@@ -41,7 +41,7 @@ dotnet test
 | Tab | What it does |
 |---|---|
 | **Insert** | Cube, cylinder, cone, sphere, pyramid, wedge, torus, hexagon, tetrahedron; import STL/OBJ |
-| **Object** | Subtract / Intersect / Merge, Smooth, Round edges, Split with a plane, Engrave a pattern, Colour, duplicate (beside or in place), delete, drop to plate, mirror |
+| **Object** | Subtract / Intersect / Merge, Smooth, Round edges, Split with a plane, Text, Engrave a pattern, Colour, duplicate (beside or in place), delete, drop to plate, mirror |
 | **Align** | Line the selection up on X, Y or Z: flush to either edge, centred, or spread evenly |
 | **Edit** | Repair, rebuild, simplify, hollow, undo, redo |
 | **File** | New, open, recent, save, save as, save a version, versions, export STL/OBJ |
@@ -261,6 +261,20 @@ unevenly afterwards will stretch the rounded edges.
 
 Closing, opening or starting a new model with unsaved changes asks first, and cancelling the
 prompt cancels the whole action — including the window close.
+
+### Lettering
+
+**Text...** on the Object tab cuts words into a face or raises them off it. Select the object,
+press it, click the face, and type: the lettering appears on the face as you set it up, with the
+font, height and depth alongside.
+
+Letters are real outlines rather than a bitmap, so an O has a proper hole in it and the result is
+a few hundred triangles rather than tens of thousands. **Raised instead of cut** stands the
+lettering proud of the face rather than sinking it in.
+
+For an FDM print, the same limits apply as to engraving: **0.4 mm deep** is two layers, and
+strokes thinner than a couple of nozzle widths will not slice. Bold at 8 mm or more is a safe
+starting point.
 
 ### Engraving a pattern
 

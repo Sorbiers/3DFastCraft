@@ -346,6 +346,9 @@
                     <Button Style="{StaticResource ToolButton}" Content="Colour..." Tag="{StaticResource IconColour}"
                             Command="{Binding PickColourCommand}" MinWidth="78"
                             ToolTip="Paint the selection. The palette in the right-hand panel is one click." />
+                    <Button Style="{StaticResource ToolButton}" Content="Text..." Tag="{StaticResource IconText}"
+                            Command="{Binding BeginEmbossCommand}" MinWidth="72"
+                            ToolTip="Cut lettering into a face, or raise it off one" />
                     <Button Style="{StaticResource ToolButton}" Content="Engrave..." Tag="{StaticResource IconEngrave}"
                             Command="{Binding BeginEngraveCommand}" MinWidth="82"
                             ToolTip="Cut a brick, board or stripe pattern into one flat face" />
@@ -538,6 +541,7 @@
                     <RowDefinition Height="Auto" />
                     <RowDefinition Height="Auto" />
                     <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
                     <RowDefinition Height="*" />
                 </Grid.RowDefinitions>
 
@@ -687,10 +691,57 @@
                     </StackPanel>
                 </Border>
 
+                <!-- Lettering panel, shown only while a face is being lettered -->
+                <Border Grid.Row="5" Margin="0,10,0,0" Padding="8" Background="#FFEFF5FF"
+                        BorderBrush="#FFB8D2F0" BorderThickness="1" CornerRadius="3"
+                        Visibility="{Binding IsEmbossMode, Converter={StaticResource BoolToVisibility}}">
+                    <StackPanel>
+                        <TextBlock Text="Lettering" FontWeight="SemiBold" Margin="0,0,0,6" />
+                        <TextBlock Text="{Binding EmbossSummary}" TextWrapping="Wrap"
+                                   Foreground="#FF3A4550" Margin="0,0,0,8" />
+
+                        <TextBox Text="{Binding EmbossText, UpdateSourceTrigger=PropertyChanged}"
+                                 Padding="4,3" Margin="0,0,0,6" FontSize="14" />
+
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
+                            <TextBlock Text="Font" Style="{StaticResource FieldLabel}" Width="62" />
+                            <ComboBox Width="130" IsEditable="True" ItemsSource="{Binding EmbossFonts}"
+                                      Text="{Binding EmbossFont, UpdateSourceTrigger=LostFocus}" />
+                        </StackPanel>
+
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,2">
+                            <TextBlock Text="Height" Style="{StaticResource FieldLabel}" Width="62" />
+                            <TextBox Width="64" Style="{StaticResource NumberBox}" Tag="number"
+                                     Text="{Binding EmbossHeight, StringFormat=N1, UpdateSourceTrigger=LostFocus}" />
+                            <TextBlock Text="mm" Foreground="#FF9AA0A8" VerticalAlignment="Center" />
+                        </StackPanel>
+
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
+                            <TextBlock Text="Depth" Style="{StaticResource FieldLabel}" Width="62"
+                                       ToolTip="How deep it is cut, or how far it stands proud" />
+                            <TextBox Width="64" Style="{StaticResource NumberBox}" Tag="number"
+                                     Text="{Binding EmbossDepth, StringFormat=N2, UpdateSourceTrigger=LostFocus}" />
+                            <TextBlock Text="mm" Foreground="#FF9AA0A8" VerticalAlignment="Center" />
+                        </StackPanel>
+
+                        <CheckBox Content="Bold" IsChecked="{Binding EmbossBold, Mode=TwoWay}" Margin="0,0,0,4" />
+                        <CheckBox Content="Raised instead of cut" IsChecked="{Binding EmbossRaised, Mode=TwoWay}"
+                                  Margin="0,0,0,8"
+                                  ToolTip="Stand the lettering off the face rather than sinking it in" />
+
+                        <StackPanel Orientation="Horizontal">
+                            <Button Content="Apply" Style="{StaticResource ToolButton}"
+                                    Command="{Binding ApplyEmbossCommand}" />
+                            <Button Content="Cancel" Style="{StaticResource ToolButton}"
+                                    Command="{Binding CancelEmbossCommand}" />
+                        </StackPanel>
+                    </StackPanel>
+                </Border>
+
                 <!-- Colour. Bound to the view model rather than to Selected, because painting
                      applies to the whole selection and Selected is null once more than one
                      object is picked. -->
-                <StackPanel Grid.Row="5"
+                <StackPanel Grid.Row="6"
                             Visibility="{Binding HasAnySelection, Converter={StaticResource BoolToVisibility}}">
                     <TextBlock Text="Colour" Style="{StaticResource SectionHeader}" />
                     <ItemsControl ItemsSource="{Binding Swatches}">
@@ -716,7 +767,7 @@
                 </StackPanel>
 
                 <!-- Properties -->
-                <ScrollViewer Grid.Row="6" VerticalScrollBarVisibility="Auto" Margin="0,6,0,0"
+                <ScrollViewer Grid.Row="7" VerticalScrollBarVisibility="Auto" Margin="0,6,0,0"
                               DataContext="{Binding Selected}">
                     <StackPanel>
                         <StackPanel.Style>

@@ -56,7 +56,7 @@ public sealed class SceneRenderer : IDisposable
     /// the whole object would show nothing at all. The patch is already in world space, so the
     /// highlight carries no transform.
     /// </summary>
-    public void ShowFace(FacePatch? face, GrooveSet? preview = null)
+    public void ShowFace(FacePatch? face, GrooveSet? preview = null, Mesh? overlay = null)
     {
         if (facePreview is not null)
         {
@@ -126,7 +126,7 @@ public sealed class SceneRenderer : IDisposable
         };
         root.Children.Add(faceOutline);
 
-        ShowPreview(face, preview);
+        ShowPreview(face, preview, overlay);
     }
 
     /// <summary>
@@ -134,12 +134,14 @@ public sealed class SceneRenderer : IDisposable
     /// is cut. The shapes come from the same code that builds the cutter, so this is not an
     /// impression of the result - it is the result, drawn flat.
     /// </summary>
-    private void ShowPreview(FacePatch face, GrooveSet? preview)
+    private void ShowPreview(FacePatch face, GrooveSet? preview, Mesh? overlay)
     {
-        if (preview is null || preview.IsEmpty) return;
+        // Either a pattern to lay out, or a shape already built - lettering arrives as the
+        // second, since its outlines are nothing like the rectangles a pattern is made of.
+        var pattern = overlay ?? (preview is null || preview.IsEmpty
+            ? new Mesh()
+            : GrooveSolid.Surface(preview, face, 0.09f));
 
-        // A little above the tinted skin, so the grooves read as cut into it rather than under it.
-        var pattern = GrooveSolid.Surface(preview, face, 0.09f);
         if (pattern.TriangleCount == 0) return;
 
         facePreview = new MeshGeometryModel3D

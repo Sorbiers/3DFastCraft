@@ -10,6 +10,7 @@ using FastCraft3D.Io;
 using FastCraft3D.Model;
 using FastCraft3D.Model.Commands;
 using FastCraft3D.Render;
+using FastCraft3D.Text;
 using FastCraft3D.View;
 using Microsoft.Win32;
 
@@ -29,6 +30,15 @@ public sealed class MainViewModel : INotifyPropertyChanged
     private bool isSplitMode;
     private bool isEngraveMode;
     private bool isMeasureMode;
+    private bool isEmbossMode;
+    private FacePatch? embossFace;
+    private Mesh? embossMesh;
+    private string embossText = "TEXT";
+    private string embossFont = "Arial";
+    private float embossHeight = 10f;
+    private float embossDepth = 0.8f;
+    private bool embossBold = true;
+    private bool embossRaised;
     private bool measureSnap = true;
     private Vector3? measureFrom;
     private Vector3? measureTo;
@@ -85,6 +95,9 @@ public sealed class MainViewModel : INotifyPropertyChanged
         RebuildCommand = AsyncRelayCommand.Simple(RebuildObjects, () => Scene.Objects.Count > 0);
         SimplifyCommand = AsyncRelayCommand.Simple(SimplifySelection, () => Scene.Selection.Count > 0);
         HollowCommand = AsyncRelayCommand.Simple(HollowSelection, () => Scene.Selection.Count > 0);
+        BeginEmbossCommand = RelayCommand.Simple(BeginEmboss, () => Scene.Selection.Count == 1);
+        ApplyEmbossCommand = AsyncRelayCommand.Simple(ApplyEmboss, () => isEmbossMode && embossFace is not null);
+        CancelEmbossCommand = RelayCommand.Simple(() => IsEmbossMode = false);
         BeginMeasureCommand = RelayCommand.Simple(BeginMeasure, () => Scene.Objects.Count > 0);
         CancelMeasureCommand = RelayCommand.Simple(() => IsMeasureMode = false);
         BeginEngraveCommand = RelayCommand.Simple(BeginEngrave, () => Scene.Selection.Count == 1);
@@ -139,6 +152,9 @@ public sealed class MainViewModel : INotifyPropertyChanged
     public System.Windows.Input.ICommand RebuildCommand { get; }
     public System.Windows.Input.ICommand SimplifyCommand { get; }
     public System.Windows.Input.ICommand HollowCommand { get; }
+    public System.Windows.Input.ICommand BeginEmbossCommand { get; }
+    public System.Windows.Input.ICommand ApplyEmbossCommand { get; }
+    public System.Windows.Input.ICommand CancelEmbossCommand { get; }
     public System.Windows.Input.ICommand BeginMeasureCommand { get; }
     public System.Windows.Input.ICommand CancelMeasureCommand { get; }
     public System.Windows.Input.ICommand BeginEngraveCommand { get; }
@@ -426,6 +442,226 @@ public sealed class MainViewModel : INotifyPropertyChanged
     }
 
     public bool HasEngraveFace => engrave.HasFace;
+
+    // --- Lettering -----------------------------------------------------------------
+
+    /// <summary>
+    /// While this is on, clicking picks the face to letter. Its own mode, like engraving, and
+    /// they take it in turns rather than sharing.
+    /// </summary>
+    public bool IsEmbossMode
+    {
+        get => isEmbossMode;
+        set
+        {
+            if (isEmbossMode == value) return;
+
+            Set(ref isEmbossMode, value);
+            if (!value) { embossFace = null; embossMesh = null; }
+
+            Raise(nameof(HasEmbossFace));
+            Raise(nameof(EmbossSummary));
+            EngraveFaceChanged?.Invoke();
+        }
+    }
+
+    public bool HasEmbossFace => embossFace is not null;
+
+    /// <summary>The face being lettered, for the viewport to highlight.</summary>
+    public FacePatch? EmbossFace => embossFace;
+
+    public string EmbossText
+    {
+        get => embossText;
+        set { Set(ref embossText, value ?? ""); RefreshEmboss(); }
+    }
+
+    public string EmbossFont
+    {
+        get => embossFont;
+        set { Set(ref embossFont, string.IsNullOrWhiteSpace(value) ? "Arial" : value); RefreshEmboss(); }
+    }
+
+    /// <summary>Common faces, so the usual ones need no typing.</summary>
+    public IReadOnlyList<string> EmbossFonts { get; } =
+        ["Arial", "Segoe UI", "Calibri", "Consolas", "Georgia", "Impact", "Times New Roman", "Verdana"];
+
+    public float EmbossHeight
+    {
+        get => embossHeight;
+        set { Set(ref embossHeight, Math.Clamp(value, 1f, 500f)); RefreshEmboss(); }
+    }
+
+    /// <summary>How deep it is cut, or how far it stands proud.</summary>
+    public float EmbossDepth
+    {
+        get => embossDepth;
+        set { Set(ref embossDepth, Math.Clamp(value, 0.05f, 50f)); RefreshEmboss(); }
+    }
+
+    public bool EmbossBold
+    {
+        get => embossBold;
+        set { Set(ref embossBold, value); RefreshEmboss(); }
+    }
+
+    /// <summary>Raised off the face rather than cut into it.</summary>
+    public bool EmbossRaised
+    {
+        get => embossRaised;
+        set { Set(ref embossRaised, value); RefreshEmboss(); }
+    }
+
+    public string EmbossSummary
+    {
+        get
+        {
+            if (embossFace is null) return "Click the face to letter.";
+
+            var shapes = EmbossShapes();
+            if (shapes.Count == 0) return "Nothing to letter - type something.";
+
+            string what = embossRaised
+                ? $"raised {embossDepth:0.##} mm"
+                : $"cut {embossDepth:0.##} mm deep";
+
+            return $"{shapes.Count} shape(s), {embossHeight:0.#} mm tall, {what}";
+        }
+    }
+
+    private void BeginEmboss()
+    {
+        if (Scene.Selection.Count != 1) return;
+
+        IsSplitMode = false;
+        IsEngraveMode = false;
+        IsMeasureMode = false;
+        IsEmbossMode = true;
+
+        Status = "Click the face you want to letter";
+    }
+
+    /// <summary>Picks the face to letter. Both arguments are in world space, as for engraving.</summary>
+    public bool PickEmbossFace(SceneObject target, Vector3 worldPoint, Vector3 worldNormal)
+    {
+        if (!isEmbossMode) return false;
+
+        var world = target.ToWorldMesh();
+        var face = EngraveState.FaceAt(world, worldPoint, worldNormal);
+
+        if (face is null)
+        {
+            Status = "That is not a flat face - pick one of the flat sides";
+            return false;
+        }
+
+        embossMesh = world;
+        embossFace = face;
+
+        Raise(nameof(HasEmbossFace));
+        RefreshEmboss();
+        Status = EmbossSummary;
+        return true;
+    }
+
+    /// <summary>The outlines to cut or raise, in the face's own frame.</summary>
+    private List<TextShape> EmbossShapes()
+    {
+        if (embossFace is null) return [];
+
+        return GlyphOutlines.Build(embossText, embossFont, embossHeight, embossBold)
+            .Select(g => new TextShape(g.Outline, g.Holes))
+            .ToList();
+    }
+
+    /// <summary>A flat slab of the lettering, laid on the face so the placement can be seen.</summary>
+    public Mesh? EmbossPreview()
+    {
+        if (embossFace is not { } face) return null;
+
+        var shapes = EmbossShapes();
+        return shapes.Count == 0 ? null : TextSolid.Build(shapes, face, 0.08f, 0.11f);
+    }
+
+    private void RefreshEmboss()
+    {
+        Raise(nameof(EmbossSummary));
+        if (isEmbossMode) EngraveFaceChanged?.Invoke();
+    }
+
+    private async Task ApplyEmboss()
+    {
+        if (Scene.Selection.Count != 1) return;
+        if (embossFace is not { } face || embossMesh is not { } world) return;
+
+        var shapes = EmbossShapes();
+        if (shapes.Count == 0)
+        {
+            Status = "Nothing to letter - type something first";
+            return;
+        }
+
+        var source = Scene.Selection[0];
+        bool raised = embossRaised;
+        float amount = embossDepth;
+
+        IsBusy = true;
+        Status = raised ? "Raising lettering..." : "Cutting lettering...";
+        try
+        {
+            var result = await Task.Run(() =>
+            {
+                // Started a hair past the surface either way, so the solid always crosses it
+                // rather than meeting it exactly - a coplanar face is the one thing the boolean
+                // handles badly.
+                var solid = raised
+                    ? TextSolid.Build(shapes, face, -0.02f, amount)
+                    : TextSolid.Build(shapes, face, 0.02f, -amount);
+
+                if (solid.TriangleCount == 0) return null;
+
+                return MeshHealer.Heal(
+                    raised ? CsgSolid.Union(world, solid) : CsgSolid.Subtract(world, solid)).Mesh;
+            });
+
+            if (result is null || result.TriangleCount == 0)
+            {
+                Status = "The lettering produced no geometry";
+                return;
+            }
+
+            if (!result.CheckHealth().IsWatertight)
+            {
+                Status = $"Lettering that face came out unprintable - {result.CheckHealth().Describe()}. Nothing was changed.";
+                MessageBox.Show(
+                    "The lettering could not be applied cleanly, so the object has been left as "
+                    + "it was. A flat face, a larger size or a shallower depth will usually get "
+                    + "through.",
+                    "3DFastCraft", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+
+            var lettered = new SceneObject(Scene.UniqueName($"{source.Name} text"), result)
+            {
+                Colour = source.Colour
+            };
+
+            Undo.Execute(new ReplaceObjectsCommand(raised ? "Raise text" : "Cut text", [source], [lettered]));
+            IsEmbossMode = false;
+            RefreshSelection();
+
+            Status = $"{(raised ? "Raised" : "Cut")} \"{embossText}\" - {result.TriangleCount:N0} triangles";
+        }
+        catch (Exception ex)
+        {
+            Status = $"Lettering failed: {ex.Message}";
+            MessageBox.Show(ex.Message, "3DFastCraft", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+        finally
+        {
+            IsBusy = false;
+        }
+    }
 
     // --- Measuring -----------------------------------------------------------------
 

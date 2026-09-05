@@ -74,7 +74,13 @@ public partial class MainWindow : Window
         viewModel.MeasureChanged += () => measure.Show(viewModel.MeasureFrom, viewModel.MeasureTo);
 
         viewModel.EngraveFaceChanged += () =>
-            renderer.ShowFace(viewModel.EngraveFace, viewModel.EngravePreview);
+        {
+            // Both tools pick a face and draw on it; whichever is running owns the highlight.
+            if (viewModel.IsEmbossMode)
+                renderer.ShowFace(viewModel.EmbossFace, null, viewModel.EmbossPreview());
+            else
+                renderer.ShowFace(viewModel.EngraveFace, viewModel.EngravePreview);
+        };
 
         listSync = new SelectionListSync(ObjectList, viewModel.Scene);
         listSync.ChangedFromList += viewModel.RefreshSelection;
@@ -311,6 +317,19 @@ public partial class MainWindow : Window
         if (viewModel.IsMeasureMode)
         {
             viewModel.TakeMeasurePoint(SnappedPoint(target, ToVector3(hit!.PointHit)));
+            e.Handled = true;
+            return;
+        }
+
+        if (viewModel.IsEmbossMode)
+        {
+            if (!viewModel.Scene.Selection.Contains(target))
+            {
+                PressLikeFileExplorer(target);
+                viewModel.RefreshSelection();
+            }
+
+            viewModel.PickEmbossFace(target, ToVector3(hit!.PointHit), ToVector3(hit.NormalAtHit));
             e.Handled = true;
             return;
         }
