@@ -29,6 +29,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
     private bool isSplitMode;
     private bool isEngraveMode;
     private bool? damaged;
+    private bool scaleOneSide;
     private bool showWireframe;
     private bool showXray;
     private bool showPlate = true;
@@ -312,6 +313,19 @@ public sealed class MainViewModel : INotifyPropertyChanged
     {
         get => uniformScale;
         set => Set(ref uniformScale, value);
+    }
+
+    /// <summary>
+    /// Grow only the way the handle is dragged, holding the opposite face where it is.
+    ///
+    /// The default resizes about the centre, which keeps a part where it sits but moves both
+    /// faces. Holding one still is what you want when the part has to keep meeting the one next
+    /// to it. Shortcut: O.
+    /// </summary>
+    public bool ScaleOneSide
+    {
+        get => scaleOneSide;
+        set => Set(ref scaleOneSide, value);
     }
 
     /// <summary>

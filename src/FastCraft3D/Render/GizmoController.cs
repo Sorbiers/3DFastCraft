@@ -1,4 +1,4 @@
-using System.Numerics;
+﻿using System.Numerics;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
@@ -82,6 +82,12 @@ public sealed class GizmoController
     /// <summary>How many handle shapes the current mode has laid out. Used by tests.</summary>
     public int HandleCount => handles.Count;
     public bool UniformScale { get; set; } = true;
+
+    /// <summary>
+    /// Hold the face opposite the handle still, so the object grows only the way it is dragged.
+    /// Off by default, which matches how the old app behaved.
+    /// </summary>
+    public bool ScaleOneSide { get; set; }
 
     /// <summary>Millimetres to snap a move to, or zero for free movement.</summary>
     public double SnapStep { get; set; }
@@ -494,6 +500,9 @@ public sealed class GizmoController
         Feedback?.Invoke($"Move {active.Axis} {millimetres:+0.##;-0.##;0} mm");
     }
 
+    private static float Along(Vector3 point, Axis axis) =>
+        axis switch { Axis.X => point.X, Axis.Y => point.Y, _ => point.Z };
+
     private void DragScale(Point screen)
     {
         if (!TryAxisScreenScale(active!.Axis, out Vector axisScreen, out double pixelsPerMm)) return;
@@ -505,7 +514,13 @@ public sealed class GizmoController
         float startExtent = Extent(StartBounds(), active.Axis);
         if (startExtent < 1e-4f) return;
 
-        float ratio = GizmoMath.ScaleRatio(startExtent, millimetres);
+        float ratio = GizmoMath.ScaleRatio(startExtent, millimetres, aboutCentre: !ScaleOneSide);
+
+        // The face that stays put: whichever one the handle is not on.
+        var bounds = StartBounds();
+        float anchor = ScaleOneSide
+            ? Along(active.Sign > 0 ? bounds.Min : bounds.Max, active.Axis)
+            : 0f;
 
         for (int i = 0; i < dragObjects.Count; i++)
         {
@@ -518,12 +533,26 @@ public sealed class GizmoController
                     Axis.Y => before with { Y = before.Y * ratio },
                     _ => before with { Z = before.Z * ratio }
                 };
+
+            // Holding a face still means the object has to travel as it grows. Positions are
+            // taken from where the drag started rather than from where they are now, so a long
+            // drag cannot accumulate rounding.
+            if (!ScaleOneSide) continue;
+
+            Vector3 was = dragBefore[i].Position;
+            dragObjects[i].Position = active.Axis switch
+            {
+                Axis.X => was with { X = GizmoMath.ScaledAbout(anchor, was.X, ratio) },
+                Axis.Y => was with { Y = GizmoMath.ScaledAbout(anchor, was.Y, ratio) },
+                _ => was with { Z = GizmoMath.ScaledAbout(anchor, was.Z, ratio) }
+            };
         }
 
         dragChanged = true;
+        string held = ScaleOneSide ? ", far side held" : "";
         Feedback?.Invoke(UniformScale
-            ? $"Resize {ratio * 100:0.#}% (uniform)"
-            : $"Resize {active.Axis} {ratio * 100:0.#}%");
+            ? $"Resize {ratio * 100:0.#}% (uniform{held})"
+            : $"Resize {active.Axis} {ratio * 100:0.#}%{held}");
     }
 
     private void DragRotate(Point screen)

@@ -1,4 +1,4 @@
-using System.Windows;
+﻿using System.Windows;
 
 namespace FastCraft3D.Render;
 
@@ -24,16 +24,32 @@ public static class GizmoMath
     /// <summary>
     /// How much to multiply the current size by.
     ///
-    /// Resizing is about the object's centre, so both faces move outward and the dimension
-    /// grows by twice the handle's travel. The result is clamped well above zero: allowing a
-    /// scale of zero would collapse the mesh, and a negative one would silently mirror it.
+    /// About the centre, both faces move outward and the dimension grows by twice the handle's
+    /// travel. Held on one side, the far face stays put and the dimension grows by exactly what
+    /// the handle moved - which is what you want when a part has to keep meeting the one next to
+    /// it, and is the more useful of the two more often than not.
+    ///
+    /// The result is clamped well above zero: a scale of zero would collapse the mesh, and a
+    /// negative one would silently mirror it.
     /// </summary>
-    public static float ScaleRatio(float startExtent, double millimetresOutward, float minimum = 0.01f)
+    public static float ScaleRatio(
+        float startExtent, double millimetresOutward, float minimum = 0.01f, bool aboutCentre = true)
     {
         if (startExtent < 1e-4f) return 1f;
-        float ratio = (float)((startExtent + millimetresOutward * 2.0) / startExtent);
-        return Math.Max(ratio, minimum);
+
+        double growth = aboutCentre ? millimetresOutward * 2.0 : millimetresOutward;
+        return Math.Max((float)((startExtent + growth) / startExtent), minimum);
     }
+
+    /// <summary>
+    /// Where a point ends up when everything is scaled about a fixed plane.
+    ///
+    /// Holding one face still is not just a matter of scaling less: the object has to move as
+    /// well, or it would grow away from the face that is meant to be pinned. Positions ride the
+    /// same scaling as sizes, measured from the plane that stays put.
+    /// </summary>
+    public static float ScaledAbout(float anchor, float coordinate, float ratio) =>
+        anchor + (coordinate - anchor) * ratio;
 
     /// <summary>
     /// Degrees swept around a ring between two pointer positions.

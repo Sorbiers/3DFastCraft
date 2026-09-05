@@ -147,6 +147,7 @@ public partial class MainWindow : Window
             case Key.M: viewModel.GizmoMode = GizmoMode.Move; break;
             case Key.R: viewModel.GizmoMode = GizmoMode.Rotate; break;
             case Key.S: viewModel.GizmoMode = GizmoMode.Scale; break;
+            case Key.O: viewModel.ScaleOneSide = !viewModel.ScaleOneSide; break;
             default: return;
         }
         e.Handled = true;
@@ -641,6 +642,9 @@ public partial class MainWindow : Window
 
         if (e.PropertyName is nameof(MainViewModel.UniformScale) && gizmo is not null)
             gizmo.UniformScale = viewModel.UniformScale;
+
+        if (e.PropertyName is nameof(MainViewModel.ScaleOneSide) && gizmo is not null)
+            gizmo.ScaleOneSide = viewModel.ScaleOneSide;
 
         if (e.PropertyName is nameof(MainViewModel.SnapStep) && gizmo is not null)
             gizmo.SnapStep = viewModel.SnapStep;

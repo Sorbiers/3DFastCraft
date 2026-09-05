@@ -1004,6 +1004,14 @@
                                   Stroke="#FF33383F" StrokeThickness="1.8" Fill="{x:Null}"
                                   Stretch="Uniform" Width="15" Height="15" />
                         </ToggleButton>
+                        <ToggleButton Style="{StaticResource ModeButton}" Margin="2,0,0,0"
+                                      ToolTip="Grow one way only, holding the opposite face still (O)"
+                                      IsChecked="{Binding ScaleOneSide, Mode=TwoWay}">
+                            <!-- A wall on the left, an arrow growing away from it. -->
+                            <Path Data="M3,3 L3,17 M6,10 L16,10 M12.5,6.5 L16,10 L12.5,13.5"
+                                  Stroke="#FF33383F" StrokeThickness="1.8" Fill="{x:Null}"
+                                  Stretch="Uniform" Width="15" Height="15" />
+                        </ToggleButton>
                     </StackPanel>
                 </StackPanel>
             </Border>
