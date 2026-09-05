@@ -1112,7 +1112,28 @@ public sealed class MainViewModel : INotifyPropertyChanged
 
             if (replaced.Count == 0)
             {
-                Status = $"{targets.Count} object(s) are damaged in a way this cannot mend - they are unchanged";
+                // Saying what is actually wrong matters more here than anywhere else: this is
+                // the one path where nothing happens, and "cannot mend" on its own leaves
+                // someone with no idea whether to try another tool or another model.
+                var worst = targets
+                    .Select(o => o.Mesh.CheckHealth())
+                    .OrderByDescending(h => h.BoundaryEdges + h.NonManifoldEdges + h.InconsistentEdges)
+                    .First();
+
+                Status = targets.Count == 1
+                    ? $"Cannot mend this one - {worst.Describe()}. It is unchanged."
+                    : $"Cannot mend {targets.Count} object(s) - the worst has {worst.Describe()}. They are unchanged.";
+
+                MessageBox.Show(
+                    $"This model has {worst.Describe().ToLowerInvariant()}, and repairing it would "
+                    + "leave it worse than it is, so nothing has been changed." + Environment.NewLine + Environment.NewLine
+                    + "Filling holes and turning faces round only works when the damage is local. "
+                    + "A mesh whose surface passes through itself has no well-defined inside, and "
+                    + "patching it piece by piece tears more than it closes." + Environment.NewLine + Environment.NewLine
+                    + "Meshes like this are usually mended by rebuilding the surface from scratch "
+                    + "rather than by patching - which also throws away fine detail, so it is not "
+                    + "something to do behind your back.",
+                    "3DFastCraft", MessageBoxButton.OK, MessageBoxImage.Information);
                 return;
             }
 
