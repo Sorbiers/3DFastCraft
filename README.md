@@ -37,10 +37,10 @@ dotnet test
 | Tab | What it does |
 |---|---|
 | **Insert** | Cube, cylinder, cone, sphere, pyramid, wedge, torus, hexagon, tetrahedron; import STL/OBJ |
-| **Object** | Subtract / Intersect / Merge, Round edges, Split with a plane, duplicate, delete, drop to plate, mirror |
+| **Object** | Subtract / Intersect / Merge, Round edges, Split with a plane, duplicate (beside or in place), delete, drop to plate, mirror |
 | **Align** | Line the selection up on X, Y or Z: flush to either edge, centred, or spread evenly |
 | **Edit** | Undo, redo |
-| **File** | New, open, save, save as, save a version, versions, export STL/OBJ |
+| **File** | New, open, recent, save, save as, save a version, versions, export STL/OBJ |
 | **View** | Zoom to fit, top / front / right / isometric |
 
 **Camera:** left-drag orbits, right-drag pans, the wheel zooms. Dragging horizontally turns the
@@ -68,6 +68,13 @@ one in object-list order, and clicking empty space clears the selection.
 Left-drag *on an object* also moves it across the plate; hold **Shift** to constrain to one axis.
 
 Inserting a shape never moves the camera - it lands at the origin, sitting on the plate.
+
+In the position, size and rotation boxes, **Up/Down** and the **mouse wheel** nudge the value by
+1 — hold **Shift** for 10 or **Ctrl** for 0.1. A nudge also rounds onto that step, so a value
+like 4.37 tidies up rather than carrying its rounding error forever.
+
+**Snap** in the manipulator bar constrains drags to whole millimetres or 5 mm. It snaps where the
+object *lands*, not how far it travels, so two parts dragged onto the same grid meet exactly.
 
 Shortcuts: `Ctrl+Z` / `Ctrl+Y` undo & redo, `Delete`, `Ctrl+C` / `Ctrl+V` copy & paste,
 `Ctrl+A` select all, `Ctrl+D` deselect all, `Ctrl+N/O/S` new/open/save, `Ctrl+I` import,
@@ -127,6 +134,9 @@ honest answer rather than something that half-works everywhere.
 
 Because the shape is rebuilt at its current size, its scale resets in the process; resizing it
 unevenly afterwards will stretch the rounded edges.
+
+Closing, opening or starting a new model with unsaved changes asks first, and cancelling the
+prompt cancels the whole action — including the window close.
 
 ### Versions
 

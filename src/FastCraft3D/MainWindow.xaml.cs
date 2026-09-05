@@ -1,4 +1,5 @@
 using System.ComponentModel;
+using System.Globalization;
 using System.Numerics;
 using System.Windows;
 using System.Windows.Controls;
@@ -104,11 +105,19 @@ public partial class MainWindow : Window
         AddHandler(GotFocusEvent, new RoutedEventHandler(OnFieldGotFocus), true);
         AddHandler(LostFocusEvent, new RoutedEventHandler(OnFieldLostFocus), true);
 
+        // Arrow keys and the wheel nudge the numeric fields.
+        AddHandler(PreviewKeyDownEvent, new KeyEventHandler(OnFieldKey), true);
+        AddHandler(PreviewMouseWheelEvent, new MouseWheelEventHandler(OnFieldWheel), true);
+
         PreviewKeyDown += OnWindowKeyDown;
 
         View.PreviewMouseLeftButtonDown += OnViewportLeftDown;
         View.PreviewMouseMove += OnViewportMove;
         View.PreviewMouseLeftButtonUp += OnViewportLeftUp;
+
+        // The last chance to save: this is the only path where unsaved work would vanish
+        // without the user having asked for anything.
+        Closing += (_, e) => e.Cancel = !viewModel.ConfirmDiscardChanges();
 
         Closed += (_, _) =>
         {
@@ -390,6 +399,15 @@ public partial class MainWindow : Window
         }
         delta.Z = 0;
 
+        // Snapped against the object actually grabbed, with the same correction applied to the
+        // rest of the selection so the group keeps its shape.
+        double step = viewModel.SnapStep;
+        if (step > 0)
+        {
+            delta.X = (float)GizmoMath.SnapTravel(dragBefore[0].Position.X, delta.X, step);
+            delta.Y = (float)GizmoMath.SnapTravel(dragBefore[0].Position.Y, delta.Y, step);
+        }
+
         for (int i = 0; i < dragObjects.Count; i++)
             dragObjects[i].Position = dragBefore[i].Position + delta;
 
@@ -498,6 +516,64 @@ public partial class MainWindow : Window
         viewModel.RefreshSelection();
     }
 
+    // --- Nudging the numeric fields ---------------------------------------------------
+
+    /// <summary>
+    /// How much one nudge moves a value. Shift takes bigger steps and Ctrl finer ones, which is
+    /// the convention everywhere else and saves reaching for the keyboard to type an exact figure.
+    /// </summary>
+    private static double NudgeStep()
+    {
+        if (Keyboard.Modifiers.HasFlag(ModifierKeys.Shift)) return 10;
+        if (Keyboard.Modifiers.HasFlag(ModifierKeys.Control)) return 0.1;
+        return 1;
+    }
+
+    private void OnFieldKey(object sender, KeyEventArgs e)
+    {
+        if (e.OriginalSource is not TextBox { Tag: "transform" } box) return;
+
+        double direction = e.Key switch { Key.Up => 1, Key.Down => -1, _ => 0 };
+        if (direction == 0) return;
+
+        Nudge(box, direction * NudgeStep());
+        e.Handled = true;
+    }
+
+    private void OnFieldWheel(object sender, MouseWheelEventArgs e)
+    {
+        // Only while the field has focus, so scrolling the properties panel still scrolls it.
+        if (e.OriginalSource is not TextBox { Tag: "transform" } box || !box.IsKeyboardFocusWithin) return;
+
+        Nudge(box, Math.Sign(e.Delta) * NudgeStep());
+        e.Handled = true;
+    }
+
+    /// <summary>
+    /// Adds to the value in a field and pushes it through immediately.
+    ///
+    /// These fields commit on focus loss, which keeps typing from being applied a digit at a
+    /// time; a nudge is a finished edit on its own, so it updates the source at once. The undo
+    /// entry still covers the whole time the field held focus, so holding an arrow key down
+    /// produces one step rather than fifty.
+    /// </summary>
+    private static void Nudge(TextBox box, double amount)
+    {
+        if (!double.TryParse(box.Text, NumberStyles.Float, CultureInfo.CurrentCulture, out double current))
+            return;
+
+        double updated = current + amount;
+
+        // Snap onto the step grid so repeated nudges tidy up a value like 4.37 rather than
+        // carrying its rounding error along forever.
+        double step = Math.Abs(amount);
+        if (step > 0) updated = Math.Round(updated / step) * step;
+
+        box.Text = updated.ToString("0.####", CultureInfo.CurrentCulture);
+        box.CaretIndex = box.Text.Length;
+        box.GetBindingExpression(TextBox.TextProperty)?.UpdateSource();
+    }
+
     // --- Cut plane preview -----------------------------------------------------------
 
     private void OnViewModelChanged(object? sender, PropertyChangedEventArgs e)
@@ -513,6 +589,9 @@ public partial class MainWindow : Window
 
         if (e.PropertyName is nameof(MainViewModel.UniformScale) && gizmo is not null)
             gizmo.UniformScale = viewModel.UniformScale;
+
+        if (e.PropertyName is nameof(MainViewModel.SnapStep) && gizmo is not null)
+            gizmo.SnapStep = viewModel.SnapStep;
 
         if (e.PropertyName is nameof(MainViewModel.SnapRotation))
         {
@@ -612,6 +691,27 @@ public partial class MainWindow : Window
         var back = -camera.LookDirection;
         if (back.Length < 1e-6) return;
         LookFrom(back, new Media3D.Vector3D(0, 0, 1));
+    }
+
+    /// <summary>
+    /// Drops the recent-files menu under its button. A context menu is used rather than a popup
+    /// so the list styles and behaves like every other menu in Windows.
+    /// </summary>
+    private void OnShowRecent(object sender, RoutedEventArgs e)
+    {
+        if (sender is not Button button || button.ContextMenu is not { } menu) return;
+
+        if (viewModel.RecentFiles.Count == 0)
+        {
+            viewModel.Status = "No recent projects yet";
+            return;
+        }
+
+        // The menu inherits the window's DataContext so its items can reach the command.
+        menu.DataContext = viewModel;
+        menu.PlacementTarget = button;
+        menu.Placement = System.Windows.Controls.Primitives.PlacementMode.Bottom;
+        menu.IsOpen = true;
     }
 
     private void OnZoomExtents(object sender, RoutedEventArgs e) => ZoomExtents();

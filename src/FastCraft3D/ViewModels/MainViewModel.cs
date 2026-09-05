@@ -37,6 +37,8 @@ public sealed class MainViewModel : INotifyPropertyChanged
     private GizmoMode gizmoMode = GizmoMode.Move;
     private bool uniformScale = true;
     private bool snapRotation = true;
+    private double snapStep;
+    private readonly RecentFiles recent = new();
     private bool stickySelection = true;
     private bool isSelectionMenuOpen = true;
 
@@ -53,7 +55,8 @@ public sealed class MainViewModel : INotifyPropertyChanged
 
         InsertCommand = new RelayCommand(p => Insert(p));
         DeleteCommand = RelayCommand.Simple(Delete, () => Scene.Selection.Count > 0);
-        DuplicateCommand = RelayCommand.Simple(Duplicate, () => Scene.Selection.Count > 0);
+        DuplicateCommand = new RelayCommand(p => Duplicate(offset: !Equals(p, "InPlace")),
+            _ => Scene.Selection.Count > 0);
         MirrorCommand = new RelayCommand(p => Mirror(p), _ => Scene.Selection.Count > 0);
         AlignToPlateCommand = RelayCommand.Simple(AlignToPlate, () => Scene.Selection.Count > 0);
         SelectAllCommand = RelayCommand.Simple(SelectAll, () => Scene.Objects.Count > 0);
@@ -72,6 +75,8 @@ public sealed class MainViewModel : INotifyPropertyChanged
         UndoCommand = RelayCommand.Simple(() => { Undo.Undo(); RefreshSelection(); }, () => Undo.CanUndo);
         RedoCommand = RelayCommand.Simple(() => { Undo.Redo(); RefreshSelection(); }, () => Undo.CanRedo);
 
+        OpenRecentCommand = new RelayCommand(OpenRecent);
+        recent.Changed += () => Raise(nameof(RecentFiles));
         SaveVersionCommand = RelayCommand.Simple(SaveVersion, () => Scene.Objects.Count > 0);
         VersionsCommand = RelayCommand.Simple(ShowVersions, () => projectPath is not null);
         NewCommand = RelayCommand.Simple(NewScene);
@@ -110,6 +115,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
     public System.Windows.Input.ICommand CancelSplitCommand { get; }
     public System.Windows.Input.ICommand UndoCommand { get; }
     public System.Windows.Input.ICommand RedoCommand { get; }
+    public System.Windows.Input.ICommand OpenRecentCommand { get; }
     public System.Windows.Input.ICommand SaveVersionCommand { get; }
     public System.Windows.Input.ICommand VersionsCommand { get; }
     public System.Windows.Input.ICommand NewCommand { get; }
@@ -125,6 +131,15 @@ public sealed class MainViewModel : INotifyPropertyChanged
     public System.Windows.Input.ICommand PasteCommand { get; }
     public System.Windows.Input.ICommand ImportCommand { get; }
     public System.Windows.Input.ICommand ExportCommand { get; }
+
+    /// <summary>Recently opened projects, most recent first, for the File tab.</summary>
+    public IReadOnlyList<RecentEntry> RecentFiles => recent.Paths
+        .Select(p => new RecentEntry(Path.GetFileNameWithoutExtension(p), p))
+        .ToList();
+
+    /// <param name="Name">What to show.</param>
+    /// <param name="Path">The full path, shown as a tooltip and used to open it.</param>
+    public readonly record struct RecentEntry(string Name, string Path);
 
     /// <summary>Raised when geometry changed enough that the camera should reframe.</summary>
     public event Action? ZoomExtentsRequested;
@@ -281,6 +296,27 @@ public sealed class MainViewModel : INotifyPropertyChanged
         set => Set(ref uniformScale, value);
     }
 
+    /// <summary>
+    /// Millimetres a drag snaps to, or zero for free movement. Offered as a choice rather than
+    /// always on: a grid is what makes parts meet exactly, and a nuisance when they should not.
+    /// </summary>
+    public double SnapStep
+    {
+        get => snapStep;
+        set
+        {
+            Set(ref snapStep, value);
+            Raise(nameof(SnapOff));
+            Raise(nameof(SnapOne));
+            Raise(nameof(SnapFive));
+            Status = value <= 0 ? "Snapping off" : $"Snapping to {value:0.##} mm";
+        }
+    }
+
+    public bool SnapOff { get => snapStep <= 0; set { if (value) SnapStep = 0; } }
+    public bool SnapOne { get => Math.Abs(snapStep - 1) < 1e-6; set { if (value) SnapStep = 1; } }
+    public bool SnapFive { get => Math.Abs(snapStep - 5) < 1e-6; set { if (value) SnapStep = 5; } }
+
     /// <summary>Snap rotation to 15 degree steps.</summary>
     public bool SnapRotation
     {
@@ -397,21 +433,28 @@ public sealed class MainViewModel : INotifyPropertyChanged
         Status = "Deleted";
     }
 
-    private void Duplicate()
+    /// <summary>
+    /// Copies the selection, either set aside or left exactly where the original is.
+    ///
+    /// In place is the one you want before a boolean or a mirror, where the copy has to start
+    /// from the same spot; offset is the one you want when laying parts out, where a copy hidden
+    /// inside its original just looks like nothing happened.
+    /// </summary>
+    private void Duplicate(bool offset)
     {
         var copies = Scene.Selection.Select(o =>
         {
             var copy = o.Clone();
             copy.Name = Scene.UniqueName(o.Name);
-            // Offset so the copy is visible rather than hidden inside the original.
-            copy.Position += new Vector3(o.WorldBounds.Size.X + 5f, 0, 0);
+            if (offset) copy.Position += new Vector3(o.WorldBounds.Size.X + 5f, 0, 0);
             return copy;
         }).ToList();
 
         if (copies.Count == 0) return;
-        Undo.Execute(new AddObjectsCommand("Duplicate", copies));
+
+        Undo.Execute(new AddObjectsCommand(offset ? "Duplicate" : "Duplicate in place", copies));
         RefreshSelection();
-        Status = "Duplicated";
+        Status = offset ? "Duplicated" : "Duplicated in place";
     }
 
     private void Mirror(object? parameter)
@@ -767,8 +810,40 @@ public sealed class MainViewModel : INotifyPropertyChanged
 
     // --- Files -----------------------------------------------------------------------
 
+    /// <summary>
+    /// Offers to save before something replaces the scene. Returns false to call the whole thing
+    /// off - including a window close, which is why this exists: quietly discarding an unsaved
+    /// model on exit is the one mistake the app cannot let the user make.
+    /// </summary>
+    public bool ConfirmDiscardChanges()
+    {
+        if (!IsDirty || Scene.Objects.Count == 0) return true;
+
+        string name = projectPath is null ? "this model" : Path.GetFileName(projectPath);
+        var answer = MessageBox.Show(
+            $"Save changes to {name} before continuing?",
+            "3DFastCraft", MessageBoxButton.YesNoCancel, MessageBoxImage.Warning);
+
+        switch (answer)
+        {
+            case MessageBoxResult.Yes:
+                SaveProject(saveAs: false);
+                // Still dirty means the save dialog was cancelled or the write failed, so the
+                // original request must not go ahead either.
+                return !IsDirty;
+
+            case MessageBoxResult.No:
+                return true;
+
+            default:
+                return false;
+        }
+    }
+
     private void NewScene()
     {
+        if (!ConfirmDiscardChanges()) return;
+
         Scene.Objects.Clear();
         Undo.Clear();
         projectPath = null;
@@ -779,6 +854,8 @@ public sealed class MainViewModel : INotifyPropertyChanged
 
     private void OpenProject()
     {
+        if (!ConfirmDiscardChanges()) return;
+
         var dialog = new OpenFileDialog
         {
             Filter = $"3DFastCraft project (*{SceneSerializer.Extension})|*{SceneSerializer.Extension}",
@@ -786,17 +863,23 @@ public sealed class MainViewModel : INotifyPropertyChanged
         };
         if (dialog.ShowDialog() != true) return;
 
+        LoadProject(dialog.FileName);
+    }
+
+    private void LoadProject(string path)
+    {
         try
         {
-            var loaded = SceneSerializer.Load(dialog.FileName);
+            var loaded = SceneSerializer.Load(path);
             Scene.Objects.Clear();
             foreach (var o in loaded) Scene.Objects.Add(o);
             Undo.Clear();
-            projectPath = dialog.FileName;
+            projectPath = path;
             IsDirty = false;
+            recent.Add(path);
             RefreshSelection();
             ZoomExtentsRequested?.Invoke();
-            Status = $"Opened {Path.GetFileName(dialog.FileName)}";
+            Status = $"Opened {Path.GetFileName(path)}";
         }
         catch (Exception ex)
         {
@@ -824,6 +907,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
             SceneSerializer.Save(target, Scene);
             projectPath = target;
             IsDirty = false;
+            recent.Add(target);
             Status = $"Saved {Path.GetFileName(target)}";
         }
         catch (Exception ex)
@@ -863,6 +947,24 @@ public sealed class MainViewModel : INotifyPropertyChanged
         {
             MessageBox.Show(ex.Message, "Could not save the version", MessageBoxButton.OK, MessageBoxImage.Error);
         }
+    }
+
+    private void OpenRecent(object? parameter)
+    {
+        if (parameter is not string path) return;
+
+        if (!File.Exists(path))
+        {
+            MessageBox.Show(
+                $"{path}" + Environment.NewLine + Environment.NewLine +
+                "That file is no longer there, so it has been removed from the list.",
+                "Cannot open", MessageBoxButton.OK, MessageBoxImage.Information);
+            recent.Remove(path);
+            return;
+        }
+
+        if (!ConfirmDiscardChanges()) return;
+        LoadProject(path);
     }
 
     private void ShowVersions()

@@ -277,7 +277,11 @@
                             ToolTip="Split the selected object with a plane" />
                     <Separator Margin="8,0" />
                     <Button Style="{StaticResource ToolButton}" Content="Duplicate" Tag="{StaticResource IconDuplicate}"
-                            Command="{Binding DuplicateCommand}" />
+                            Command="{Binding DuplicateCommand}"
+                            ToolTip="Copy the selection and set it beside the original" />
+                    <Button Style="{StaticResource ToolButton}" Content="In place" Tag="{StaticResource IconDuplicate}"
+                            Command="{Binding DuplicateCommand}" CommandParameter="InPlace" MinWidth="64"
+                            ToolTip="Copy the selection without moving it - what you want before a boolean or a mirror" />
                     <Button Style="{StaticResource ToolButton}" Content="Delete" Tag="{StaticResource IconDelete}"
                             Command="{Binding DeleteCommand}" />
                     <Button Style="{StaticResource ToolButton}" Content="Drop to plate" Tag="{StaticResource IconDropToPlate}"
@@ -346,6 +350,23 @@
                 <WrapPanel Margin="4">
                     <Button Style="{StaticResource ToolButton}" Content="New" Tag="{StaticResource IconNew}" Command="{Binding NewCommand}" />
                     <Button Style="{StaticResource ToolButton}" Content="Open..." Tag="{StaticResource IconOpen}" Command="{Binding OpenCommand}" />
+                    <Button Style="{StaticResource ToolButton}" Content="Recent" Tag="{StaticResource IconVersions}"
+                            Click="OnShowRecent" ToolTip="Projects opened recently">
+                        <Button.ContextMenu>
+                            <ContextMenu ItemsSource="{Binding RecentFiles}">
+                                <ContextMenu.ItemContainerStyle>
+                                    <Style TargetType="MenuItem">
+                                        <Setter Property="Header" Value="{Binding Name}" />
+                                        <Setter Property="ToolTip" Value="{Binding Path}" />
+                                        <Setter Property="Command"
+                                                Value="{Binding DataContext.OpenRecentCommand,
+                                                        RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
+                                        <Setter Property="CommandParameter" Value="{Binding Path}" />
+                                    </Style>
+                                </ContextMenu.ItemContainerStyle>
+                            </ContextMenu>
+                        </Button.ContextMenu>
+                    </Button>
                     <Button Style="{StaticResource ToolButton}" Content="Save" Tag="{StaticResource IconSave}" Command="{Binding SaveCommand}" />
                     <Button Style="{StaticResource ToolButton}" Content="Save as..." Tag="{StaticResource IconSaveAs}" Command="{Binding SaveAsCommand}" MinWidth="86" />
                     <Button Style="{StaticResource ToolButton}" Content="Save a version" Tag="{StaticResource IconVersions}"
@@ -686,6 +707,17 @@
                               Stroke="#FF33383F" StrokeThickness="1.8" Fill="{x:Null}"
                               Stretch="Uniform" Width="16" Height="16" />
                     </ToggleButton>
+
+                    <Rectangle Width="1" Margin="6,3" Fill="#FFD8DBE0" />
+
+                    <TextBlock Text="Snap" Style="{StaticResource GizmoLabel}" />
+                    <RadioButton Content="off" GroupName="Snap" VerticalAlignment="Center" Margin="0,0,7,0"
+                                 IsChecked="{Binding SnapOff, Mode=TwoWay}" />
+                    <RadioButton Content="1" GroupName="Snap" VerticalAlignment="Center" Margin="0,0,7,0"
+                                 IsChecked="{Binding SnapOne, Mode=TwoWay}" ToolTip="Snap moves to whole millimetres" />
+                    <RadioButton Content="5" GroupName="Snap" VerticalAlignment="Center" Margin="0,0,3,0"
+                                 IsChecked="{Binding SnapFive, Mode=TwoWay}" ToolTip="Snap moves to 5 mm" />
+                    <TextBlock Text="mm" Style="{StaticResource GizmoUnit}" />
 
                     <Rectangle Width="1" Margin="6,3" Fill="#FFD8DBE0" />
 

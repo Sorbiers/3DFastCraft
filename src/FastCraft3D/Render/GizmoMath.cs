@@ -55,6 +55,24 @@ public static class GizmoMath
         return degrees;
     }
 
+    /// <summary>
+    /// Adjusts a travel distance so the object being dragged lands on a whole multiple of the
+    /// snap step.
+    ///
+    /// The <em>destination</em> is snapped rather than the distance travelled. Snapping the
+    /// distance would keep whatever fractional offset the object already had, so two parts that
+    /// need to meet exactly never quite would; snapping the destination puts everything on the
+    /// same grid. The rest of a multiple selection then moves by the same corrected amount, so
+    /// the group keeps its shape.
+    /// </summary>
+    public static double SnapTravel(double start, double travel, double step)
+    {
+        if (step <= 0) return travel;
+
+        double destination = start + travel;
+        return Math.Round(destination / step) * step - start;
+    }
+
     /// <summary>Folds an angle into (-180, 180] so the readout never drifts to 720 degrees.</summary>
     public static float NormaliseDegrees(float degrees)
     {

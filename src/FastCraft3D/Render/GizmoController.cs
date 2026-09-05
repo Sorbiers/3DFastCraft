@@ -82,6 +82,10 @@ public sealed class GizmoController
     /// <summary>How many handle shapes the current mode has laid out. Used by tests.</summary>
     public int HandleCount => handles.Count;
     public bool UniformScale { get; set; } = true;
+
+    /// <summary>Millimetres to snap a move to, or zero for free movement.</summary>
+    public double SnapStep { get; set; }
+
     public bool SnapRotation { get; set; } = true;
 
     public GizmoMode Mode
@@ -478,6 +482,10 @@ public sealed class GizmoController
         var delta = new Vector(screen.X - dragStart.X, screen.Y - dragStart.Y);
         double millimetres = GizmoMath.MillimetresAlongAxis(delta, axisScreen, pixelsPerMm);
 
+        // Snapped against the first object's own position, and the correction is then shared by
+        // the whole selection, so a group lands on the grid without being pulled apart.
+        millimetres = GizmoMath.SnapTravel(Component(dragBefore[0].Position, active.Axis), millimetres, SnapStep);
+
         Vector3 offset = AxisVector(active.Axis) * (float)millimetres;
         for (int i = 0; i < dragObjects.Count; i++)
             dragObjects[i].Position = dragBefore[i].Position + offset;
@@ -603,6 +611,13 @@ public sealed class GizmoController
         Axis.X => (Vector3.UnitY, Vector3.UnitZ),
         Axis.Y => (Vector3.UnitZ, Vector3.UnitX),
         _ => (Vector3.UnitX, Vector3.UnitY)
+    };
+
+    private static float Component(Vector3 v, Axis axis) => axis switch
+    {
+        Axis.X => v.X,
+        Axis.Y => v.Y,
+        _ => v.Z
     };
 
     private static float Extent(Bounds bounds, Axis axis) => axis switch
