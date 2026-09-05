@@ -2,18 +2,82 @@
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:hx="http://helix-toolkit.org/wpf/SharpDX"
-        Title="3DFastCraft" Height="900" Width="1500"
+        Title="{Binding WindowTitle}" Height="900" Width="1500"
         Background="#FFF3F3F3" WindowStartupLocation="CenterScreen">
 
     <Window.Resources>
+        <!-- Ribbon button: icon over label. The icon geometry travels in Tag, so adding one to
+             a button is a single attribute rather than a nested StackPanel each time. -->
         <Style x:Key="ToolButton" TargetType="Button">
-            <Setter Property="Padding" Value="10,6" />
-            <Setter Property="Margin" Value="2,0" />
-            <Setter Property="MinWidth" Value="74" />
-            <Setter Property="Background" Value="Transparent" />
-            <Setter Property="BorderBrush" Value="#FFD0D3D8" />
-            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="MinWidth" Value="68" />
+            <Setter Property="Margin" Value="1,0" />
             <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Foreground" Value="#FF2C3037" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Chrome" Background="Transparent" BorderThickness="1"
+                                BorderBrush="Transparent" CornerRadius="4" Padding="8,5" Margin="1">
+                            <StackPanel VerticalAlignment="Center">
+                                <Path Data="{TemplateBinding Tag}" Width="22" Height="22"
+                                      Stretch="Uniform" Fill="{x:Null}"
+                                      Stroke="{TemplateBinding Foreground}" StrokeThickness="1.35"
+                                      StrokeLineJoin="Round" StrokeStartLineCap="Round"
+                                      StrokeEndLineCap="Round" HorizontalAlignment="Center"
+                                      SnapsToDevicePixels="True" />
+                                <TextBlock Text="{TemplateBinding Content}" FontSize="11.5"
+                                           Margin="0,4,0,0" HorizontalAlignment="Center"
+                                           Foreground="{TemplateBinding Foreground}" />
+                            </StackPanel>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Chrome" Property="Background" Value="#FFE7EDF5" />
+                                <Setter TargetName="Chrome" Property="BorderBrush" Value="#FFBCCADC" />
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="Chrome" Property="Background" Value="#FFD3E0EF" />
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter Property="Opacity" Value="0.35" />
+                                <Setter Property="Cursor" Value="Arrow" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- Ribbon tabs: rounded tops, a little larger, with the selected one joined to the
+             panel below it. -->
+        <Style TargetType="TabItem">
+            <Setter Property="Foreground" Value="#FF4A5058" />
+            <Setter Property="FontSize" Value="13" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="TabItem">
+                        <Border x:Name="Tab" Margin="2,3,2,0" Padding="18,8"
+                                CornerRadius="7,7,0,0" Background="Transparent"
+                                BorderThickness="1,1,1,0" BorderBrush="Transparent">
+                            <ContentPresenter ContentSource="Header" VerticalAlignment="Center"
+                                              HorizontalAlignment="Center" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Tab" Property="Background" Value="#FFEDF2F8" />
+                            </Trigger>
+                            <Trigger Property="IsSelected" Value="True">
+                                <Setter TargetName="Tab" Property="Background" Value="#FFFAFAFB" />
+                                <Setter TargetName="Tab" Property="BorderBrush" Value="#FFD8DBE0" />
+                                <Setter Property="Foreground" Value="#FF1D5FA8" />
+                                <Setter Property="FontWeight" Value="SemiBold" />
+                                <!-- Overlap the panel border so the tab reads as part of it. -->
+                                <Setter TargetName="Tab" Property="Margin" Value="2,1,2,-1" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
         </Style>
 
         <Style x:Key="FieldLabel" TargetType="TextBlock">
@@ -168,83 +232,130 @@
                     BorderBrush="#FFD8DBE0" Padding="6">
             <TabItem Header="Insert">
                 <WrapPanel Margin="4">
-                    <Button Style="{StaticResource ToolButton}" Content="Cube"
+                    <Button Style="{StaticResource ToolButton}" Content="Cube" Tag="{StaticResource IconCube}"
                             Command="{Binding InsertCommand}" CommandParameter="Cube" />
-                    <Button Style="{StaticResource ToolButton}" Content="Cylinder"
+                    <Button Style="{StaticResource ToolButton}" Content="Cylinder" Tag="{StaticResource IconCylinder}"
                             Command="{Binding InsertCommand}" CommandParameter="Cylinder" />
-                    <Button Style="{StaticResource ToolButton}" Content="Cone"
+                    <Button Style="{StaticResource ToolButton}" Content="Cone" Tag="{StaticResource IconCone}"
                             Command="{Binding InsertCommand}" CommandParameter="Cone" />
-                    <Button Style="{StaticResource ToolButton}" Content="Sphere"
+                    <Button Style="{StaticResource ToolButton}" Content="Sphere" Tag="{StaticResource IconSphere}"
                             Command="{Binding InsertCommand}" CommandParameter="Sphere" />
-                    <Button Style="{StaticResource ToolButton}" Content="Pyramid"
+                    <Button Style="{StaticResource ToolButton}" Content="Pyramid" Tag="{StaticResource IconPyramid}"
                             Command="{Binding InsertCommand}" CommandParameter="Pyramid" />
-                    <Button Style="{StaticResource ToolButton}" Content="Wedge"
+                    <Button Style="{StaticResource ToolButton}" Content="Wedge" Tag="{StaticResource IconWedge}"
                             Command="{Binding InsertCommand}" CommandParameter="Wedge" />
-                    <Button Style="{StaticResource ToolButton}" Content="Torus"
+                    <Button Style="{StaticResource ToolButton}" Content="Torus" Tag="{StaticResource IconTorus}"
                             Command="{Binding InsertCommand}" CommandParameter="Torus" />
-                    <Button Style="{StaticResource ToolButton}" Content="Hexagon"
+                    <Button Style="{StaticResource ToolButton}" Content="Hexagon" Tag="{StaticResource IconHexagon}"
                             Command="{Binding InsertCommand}" CommandParameter="Hexagon" />
-                    <Button Style="{StaticResource ToolButton}" Content="Tetrahedron"
+                    <Button Style="{StaticResource ToolButton}" Content="Tetrahedron" Tag="{StaticResource IconTetrahedron}"
                             Command="{Binding InsertCommand}" CommandParameter="Tetrahedron" />
                     <Separator Margin="8,0" />
-                    <Button Style="{StaticResource ToolButton}" Content="Import..."
+                    <Button Style="{StaticResource ToolButton}" Content="Import..." Tag="{StaticResource IconImport}"
                             Command="{Binding ImportCommand}" ToolTip="Import an STL or OBJ file (Ctrl+I)" />
                 </WrapPanel>
             </TabItem>
 
             <TabItem Header="Object">
                 <WrapPanel Margin="4">
-                    <Button Style="{StaticResource ToolButton}" Content="Subtract"
+                    <Button Style="{StaticResource ToolButton}" Content="Subtract" Tag="{StaticResource IconSubtract}"
                             Command="{Binding BooleanCommand}" CommandParameter="Subtract"
                             ToolTip="Subtract the later selection from the first. Select two or more objects." />
-                    <Button Style="{StaticResource ToolButton}" Content="Intersect"
+                    <Button Style="{StaticResource ToolButton}" Content="Intersect" Tag="{StaticResource IconIntersect}"
                             Command="{Binding BooleanCommand}" CommandParameter="Intersect"
                             ToolTip="Keep only the overlapping volume" />
-                    <Button Style="{StaticResource ToolButton}" Content="Merge"
+                    <Button Style="{StaticResource ToolButton}" Content="Merge" Tag="{StaticResource IconMerge}"
                             Command="{Binding BooleanCommand}" CommandParameter="Union"
                             ToolTip="Fuse the selection into one solid" />
                     <Separator Margin="8,0" />
-                    <Button Style="{StaticResource ToolButton}" Content="Round..."
+                    <Button Style="{StaticResource ToolButton}" Content="Round..." Tag="{StaticResource IconRound}"
                             Command="{Binding RoundCommand}" MinWidth="82"
                             ToolTip="Round the edges of a cube or cylinder. Only shapes still described by their parameters can be rounded." />
                     <Separator Margin="8,0" />
-                    <Button Style="{StaticResource ToolButton}" Content="Split..."
+                    <Button Style="{StaticResource ToolButton}" Content="Split..." Tag="{StaticResource IconSplit}"
                             Command="{Binding BeginSplitCommand}"
                             ToolTip="Split the selected object with a plane" />
                     <Separator Margin="8,0" />
-                    <Button Style="{StaticResource ToolButton}" Content="Duplicate"
+                    <Button Style="{StaticResource ToolButton}" Content="Duplicate" Tag="{StaticResource IconDuplicate}"
                             Command="{Binding DuplicateCommand}" />
-                    <Button Style="{StaticResource ToolButton}" Content="Delete"
+                    <Button Style="{StaticResource ToolButton}" Content="Delete" Tag="{StaticResource IconDelete}"
                             Command="{Binding DeleteCommand}" />
-                    <Button Style="{StaticResource ToolButton}" Content="Drop to plate"
+                    <Button Style="{StaticResource ToolButton}" Content="Drop to plate" Tag="{StaticResource IconDropToPlate}"
                             Command="{Binding AlignToPlateCommand}" MinWidth="90" />
                     <Separator Margin="8,0" />
-                    <Button Style="{StaticResource ToolButton}" Content="Mirror X"
+                    <Button Style="{StaticResource ToolButton}" Content="Mirror X" Tag="{StaticResource IconMirror}"
                             Command="{Binding MirrorCommand}" CommandParameter="X" />
-                    <Button Style="{StaticResource ToolButton}" Content="Mirror Y"
+                    <Button Style="{StaticResource ToolButton}" Content="Mirror Y" Tag="{StaticResource IconMirror}"
                             Command="{Binding MirrorCommand}" CommandParameter="Y" />
-                    <Button Style="{StaticResource ToolButton}" Content="Mirror Z"
+                    <Button Style="{StaticResource ToolButton}" Content="Mirror Z" Tag="{StaticResource IconMirror}"
                             Command="{Binding MirrorCommand}" CommandParameter="Z" />
+                </WrapPanel>
+            </TabItem>
+
+            <TabItem Header="Align">
+                <WrapPanel Margin="4">
+                    <TextBlock Text="X" VerticalAlignment="Center" FontWeight="SemiBold"
+                               Foreground="#FF5A5F66" Margin="10,0,4,0" />
+                    <Button Style="{StaticResource ToolButton}" Content="Left" Tag="{StaticResource IconAlignMin}"
+                            Command="{Binding AlignCommand}" CommandParameter="X:Minimum" MinWidth="58" />
+                    <Button Style="{StaticResource ToolButton}" Content="Centre" Tag="{StaticResource IconAlignCentre}"
+                            Command="{Binding AlignCommand}" CommandParameter="X:Centre" MinWidth="58" />
+                    <Button Style="{StaticResource ToolButton}" Content="Right" Tag="{StaticResource IconAlignMax}"
+                            Command="{Binding AlignCommand}" CommandParameter="X:Maximum" MinWidth="58" />
+                    <Button Style="{StaticResource ToolButton}" Content="Spread" Tag="{StaticResource IconDistribute}"
+                            Command="{Binding AlignCommand}" CommandParameter="X:Distribute" MinWidth="58"
+                            ToolTip="Even out the gaps along X, keeping the two outermost objects where they are" />
+                    <Separator Margin="6,0" />
+                    <TextBlock Text="Y" VerticalAlignment="Center" FontWeight="SemiBold"
+                               Foreground="#FF5A5F66" Margin="10,0,4,0" />
+                    <Button Style="{StaticResource ToolButton}" Content="Front" Tag="{StaticResource IconAlignMin}"
+                            Command="{Binding AlignCommand}" CommandParameter="Y:Minimum" MinWidth="58" />
+                    <Button Style="{StaticResource ToolButton}" Content="Centre" Tag="{StaticResource IconAlignCentre}"
+                            Command="{Binding AlignCommand}" CommandParameter="Y:Centre" MinWidth="58" />
+                    <Button Style="{StaticResource ToolButton}" Content="Back" Tag="{StaticResource IconAlignMax}"
+                            Command="{Binding AlignCommand}" CommandParameter="Y:Maximum" MinWidth="58" />
+                    <Button Style="{StaticResource ToolButton}" Content="Spread" Tag="{StaticResource IconDistribute}"
+                            Command="{Binding AlignCommand}" CommandParameter="Y:Distribute" MinWidth="58"
+                            ToolTip="Even out the gaps along Y, keeping the two outermost objects where they are" />
+                    <Separator Margin="6,0" />
+                    <TextBlock Text="Z" VerticalAlignment="Center" FontWeight="SemiBold"
+                               Foreground="#FF5A5F66" Margin="10,0,4,0" />
+                    <Button Style="{StaticResource ToolButton}" Content="Bottom" Tag="{StaticResource IconAlignMin}"
+                            Command="{Binding AlignCommand}" CommandParameter="Z:Minimum" MinWidth="58" />
+                    <Button Style="{StaticResource ToolButton}" Content="Centre" Tag="{StaticResource IconAlignCentre}"
+                            Command="{Binding AlignCommand}" CommandParameter="Z:Centre" MinWidth="58" />
+                    <Button Style="{StaticResource ToolButton}" Content="Top" Tag="{StaticResource IconAlignMax}"
+                            Command="{Binding AlignCommand}" CommandParameter="Z:Maximum" MinWidth="58" />
+                    <Button Style="{StaticResource ToolButton}" Content="Spread" Tag="{StaticResource IconDistribute}"
+                            Command="{Binding AlignCommand}" CommandParameter="Z:Distribute" MinWidth="58"
+                            ToolTip="Even out the gaps along Z, keeping the two outermost objects where they are" />
+                    <Separator Margin="6,0" />
                 </WrapPanel>
             </TabItem>
 
             <TabItem Header="Edit">
                 <WrapPanel Margin="4">
-                    <Button Style="{StaticResource ToolButton}" Content="{Binding UndoLabel}"
+                    <Button Style="{StaticResource ToolButton}" Content="{Binding UndoLabel}" Tag="{StaticResource IconUndo}"
                             Command="{Binding UndoCommand}" MinWidth="120" />
-                    <Button Style="{StaticResource ToolButton}" Content="Redo"
+                    <Button Style="{StaticResource ToolButton}" Content="Redo" Tag="{StaticResource IconRedo}"
                             Command="{Binding RedoCommand}" />
                 </WrapPanel>
             </TabItem>
 
             <TabItem Header="File">
                 <WrapPanel Margin="4">
-                    <Button Style="{StaticResource ToolButton}" Content="New" Command="{Binding NewCommand}" />
-                    <Button Style="{StaticResource ToolButton}" Content="Open..." Command="{Binding OpenCommand}" />
-                    <Button Style="{StaticResource ToolButton}" Content="Save" Command="{Binding SaveCommand}" />
-                    <Button Style="{StaticResource ToolButton}" Content="Save as..." Command="{Binding SaveAsCommand}" MinWidth="86" />
+                    <Button Style="{StaticResource ToolButton}" Content="New" Tag="{StaticResource IconNew}" Command="{Binding NewCommand}" />
+                    <Button Style="{StaticResource ToolButton}" Content="Open..." Tag="{StaticResource IconOpen}" Command="{Binding OpenCommand}" />
+                    <Button Style="{StaticResource ToolButton}" Content="Save" Tag="{StaticResource IconSave}" Command="{Binding SaveCommand}" />
+                    <Button Style="{StaticResource ToolButton}" Content="Save as..." Tag="{StaticResource IconSaveAs}" Command="{Binding SaveAsCommand}" MinWidth="86" />
+                    <Button Style="{StaticResource ToolButton}" Content="Save a version" Tag="{StaticResource IconVersions}"
+                            Command="{Binding SaveVersionCommand}" MinWidth="88"
+                            ToolTip="Keep a named snapshot inside this project file, so you can come back to it later" />
+                    <Button Style="{StaticResource ToolButton}" Content="Versions..." Tag="{StaticResource IconVersions}"
+                            Command="{Binding VersionsCommand}" MinWidth="82"
+                            ToolTip="List the versions kept in this file, and restore one" />
                     <Separator Margin="8,0" />
-                    <Button Style="{StaticResource ToolButton}" Content="Export STL / OBJ..."
+                    <Button Style="{StaticResource ToolButton}" Content="Export STL / OBJ..." Tag="{StaticResource IconExport}"
                             Command="{Binding ExportCommand}" MinWidth="140"
                             ToolTip="Export the selection, or everything when nothing is selected (Ctrl+E)" />
                 </WrapPanel>
@@ -252,11 +363,11 @@
 
             <TabItem Header="View">
                 <WrapPanel Margin="4">
-                    <Button Style="{StaticResource ToolButton}" Content="Zoom to fit" Click="OnZoomExtents" MinWidth="90" />
-                    <Button Style="{StaticResource ToolButton}" Content="Top" Click="OnViewTop" />
-                    <Button Style="{StaticResource ToolButton}" Content="Front" Click="OnViewFront" />
-                    <Button Style="{StaticResource ToolButton}" Content="Right" Click="OnViewRight" />
-                    <Button Style="{StaticResource ToolButton}" Content="Isometric" Click="OnViewIso" />
+                    <Button Style="{StaticResource ToolButton}" Content="Zoom to fit" Tag="{StaticResource IconZoomFit}" Click="OnZoomExtents" MinWidth="90" />
+                    <Button Style="{StaticResource ToolButton}" Content="Top" Tag="{StaticResource IconViewTop}" Click="OnViewTop" />
+                    <Button Style="{StaticResource ToolButton}" Content="Front" Tag="{StaticResource IconViewFront}" Click="OnViewFront" />
+                    <Button Style="{StaticResource ToolButton}" Content="Right" Tag="{StaticResource IconViewRight}" Click="OnViewRight" />
+                    <Button Style="{StaticResource ToolButton}" Content="Isometric" Tag="{StaticResource IconViewIso}" Click="OnViewIso" />
                 </WrapPanel>
             </TabItem>
         </TabControl>

@@ -26,6 +26,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
     private string status = "Ready";
     private bool isBusy;
     private string? projectPath;
+    private bool isDirty;
     private SceneObject? selected;
     private Axis splitAxis = Axis.Z;
     private float splitOffset;
@@ -43,7 +44,11 @@ public sealed class MainViewModel : INotifyPropertyChanged
     {
         Scene = new Scene();
         Undo = new UndoStack(Scene);
-        Undo.Changed += () => Raise(nameof(UndoLabel));
+        Undo.Changed += () =>
+        {
+            Raise(nameof(UndoLabel));
+            IsDirty = true;
+        };
         Scene.Objects.CollectionChanged += (_, _) => RefreshSelection();
 
         InsertCommand = new RelayCommand(p => Insert(p));
@@ -67,6 +72,8 @@ public sealed class MainViewModel : INotifyPropertyChanged
         UndoCommand = RelayCommand.Simple(() => { Undo.Undo(); RefreshSelection(); }, () => Undo.CanUndo);
         RedoCommand = RelayCommand.Simple(() => { Undo.Redo(); RefreshSelection(); }, () => Undo.CanRedo);
 
+        SaveVersionCommand = RelayCommand.Simple(SaveVersion, () => Scene.Objects.Count > 0);
+        VersionsCommand = RelayCommand.Simple(ShowVersions, () => projectPath is not null);
         NewCommand = RelayCommand.Simple(NewScene);
         OpenCommand = RelayCommand.Simple(OpenProject);
         SaveCommand = RelayCommand.Simple(() => SaveProject(saveAs: false));
@@ -74,6 +81,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
         SetMoveModeCommand = RelayCommand.Simple(() => GizmoMode = GizmoMode.Move);
         SetRotateModeCommand = RelayCommand.Simple(() => GizmoMode = GizmoMode.Rotate);
         SetScaleModeCommand = RelayCommand.Simple(() => GizmoMode = GizmoMode.Scale);
+        AlignCommand = new RelayCommand(Align, _ => Scene.Selection.Count > 1);
         RoundCommand = RelayCommand.Simple(RoundSelection, () => Scene.Selection.Any(o => o.CanRound));
         CopyCommand = RelayCommand.Simple(Copy, () => Scene.Selection.Count > 0);
         PasteCommand = RelayCommand.Simple(Paste, () => clipboard.Count > 0);
@@ -102,6 +110,8 @@ public sealed class MainViewModel : INotifyPropertyChanged
     public System.Windows.Input.ICommand CancelSplitCommand { get; }
     public System.Windows.Input.ICommand UndoCommand { get; }
     public System.Windows.Input.ICommand RedoCommand { get; }
+    public System.Windows.Input.ICommand SaveVersionCommand { get; }
+    public System.Windows.Input.ICommand VersionsCommand { get; }
     public System.Windows.Input.ICommand NewCommand { get; }
     public System.Windows.Input.ICommand OpenCommand { get; }
     public System.Windows.Input.ICommand SaveCommand { get; }
@@ -109,6 +119,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
     public System.Windows.Input.ICommand SetMoveModeCommand { get; }
     public System.Windows.Input.ICommand SetRotateModeCommand { get; }
     public System.Windows.Input.ICommand SetScaleModeCommand { get; }
+    public System.Windows.Input.ICommand AlignCommand { get; }
     public System.Windows.Input.ICommand RoundCommand { get; }
     public System.Windows.Input.ICommand CopyCommand { get; }
     public System.Windows.Input.ICommand PasteCommand { get; }
@@ -152,6 +163,30 @@ public sealed class MainViewModel : INotifyPropertyChanged
     }
 
     public string UndoLabel => Undo.NextUndoLabel is { } label ? $"Undo {label}" : "Undo";
+
+    /// <summary>Whether there are changes that have not been written to the project file.</summary>
+    public bool IsDirty
+    {
+        get => isDirty;
+        private set
+        {
+            Set(ref isDirty, value);
+            Raise(nameof(WindowTitle));
+        }
+    }
+
+    /// <summary>
+    /// The file being edited, marked with an asterisk while it has unsaved changes - the usual
+    /// convention, and the quickest way to tell which of several open models is which.
+    /// </summary>
+    public string WindowTitle
+    {
+        get
+        {
+            string name = projectPath is null ? "Untitled" : Path.GetFileNameWithoutExtension(projectPath);
+            return $"{name}{(isDirty ? " *" : string.Empty)} - 3DFastCraft";
+        }
+    }
 
     public string SelectionSummary
     {
@@ -431,6 +466,41 @@ public sealed class MainViewModel : INotifyPropertyChanged
     }
 
     /// <summary>
+    /// Lines the selection up along an axis. The parameter is "axis:mode", for example "X:Centre".
+    /// </summary>
+    private void Align(object? parameter)
+    {
+        if (parameter is not string text) return;
+        var parts = text.Split(':');
+        if (parts.Length != 2) return;
+        if (!Enum.TryParse<Axis>(parts[0], out var axis)) return;
+        if (!Enum.TryParse<AlignMode>(parts[1], out var mode)) return;
+
+        var selection = Scene.Selection;
+        if (selection.Count < 2) return;
+
+        var before = selection.Select(TransformState.Capture).ToList();
+        var offsets = AlignTools.Offsets(selection, axis, mode);
+
+        for (int i = 0; i < selection.Count; i++)
+            selection[i].Position += offsets[i];
+
+        if (TransformCommand.CreateIfChanged($"Align {axis} {mode}", selection, before) is { } command)
+        {
+            Undo.Execute(command);
+            Status = mode == AlignMode.Distribute
+                ? $"Spread {selection.Count} objects evenly along {axis}"
+                : $"Aligned {selection.Count} objects to {mode} on {axis}";
+        }
+        else
+        {
+            Status = "Already aligned";
+        }
+
+        RefreshSelection();
+    }
+
+    /// <summary>
     /// Rebuilds the selected primitives with rounded edges.
     ///
     /// Rounding regenerates the shape from its parameters at its current size rather than
@@ -702,6 +772,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
         Scene.Objects.Clear();
         Undo.Clear();
         projectPath = null;
+        IsDirty = false;
         RefreshSelection();
         Status = "New scene";
     }
@@ -722,6 +793,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
             foreach (var o in loaded) Scene.Objects.Add(o);
             Undo.Clear();
             projectPath = dialog.FileName;
+            IsDirty = false;
             RefreshSelection();
             ZoomExtentsRequested?.Invoke();
             Status = $"Opened {Path.GetFileName(dialog.FileName)}";
@@ -751,11 +823,68 @@ public sealed class MainViewModel : INotifyPropertyChanged
         {
             SceneSerializer.Save(target, Scene);
             projectPath = target;
+            IsDirty = false;
             Status = $"Saved {Path.GetFileName(target)}";
         }
         catch (Exception ex)
         {
             MessageBox.Show(ex.Message, "Could not save project", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+    }
+
+    /// <summary>
+    /// Keeps a labelled snapshot inside the project file, then saves.
+    ///
+    /// This is the answer to wanting to go back after closing the file. Undo already keeps every
+    /// step, but only for as long as the app is open, and its steps are far too fine-grained to
+    /// be worth persisting - a named version is both smaller and easier to find your way back to.
+    /// </summary>
+    private void SaveVersion()
+    {
+        if (Scene.Objects.Count == 0) return;
+
+        // A version has to live in a file, so an unsaved scene needs a home first.
+        if (projectPath is null)
+        {
+            SaveProject(saveAs: true);
+            if (projectPath is null) return;
+        }
+
+        var prompt = new VersionNameDialog { Owner = Application.Current?.MainWindow };
+        if (prompt.ShowDialog() != true) return;
+
+        try
+        {
+            SceneSerializer.SaveVersion(projectPath, Scene, prompt.VersionLabel);
+            IsDirty = false;
+            Status = $"Kept version \"{prompt.VersionLabel}\" in {Path.GetFileName(projectPath)}";
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(ex.Message, "Could not save the version", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+    }
+
+    private void ShowVersions()
+    {
+        if (projectPath is null) return;
+
+        var dialog = new VersionsDialog(projectPath) { Owner = Application.Current?.MainWindow };
+        if (dialog.ShowDialog() != true || dialog.RestoreIndex is not { } index) return;
+
+        try
+        {
+            var restored = SceneSerializer.LoadVersion(projectPath, index);
+
+            // Routed through undo, so restoring a version is as reversible as anything else.
+            Undo.Execute(new ReplaceObjectsCommand("Restore version", Scene.Objects.ToList(), restored));
+            RefreshSelection();
+            ZoomExtentsRequested?.Invoke();
+            Status = $"Restored a version with {restored.Count} object(s) - Ctrl+Z to go back";
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(ex.Message, "Could not restore that version", MessageBoxButton.OK, MessageBoxImage.Error);
         }
     }
 

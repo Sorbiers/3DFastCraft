@@ -38,8 +38,9 @@ dotnet test
 |---|---|
 | **Insert** | Cube, cylinder, cone, sphere, pyramid, wedge, torus, hexagon, tetrahedron; import STL/OBJ |
 | **Object** | Subtract / Intersect / Merge, Round edges, Split with a plane, duplicate, delete, drop to plate, mirror |
+| **Align** | Line the selection up on X, Y or Z: flush to either edge, centred, or spread evenly |
 | **Edit** | Undo, redo |
-| **File** | New, open, save, save as, export STL/OBJ |
+| **File** | New, open, save, save as, save a version, versions, export STL/OBJ |
 | **View** | Zoom to fit, top / front / right / isometric |
 
 **Camera:** left-drag orbits, right-drag pans, the wheel zooms. Dragging horizontally turns the
@@ -126,6 +127,21 @@ honest answer rather than something that half-works everywhere.
 
 Because the shape is rebuilt at its current size, its scale resets in the process; resizing it
 unevenly afterwards will stretch the rounded edges.
+
+### Versions
+
+Undo keeps every step with no limit, but only while the app is open. To come back to a model
+after closing it, **Save a version** keeps a named snapshot *inside* the `.3dfc` file, and
+**Versions...** lists them and restores one. Restoring is a normal undo step, so `Ctrl+Z` brings
+the current model straight back.
+
+Versions are deliberately named snapshots rather than a persisted undo stack. Undo steps are
+fine-grained — every drag is one — so storing them would mean hundreds of near-identical scenes,
+and none of them would tell you which was the one worth returning to. A handful of named
+versions is smaller and far easier to navigate.
+
+An ordinary save never discards them, and saves are written to a temporary file and moved into
+place, so an interrupted save cannot destroy the scene and its whole history together.
 
 ### Splitting
 

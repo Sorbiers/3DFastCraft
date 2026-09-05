@@ -8,17 +8,30 @@ using FastCraft3D.Model;
 
 namespace FastCraft3D.Io;
 
+/// <param name="Label">What the user called this version.</param>
+/// <param name="SavedUtc">When it was kept.</param>
+/// <param name="ObjectCount">How many objects it holds, for the picker.</param>
+public readonly record struct SceneVersion(string Label, DateTime SavedUtc, int ObjectCount);
+
 /// <summary>
 /// The project format (.3dfc): GZip-compressed JSON.
 ///
 /// Unlike an STL export, this keeps objects separate and their transforms live, so a scene can
 /// be reopened and kept editing. Meshes are stored as flat float arrays - readable enough to
 /// debug, and GZip removes the cost of the verbosity (mesh coordinates compress well).
+///
+/// A file holds the current scene plus any number of named versions kept alongside it, so a
+/// model's history travels with the model instead of spreading across files named "v2 final".
+/// Versions are deliberately named snapshots rather than a serialised undo stack: undo steps are
+/// fine-grained - every drag is one - so persisting them would store hundreds of near-identical
+/// scenes, and none of them would tell you which was the one worth going back to.
 /// </summary>
 public static class SceneSerializer
 {
     public const string Extension = ".3dfc";
-    private const int CurrentVersion = 1;
+
+    /// <summary>Version 1 held only a scene; version 2 added the kept versions beside it.</summary>
+    private const int CurrentVersion = 2;
 
     private static readonly JsonSerializerOptions Options = new()
     {
@@ -26,30 +39,68 @@ public static class SceneSerializer
         WriteIndented = false
     };
 
+    /// <summary>Writes the scene as the current state, leaving any kept versions untouched.</summary>
     public static void Save(string path, Scene scene)
     {
-        var dto = new SceneDto
-        {
-            Version = CurrentVersion,
-            Objects = scene.Objects.Select(o => new ObjectDto
-            {
-                Name = o.Name,
-                Position = ToArray(o.Position),
-                Rotation = ToArray(o.Rotation),
-                Scale = ToArray(o.Scale),
-                Colour = ToArray(o.Colour),
-                Origin = o.Origin?.ToString(),
-                Vertices = Flatten(o.Mesh.Positions),
-                Triangles = o.Mesh.Indices.ToArray()
-            }).ToList()
-        };
-
-        using var file = File.Create(path);
-        using var gzip = new GZipStream(file, CompressionLevel.Optimal);
-        JsonSerializer.Serialize(gzip, dto, Options);
+        var dto = ReadIfPresent(path) ?? new SceneDto();
+        dto.Version = CurrentVersion;
+        dto.Objects = scene.Objects.Select(ToDto).ToList();
+        Write(path, dto);
     }
 
-    public static List<SceneObject> Load(string path)
+    /// <summary>Keeps a labelled snapshot in the file, and saves the scene as current.</summary>
+    public static void SaveVersion(string path, Scene scene, string label)
+    {
+        var dto = ReadIfPresent(path) ?? new SceneDto();
+        dto.Version = CurrentVersion;
+        dto.Objects = scene.Objects.Select(ToDto).ToList();
+
+        (dto.Versions ??= []).Add(new VersionDto
+        {
+            Label = string.IsNullOrWhiteSpace(label) ? "Version" : label.Trim(),
+            SavedUtc = DateTime.UtcNow,
+            Objects = dto.Objects // the snapshot is the state being saved
+        });
+
+        Write(path, dto);
+    }
+
+    public static List<SceneObject> Load(string path) => Read(path).Objects?.Select(FromDto).ToList() ?? [];
+
+    /// <summary>The versions kept in a file, oldest first.</summary>
+    public static List<SceneVersion> ReadVersions(string path)
+    {
+        var dto = ReadIfPresent(path);
+        if (dto?.Versions is null) return [];
+
+        return dto.Versions
+            .Select(v => new SceneVersion(v.Label ?? "Version", v.SavedUtc, v.Objects?.Count ?? 0))
+            .ToList();
+    }
+
+    /// <summary>Reads one kept version back out, by its position in <see cref="ReadVersions"/>.</summary>
+    public static List<SceneObject> LoadVersion(string path, int index)
+    {
+        var dto = Read(path);
+        if (dto.Versions is null || index < 0 || index >= dto.Versions.Count)
+            throw new ArgumentOutOfRangeException(nameof(index), "That version is not in this file.");
+
+        return dto.Versions[index].Objects?.Select(FromDto).ToList() ?? [];
+    }
+
+    /// <summary>Forgets a kept version. The current scene is never touched.</summary>
+    public static void DeleteVersion(string path, int index)
+    {
+        var dto = Read(path);
+        if (dto.Versions is null || index < 0 || index >= dto.Versions.Count) return;
+
+        dto.Versions.RemoveAt(index);
+        Write(path, dto);
+    }
+
+    // --- Plumbing ---------------------------------------------------------------------
+
+    private static SceneDto Read(string path)
     {
         using var file = File.OpenRead(path);
         using var gzip = new GZipStream(file, CompressionMode.Decompress);
@@ -60,22 +111,53 @@ public static class SceneSerializer
             throw new InvalidDataException(
                 $"This project was saved by a newer version of 3DFastCraft (format {dto.Version}).");
 
-        var result = new List<SceneObject>();
-        foreach (var o in dto.Objects ?? [])
+        return dto;
+    }
+
+    /// <summary>Reads a file if it exists and is readable; used to preserve versions on save.</summary>
+    private static SceneDto? ReadIfPresent(string path)
+    {
+        if (!File.Exists(path)) return null;
+        try { return Read(path); }
+        catch { return null; } // a corrupt or foreign file is replaced rather than blocking the save
+    }
+
+    private static void Write(string path, SceneDto dto)
+    {
+        // Written to a temporary file first: a save interrupted halfway would otherwise destroy
+        // both the current scene and every version kept with it.
+        string temporary = path + ".tmp";
+
+        using (var file = File.Create(temporary))
+        using (var gzip = new GZipStream(file, CompressionLevel.Optimal))
         {
-            var mesh = new Mesh(Unflatten(o.Vertices), o.Triangles ?? []);
-            result.Add(new SceneObject(o.Name ?? "Object", mesh)
-            {
-                Position = ToVector(o.Position),
-                Rotation = ToVector(o.Rotation),
-                Scale = o.Scale is { Length: 3 } ? ToVector(o.Scale) : Vector3.One,
-                Colour = o.Colour is { Length: 3 } ? ToVector(o.Colour) : new Vector3(0.3f, 0.55f, 0.85f),
-                Origin = Enum.TryParse<PrimitiveKind>(o.Origin, out var kind) ? kind : null
-            });
+            JsonSerializer.Serialize(gzip, dto, Options);
         }
 
-        return result;
+        File.Move(temporary, path, overwrite: true);
     }
+
+    private static ObjectDto ToDto(SceneObject o) => new()
+    {
+        Name = o.Name,
+        Position = ToArray(o.Position),
+        Rotation = ToArray(o.Rotation),
+        Scale = ToArray(o.Scale),
+        Colour = ToArray(o.Colour),
+        Origin = o.Origin?.ToString(),
+        Vertices = Flatten(o.Mesh.Positions),
+        Triangles = o.Mesh.Indices.ToArray()
+    };
+
+    private static SceneObject FromDto(ObjectDto o) =>
+        new(o.Name ?? "Object", new Mesh(Unflatten(o.Vertices), o.Triangles ?? []))
+        {
+            Position = ToVector(o.Position),
+            Rotation = ToVector(o.Rotation),
+            Scale = o.Scale is { Length: 3 } ? ToVector(o.Scale) : Vector3.One,
+            Colour = o.Colour is { Length: 3 } ? ToVector(o.Colour) : new Vector3(0.3f, 0.55f, 0.85f),
+            Origin = Enum.TryParse<PrimitiveKind>(o.Origin, out var kind) ? kind : null
+        };
 
     private static float[] ToArray(Vector3 v) => [v.X, v.Y, v.Z];
 
@@ -106,6 +188,14 @@ public static class SceneSerializer
     private sealed class SceneDto
     {
         public int Version { get; set; }
+        public List<ObjectDto>? Objects { get; set; }
+        public List<VersionDto>? Versions { get; set; }
+    }
+
+    private sealed class VersionDto
+    {
+        public string? Label { get; set; }
+        public DateTime SavedUtc { get; set; }
         public List<ObjectDto>? Objects { get; set; }
     }
 

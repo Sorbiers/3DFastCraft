@@ -1,0 +1,41 @@
+<Window x:Class="FastCraft3D.View.VersionsDialog"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Versions" Height="420" Width="480"
+        WindowStartupLocation="CenterOwner" ShowInTaskbar="False"
+        Background="#FFF7F7F8">
+
+    <Grid Margin="18,14,18,14">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <TextBlock x:Name="HeaderText" TextWrapping="Wrap" Foreground="#FF33383F" Margin="0,0,0,10" />
+
+        <ListBox x:Name="VersionList" Grid.Row="1" SelectionChanged="OnSelectionChanged">
+            <ListBox.ItemTemplate>
+                <DataTemplate>
+                    <StackPanel Margin="2,4">
+                        <TextBlock Text="{Binding Label}" FontWeight="SemiBold" Foreground="#FF2C3037" />
+                        <TextBlock Text="{Binding Detail}" FontSize="11" Foreground="#FF767C85" />
+                    </StackPanel>
+                </DataTemplate>
+            </ListBox.ItemTemplate>
+        </ListBox>
+
+        <TextBlock x:Name="WarningText" Grid.Row="2" TextWrapping="Wrap" Margin="0,10,0,0"
+                   Foreground="#FF767C85"
+                   Text="Restoring replaces what is on the plate. It is a normal undo step, so Ctrl+Z brings the current model back." />
+
+        <StackPanel Grid.Row="3" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,14,0,0">
+            <Button x:Name="DeleteButton" Content="Forget" Click="OnDelete"
+                    MinWidth="80" Padding="10,6" Margin="0,0,8,0" />
+            <Button x:Name="RestoreButton" Content="Restore" IsDefault="True" Click="OnRestore"
+                    MinWidth="92" Padding="10,6" Margin="0,0,8,0" />
+            <Button Content="Close" IsCancel="True" MinWidth="80" Padding="10,6" />
+        </StackPanel>
+    </Grid>
+</Window>
