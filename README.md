@@ -43,7 +43,7 @@ dotnet test
 | **Insert** | Cube, cylinder, cone, sphere, pyramid, wedge, torus, hexagon, tetrahedron; import STL/OBJ |
 | **Object** | Subtract / Intersect / Merge, Smooth, Round edges, Split with a plane, Engrave a pattern, Colour, duplicate (beside or in place), delete, drop to plate, mirror |
 | **Align** | Line the selection up on X, Y or Z: flush to either edge, centred, or spread evenly |
-| **Edit** | Repair, rebuild, undo, redo |
+| **Edit** | Repair, rebuild, simplify, undo, redo |
 | **File** | New, open, recent, save, save as, save a version, versions, export STL/OBJ |
 | **View** | Zoom to fit, top / front / right / isometric, wireframe, x-ray, build plate size and visibility |
 
@@ -155,6 +155,16 @@ keeps its proper shape; it makes no difference to a closed model.
 Smoothing changes the part's size, so the dialog reports it: corners pull in while flat faces
 dome very slightly outward, which is what makes a smoothed cube a pillow rather than a smaller
 cube. A 20 mm cube comes back about 20.75 mm across.
+
+### Simplifying
+
+**Simplify...** on the Edit tab cuts the triangle count down while keeping the shape. Edges are
+collapsed cheapest first, where the cost of a collapse is how far it moves the surface away from
+the planes the original triangles lay in - so it costs almost nothing to collapse an edge in the
+middle of a flat panel and a great deal to collapse one across a crease. Flat parts thin out;
+features stay.
+
+It is the natural partner to **Rebuild**, which produces a great many triangles by design.
 
 ### Rebuilding a broken model
 

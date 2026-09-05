@@ -1,0 +1,29 @@
+<Window x:Class="FastCraft3D.View.SimplifyDialog"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Simplify" SizeToContent="Height" Width="420"
+        WindowStartupLocation="CenterOwner" ResizeMode="NoResize"
+        ShowInTaskbar="False" Background="#FFF7F7F8">
+
+    <StackPanel Margin="18,14,18,14">
+        <TextBlock x:Name="SubjectText" TextWrapping="Wrap" Foreground="#FF33383F" Margin="0,0,0,14" />
+
+        <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
+            <TextBlock Text="Keep" VerticalAlignment="Center" Foreground="#FF5A5F66" Width="52" />
+            <TextBlock x:Name="AmountText" VerticalAlignment="Center" Foreground="#FF33383F" />
+        </StackPanel>
+        <Slider x:Name="AmountSlider" Minimum="1" Maximum="100" TickFrequency="1"
+                IsSnapToTickEnabled="True" ValueChanged="OnAmountChanged" Margin="0,0,0,12" />
+
+        <Border Padding="10,8" CornerRadius="3"
+                Background="#FFEFF1F4" BorderBrush="#FFDDE0E4" BorderThickness="1">
+            <TextBlock x:Name="SummaryText" TextWrapping="Wrap" Foreground="#FF3A3F45" />
+        </Border>
+
+        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,18,0,0">
+            <Button Content="Simplify" IsDefault="True" Click="OnAccept"
+                    MinWidth="88" Padding="10,6" Margin="0,0,8,0" />
+            <Button Content="Cancel" IsCancel="True" MinWidth="80" Padding="10,6" />
+        </StackPanel>
+    </StackPanel>
+</Window>

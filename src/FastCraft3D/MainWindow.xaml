@@ -419,6 +419,9 @@
                     <Button Style="{StaticResource ToolButton}" Content="Rebuild..." Tag="{StaticResource IconRebuild}"
                             Command="{Binding RebuildCommand}" MinWidth="82"
                             ToolTip="Rebuild the surface from scratch. Mends anything, including a model that passes through itself - at the cost of fine detail." />
+                    <Button Style="{StaticResource ToolButton}" Content="Simplify..." Tag="{StaticResource IconSimplify}"
+                            Command="{Binding SimplifyCommand}" MinWidth="82"
+                            ToolTip="Cut the triangle count down while keeping the shape. The natural partner to Rebuild." />
                     <Separator Margin="8,0" />
                     <Button Style="{StaticResource ToolButton}" Content="{Binding UndoLabel}" Tag="{StaticResource IconUndo}"
                             Command="{Binding UndoCommand}" MinWidth="120" />

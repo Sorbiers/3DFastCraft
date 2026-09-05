@@ -79,6 +79,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
         RepairCommand = AsyncRelayCommand.Simple(RepairObjects, () => Scene.Objects.Count > 0);
         SmoothCommand = RelayCommand.Simple(SmoothSelection, () => Scene.Selection.Count > 0);
         RebuildCommand = AsyncRelayCommand.Simple(RebuildObjects, () => Scene.Objects.Count > 0);
+        SimplifyCommand = AsyncRelayCommand.Simple(SimplifySelection, () => Scene.Selection.Count > 0);
         BeginEngraveCommand = RelayCommand.Simple(BeginEngrave, () => Scene.Selection.Count == 1);
         ApplyEngraveCommand = AsyncRelayCommand.Simple(ApplyEngrave, () => isEngraveMode && engrave.HasFace);
         CancelEngraveCommand = RelayCommand.Simple(() => IsEngraveMode = false);
@@ -129,6 +130,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
     public System.Windows.Input.ICommand RepairCommand { get; }
     public System.Windows.Input.ICommand SmoothCommand { get; }
     public System.Windows.Input.ICommand RebuildCommand { get; }
+    public System.Windows.Input.ICommand SimplifyCommand { get; }
     public System.Windows.Input.ICommand BeginEngraveCommand { get; }
     public System.Windows.Input.ICommand ApplyEngraveCommand { get; }
     public System.Windows.Input.ICommand CancelEngraveCommand { get; }
@@ -1041,6 +1043,57 @@ public sealed class MainViewModel : INotifyPropertyChanged
         {
             Status = $"{op} failed: {ex.Message}";
             MessageBox.Show(ex.Message, "3DFastCraft", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+        finally
+        {
+            IsBusy = false;
+        }
+    }
+
+    /// <summary>
+    /// Cuts the triangle count of the selection down while keeping its shape.
+    ///
+    /// The natural partner to Rebuild, which produces a great many triangles by design: nearly
+    /// all of them describe flat faces that a handful would describe just as well.
+    /// </summary>
+    private async Task SimplifySelection()
+    {
+        var selection = Scene.Selection.ToList();
+        if (selection.Count == 0) return;
+
+        var dialog = new SimplifyDialog(selection) { Owner = Application.Current?.MainWindow };
+        if (dialog.ShowDialog() != true || dialog.Result is not { } keep) return;
+
+        IsBusy = true;
+        Status = "Simplifying...";
+        try
+        {
+            var meshes = selection.Select(o => o.Mesh).ToList();
+            var reduced = await Task.Run(
+                () => meshes.Select(m => MeshSimplify.ByFraction(m, keep)).ToList());
+
+            var produced = new List<SceneObject>();
+            for (int i = 0; i < selection.Count; i++)
+            {
+                produced.Add(new SceneObject(selection[i].Name, reduced[i])
+                {
+                    Position = selection[i].Position,
+                    Rotation = selection[i].Rotation,
+                    Scale = selection[i].Scale,
+                    Colour = selection[i].Colour
+                });
+            }
+
+            Undo.Execute(new ReplaceObjectsCommand("Simplify", selection, produced));
+            RefreshSelection();
+
+            int before = meshes.Sum(m => m.TriangleCount);
+            int after = reduced.Sum(m => m.TriangleCount);
+            Status = $"Simplified {before:N0} triangles to {after:N0}";
+        }
+        catch (Exception ex)
+        {
+            Status = $"Simplify failed: {ex.Message}";
         }
         finally
         {
