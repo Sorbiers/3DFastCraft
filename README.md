@@ -41,11 +41,11 @@ dotnet test
 | Tab | What it does |
 |---|---|
 | **Insert** | Cube, cylinder, cone, sphere, pyramid, wedge, torus, hexagon, tetrahedron; import STL/OBJ |
-| **Object** | Subtract / Intersect / Merge, Round edges, Split with a plane, Engrave a pattern, Colour, duplicate (beside or in place), delete, drop to plate, mirror |
+| **Object** | Subtract / Intersect / Merge, Smooth, Round edges, Split with a plane, Engrave a pattern, Colour, duplicate (beside or in place), delete, drop to plate, mirror |
 | **Align** | Line the selection up on X, Y or Z: flush to either edge, centred, or spread evenly |
-| **Edit** | Undo, redo |
+| **Edit** | Repair, undo, redo |
 | **File** | New, open, recent, save, save as, save a version, versions, export STL/OBJ |
-| **View** | Zoom to fit, top / front / right / isometric |
+| **View** | Zoom to fit, top / front / right / isometric, wireframe, x-ray, build plate size and visibility |
 
 **Camera:** left-drag orbits, right-drag pans, the wheel zooms. Dragging horizontally turns the
 scene around the vertical **Z** axis, like a turntable - the plate never rolls onto its side.
@@ -77,6 +77,11 @@ In the position, size and rotation boxes, **Up/Down** and the **mouse wheel** nu
 1 — hold **Shift** for 10 or **Ctrl** for 0.1. A nudge also rounds onto that step, so a value
 like 4.37 tidies up rather than carrying its rounding error forever.
 
+Resizing works about the object's centre, so both faces move outward and the dimension grows by
+twice the handle's travel. The toggle beside the proportions one - or **O** - holds the face
+opposite the handle exactly where it is, so the object grows by precisely what you dragged and
+only the way you dragged it. That is what you want when a part has to keep meeting its neighbour.
+
 **Snap** in the manipulator bar constrains drags to whole millimetres or 5 mm. It snaps where the
 object *lands*, not how far it travels, so two parts dragged onto the same grid meet exactly.
 
@@ -99,6 +104,44 @@ Colour is a property of the object, so it survives duplication, booleans, splitt
 rounding, and it is saved in the project file. It reaches **OBJ** exports as a `.mtl` sidecar.
 **STL has no notion of colour** - an STL export carries geometry only, which is what slicers
 read anyway.
+
+### Repairing a model
+
+A model that would not print raises a banner over the viewport - *one or more objects are
+invalidly defined* - and **Repair** on the Edit tab mends what it can: it welds, drops what is
+genuinely nothing, makes neighbouring faces agree which way they face, turns any shell that came
+out inside out, and caps the holes. A shell enclosed by another is left facing inward, because
+that is a cavity and turning it outward would fill in the hollow.
+
+It repairs the selection, or everything if nothing is selected.
+
+What it will not do is guess. A mesh that overlaps itself cannot be mended by patching it
+locally - the tools that manage it voxelise the model and rebuild the surface, which would
+flatten every detail this app exists to cut. Faced with damage it cannot understand it hands the
+mesh straight back and says so, rather than tearing it further.
+
+### Seeing inside
+
+**Wireframe** draws every triangle edge, which is how you see what an import actually costs and
+where a boolean has left a mess. **X-ray** fades everything that is not selected, so a part
+buried inside another can be seen and worked on - only the unselected fade, since the point is to
+look past them at what is selected.
+
+The **build plate** takes any size from 20 to 2000 mm, with the common beds offered, and can be
+hidden altogether. It is rebuilt rather than stretched when the size changes: its squares are
+10 mm so the board doubles as a ruler.
+
+### Smoothing
+
+**Smooth** on the Object tab rounds the facets off by nudging each vertex toward the average of
+its neighbours. Press it again for more.
+
+It works with the vertices it is given and adds none, so it earns its keep on a dense import and
+does very little to a simple shape. A cube in fact collapses somewhat - with eight vertices there
+is no shape left once the roughness is filtered out - so rounding a box's corners remains
+**Round edges**' job. The status line says when there is little to work with.
+
+The rim of an open mesh is held still, so a hole keeps its shape.
 
 ### The manipulator
 
@@ -240,11 +283,16 @@ place, so an interrupted save cannot destroy the scene and its whole history tog
 
 ### Splitting
 
-Select an object and press **Split** on the Object tab. The plane appears with its own handles:
+Select one or more objects and press **Split** on the Object tab. The plane appears with its own handles:
 the blue arrows slide it along its normal, and the coloured rings tilt it — so the plane is not
 limited to the three axis-aligned orientations. Then choose which side to keep; the buttons are
 named after the direction the plane actually faces, so a horizontal plane offers **Top** and
 **Bottom** rather than an abstract front and back. Both halves come out capped and closed.
+
+The plane belongs to the scene rather than to an object, so it cuts **everything selected** in
+one stroke and one undo step - which is how an assembly gets sliced in half. Its travel and its
+handles are sized to the whole selection, and objects the plane misses are left alone rather than
+being dropped.
 
 ### Making a hole
 
