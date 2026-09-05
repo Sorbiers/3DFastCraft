@@ -1,4 +1,4 @@
-# 3DFastCraft
+﻿# 3DFastCraft
 
 A small Windows desktop app for building simple printable geometry — a replacement for the
 retired Microsoft 3D Builder. Drop in primitive shapes, size them exactly, cut and combine
@@ -228,6 +228,11 @@ dense imports (over 200k triangles) skip the outline and use the colour lift alo
 The status bar always shows the selected object's size, triangle count, volume, and whether it
 is watertight.
 
+**Split**, **Engrave** and **Text** take the object over while they run: the manipulator bar and
+its handles stand down, and the tool's own handles have the object to themselves. Starting one
+puts the others away, since each means something different by a click on the model. Cancel or
+apply, and the manipulator comes back.
+
 ### Rounding edges
 
 **Round...** on the Object tab rebuilds a **cube** or **cylinder** with rounded edges at a radius
@@ -272,6 +277,41 @@ Letters are real outlines rather than a bitmap, so an O has a proper hole in it 
 a few hundred triangles rather than tens of thousands. **Raised instead of cut** stands the
 lettering proud of the face rather than sinking it in.
 
+#### Putting it where you want it
+
+Two handles sit on the lettering itself: a **blue grip** in the middle slides it about, and an
+**orange knob** turns it. A dashed box shows what it covers. **Across**, **Up** and **Turn** in
+the panel are the same three numbers, so a drag can be tidied up by typing, and every field takes
+arrow keys and the wheel.
+
+Clicking the object again re-anchors the lettering to where you clicked; clicking a *different*
+face starts fresh.
+
+#### Wrap
+
+| Wrap | What it does |
+|---|---|
+| **Planar** | Flat on the face, which is what most lettering wants |
+| **Cylindrical** | Bent round the object as a barrel - a ring, a cup, a bottle |
+| **Spherical** | Laid over it as a ball |
+
+The curved ones are anchored where you clicked rather than at the object's middle, so a barrel
+picked on its side is lettered through that exact point. Across is measured as **arc length**, so
+letters keep their proportions whatever the radius, and a word long enough to go right round
+meets itself instead of piling up.
+
+Wrapped lettering is broken up finely enough to follow the curve - but only where it actually
+strays from it. Nothing bends along a barrel's axis, so a step straight up one is left alone
+however long it is. That is the difference between a couple of thousand triangles and a hundred
+and fifty thousand.
+
+#### Bevel
+
+**Bevel** draws the far end of the lettering in, sloping its walls. It is worth having for
+printing rather than for looks: upright walls leave raised lettering a step for the first layer
+to bridge, and cut lettering a slot exactly one nozzle wide. A bevel wider than the stroke would
+swallow it, so a stroke too thin to slope keeps its upright walls rather than closing up.
+
 For an FDM print, the same limits apply as to engraving: **0.4 mm deep** is two layers, and
 strokes thinner than a couple of nozzle widths will not slice. Bold at 8 mm or more is a safe
 starting point.
@@ -306,10 +346,11 @@ Two walls will not line up by themselves. Each face measures its pattern from it
 corner, and which corner that is depends on which way the face points, so the courses on adjacent
 walls start at different places and the joints miss each other where they meet.
 
-**Shift across** and **Shift along** slide the pattern over the face to fix it. Engrave the first
-wall, then on the second nudge **Shift across** with the arrow keys until the preview's joints
-line up with the wall you have already cut. Shifting by a whole repeat changes nothing, so there
-is only ever a fraction of a brick to find.
+**Shift across** and **Shift along** slide the pattern over the face to fix it, and the **blue
+grip** on the face is the same two numbers under the pointer. Engrave the first wall, then on the
+second drag the grip - or nudge the fields with the arrow keys - until the preview's joints line
+up with the wall you have already cut. Shifting by a whole repeat changes nothing, so there is
+only ever a fraction of a brick to find.
 
 A face picks up its own orientation, so **U runs horizontally on any upright face**: courses come
 out level on a wall whichever way the wall faces, without you having to line anything up.
@@ -465,6 +506,20 @@ through to the camera. Two consequences worth knowing:
 - `SceneObject.WorldBounds` is cached, because that per-frame check reads it and computing it
   means transforming every vertex.
 
+**Lettering never learns about the shape it is going onto.** Outlines are laid out flat, in
+millimetres, and a separate `IPlacementSurface` says where a flat point ends up in space. That is
+what lets the same letters go onto a face, round a barrel or over a ball without the glyph code
+knowing which, and it is what lets the placement handles serve the engraving tool as well — the
+gizmo asks the surface where a layout point lands and how far a millimetre of layout carries on
+screen, and nothing in it knows whether it is placing a word or a brick course.
+
+The surface also answers **how far a straight step strays from it**, which is what decides where
+the lettering gets broken up. Measuring the step's *length* instead is the obvious thing and is
+wrong: nothing bends along a barrel's axis, so a long step that way is already perfect while a
+short one round the barrel is not. Splitting by length quadrupled the whole solid to fix a
+handful of edges — 147,456 triangles and 24.8 seconds for one short word, with thousands of torn
+edges in the result. Splitting only what strays gives 1,168 triangles and 124 ms.
+
 **GPU use is confined to rendering.** Direct3D 11 via `HelixToolkit.SharpDX.Core.Wpf` gives
 MSAA and handles imported meshes of millions of triangles. Booleans stay on the CPU
 deliberately: BSP tree work is serial and branch-heavy, and GPU voxel/SDF booleans — robust as
@@ -481,13 +536,21 @@ primitives headed to a slicer.
   hangs in mid-air and cuts nothing, so a gable end or a round cap comes out right, but a
   separate face lying in the same plane and inside that rectangle is engraved too, and an
   inside corner loses half a millimetre off the neighbouring face.
-- No mesh repair for damaged *imported* meshes, no smoothing/subdivision, no 3MF.
+- **Letters with an enclosed middle - O, B, A, D - wrapped round a barrel** are past what the
+  boolean will do: the cutter is sound but the result comes back torn. It is refused rather than
+  shipped, so the object is left as it was. Lettering without counters wraps fine, and **Rebuild**
+  on the Edit tab remakes a shape the boolean has given up on.
+- Engraving and lettering are refused outright rather than applied badly whenever the result
+  would not be watertight. The object is never left in a worse state than it started.
+- No 3MF, and no printer integration.
 
 ## Layout
 
 ```
 src/FastCraft3D/
-  Geometry/   meshes, primitives, transforms, repair, plane split, Csg/ (the BSP engine)
+  Geometry/   meshes, primitives, transforms, repair, plane split, Csg/ (the BSP engine),
+              Engraving/ (patterns, lettering, the surfaces they are laid on)
+  Text/       the one place that asks the operating system about fonts
   Model/      scene objects, scene, Commands/ (undo-redo)
   Io/         STL, OBJ, .3dfc project files, export composition
   Render/     the only Direct3D-aware layer, plus the on-screen manipulator
