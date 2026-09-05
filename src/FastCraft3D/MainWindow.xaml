@@ -305,6 +305,9 @@
                     <Button Style="{StaticResource ToolButton}" Content="Colour..." Tag="{StaticResource IconColour}"
                             Command="{Binding PickColourCommand}" MinWidth="78"
                             ToolTip="Paint the selection. The palette in the right-hand panel is one click." />
+                    <Button Style="{StaticResource ToolButton}" Content="Engrave..." Tag="{StaticResource IconEngrave}"
+                            Command="{Binding BeginEngraveCommand}" MinWidth="82"
+                            ToolTip="Cut a brick, board or stripe pattern into one flat face" />
                     <Separator Margin="8,0" />
                     <Button Style="{StaticResource ToolButton}" Content="Duplicate" Tag="{StaticResource IconDuplicate}"
                             Command="{Binding DuplicateCommand}"
@@ -458,6 +461,7 @@
                     <RowDefinition Height="180" />
                     <RowDefinition Height="Auto" />
                     <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
                     <RowDefinition Height="*" />
                 </Grid.RowDefinitions>
 
@@ -513,10 +517,88 @@
                     </StackPanel>
                 </Border>
 
+                <!-- Engrave panel, shown only while a face is being picked -->
+                <Border Grid.Row="3" Margin="0,10,0,0" Padding="8" Background="#FFEFF5FF"
+                        BorderBrush="#FFB8D2F0" BorderThickness="1" CornerRadius="3"
+                        Visibility="{Binding IsEngraveMode, Converter={StaticResource BoolToVisibility}}">
+                    <StackPanel>
+                        <TextBlock Text="Engrave a pattern" FontWeight="SemiBold" Margin="0,0,0,6" />
+
+                        <TextBlock Text="{Binding EngraveSummary}" TextWrapping="Wrap"
+                                   Foreground="#FF3A4550" Margin="0,0,0,8" />
+
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
+                            <TextBlock Text="Pattern" Style="{StaticResource FieldLabel}" Width="76" />
+                            <ComboBox Width="120" ItemsSource="{Binding EngravePatterns}"
+                                      SelectedItem="{Binding EngravePattern}" />
+                        </StackPanel>
+
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,6"
+                                    Visibility="{Binding EngraveDirectionApplies, Converter={StaticResource BoolToVisibility}}">
+                            <TextBlock Text="Runs" Style="{StaticResource FieldLabel}" Width="76" />
+                            <ComboBox Width="120" ItemsSource="{Binding EngraveDirections}"
+                                      SelectedItem="{Binding EngraveDirection}" />
+                        </StackPanel>
+
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,2">
+                            <TextBlock Text="Size" Style="{StaticResource FieldLabel}" Width="76"
+                                       ToolTip="Brick length, board width, or the gap between stripes" />
+                            <TextBox Width="64" Style="{StaticResource NumberBox}" Tag="number"
+                                     Text="{Binding EngraveSize, StringFormat=N1, UpdateSourceTrigger=LostFocus}" />
+                            <TextBlock Text="mm" Foreground="#FF9AA0A8" VerticalAlignment="Center" />
+                        </StackPanel>
+
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,2">
+                            <TextBlock Text="Line width" Style="{StaticResource FieldLabel}" Width="76" />
+                            <TextBox Width="64" Style="{StaticResource NumberBox}" Tag="number"
+                                     Text="{Binding EngraveGrooveWidth, StringFormat=N2, UpdateSourceTrigger=LostFocus}" />
+                            <TextBlock Text="mm" Foreground="#FF9AA0A8" VerticalAlignment="Center" />
+                        </StackPanel>
+
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
+                            <TextBlock Text="Depth" Style="{StaticResource FieldLabel}" Width="76" />
+                            <TextBox Width="64" Style="{StaticResource NumberBox}" Tag="number"
+                                     Text="{Binding EngraveDepth, StringFormat=N2, UpdateSourceTrigger=LostFocus}" />
+                            <TextBlock Text="mm" Foreground="#FF9AA0A8" VerticalAlignment="Center" />
+                        </StackPanel>
+
+                        <!-- Offsets: sliding the pattern is how a corner is made to line up -->
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,2">
+                            <TextBlock Text="Shift across" Style="{StaticResource FieldLabel}" Width="76"
+                                       ToolTip="Slides the pattern sideways. Use it to line the joints up with the next wall - arrow keys and the wheel nudge it." />
+                            <TextBox Width="64" Style="{StaticResource NumberBox}" Tag="number"
+                                     Text="{Binding EngraveOffsetU, StringFormat=N2, UpdateSourceTrigger=LostFocus}" />
+                            <TextBlock Text="mm" Foreground="#FF9AA0A8" VerticalAlignment="Center" />
+                        </StackPanel>
+
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+                            <TextBlock Text="Shift along" Style="{StaticResource FieldLabel}" Width="76"
+                                       ToolTip="Slides the pattern the other way, for lining courses up with a neighbouring face." />
+                            <TextBox Width="64" Style="{StaticResource NumberBox}" Tag="number"
+                                     Text="{Binding EngraveOffsetV, StringFormat=N2, UpdateSourceTrigger=LostFocus}" />
+                            <TextBlock Text="mm" Foreground="#FF9AA0A8" VerticalAlignment="Center" />
+                        </StackPanel>
+
+                        <!-- Printing advice: what these settings will actually do on a printer -->
+                        <Border Background="#FFFFF6E8" BorderBrush="#FFE8C88A" BorderThickness="1"
+                                CornerRadius="3" Padding="7,5" Margin="0,0,0,8"
+                                Visibility="{Binding HasEngraveAdvice, Converter={StaticResource BoolToVisibility}}">
+                            <TextBlock Text="{Binding EngraveAdvice}" TextWrapping="Wrap" Foreground="#FF6B4E12" />
+                        </Border>
+
+                        <StackPanel Orientation="Horizontal">
+                            <Button Content="Engrave" Style="{StaticResource ToolButton}"
+                                    Command="{Binding ApplyEngraveCommand}" />
+                            <Button Content="Cancel" Style="{StaticResource ToolButton}"
+                                    Command="{Binding CancelEngraveCommand}" />
+                        </StackPanel>
+                    </StackPanel>
+                </Border>
+
                 <!-- Colour. Bound to the view model rather than to Selected, because painting
                      applies to the whole selection and Selected is null once more than one
                      object is picked. -->
-                <StackPanel Grid.Row="3"
+                <StackPanel Grid.Row="4"
                             Visibility="{Binding HasAnySelection, Converter={StaticResource BoolToVisibility}}">
                     <TextBlock Text="Colour" Style="{StaticResource SectionHeader}" />
                     <ItemsControl ItemsSource="{Binding Swatches}">
@@ -542,7 +624,7 @@
                 </StackPanel>
 
                 <!-- Properties -->
-                <ScrollViewer Grid.Row="4" VerticalScrollBarVisibility="Auto" Margin="0,6,0,0"
+                <ScrollViewer Grid.Row="5" VerticalScrollBarVisibility="Auto" Margin="0,6,0,0"
                               DataContext="{Binding Selected}">
                     <StackPanel>
                         <StackPanel.Style>

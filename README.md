@@ -41,7 +41,7 @@ dotnet test
 | Tab | What it does |
 |---|---|
 | **Insert** | Cube, cylinder, cone, sphere, pyramid, wedge, torus, hexagon, tetrahedron; import STL/OBJ |
-| **Object** | Subtract / Intersect / Merge, Round edges, Split with a plane, Colour, duplicate (beside or in place), delete, drop to plate, mirror |
+| **Object** | Subtract / Intersect / Merge, Round edges, Split with a plane, Engrave a pattern, Colour, duplicate (beside or in place), delete, drop to plate, mirror |
 | **Align** | Line the selection up on X, Y or Z: flush to either edge, centred, or spread evenly |
 | **Edit** | Undo, redo |
 | **File** | New, open, recent, save, save as, save a version, versions, export STL/OBJ |
@@ -157,6 +157,71 @@ unevenly afterwards will stretch the rounded edges.
 
 Closing, opening or starting a new model with unsaved changes asks first, and cancelling the
 prompt cancels the whole action — including the window close.
+
+### Engraving a pattern
+
+**Engrave...** on the Object tab cuts a repeating pattern into one flat face - brickwork on a
+wall, boards on a shed, lap siding on a gable.
+
+Select the object, press **Engrave...**, then **click the face** you want. It highlights in
+blue, and the panel on the right fills in with the face's size and how many grooves the current
+settings would cut. Click a different face at any time to move the pattern; **Cancel** leaves
+the mode.
+
+| Pattern | What you get | Size means |
+|---|---|---|
+| **Brick** | Running-bond masonry: level courses with the perpend joints staggered half a brick | Brick length; the height follows at a third of it |
+| **Wood** | Flowing grain that parts around knots, with a ring or two marking each one | The spacing between grain lines |
+| **Stripes** | Evenly spaced parallel grooves - lap siding, panelling, ribs | The gap from one groove to the next |
+
+**Line width** is how wide the cut lines are and **Depth** how far they go in. Stripes and wood
+can run either way across the face; brick courses are always level, so it has no direction of
+its own.
+
+The pattern is drawn **on the face as you set it up**, from the same code that builds the cutter,
+so what you see is what gets taken away. Every field takes **arrow keys and the mouse wheel** as
+well as typing - Shift for 10 mm steps, Ctrl for 0.1 mm.
+
+#### Making a corner meet
+
+Two walls will not line up by themselves. Each face measures its pattern from its own bottom-left
+corner, and which corner that is depends on which way the face points, so the courses on adjacent
+walls start at different places and the joints miss each other where they meet.
+
+**Shift across** and **Shift along** slide the pattern over the face to fix it. Engrave the first
+wall, then on the second nudge **Shift across** with the arrow keys until the preview's joints
+line up with the wall you have already cut. Shifting by a whole repeat changes nothing, so there
+is only ever a fraction of a brick to find.
+
+A face picks up its own orientation, so **U runs horizontally on any upright face**: courses come
+out level on a wall whichever way the wall faces, without you having to line anything up.
+
+#### Depth, and what will actually print
+
+The panel warns when the settings will not survive the printer, because the numbers that look
+reasonable often do not:
+
+- **Under 0.4 mm deep** is less than two 0.2 mm layers, and an FDM slicer will simply drop it.
+  0.1 mm is fine on resin and invisible on FDM.
+- **Lines under 0.8 mm wide** are narrower than two passes of a 0.4 mm nozzle, and go the same
+  way.
+- **Deeper than the wall** is called out with the thickness actually available behind the face,
+  as is anything taking more than half of it.
+
+Since nozzles and filaments differ, the depth is yours to set - the panel only tells you what
+the number means. For most FDM work **0.5-0.8 mm deep with 1-1.5 mm lines** reads well and
+prints without any support: the overhang at the top of a groove is only as wide as the groove is
+deep, which every printer bridges.
+
+Wood is cut differently from the other two. Brick and stripes are rectangles, resolved into one
+region so their joints can run into each other; grain is a set of curves, each extruded along its
+own path. The curves are generated freely and then walked in order with a minimum gap enforced
+between neighbours, because two of them crossing would leave a wall inside the material being
+removed and tear the result open. Where the gap bites, the grain flattens slightly - it can never
+fold.
+
+Engraving is a boolean underneath, so the result is watertight and the object becomes plain
+geometry - as after a Merge, it can no longer be rounded.
 
 ### Versions
 
@@ -289,6 +354,10 @@ primitives headed to a slicer.
   import). The GPU renders them fine; the BSP tree is the bottleneck.
 - `SharpDX` 4.2.0 is unmaintained upstream. It works on Windows 11 and is fully managed, but it
   is the one long-term liability — the renderer-agnostic core is the insurance.
+- Engraving covers the face's **rectangular extent**. On anything convex the overshoot
+  hangs in mid-air and cuts nothing, so a gable end or a round cap comes out right, but a
+  separate face lying in the same plane and inside that rectangle is engraved too, and an
+  inside corner loses half a millimetre off the neighbouring face.
 - No mesh repair for damaged *imported* meshes, no smoothing/subdivision, no 3MF.
 
 ## Layout

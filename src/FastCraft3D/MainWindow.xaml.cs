@@ -1,4 +1,4 @@
-using System.ComponentModel;
+﻿using System.ComponentModel;
 using System.Globalization;
 using System.Numerics;
 using System.Windows;
@@ -67,6 +67,9 @@ public partial class MainWindow : Window
             PlateGroup.Children.Add(element);
 
         renderer = new SceneRenderer(ContentGroup, viewModel.Scene);
+
+        viewModel.EngraveFaceChanged += () =>
+            renderer.ShowFace(viewModel.EngraveFace, viewModel.EngravePreview);
 
         listSync = new SelectionListSync(ObjectList, viewModel.Scene);
         listSync.ChangedFromList += viewModel.RefreshSelection;
@@ -286,6 +289,22 @@ public partial class MainWindow : Window
             // how a camera orbit begins, so the decision waits for the release.
             if (!viewModel.StickySelection && !IsShiftDown && !IsControlDown) pendingClear = true;
             return; // unhandled, so the camera gesture takes over
+        }
+
+        // While a face is being picked the click means something else entirely, so it never
+        // reaches the selection logic. Clicking a different object switches the selection to it
+        // first, which is the only way to engrave something else without leaving the mode.
+        if (viewModel.IsEngraveMode)
+        {
+            if (!viewModel.Scene.Selection.Contains(target))
+            {
+                PressLikeFileExplorer(target);
+                viewModel.RefreshSelection();
+            }
+
+            viewModel.PickEngraveFace(target, ToVector3(hit!.PointHit), ToVector3(hit.NormalAtHit));
+            e.Handled = true;
+            return;
         }
 
         if (viewModel.StickySelection) PressWithStickySelection(target);
@@ -531,7 +550,7 @@ public partial class MainWindow : Window
 
     private void OnFieldKey(object sender, KeyEventArgs e)
     {
-        if (e.OriginalSource is not TextBox { Tag: "transform" } box) return;
+        if (e.OriginalSource is not TextBox { Tag: "transform" or "number" } box) return;
 
         double direction = e.Key switch { Key.Up => 1, Key.Down => -1, _ => 0 };
         if (direction == 0) return;
@@ -543,7 +562,8 @@ public partial class MainWindow : Window
     private void OnFieldWheel(object sender, MouseWheelEventArgs e)
     {
         // Only while the field has focus, so scrolling the properties panel still scrolls it.
-        if (e.OriginalSource is not TextBox { Tag: "transform" } box || !box.IsKeyboardFocusWithin) return;
+        if (e.OriginalSource is not TextBox { Tag: "transform" or "number" } box
+            || !box.IsKeyboardFocusWithin) return;
 
         Nudge(box, Math.Sign(e.Delta) * NudgeStep());
         e.Handled = true;

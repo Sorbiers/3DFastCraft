@@ -5,6 +5,7 @@ using System.Runtime.CompilerServices;
 using System.Windows;
 using FastCraft3D.Geometry;
 using FastCraft3D.Geometry.Csg;
+using FastCraft3D.Geometry.Engraving;
 using FastCraft3D.Io;
 using FastCraft3D.Model;
 using FastCraft3D.Model.Commands;
@@ -26,6 +27,8 @@ public sealed class MainViewModel : INotifyPropertyChanged
     private float splitOffset;
     private SplitKeep splitKeep = SplitKeep.Both;
     private bool isSplitMode;
+    private bool isEngraveMode;
+    private readonly EngraveState engrave = new();
     private Vector3 splitNormal = Vector3.UnitZ;
     private readonly List<SceneObject> clipboard = new();
     private GizmoMode gizmoMode = GizmoMode.Move;
@@ -65,6 +68,10 @@ public sealed class MainViewModel : INotifyPropertyChanged
         BeginSplitCommand = RelayCommand.Simple(BeginSplit, () => Scene.Selection.Count == 1);
         ApplySplitCommand = AsyncRelayCommand.Simple(ApplySplit, () => IsSplitMode);
         CancelSplitCommand = RelayCommand.Simple(() => IsSplitMode = false);
+
+        BeginEngraveCommand = RelayCommand.Simple(BeginEngrave, () => Scene.Selection.Count == 1);
+        ApplyEngraveCommand = AsyncRelayCommand.Simple(ApplyEngrave, () => isEngraveMode && engrave.HasFace);
+        CancelEngraveCommand = RelayCommand.Simple(() => IsEngraveMode = false);
 
         UndoCommand = RelayCommand.Simple(() => { Undo.Undo(); RefreshSelection(); }, () => Undo.CanUndo);
         RedoCommand = RelayCommand.Simple(() => { Undo.Redo(); RefreshSelection(); }, () => Undo.CanRedo);
@@ -109,6 +116,9 @@ public sealed class MainViewModel : INotifyPropertyChanged
     public System.Windows.Input.ICommand BeginSplitCommand { get; }
     public System.Windows.Input.ICommand ApplySplitCommand { get; }
     public System.Windows.Input.ICommand CancelSplitCommand { get; }
+    public System.Windows.Input.ICommand BeginEngraveCommand { get; }
+    public System.Windows.Input.ICommand ApplyEngraveCommand { get; }
+    public System.Windows.Input.ICommand CancelEngraveCommand { get; }
     public System.Windows.Input.ICommand UndoCommand { get; }
     public System.Windows.Input.ICommand RedoCommand { get; }
     public System.Windows.Input.ICommand OpenRecentCommand { get; }
@@ -338,6 +348,122 @@ public sealed class MainViewModel : INotifyPropertyChanged
     }
 
     public bool SplitPlaneVisible => isSplitMode;
+
+    // --- Engraving -----------------------------------------------------------------
+
+    /// <summary>Raised when the picked face changes, so the viewport can highlight it.</summary>
+    public event Action? EngraveFaceChanged;
+
+    /// <summary>
+    /// While this is on, clicking the object picks a face to engrave rather than changing the
+    /// selection. It is its own mode for the same reason splitting is: the click means something
+    /// different, and there is nowhere else to say so.
+    /// </summary>
+    public bool IsEngraveMode
+    {
+        get => isEngraveMode;
+        set
+        {
+            if (isEngraveMode == value) return;
+
+            Set(ref isEngraveMode, value);
+            if (!value) engrave.Clear();
+
+            Raise(nameof(HasEngraveFace));
+            RaiseEngraveText();
+            EngraveFaceChanged?.Invoke();
+        }
+    }
+
+    public bool HasEngraveFace => engrave.HasFace;
+
+    /// <summary>The picked face, in world space, or null. Read by the renderer.</summary>
+    public FacePatch? EngraveFace => engrave.Face;
+
+    /// <summary>What the pattern would cut, drawn on the face while the settings are chosen.</summary>
+    public GrooveSet EngravePreview => engrave.Preview();
+
+    public IReadOnlyList<PatternKind> EngravePatterns { get; } = Enum.GetValues<PatternKind>();
+    public IReadOnlyList<PatternDirection> EngraveDirections { get; } = Enum.GetValues<PatternDirection>();
+
+    public PatternKind EngravePattern
+    {
+        get => engrave.Options.Kind;
+        set => SetEngrave(engrave.Options with { Kind = value });
+    }
+
+    public float EngraveSize
+    {
+        get => engrave.Options.Size;
+        set => SetEngrave(engrave.Options with { Size = value });
+    }
+
+    public float EngraveGrooveWidth
+    {
+        get => engrave.Options.GrooveWidth;
+        set => SetEngrave(engrave.Options with { GrooveWidth = value });
+    }
+
+    public float EngraveDepth
+    {
+        get => engrave.Options.Depth;
+        set => SetEngrave(engrave.Options with { Depth = value });
+    }
+
+    public PatternDirection EngraveDirection
+    {
+        get => engrave.Options.Direction;
+        set => SetEngrave(engrave.Options with { Direction = value });
+    }
+
+    /// <summary>
+    /// Slides the pattern across the face. This is how two walls are made to meet: each face
+    /// measures from its own bottom-left corner, and which corner that is depends on which way
+    /// the face points, so adjacent walls almost never line up on their own.
+    /// </summary>
+    public float EngraveOffsetU
+    {
+        get => engrave.Options.OffsetU;
+        set => SetEngrave(engrave.Options with { OffsetU = value });
+    }
+
+    public float EngraveOffsetV
+    {
+        get => engrave.Options.OffsetV;
+        set => SetEngrave(engrave.Options with { OffsetV = value });
+    }
+
+    public string EngraveSummary => engrave.Describe();
+    public string EngraveAdvice => engrave.Advice();
+    public bool HasEngraveAdvice => EngraveAdvice.Length > 0;
+
+    /// <summary>Only Stripes and Wood have a direction; brick courses are always level.</summary>
+    public bool EngraveDirectionApplies => engrave.Options.Kind != PatternKind.Brick;
+
+    private void SetEngrave(EngraveOptions options)
+    {
+        engrave.Options = options;
+
+        Raise(nameof(EngravePattern));
+        Raise(nameof(EngraveSize));
+        Raise(nameof(EngraveGrooveWidth));
+        Raise(nameof(EngraveDepth));
+        Raise(nameof(EngraveDirection));
+        Raise(nameof(EngraveDirectionApplies));
+        Raise(nameof(EngraveOffsetU));
+        Raise(nameof(EngraveOffsetV));
+        RaiseEngraveText();
+
+        // The preview is drawn from these settings, so it has to be redrawn with them.
+        EngraveFaceChanged?.Invoke();
+    }
+
+    private void RaiseEngraveText()
+    {
+        Raise(nameof(EngraveSummary));
+        Raise(nameof(EngraveAdvice));
+        Raise(nameof(HasEngraveAdvice));
+    }
 
     public Axis SplitAxis
     {
@@ -810,9 +936,93 @@ public sealed class MainViewModel : INotifyPropertyChanged
         }
     }
 
+    private void BeginEngrave()
+    {
+        if (Scene.Selection.Count != 1) return;
+
+        IsSplitMode = false;
+        IsEngraveMode = true;
+        Status = "Click the face you want to engrave";
+    }
+
+    /// <summary>
+    /// Picks the face under a click. Both arguments are in world space, and so is the mesh the
+    /// face is found on: the object is baked before engraving, exactly as it is for a boolean,
+    /// so that a shape stretched twice as wide does not come back with bricks stretched with it.
+    /// </summary>
+    public bool PickEngraveFace(SceneObject target, Vector3 worldPoint, Vector3 worldNormal)
+    {
+        if (!isEngraveMode) return false;
+
+        var world = target.ToWorldMesh();
+        var face = EngraveState.FaceAt(world, worldPoint, worldNormal);
+
+        if (face is null)
+        {
+            Status = "That is not a flat face - pick one of the flat sides";
+            return false;
+        }
+
+        engrave.Pick(world, face);
+
+        Raise(nameof(HasEngraveFace));
+        RaiseEngraveText();
+        EngraveFaceChanged?.Invoke();
+
+        Status = EngraveSummary;
+        return true;
+    }
+
+    private async Task ApplyEngrave()
+    {
+        if (Scene.Selection.Count != 1) return;
+        if (engrave.Face is not { } face || engrave.WorldMesh is not { } world) return;
+
+        var source = Scene.Selection[0];
+        var options = engrave.Options;
+
+        IsBusy = true;
+        Status = $"Engraving {options.Kind}...";
+        try
+        {
+            var result = await Task.Run(() => Engraver.Engrave(world, face, options));
+
+            if (result.Grooves == 0 || result.Mesh.TriangleCount == 0)
+            {
+                Status = "That pattern did not reach the face - try a smaller pattern size";
+                return;
+            }
+
+            // The mesh is already in world space, so the new object carries no transform of its
+            // own. Same as a boolean, and for the same reason.
+            var engraved = new SceneObject(Scene.UniqueName($"{source.Name} {options.Kind}"), result.Mesh)
+            {
+                Colour = source.Colour
+            };
+
+            Undo.Execute(new ReplaceObjectsCommand($"Engrave {options.Kind}", [source], [engraved]));
+            IsEngraveMode = false;
+            RefreshSelection();
+
+            var health = result.Mesh.CheckHealth();
+            Status = $"Engraved {result.Grooves:N0} grooves - {health.TriangleCount:N0} triangles, {health.Describe()}";
+        }
+        catch (Exception ex)
+        {
+            Status = $"Engrave failed: {ex.Message}";
+            MessageBox.Show(ex.Message, "3DFastCraft", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+        finally
+        {
+            IsBusy = false;
+        }
+    }
+
     private void BeginSplit()
     {
         if (Scene.Selection.Count != 1) return;
+
+        IsEngraveMode = false; // both modes claim the click, so only one can be on
         IsSplitMode = true;
         ResetSplitOffset();
         Status = "Drag the arrows to slide the split plane, the rings to tilt it";

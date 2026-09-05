@@ -1,7 +1,8 @@
-using System.Collections.Specialized;
+﻿using System.Collections.Specialized;
 using System.ComponentModel;
 using System.Windows.Media;
 using FastCraft3D.Geometry;
+using FastCraft3D.Geometry.Engraving;
 using FastCraft3D.Model;
 using HelixToolkit.SharpDX.Core;
 using HelixToolkit.Wpf.SharpDX;
@@ -30,6 +31,11 @@ public sealed class SceneRenderer : IDisposable
     private readonly Dictionary<SceneObject, MeshGeometryModel3D> visuals = new();
     private readonly Dictionary<SceneObject, LineGeometryModel3D> outlines = new();
 
+    /// <summary>The face waiting to be engraved, drawn over the surface while it is picked.</summary>
+    private MeshGeometryModel3D? faceHighlight;
+    private LineGeometryModel3D? faceOutline;
+    private MeshGeometryModel3D? facePreview;
+
     public SceneRenderer(GroupModel3D root, Scene scene)
     {
         this.root = root;
@@ -37,6 +43,116 @@ public sealed class SceneRenderer : IDisposable
 
         scene.Objects.CollectionChanged += OnCollectionChanged;
         foreach (var o in scene.Objects) Attach(o);
+    }
+
+    /// <summary>
+    /// Marks the face that is about to be engraved, or clears it when given null.
+    ///
+    /// Drawn as a tinted skin over the face rather than as a change to the object's own
+    /// material: the point is to show which of several flat surfaces was picked, and repainting
+    /// the whole object would show nothing at all. The patch is already in world space, so the
+    /// highlight carries no transform.
+    /// </summary>
+    public void ShowFace(FacePatch? face, GrooveSet? preview = null)
+    {
+        if (facePreview is not null)
+        {
+            root.Children.Remove(facePreview);
+            facePreview.Dispose();
+            facePreview = null;
+        }
+
+        if (faceHighlight is not null)
+        {
+            root.Children.Remove(faceHighlight);
+            faceHighlight.Dispose();
+            faceHighlight = null;
+        }
+
+        if (faceOutline is not null)
+        {
+            root.Children.Remove(faceOutline);
+            faceOutline.Dispose();
+            faceOutline = null;
+        }
+
+        if (face is null || face.Triangles.Count == 0) return;
+
+        // Lifted clear of the surface it covers, or the two fight over every pixel.
+        var lift = face.Normal * 0.05f;
+        var skin = new Mesh();
+
+        foreach (int t in face.Triangles)
+        {
+            skin.AddTriangle(
+                face.Mesh.Positions[face.Mesh.Indices[t]] + lift,
+                face.Mesh.Positions[face.Mesh.Indices[t + 1]] + lift,
+                face.Mesh.Positions[face.Mesh.Indices[t + 2]] + lift);
+        }
+
+        faceHighlight = new MeshGeometryModel3D
+        {
+            Geometry = MeshConverter.ToGeometry(skin),
+            Material = new PhongMaterial
+            {
+                DiffuseColor = new SharpDX.Color4(0.20f, 0.62f, 1f, 0.42f),
+                AmbientColor = new SharpDX.Color4(0.10f, 0.30f, 0.50f, 1f),
+                SpecularColor = new SharpDX.Color4(0, 0, 0, 1)
+            },
+            IsTransparent = true,
+            IsHitTestVisible = false // clicking again must pick the face underneath, not this
+        };
+        root.Children.Add(faceHighlight);
+
+        var builder = new LineBuilder();
+        foreach (var (a, b) in face.Boundary)
+        {
+            var from = face.Mesh.Positions[a] + lift;
+            var to = face.Mesh.Positions[b] + lift;
+            builder.AddLine(
+                new SharpDX.Vector3(from.X, from.Y, from.Z),
+                new SharpDX.Vector3(to.X, to.Y, to.Z));
+        }
+
+        faceOutline = new LineGeometryModel3D
+        {
+            Geometry = builder.ToLineGeometry3D(),
+            Color = Color.FromRgb(0x2E, 0x9B, 0xFF),
+            Thickness = 2.2,
+            IsHitTestVisible = false
+        };
+        root.Children.Add(faceOutline);
+
+        ShowPreview(face, preview);
+    }
+
+    /// <summary>
+    /// Lays the pattern over the highlighted face so the settings can be judged before anything
+    /// is cut. The shapes come from the same code that builds the cutter, so this is not an
+    /// impression of the result - it is the result, drawn flat.
+    /// </summary>
+    private void ShowPreview(FacePatch face, GrooveSet? preview)
+    {
+        if (preview is null || preview.IsEmpty) return;
+
+        // A little above the tinted skin, so the grooves read as cut into it rather than under it.
+        var pattern = GrooveSolid.Surface(preview, face, 0.09f);
+        if (pattern.TriangleCount == 0) return;
+
+        facePreview = new MeshGeometryModel3D
+        {
+            Geometry = MeshConverter.ToGeometry(pattern),
+            Material = new PhongMaterial
+            {
+                DiffuseColor = new SharpDX.Color4(0.05f, 0.13f, 0.24f, 0.92f),
+                AmbientColor = new SharpDX.Color4(0.05f, 0.10f, 0.18f, 1f),
+                SpecularColor = new SharpDX.Color4(0, 0, 0, 1)
+            },
+            // The strips are drawn on their own with no underside, so both faces have to show.
+            CullMode = SharpDX.Direct3D11.CullMode.None,
+            IsHitTestVisible = false
+        };
+        root.Children.Add(facePreview);
     }
 
     /// <summary>Maps a hit-tested model back to the object it represents.</summary>
@@ -192,6 +308,7 @@ public sealed class SceneRenderer : IDisposable
 
     public void Dispose()
     {
+        ShowFace(null);
         scene.Objects.CollectionChanged -= OnCollectionChanged;
         foreach (var o in visuals.Keys.ToList()) Detach(o);
     }
