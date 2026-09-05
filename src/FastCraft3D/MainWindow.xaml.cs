@@ -25,6 +25,7 @@ public partial class MainWindow : Window
 {
     private readonly MainViewModel viewModel = new();
     private SceneRenderer? renderer;
+    private float plateShown;
     private GizmoController? gizmo;
     private SplitPlaneGizmo? splitGizmo;
     private SelectionListSync? listSync;
@@ -63,8 +64,8 @@ public partial class MainWindow : Window
         View.Camera = CreateCamera();
         ConfigureCameraGestures();
 
-        foreach (var element in BuildPlateVisual.Create())
-            PlateGroup.Children.Add(element);
+        RebuildPlate();
+        viewModel.ViewChanged += ApplyViewSettings;
 
         renderer = new SceneRenderer(ContentGroup, viewModel.Scene);
 
@@ -595,6 +596,33 @@ public partial class MainWindow : Window
     }
 
     // --- Cut plane preview -----------------------------------------------------------
+
+    /// <summary>
+    /// Puts the view settings into the scene. The plate is rebuilt rather than scaled: its
+    /// squares are 10 mm so that it doubles as a ruler, and stretching it would make them lie.
+    /// </summary>
+    private void ApplyViewSettings()
+    {
+        if (renderer is null) return;
+
+        renderer.Wireframe = viewModel.ShowWireframe;
+        renderer.Xray = viewModel.ShowXray;
+
+        if (Math.Abs(plateShown - viewModel.PlateSize) > 0.01f) RebuildPlate();
+
+        PlateGroup.Visibility = viewModel.ShowPlate ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    private void RebuildPlate()
+    {
+        foreach (var element in PlateGroup.Children) element.Dispose();
+        PlateGroup.Children.Clear();
+
+        foreach (var element in BuildPlateVisual.Create(viewModel.PlateSize))
+            PlateGroup.Children.Add(element);
+
+        plateShown = viewModel.PlateSize;
+    }
 
     private void OnViewModelChanged(object? sender, PropertyChangedEventArgs e)
     {

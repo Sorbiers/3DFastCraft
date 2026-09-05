@@ -93,6 +93,44 @@
             <Setter Property="HorizontalContentAlignment" Value="Right" />
         </Style>
 
+        <!-- Same look as a ribbon button, but it stays pressed while it is on. -->
+        <Style x:Key="ToolToggle" TargetType="ToggleButton">
+            <Setter Property="MinWidth" Value="68" />
+            <Setter Property="Margin" Value="1,0" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Foreground" Value="#FF2C3037" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ToggleButton">
+                        <Border x:Name="Chrome" Background="Transparent" BorderThickness="1"
+                                BorderBrush="Transparent" CornerRadius="4" Padding="8,5" Margin="1">
+                            <StackPanel VerticalAlignment="Center">
+                                <Path Data="{TemplateBinding Tag}" Width="22" Height="22"
+                                      Stretch="Uniform" Fill="{x:Null}"
+                                      Stroke="{TemplateBinding Foreground}" StrokeThickness="1.35"
+                                      StrokeLineJoin="Round" StrokeStartLineCap="Round"
+                                      StrokeEndLineCap="Round" HorizontalAlignment="Center"
+                                      SnapsToDevicePixels="True" />
+                                <TextBlock Text="{TemplateBinding Content}" FontSize="11.5"
+                                           Margin="0,4,0,0" HorizontalAlignment="Center"
+                                           Foreground="{TemplateBinding Foreground}" />
+                            </StackPanel>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Chrome" Property="Background" Value="#FFE7EDF5" />
+                                <Setter TargetName="Chrome" Property="BorderBrush" Value="#FFBCCADC" />
+                            </Trigger>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="Chrome" Property="Background" Value="#FFD3E0EF" />
+                                <Setter TargetName="Chrome" Property="BorderBrush" Value="#FF8FAFD0" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
         <Style x:Key="SectionHeader" TargetType="TextBlock">
             <Setter Property="FontWeight" Value="SemiBold" />
             <Setter Property="Foreground" Value="#FF33373D" />
@@ -426,6 +464,23 @@
                     <Button Style="{StaticResource ToolButton}" Content="Front" Tag="{StaticResource IconViewFront}" Click="OnViewFront" />
                     <Button Style="{StaticResource ToolButton}" Content="Right" Tag="{StaticResource IconViewRight}" Click="OnViewRight" />
                     <Button Style="{StaticResource ToolButton}" Content="Isometric" Tag="{StaticResource IconViewIso}" Click="OnViewIso" />
+                    <Separator Margin="8,0" />
+                    <ToggleButton Style="{StaticResource ToolToggle}" Content="Wireframe" Tag="{StaticResource IconWireframe}"
+                                  IsChecked="{Binding ShowWireframe}" MinWidth="80"
+                                  ToolTip="Draw every triangle edge - useful for seeing how dense an import is" />
+                    <ToggleButton Style="{StaticResource ToolToggle}" Content="X-ray" Tag="{StaticResource IconXray}"
+                                  IsChecked="{Binding ShowXray}"
+                                  ToolTip="Fade everything that is not selected, to see a part buried inside another" />
+                    <ToggleButton Style="{StaticResource ToolToggle}" Content="Plate" Tag="{StaticResource IconPlate}"
+                                  IsChecked="{Binding ShowPlate}"
+                                  ToolTip="Show or hide the build plate" />
+                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="6,0,0,0">
+                        <TextBlock Text="Bed" Style="{StaticResource FieldLabel}" />
+                        <ComboBox Width="82" IsEditable="True" ItemsSource="{Binding PlateSizes}"
+                                  Text="{Binding PlateSize, UpdateSourceTrigger=LostFocus}"
+                                  ToolTip="The printer's bed size in millimetres. A guide, not a limit." />
+                        <TextBlock Text="mm" Foreground="#FF9AA0A8" VerticalAlignment="Center" Margin="5,0,0,0" />
+                    </StackPanel>
                 </WrapPanel>
             </TabItem>
         </TabControl>

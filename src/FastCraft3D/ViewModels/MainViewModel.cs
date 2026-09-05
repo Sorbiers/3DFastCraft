@@ -29,6 +29,10 @@ public sealed class MainViewModel : INotifyPropertyChanged
     private bool isSplitMode;
     private bool isEngraveMode;
     private bool? damaged;
+    private bool showWireframe;
+    private bool showXray;
+    private bool showPlate = true;
+    private float plateSize = Scene.PlateSize;
     private readonly EngraveState engrave = new();
     private Vector3 splitNormal = Vector3.UnitZ;
     private readonly List<SceneObject> clipboard = new();
@@ -385,6 +389,51 @@ public sealed class MainViewModel : INotifyPropertyChanged
     /// banner. Worked out once per edit and remembered: checking a mesh means walking every
     /// edge of it, which is not something to do on every redraw.
     /// </summary>
+    // --- What the viewport shows ---------------------------------------------------
+
+    /// <summary>Raised when a view setting changes, for the parts of the scene the renderer owns.</summary>
+    public event Action? ViewChanged;
+
+    /// <summary>Triangle edges drawn over every object.</summary>
+    public bool ShowWireframe
+    {
+        get => showWireframe;
+        set { Set(ref showWireframe, value); ViewChanged?.Invoke(); }
+    }
+
+    /// <summary>Unselected objects go see-through, so a part inside another can be worked on.</summary>
+    public bool ShowXray
+    {
+        get => showXray;
+        set { Set(ref showXray, value); ViewChanged?.Invoke(); }
+    }
+
+    public bool ShowPlate
+    {
+        get => showPlate;
+        set { Set(ref showPlate, value); ViewChanged?.Invoke(); }
+    }
+
+    /// <summary>
+    /// The printer's bed, in millimetres. It is a guide rather than a limit - nothing stops an
+    /// object being placed off it - so any printer's size can be dialled in.
+    /// </summary>
+    public float PlateSize
+    {
+        get => plateSize;
+        set
+        {
+            float wanted = Math.Clamp(value, 20f, 2000f);
+            if (Math.Abs(wanted - plateSize) < 0.01f) return;
+
+            Set(ref plateSize, wanted);
+            ViewChanged?.Invoke();
+        }
+    }
+
+    /// <summary>Common bed sizes, so the usual ones are one click rather than a typed number.</summary>
+    public IReadOnlyList<float> PlateSizes { get; } = [120f, 180f, 200f, 220f, 250f, 300f, 350f, 400f];
+
     public bool HasDamagedObjects => damaged ??= Scene.Objects.Any(o => !o.Mesh.CheckHealth().IsWatertight);
 
     /// <summary>The picked face, in world space, or null. Read by the renderer.</summary>

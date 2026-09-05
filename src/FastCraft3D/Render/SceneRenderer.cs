@@ -32,6 +32,9 @@ public sealed class SceneRenderer : IDisposable
     private readonly Dictionary<SceneObject, LineGeometryModel3D> outlines = new();
 
     /// <summary>The face waiting to be engraved, drawn over the surface while it is picked.</summary>
+    private bool wireframe;
+    private bool xray;
+
     private MeshGeometryModel3D? faceHighlight;
     private LineGeometryModel3D? faceOutline;
     private MeshGeometryModel3D? facePreview;
@@ -155,6 +158,54 @@ public sealed class SceneRenderer : IDisposable
         root.Children.Add(facePreview);
     }
 
+    /// <summary>
+    /// Draws every object's triangle edges over it. Useful for seeing how dense an import is,
+    /// and for spotting where a boolean has left a mess.
+    /// </summary>
+    public bool Wireframe
+    {
+        get => wireframe;
+        set
+        {
+            if (wireframe == value) return;
+            wireframe = value;
+
+            foreach (var (o, visual) in visuals) ApplyLook(o, visual);
+        }
+    }
+
+    /// <summary>
+    /// Fades everything that is not selected, so a part buried inside another can be seen and
+    /// worked on. Only the unselected fade: the point is to look past them at what is selected.
+    /// </summary>
+    public bool Xray
+    {
+        get => xray;
+        set
+        {
+            if (xray == value) return;
+            xray = value;
+
+            foreach (var (o, visual) in visuals) ApplyLook(o, visual);
+        }
+    }
+
+    /// <summary>
+    /// Puts the current view settings on one object's model. Everything that decides how an
+    /// object looks goes through here, so a new object and a toggled setting cannot disagree.
+    /// </summary>
+    private void ApplyLook(SceneObject o, MeshGeometryModel3D visual)
+    {
+        visual.Material = MaterialFor(o);
+
+        // The flag has to be set as well as the alpha: it is what puts the model through the
+        // order-independent transparency pass rather than straight into the depth buffer.
+        visual.IsTransparent = xray && !o.IsSelected;
+
+        visual.RenderWireframe = wireframe;
+        visual.WireframeColor = Color.FromArgb(0x99, 0x1E, 0x26, 0x30);
+    }
+
     /// <summary>Maps a hit-tested model back to the object it represents.</summary>
     public SceneObject? Resolve(object? model)
     {
@@ -186,9 +237,9 @@ public sealed class SceneRenderer : IDisposable
         var visual = new MeshGeometryModel3D
         {
             Geometry = MeshConverter.ToGeometry(o.Mesh),
-            Transform = MeshConverter.ToTransform(o.Transform),
-            Material = MaterialFor(o)
+            Transform = MeshConverter.ToTransform(o.Transform)
         };
+        ApplyLook(o, visual);
 
         visuals[o] = visual;
         root.Children.Add(visual);
@@ -227,7 +278,7 @@ public sealed class SceneRenderer : IDisposable
 
             case nameof(SceneObject.IsSelected):
             case nameof(SceneObject.Colour):
-                visual.Material = MaterialFor(o);
+                ApplyLook(o, visual);
                 UpdateOutline(o);
                 break;
         }
@@ -286,7 +337,7 @@ public sealed class SceneRenderer : IDisposable
     /// Selected objects keep their colour and are lifted a little, so they read as picked even
     /// where the outline is edge-on to the camera.
     /// </summary>
-    private static PhongMaterial MaterialFor(SceneObject o)
+    private PhongMaterial MaterialFor(SceneObject o)
     {
         var colour = new SharpDX.Color4(o.Colour.X, o.Colour.Y, o.Colour.Z, 1f);
 
@@ -296,6 +347,10 @@ public sealed class SceneRenderer : IDisposable
             Math.Min(colour.Green + lift, 1f),
             Math.Min(colour.Blue + lift, 1f),
             1f);
+
+        // In x-ray the unselected go translucent. Transparency is ordered by the renderer's
+        // own OIT pass, so parts behind parts still read correctly.
+        if (xray && !o.IsSelected) diffuse.Alpha = 0.28f;
 
         return new PhongMaterial
         {
