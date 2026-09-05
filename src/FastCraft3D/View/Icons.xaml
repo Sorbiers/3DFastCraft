@@ -30,6 +30,7 @@
     <StreamGeometry x:Key="IconMerge">M9,12 A6,6 0 1 1 8.9,12 Z M15,12 A6,6 0 1 1 14.9,12 Z M12,6.7 L12,17.3</StreamGeometry>
 
     <!-- Editing -->
+    <StreamGeometry x:Key="IconSmooth">M3,16 C6,16 6,8 9,8 C12,8 12,16 15,16 C18,16 18,8 21,8 M3,20 L21,20</StreamGeometry>
     <StreamGeometry x:Key="IconRound">M4,20 L4,10 A6,6 0 0 1 10,4 L20,4</StreamGeometry>
     <StreamGeometry x:Key="IconColour">M12,3 A9,9 0 1 0 12,21 A2,2 0 0 0 12,17 A2,2 0 0 1 12,13 L16,13 A5,5 0 0 0 12,3 Z M8,7.5 A1,1 0 1 1 7.9,7.5 Z M13,6.5 A1,1 0 1 1 12.9,6.5 Z M6.5,12 A1,1 0 1 1 6.4,12 Z</StreamGeometry>
     <StreamGeometry x:Key="IconEngrave">M3,4 L21,4 L21,20 L3,20 Z M3,9.3 L21,9.3 M3,14.7 L21,14.7 M9,4 L9,9.3 M15,4 L15,9.3 M6,9.3 L6,14.7 M12,9.3 L12,14.7 M18,9.3 L18,14.7 M9,14.7 L9,20 M15,14.7 L15,20</StreamGeometry>

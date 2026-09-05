@@ -76,6 +76,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
         CancelSplitCommand = RelayCommand.Simple(() => IsSplitMode = false);
 
         RepairCommand = AsyncRelayCommand.Simple(RepairObjects, () => Scene.Objects.Count > 0);
+        SmoothCommand = AsyncRelayCommand.Simple(SmoothSelection, () => Scene.Selection.Count > 0);
         BeginEngraveCommand = RelayCommand.Simple(BeginEngrave, () => Scene.Selection.Count == 1);
         ApplyEngraveCommand = AsyncRelayCommand.Simple(ApplyEngrave, () => isEngraveMode && engrave.HasFace);
         CancelEngraveCommand = RelayCommand.Simple(() => IsEngraveMode = false);
@@ -124,6 +125,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
     public System.Windows.Input.ICommand ApplySplitCommand { get; }
     public System.Windows.Input.ICommand CancelSplitCommand { get; }
     public System.Windows.Input.ICommand RepairCommand { get; }
+    public System.Windows.Input.ICommand SmoothCommand { get; }
     public System.Windows.Input.ICommand BeginEngraveCommand { get; }
     public System.Windows.Input.ICommand ApplyEngraveCommand { get; }
     public System.Windows.Input.ICommand CancelEngraveCommand { get; }
@@ -1002,6 +1004,60 @@ public sealed class MainViewModel : INotifyPropertyChanged
         {
             Status = $"{op} failed: {ex.Message}";
             MessageBox.Show(ex.Message, "3DFastCraft", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+        finally
+        {
+            IsBusy = false;
+        }
+    }
+
+    /// <summary>
+    /// Rounds the facets off the selection.
+    ///
+    /// Applied a fixed amount at a time and meant to be repeated: it is far easier to judge how
+    /// much smoothing a shape wants by watching it than by choosing a number beforehand, and
+    /// each press is its own undo step.
+    /// </summary>
+    private async Task SmoothSelection()
+    {
+        var selection = Scene.Selection.ToList();
+        if (selection.Count == 0) return;
+
+        IsBusy = true;
+        Status = "Smoothing...";
+        try
+        {
+            var meshes = selection.Select(o => o.Mesh).ToList();
+            var smoothed = await Task.Run(() => meshes.Select(m => MeshSmoothing.Smooth(m)).ToList());
+
+            var produced = new List<SceneObject>();
+            for (int i = 0; i < selection.Count; i++)
+            {
+                produced.Add(new SceneObject(selection[i].Name, smoothed[i])
+                {
+                    Position = selection[i].Position,
+                    Rotation = selection[i].Rotation,
+                    Scale = selection[i].Scale,
+                    Colour = selection[i].Colour
+                    // Origin is deliberately dropped: the shape is no longer the primitive it
+                    // was, so it can no longer be rebuilt with rounded edges.
+                });
+            }
+
+            Undo.Execute(new ReplaceObjectsCommand("Smooth", selection, produced));
+            RefreshSelection();
+
+            // Smoothing can only work with the vertices it is given, so on a shape with few of
+            // them almost nothing happens - which is worth saying rather than leaving someone
+            // pressing the button.
+            int vertices = smoothed.Sum(m => m.VertexCount);
+            Status = vertices < 200
+                ? $"Smoothed - though with only {vertices} vertices there is little to smooth"
+                : $"Smoothed {produced.Count} object(s)";
+        }
+        catch (Exception ex)
+        {
+            Status = $"Smooth failed: {ex.Message}";
         }
         finally
         {

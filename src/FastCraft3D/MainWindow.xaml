@@ -332,6 +332,9 @@
                             Command="{Binding BooleanCommand}" CommandParameter="Union"
                             ToolTip="Fuse the selection into one solid" />
                     <Separator Margin="8,0" />
+                    <Button Style="{StaticResource ToolButton}" Content="Smooth" Tag="{StaticResource IconSmooth}"
+                            Command="{Binding SmoothCommand}"
+                            ToolTip="Round the facets off. Press again for more; it needs a mesh with plenty of vertices to show." />
                     <Button Style="{StaticResource ToolButton}" Content="Round..." Tag="{StaticResource IconRound}"
                             Command="{Binding RoundCommand}" MinWidth="82"
                             ToolTip="Round the edges of a cube or cylinder. Only shapes still described by their parameters can be rounded." />
