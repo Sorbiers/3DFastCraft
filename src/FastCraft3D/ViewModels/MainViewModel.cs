@@ -1,4 +1,4 @@
-using System.ComponentModel;
+﻿using System.ComponentModel;
 using System.IO;
 using System.Numerics;
 using System.Runtime.CompilerServices;
@@ -16,12 +16,6 @@ namespace FastCraft3D.ViewModels;
 
 public sealed class MainViewModel : INotifyPropertyChanged
 {
-    private static readonly Vector3[] Palette =
-    [
-        new(0.30f, 0.55f, 0.85f), new(0.85f, 0.45f, 0.30f), new(0.40f, 0.72f, 0.45f),
-        new(0.75f, 0.40f, 0.70f), new(0.90f, 0.72f, 0.25f), new(0.35f, 0.70f, 0.75f)
-    ];
-
     private int colourCursor;
     private string status = "Ready";
     private bool isBusy;
@@ -92,6 +86,8 @@ public sealed class MainViewModel : INotifyPropertyChanged
         PasteCommand = RelayCommand.Simple(Paste, () => clipboard.Count > 0);
         ImportCommand = RelayCommand.Simple(Import);
         ExportCommand = RelayCommand.Simple(Export, () => Scene.Objects.Count > 0);
+        SetColourCommand = new RelayCommand(SetColour, _ => Scene.Selection.Count > 0);
+        PickColourCommand = RelayCommand.Simple(PickColour, () => Scene.Selection.Count > 0);
     }
 
     public event PropertyChangedEventHandler? PropertyChanged;
@@ -131,6 +127,11 @@ public sealed class MainViewModel : INotifyPropertyChanged
     public System.Windows.Input.ICommand PasteCommand { get; }
     public System.Windows.Input.ICommand ImportCommand { get; }
     public System.Windows.Input.ICommand ExportCommand { get; }
+    public System.Windows.Input.ICommand SetColourCommand { get; }
+    public System.Windows.Input.ICommand PickColourCommand { get; }
+
+    /// <summary>The swatch grid shown in the properties panel.</summary>
+    public IReadOnlyList<Swatch> Swatches => Palette.Swatches;
 
     /// <summary>Recently opened projects, most recent first, for the File tab.</summary>
     public IReadOnlyList<RecentEntry> RecentFiles => recent.Paths
@@ -410,7 +411,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
         var mesh = Primitives.Create(kind);
         var o = new SceneObject(Scene.UniqueName(kind.ToString()), mesh)
         {
-            Colour = Palette[colourCursor++ % Palette.Length],
+            Colour = NextAutomaticColour(),
             Origin = kind
         };
 
@@ -542,6 +543,72 @@ public sealed class MainViewModel : INotifyPropertyChanged
 
         RefreshSelection();
     }
+
+    /// <summary>
+    /// Paints the whole selection, from a palette swatch or a hex string.
+    ///
+    /// Everything selected takes the colour, not just the primary object: picking a swatch with
+    /// five things selected and watching one of them change would be a surprise.
+    /// </summary>
+    private void SetColour(object? parameter)
+    {
+        if (TryReadColour(parameter, out var colour)) ApplyColour(colour);
+    }
+
+    private void PickColour()
+    {
+        var selection = Scene.Selection;
+        if (selection.Count == 0) return;
+
+        // Seeded from the first selected object, so a custom colour starts as a tweak of what
+        // is already there rather than from an arbitrary point on the wheel.
+        var dialog = new ColourDialog(selection[0].Colour) { Owner = Application.Current?.MainWindow };
+        if (dialog.ShowDialog() != true || dialog.Result is not { } picked) return;
+
+        ApplyColour(picked);
+    }
+
+    private void ApplyColour(Vector3 colour)
+    {
+        var selection = Scene.Selection.ToList();
+        if (selection.Count == 0) return;
+
+        string hex = Palette.ToHex(colour);
+        string label = selection.Count == 1 ? "Colour" : $"Colour {selection.Count} objects";
+
+        if (ColourCommand.CreateIfChanged(label, selection, colour) is not { } command)
+        {
+            Status = $"Already {hex}";
+            return;
+        }
+
+        Undo.Execute(command);
+        RefreshSelection();
+        Status = selection.Count == 1
+            ? $"Painted {selection[0].Name} {hex}"
+            : $"Painted {selection.Count} objects {hex}";
+    }
+
+    /// <summary>Swatch buttons pass the vector; anything authored in XAML passes hex.</summary>
+    private static bool TryReadColour(object? parameter, out Vector3 colour)
+    {
+        switch (parameter)
+        {
+            case Vector3 v:
+                colour = v;
+                return true;
+            case Swatch swatch:
+                colour = swatch.Colour;
+                return true;
+            case string text:
+                return Palette.TryFromHex(text, out colour);
+            default:
+                colour = default;
+                return false;
+        }
+    }
+
+    private Vector3 NextAutomaticColour() => Palette.Cycle[colourCursor++ % Palette.Cycle.Length];
 
     /// <summary>
     /// Rebuilds the selected primitives with rounded edges.
@@ -1007,7 +1074,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
                 foreach (var (name, mesh) in ObjReader.Read(dialog.FileName))
                     imported.Add(new SceneObject(Scene.UniqueName(name), mesh)
                     {
-                        Colour = Palette[colourCursor++ % Palette.Length]
+                        Colour = NextAutomaticColour()
                     });
             }
             else
@@ -1016,7 +1083,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
                 imported.Add(new SceneObject(
                     Scene.UniqueName(Path.GetFileNameWithoutExtension(dialog.FileName)), mesh)
                 {
-                    Colour = Palette[colourCursor++ % Palette.Length]
+                    Colour = NextAutomaticColour()
                 });
             }
 

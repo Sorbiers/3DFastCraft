@@ -41,7 +41,7 @@ dotnet test
 | Tab | What it does |
 |---|---|
 | **Insert** | Cube, cylinder, cone, sphere, pyramid, wedge, torus, hexagon, tetrahedron; import STL/OBJ |
-| **Object** | Subtract / Intersect / Merge, Round edges, Split with a plane, duplicate (beside or in place), delete, drop to plate, mirror |
+| **Object** | Subtract / Intersect / Merge, Round edges, Split with a plane, Colour, duplicate (beside or in place), delete, drop to plate, mirror |
 | **Align** | Line the selection up on X, Y or Z: flush to either edge, centred, or spread evenly |
 | **Edit** | Undo, redo |
 | **File** | New, open, recent, save, save as, save a version, versions, export STL/OBJ |
@@ -83,6 +83,22 @@ object *lands*, not how far it travels, so two parts dragged onto the same grid 
 Shortcuts: `Ctrl+Z` / `Ctrl+Y` undo & redo, `Delete`, `Ctrl+C` / `Ctrl+V` copy & paste,
 `Ctrl+A` select all, `Ctrl+D` deselect all, `Ctrl+N/O/S` new/open/save, `Ctrl+I` import,
 `Ctrl+E` export, and `M` / `R` / `S` to switch manipulator mode.
+
+### Colour
+
+New shapes are handed a colour in turn from a six-colour cycle, so a scene stays legible without
+anyone having to paint anything.
+
+To change one, select the objects and click a swatch in the **Colour** grid on the right - the
+whole selection is painted in a single undo step. **Custom...** on the Object tab (or the button
+under the grid) opens a picker with a saturation/value square, a hue strip, and hex and RGB
+boxes; it opens on the colour the selection already has, so a small adjustment starts from
+where you are.
+
+Colour is a property of the object, so it survives duplication, booleans, splitting and
+rounding, and it is saved in the project file. It reaches **OBJ** exports as a `.mtl` sidecar.
+**STL has no notion of colour** - an STL export carries geometry only, which is what slicers
+read anyway.
 
 ### The manipulator
 

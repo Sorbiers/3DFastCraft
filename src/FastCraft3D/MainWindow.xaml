@@ -1,7 +1,8 @@
-<Window x:Class="FastCraft3D.MainWindow"
+﻿<Window x:Class="FastCraft3D.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:hx="http://helix-toolkit.org/wpf/SharpDX"
+        xmlns:view="clr-namespace:FastCraft3D.View"
         Title="{Binding WindowTitle}" Height="900" Width="1500"
         Background="#FFF3F3F3" WindowStartupLocation="CenterScreen">
 
@@ -99,6 +100,31 @@
         </Style>
 
         <BooleanToVisibilityConverter x:Key="BoolToVisibility" />
+        <view:ColourToBrushConverter x:Key="ColourToBrush" />
+
+        <!-- A palette swatch: the colour itself is the whole button, so the grid reads as paint
+             rather than as a row of controls. -->
+        <Style x:Key="SwatchButton" TargetType="Button">
+            <Setter Property="Height" Value="22" />
+            <Setter Property="Margin" Value="1" />
+            <Setter Property="BorderBrush" Value="#FFB9BEC5" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}" />
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+            <Style.Triggers>
+                <Trigger Property="IsMouseOver" Value="True">
+                    <Setter Property="BorderBrush" Value="#FF33383F" />
+                    <Setter Property="BorderThickness" Value="2" />
+                </Trigger>
+            </Style.Triggers>
+        </Style>
 
         <Style x:Key="ModeButton" TargetType="ToggleButton">
             <Setter Property="Width" Value="30" />
@@ -276,6 +302,10 @@
                             Command="{Binding BeginSplitCommand}"
                             ToolTip="Split the selected object with a plane" />
                     <Separator Margin="8,0" />
+                    <Button Style="{StaticResource ToolButton}" Content="Colour..." Tag="{StaticResource IconColour}"
+                            Command="{Binding PickColourCommand}" MinWidth="78"
+                            ToolTip="Paint the selection. The palette in the right-hand panel is one click." />
+                    <Separator Margin="8,0" />
                     <Button Style="{StaticResource ToolButton}" Content="Duplicate" Tag="{StaticResource IconDuplicate}"
                             Command="{Binding DuplicateCommand}"
                             ToolTip="Copy the selection and set it beside the original" />
@@ -427,6 +457,7 @@
                     <RowDefinition Height="Auto" />
                     <RowDefinition Height="180" />
                     <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
                     <RowDefinition Height="*" />
                 </Grid.RowDefinitions>
 
@@ -482,8 +513,36 @@
                     </StackPanel>
                 </Border>
 
+                <!-- Colour. Bound to the view model rather than to Selected, because painting
+                     applies to the whole selection and Selected is null once more than one
+                     object is picked. -->
+                <StackPanel Grid.Row="3"
+                            Visibility="{Binding HasAnySelection, Converter={StaticResource BoolToVisibility}}">
+                    <TextBlock Text="Colour" Style="{StaticResource SectionHeader}" />
+                    <ItemsControl ItemsSource="{Binding Swatches}">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <UniformGrid Columns="8" />
+                            </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Button Style="{StaticResource SwatchButton}"
+                                        Background="{Binding Colour, Converter={StaticResource ColourToBrush}}"
+                                        ToolTip="{Binding Name}"
+                                        CommandParameter="{Binding Colour}"
+                                        Command="{Binding DataContext.SetColourCommand,
+                                                          RelativeSource={RelativeSource AncestorType=Window}}" />
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                    <Button Content="Custom..." Command="{Binding PickColourCommand}"
+                            HorizontalAlignment="Left" Padding="10,3" Margin="1,6,0,0"
+                            ToolTip="Pick any colour" />
+                </StackPanel>
+
                 <!-- Properties -->
-                <ScrollViewer Grid.Row="3" VerticalScrollBarVisibility="Auto" Margin="0,6,0,0"
+                <ScrollViewer Grid.Row="4" VerticalScrollBarVisibility="Auto" Margin="0,6,0,0"
                               DataContext="{Binding Selected}">
                     <StackPanel>
                         <StackPanel.Style>

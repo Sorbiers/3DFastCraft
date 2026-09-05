@@ -1,0 +1,171 @@
+<Window x:Class="FastCraft3D.View.ColourDialog"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:view="clr-namespace:FastCraft3D.View"
+        Title="Colour" SizeToContent="Height" Width="376"
+        WindowStartupLocation="CenterOwner" ResizeMode="NoResize"
+        ShowInTaskbar="False" Background="#FFF7F7F8">
+
+    <Window.Resources>
+        <view:ColourToBrushConverter x:Key="ColourToBrush" />
+
+        <Style x:Key="ChannelBox" TargetType="TextBox">
+            <Setter Property="Width" Value="44" />
+            <Setter Property="Padding" Value="4,3" />
+            <Setter Property="Margin" Value="0,0,10,0" />
+            <Setter Property="HorizontalContentAlignment" Value="Right" />
+        </Style>
+
+        <Style x:Key="ChannelLabel" TargetType="TextBlock">
+            <Setter Property="VerticalAlignment" Value="Center" />
+            <Setter Property="Foreground" Value="#FF5A5F66" />
+            <Setter Property="Margin" Value="0,0,5,0" />
+        </Style>
+    </Window.Resources>
+
+    <StackPanel Margin="18,14,18,14">
+
+        <!-- Saturation across, value down, with the hue strip beside it. Three stacked
+             rectangles rather than a generated bitmap: the gradients are the picker. -->
+        <Grid Height="176">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="14" />
+                <ColumnDefinition Width="26" />
+            </Grid.ColumnDefinitions>
+
+            <Border BorderBrush="#FFC8CCD2" BorderThickness="1" ClipToBounds="True">
+                <Grid x:Name="Square" Background="Transparent"
+                      MouseLeftButtonDown="OnSquarePressed" MouseMove="OnSquareMoved"
+                      MouseLeftButtonUp="OnPointerReleased" Cursor="Cross">
+                    <Rectangle x:Name="HueFill" />
+                    <Rectangle>
+                        <Rectangle.Fill>
+                            <LinearGradientBrush StartPoint="0,0" EndPoint="1,0">
+                                <GradientStop Offset="0" Color="#FFFFFFFF" />
+                                <GradientStop Offset="1" Color="#00FFFFFF" />
+                            </LinearGradientBrush>
+                        </Rectangle.Fill>
+                    </Rectangle>
+                    <Rectangle>
+                        <Rectangle.Fill>
+                            <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
+                                <GradientStop Offset="0" Color="#00000000" />
+                                <GradientStop Offset="1" Color="#FF000000" />
+                            </LinearGradientBrush>
+                        </Rectangle.Fill>
+                    </Rectangle>
+                    <Canvas IsHitTestVisible="False">
+                        <Ellipse x:Name="SquareMarker" Width="12" Height="12"
+                                 Stroke="White" StrokeThickness="2" IsHitTestVisible="False">
+                            <Ellipse.Effect>
+                                <DropShadowEffect BlurRadius="3" ShadowDepth="0" Opacity="0.65" />
+                            </Ellipse.Effect>
+                        </Ellipse>
+                    </Canvas>
+                </Grid>
+            </Border>
+
+            <Border Grid.Column="2" BorderBrush="#FFC8CCD2" BorderThickness="1" ClipToBounds="True">
+                <Grid x:Name="HueStrip" Background="Transparent"
+                      MouseLeftButtonDown="OnHuePressed" MouseMove="OnHueMoved"
+                      MouseLeftButtonUp="OnPointerReleased" Cursor="Hand">
+                    <Rectangle>
+                        <Rectangle.Fill>
+                            <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
+                                <GradientStop Offset="0.000" Color="#FFFF0000" />
+                                <GradientStop Offset="0.167" Color="#FFFFFF00" />
+                                <GradientStop Offset="0.333" Color="#FF00FF00" />
+                                <GradientStop Offset="0.500" Color="#FF00FFFF" />
+                                <GradientStop Offset="0.667" Color="#FF0000FF" />
+                                <GradientStop Offset="0.833" Color="#FFFF00FF" />
+                                <GradientStop Offset="1.000" Color="#FFFF0000" />
+                            </LinearGradientBrush>
+                        </Rectangle.Fill>
+                    </Rectangle>
+                    <Canvas IsHitTestVisible="False">
+                        <Rectangle x:Name="HueMarker" Width="24" Height="4"
+                                   Stroke="White" StrokeThickness="2" IsHitTestVisible="False">
+                            <Rectangle.Effect>
+                                <DropShadowEffect BlurRadius="3" ShadowDepth="0" Opacity="0.65" />
+                            </Rectangle.Effect>
+                        </Rectangle>
+                    </Canvas>
+                </Grid>
+            </Border>
+        </Grid>
+
+        <!-- Values, and the before/after pair so a small adjustment is visible -->
+        <Grid Margin="0,12,0,0">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+
+            <StackPanel>
+                <StackPanel Orientation="Horizontal" Margin="0,0,0,7">
+                    <TextBlock Text="Hex" Style="{StaticResource ChannelLabel}" />
+                    <TextBox x:Name="HexBox" Width="86" Padding="4,3" TextChanged="OnHexTyped"
+                             CharacterCasing="Upper" />
+                </StackPanel>
+                <StackPanel Orientation="Horizontal">
+                    <TextBlock Text="R" Style="{StaticResource ChannelLabel}" />
+                    <TextBox x:Name="RedBox" Style="{StaticResource ChannelBox}" TextChanged="OnChannelTyped" />
+                    <TextBlock Text="G" Style="{StaticResource ChannelLabel}" />
+                    <TextBox x:Name="GreenBox" Style="{StaticResource ChannelBox}" TextChanged="OnChannelTyped" />
+                    <TextBlock Text="B" Style="{StaticResource ChannelLabel}" />
+                    <TextBox x:Name="BlueBox" Style="{StaticResource ChannelBox}" TextChanged="OnChannelTyped" />
+                </StackPanel>
+            </StackPanel>
+
+            <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                <Border BorderBrush="#FFC8CCD2" BorderThickness="1,1,0,1" Width="40" Height="40">
+                    <Rectangle x:Name="BeforeSwatch" ToolTip="Current colour" />
+                </Border>
+                <Border BorderBrush="#FFC8CCD2" BorderThickness="1" Width="40" Height="40">
+                    <Rectangle x:Name="AfterSwatch" ToolTip="New colour" />
+                </Border>
+            </StackPanel>
+        </Grid>
+
+        <TextBlock Text="Palette" FontWeight="SemiBold" Foreground="#FF33383F" Margin="0,14,0,6" />
+        <ItemsControl x:Name="SwatchList">
+            <ItemsControl.ItemsPanel>
+                <ItemsPanelTemplate>
+                    <UniformGrid Columns="8" />
+                </ItemsPanelTemplate>
+            </ItemsControl.ItemsPanel>
+            <ItemsControl.ItemTemplate>
+                <DataTemplate>
+                    <Button Height="26" Margin="1" Click="OnSwatchPicked" Tag="{Binding Colour}"
+                            ToolTip="{Binding Name}" BorderBrush="#FFB9BEC5" BorderThickness="1"
+                            Background="{Binding Colour, Converter={StaticResource ColourToBrush}}">
+                        <Button.Template>
+                            <ControlTemplate TargetType="Button">
+                                <Border Background="{TemplateBinding Background}"
+                                        BorderBrush="{TemplateBinding BorderBrush}"
+                                        BorderThickness="{TemplateBinding BorderThickness}" />
+                            </ControlTemplate>
+                        </Button.Template>
+                        <Button.Style>
+                            <Style TargetType="Button">
+                                <Style.Triggers>
+                                    <Trigger Property="IsMouseOver" Value="True">
+                                        <Setter Property="BorderBrush" Value="#FF33383F" />
+                                        <Setter Property="BorderThickness" Value="2" />
+                                    </Trigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Button.Style>
+                    </Button>
+                </DataTemplate>
+            </ItemsControl.ItemTemplate>
+        </ItemsControl>
+
+        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,18,0,0">
+            <Button Content="Apply" IsDefault="True" Click="OnAccept"
+                    MinWidth="88" Padding="10,6" Margin="0,0,8,0" />
+            <Button Content="Cancel" IsCancel="True" MinWidth="80" Padding="10,6" />
+        </StackPanel>
+    </StackPanel>
+</Window>

@@ -215,3 +215,38 @@ public sealed class TransformCommand(
         return changed ? new TransformCommand(label, objects, before, after) : null;
     }
 }
+
+/// <summary>
+/// Painting a selection. Separate from <see cref="TransformCommand"/> because colour is not part
+/// of the transform, and because repainting the whole selection has to undo as one step rather
+/// than one step per object.
+/// </summary>
+public sealed class ColourCommand(
+    string label,
+    IReadOnlyList<SceneObject> objects,
+    IReadOnlyList<Vector3> before,
+    Vector3 after) : IUndoableCommand
+{
+    public string Label { get; } = label;
+
+    public void Apply(Scene scene)
+    {
+        foreach (var o in objects) o.Colour = after;
+    }
+
+    public void Revert(Scene scene)
+    {
+        for (int i = 0; i < objects.Count; i++)
+            objects[i].Colour = before[i];
+    }
+
+    /// <summary>Null when every object already has that colour, so re-picking it is not an undo step.</summary>
+    public static ColourCommand? CreateIfChanged(
+        string label, IReadOnlyList<SceneObject> objects, Vector3 colour)
+    {
+        if (objects.Count == 0) return null;
+
+        var before = objects.Select(o => o.Colour).ToList();
+        return before.All(c => c == colour) ? null : new ColourCommand(label, objects, before, colour);
+    }
+}
