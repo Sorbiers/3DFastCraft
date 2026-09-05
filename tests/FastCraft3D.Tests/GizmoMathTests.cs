@@ -1,4 +1,4 @@
-using System.Windows;
+﻿using System.Windows;
 using FastCraft3D.Render;
 using Xunit;
 
@@ -156,5 +156,50 @@ public class GizmoMathTests
             angle = GizmoMath.NormaliseDegrees(angle + 15f);
 
         Assert.InRange(angle, -180f, 180f);
+    }
+
+    // --- Dragging across a surface -----------------------------------------------------
+
+    /// <summary>The straightforward case: the two directions land on the screen axes.</summary>
+    [Fact]
+    public void ADragSplitsIntoTheSurfaceOwnDirections()
+    {
+        var moved = GizmoMath.AcrossSurface(
+            new Vector(40, -20), acrossPerMm: new Vector(4, 0), upPerMm: new Vector(0, -4));
+
+        Assert.NotNull(moved);
+        Assert.Equal(10, moved!.Value.X, 6);
+        Assert.Equal(5, moved.Value.Y, 6);
+    }
+
+    /// <summary>A turned surface: the answer is in its directions, not the screen's.</summary>
+    [Fact]
+    public void ADragIsResolvedInTheDirectionsGivenRatherThanTheScreens()
+    {
+        var across = new Vector(3, 3);   // 45 degrees, about 4.24 pixels per millimetre
+        var up = new Vector(-3, 3);
+
+        var moved = GizmoMath.AcrossSurface(across * 2 + up * 5, across, up);
+
+        Assert.NotNull(moved);
+        Assert.Equal(2, moved!.Value.X, 6);
+        Assert.Equal(5, moved.Value.Y, 6);
+    }
+
+    /// <summary>
+    /// Edge-on, both directions run along the same screen line and the split between them would
+    /// be invention - so it declines rather than throwing the lettering across the object.
+    /// </summary>
+    [Fact]
+    public void AnEdgeOnSurfaceDeclinesTheDrag()
+    {
+        Assert.Null(GizmoMath.AcrossSurface(
+            new Vector(10, 0), new Vector(4, 0), new Vector(-2, 0)));
+
+        Assert.Null(GizmoMath.AcrossSurface(
+            new Vector(10, 0), new Vector(4, 0), new Vector(4, 0.05)));
+
+        Assert.Null(GizmoMath.AcrossSurface(
+            new Vector(10, 0), new Vector(0, 0), new Vector(0, 4)));
     }
 }

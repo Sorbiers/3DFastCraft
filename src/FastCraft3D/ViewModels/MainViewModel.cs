@@ -39,6 +39,12 @@ public sealed class MainViewModel : INotifyPropertyChanged
     private float embossDepth = 0.8f;
     private bool embossBold = true;
     private bool embossRaised;
+    private float embossBevel;
+    private TextProjection embossProjection = TextProjection.Planar;
+    private SurfacePlacement embossPlacement = SurfacePlacement.Middle;
+    private List<TextShape>? letteringCache;
+    private Vector3 embossPick;
+    private Bounds embossBounds = Bounds.Empty;
     private bool measureSnap = true;
     private Vector3? measureFrom;
     private Vector3? measureTo;
@@ -216,6 +222,13 @@ public sealed class MainViewModel : INotifyPropertyChanged
 
     /// <summary>Anything selected. The handles work on a group even when the fields cannot.</summary>
     public bool HasAnySelection => Scene.Selection.Count > 0;
+
+    /// <summary>
+    /// The floating move/rotate/resize strip. Out of the way while a tool is running, along with
+    /// the handles it drives - leaving it up would offer a resize that the tool's own handles
+    /// are sitting on top of.
+    /// </summary>
+    public bool ShowManipulatorBar => HasAnySelection && !IsToolRunning;
 
     public string Status
     {
@@ -410,10 +423,22 @@ public sealed class MainViewModel : INotifyPropertyChanged
         {
             Set(ref isSplitMode, value);
             Raise(nameof(SplitPlaneVisible));
+            Raise(nameof(IsToolRunning));
+            Raise(nameof(ShowManipulatorBar));
         }
     }
 
     public bool SplitPlaneVisible => isSplitMode;
+
+    /// <summary>
+    /// Whether a tool has taken the object over.
+    ///
+    /// Splitting, engraving and lettering all put their own handles on the very same object and
+    /// all mean something different by a click on it. The move and resize handles, and the tool
+    /// strip that goes with them, stand down while one of them is running rather than sitting
+    /// underneath and leaving it to the pointer to decide which was meant.
+    /// </summary>
+    public bool IsToolRunning => isSplitMode || isEngraveMode || isEmbossMode;
 
     // --- Engraving -----------------------------------------------------------------
 
@@ -435,6 +460,8 @@ public sealed class MainViewModel : INotifyPropertyChanged
             Set(ref isEngraveMode, value);
             if (!value) engrave.Clear();
 
+            Raise(nameof(IsToolRunning));
+            Raise(nameof(ShowManipulatorBar));
             Raise(nameof(HasEngraveFace));
             RaiseEngraveText();
             EngraveFaceChanged?.Invoke();
@@ -457,8 +484,16 @@ public sealed class MainViewModel : INotifyPropertyChanged
             if (isEmbossMode == value) return;
 
             Set(ref isEmbossMode, value);
-            if (!value) { embossFace = null; embossMesh = null; }
+            if (!value)
+            {
+                embossFace = null;
+                embossMesh = null;
+                embossPlacement = SurfacePlacement.Middle;
+                letteringCache = null;
+            }
 
+            Raise(nameof(IsToolRunning));
+            Raise(nameof(ShowManipulatorBar));
             Raise(nameof(HasEmbossFace));
             Raise(nameof(EmbossSummary));
             EngraveFaceChanged?.Invoke();
@@ -473,13 +508,13 @@ public sealed class MainViewModel : INotifyPropertyChanged
     public string EmbossText
     {
         get => embossText;
-        set { Set(ref embossText, value ?? ""); RefreshEmboss(); }
+        set { Set(ref embossText, value ?? ""); RefreshLettering(); }
     }
 
     public string EmbossFont
     {
         get => embossFont;
-        set { Set(ref embossFont, string.IsNullOrWhiteSpace(value) ? "Arial" : value); RefreshEmboss(); }
+        set { Set(ref embossFont, string.IsNullOrWhiteSpace(value) ? "Arial" : value); RefreshLettering(); }
     }
 
     /// <summary>Common faces, so the usual ones need no typing.</summary>
@@ -489,7 +524,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
     public float EmbossHeight
     {
         get => embossHeight;
-        set { Set(ref embossHeight, Math.Clamp(value, 1f, 500f)); RefreshEmboss(); }
+        set { Set(ref embossHeight, Math.Clamp(value, 1f, 500f)); RefreshLettering(); }
     }
 
     /// <summary>How deep it is cut, or how far it stands proud.</summary>
@@ -502,7 +537,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
     public bool EmbossBold
     {
         get => embossBold;
-        set { Set(ref embossBold, value); RefreshEmboss(); }
+        set { Set(ref embossBold, value); RefreshLettering(); }
     }
 
     /// <summary>Raised off the face rather than cut into it.</summary>
@@ -510,6 +545,128 @@ public sealed class MainViewModel : INotifyPropertyChanged
     {
         get => embossRaised;
         set { Set(ref embossRaised, value); RefreshEmboss(); }
+    }
+
+    /// <summary>
+    /// How far the far end of the lettering is drawn in, sloping its walls.
+    ///
+    /// Worth having for printing rather than for looks: raised lettering with upright walls
+    /// leaves a sharp step the first layer has to bridge, and cut lettering with upright walls
+    /// traps the nozzle in a slot the width of one line.
+    /// </summary>
+    public float EmbossBevel
+    {
+        get => embossBevel;
+        set { Set(ref embossBevel, Math.Clamp(value, 0f, 10f)); RefreshEmboss(); }
+    }
+
+    public TextProjection EmbossProjection
+    {
+        get => embossProjection;
+        set
+        {
+            if (embossProjection == value) return;
+
+            Set(ref embossProjection, value);
+            Raise(nameof(IsEmbossWrapped));
+            RefreshEmboss();
+        }
+    }
+
+    public IReadOnlyList<TextProjection> EmbossProjections { get; } =
+        [TextProjection.Planar, TextProjection.Cylindrical, TextProjection.Spherical];
+
+    /// <summary>Whether the lettering is being wrapped rather than laid flat.</summary>
+    public bool IsEmbossWrapped => embossProjection != TextProjection.Planar;
+
+    /// <summary>Where the lettering sits, and which way up. Driven by the handles or the fields.</summary>
+    public SurfacePlacement EmbossPlacement
+    {
+        get => embossPlacement;
+        set
+        {
+            if (embossPlacement == value) return;
+
+            embossPlacement = value;
+            Raise(nameof(EmbossAcross));
+            Raise(nameof(EmbossUp));
+            Raise(nameof(EmbossAngle));
+            RefreshEmboss();
+        }
+    }
+
+    public float EmbossAcross
+    {
+        get => embossPlacement.OffsetMm.X;
+        set => EmbossPlacement = embossPlacement with
+        {
+            OffsetMm = new Vector2(Rounded(value), embossPlacement.OffsetMm.Y)
+        };
+    }
+
+    public float EmbossUp
+    {
+        get => embossPlacement.OffsetMm.Y;
+        set => EmbossPlacement = embossPlacement with
+        {
+            OffsetMm = new Vector2(embossPlacement.OffsetMm.X, Rounded(value))
+        };
+    }
+
+    public float EmbossAngle
+    {
+        get => embossPlacement.AngleDegrees;
+        set => EmbossPlacement = embossPlacement with { AngleDegrees = Rounded(value) };
+    }
+
+    private static float Rounded(float value) => float.IsFinite(value) ? MathF.Round(value, 3) : 0f;
+
+    /// <summary>Half the size of the lettering, for the handles to be drawn round.</summary>
+    public Vector2 EmbossExtent => SurfacePlacement.Extent(Lettering());
+
+    /// <summary>
+    /// The shape the lettering is laid onto.
+    ///
+    /// The curved ones are taken from where the click landed rather than from the object's
+    /// bounding box alone: a barrel picked on its side gives a radius that passes exactly
+    /// through the point clicked, so the lettering starts where it was asked for instead of
+    /// somewhere near it.
+    /// </summary>
+    public IPlacementSurface? EmbossSurface()
+    {
+        if (embossFace is not { } face) return null;
+
+        switch (embossProjection)
+        {
+            case TextProjection.Cylindrical:
+            {
+                var axis = new Vector2(embossBounds.Center.X, embossBounds.Center.Y);
+                var outward = new Vector2(embossPick.X, embossPick.Y) - axis;
+
+                float radius = outward.Length();
+                if (radius < 0.05f) return new PlanarSurface(face);
+
+                return new CylinderSurface(
+                    new Vector3(axis.X, axis.Y, embossPick.Z), radius,
+                    MathF.Atan2(outward.Y, outward.X));
+            }
+
+            case TextProjection.Spherical:
+            {
+                var outward = embossPick - embossBounds.Center;
+
+                float radius = outward.Length();
+                if (radius < 0.05f) return new PlanarSurface(face);
+
+                return new SphereSurface(
+                    embossBounds.Center, radius,
+                    MathF.Atan2(outward.Y, outward.X),
+                    MathF.Asin(Math.Clamp(outward.Z / radius, -1f, 1f)));
+            }
+
+            default:
+                return new PlanarSurface(face);
+        }
     }
 
     public string EmbossSummary
@@ -525,7 +682,13 @@ public sealed class MainViewModel : INotifyPropertyChanged
                 ? $"raised {embossDepth:0.##} mm"
                 : $"cut {embossDepth:0.##} mm deep";
 
-            return $"{shapes.Count} shape(s), {embossHeight:0.#} mm tall, {what}";
+            string wrapped = embossProjection == TextProjection.Planar
+                ? ""
+                : $", {embossProjection.ToString().ToLowerInvariant()}";
+
+            string bevel = embossBevel > 0 ? $", {embossBevel:0.##} mm bevel" : "";
+
+            return $"{shapes.Count} shape(s), {embossHeight:0.#} mm tall, {what}{wrapped}{bevel}";
         }
     }
 
@@ -555,44 +718,107 @@ public sealed class MainViewModel : INotifyPropertyChanged
             return false;
         }
 
+        // Clicking the same face again is how the wrapping is re-anchored, and it would be
+        // maddening if it also threw away a placement that had just been dragged into position.
+        if (!SameFace(embossFace, face)) embossPlacement = SurfacePlacement.Middle;
+
         embossMesh = world;
         embossFace = face;
+        embossPick = worldPoint;
+        embossBounds = world.ComputeBounds();
+        letteringCache = null;
 
         Raise(nameof(HasEmbossFace));
+        Raise(nameof(EmbossAcross));
+        Raise(nameof(EmbossUp));
+        Raise(nameof(EmbossAngle));
         RefreshEmboss();
         Status = EmbossSummary;
         return true;
     }
 
-    /// <summary>The outlines to cut or raise, in the face's own frame.</summary>
-    private List<TextShape> EmbossShapes()
+    /// <summary>Whether two picks landed on the same flat face - same direction, same plane.</summary>
+    private static bool SameFace(FacePatch? a, FacePatch? b)
+    {
+        if (a is null || b is null) return false;
+        if (Vector3.Dot(a.Normal, b.Normal) < 0.999f) return false;
+
+        return MathF.Abs(Vector3.Dot(a.Normal, a.Origin) - Vector3.Dot(b.Normal, b.Origin)) < 0.01f;
+    }
+
+    /// <summary>
+    /// The outlines as the font gives them: middle at the origin, nothing placed yet.
+    ///
+    /// Kept from one call to the next. Dragging the handles asks for the lettering on every
+    /// mouse move, and asking the font system to lay a word out again each time - only to move
+    /// the result a millimetre - is the one thing here expensive enough to be felt.
+    /// </summary>
+    private List<TextShape> Lettering()
     {
         if (embossFace is null) return [];
 
-        return GlyphOutlines.Build(embossText, embossFont, embossHeight, embossBold)
+        return letteringCache ??= GlyphOutlines
+            .Build(embossText, embossFont, embossHeight, embossBold)
             .Select(g => new TextShape(g.Outline, g.Holes))
             .ToList();
     }
 
-    /// <summary>A flat slab of the lettering, laid on the face so the placement can be seen.</summary>
+    /// <summary>Throws the laid-out lettering away, for whatever would change how it reads.</summary>
+    private void RefreshLettering()
+    {
+        letteringCache = null;
+        RefreshEmboss();
+    }
+
+    /// <summary>The outlines where they have been put, ready to lay on the surface.</summary>
+    private IReadOnlyList<TextShape> EmbossShapes() => embossPlacement.Apply(Lettering());
+
+    /// <summary>A thin slab of the lettering, laid on the shape so the placement can be seen.</summary>
     public Mesh? EmbossPreview()
     {
-        if (embossFace is not { } face) return null;
+        if (EmbossSurface() is not { } surface) return null;
 
         var shapes = EmbossShapes();
-        return shapes.Count == 0 ? null : TextSolid.Build(shapes, face, 0.08f, 0.11f);
+
+        // Standing proud whichever way it will go: a preview sunk into the object would be
+        // hidden by the very face it is being placed on.
+        float clear = surface.ClearanceMm + 0.06f;
+
+        return shapes.Count == 0 ? null : TextSolid.Build(shapes, surface, clear, clear + 0.03f);
     }
+
+    /// <summary>
+    /// What to try next when the lettering would not go on. Different for wrapped lettering,
+    /// because the advice that fits a flat face - a bigger size, a shallower cut - is not what
+    /// is going wrong round a barrel.
+    /// </summary>
+    private string WayRound() => embossProjection == TextProjection.Planar
+        ? "A flatter face, a larger size or a shallower depth will usually get through."
+        : "Wrapping is hardest on letters with an enclosed middle - O, B, A, D. Lettering "
+          + "without them usually goes on; so does Rebuild on the Object tab afterwards, which "
+          + "remakes the whole shape from scratch.";
 
     private void RefreshEmboss()
     {
         Raise(nameof(EmbossSummary));
-        if (isEmbossMode) EngraveFaceChanged?.Invoke();
+        Raise(nameof(EmbossExtent));
+
+        if (!isEmbossMode) return;
+
+        EngraveFaceChanged?.Invoke();
+        PlacementChanged?.Invoke();
     }
+
+    /// <summary>
+    /// Raised when the placement handles need re-drawing: what they are placing has moved, or
+    /// changed size, or is now on a different face. Both tools that use them raise it.
+    /// </summary>
+    public event Action? PlacementChanged;
 
     private async Task ApplyEmboss()
     {
         if (Scene.Selection.Count != 1) return;
-        if (embossFace is not { } face || embossMesh is not { } world) return;
+        if (embossMesh is not { } world || EmbossSurface() is not { } surface) return;
 
         var shapes = EmbossShapes();
         if (shapes.Count == 0)
@@ -605,24 +831,16 @@ public sealed class MainViewModel : INotifyPropertyChanged
         bool raised = embossRaised;
         float amount = embossDepth;
 
+        // A bevel that would meet in the middle before it reached the far end leaves nothing
+        // there to cap, so it is held to the depth it has room to slope over.
+        float bevel = Math.Min(embossBevel, amount * 0.9f);
+
         IsBusy = true;
         Status = raised ? "Raising lettering..." : "Cutting lettering...";
         try
         {
-            var result = await Task.Run(() =>
-            {
-                // Started a hair past the surface either way, so the solid always crosses it
-                // rather than meeting it exactly - a coplanar face is the one thing the boolean
-                // handles badly.
-                var solid = raised
-                    ? TextSolid.Build(shapes, face, -0.02f, amount)
-                    : TextSolid.Build(shapes, face, 0.02f, -amount);
-
-                if (solid.TriangleCount == 0) return null;
-
-                return MeshHealer.Heal(
-                    raised ? CsgSolid.Union(world, solid) : CsgSolid.Subtract(world, solid)).Mesh;
-            });
+            var result = await Task.Run(
+                () => TextCutter.Apply(world, shapes, surface, raised, amount, bevel));
 
             if (result is null || result.TriangleCount == 0)
             {
@@ -635,8 +853,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
                 Status = $"Lettering that face came out unprintable - {result.CheckHealth().Describe()}. Nothing was changed.";
                 MessageBox.Show(
                     "The lettering could not be applied cleanly, so the object has been left as "
-                    + "it was. A flat face, a larger size or a shallower depth will usually get "
-                    + "through.",
+                    + "it was." + Environment.NewLine + Environment.NewLine + WayRound(),
                     "3DFastCraft", MessageBoxButton.OK, MessageBoxImage.Warning);
                 return;
             }
@@ -716,6 +933,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
     {
         IsSplitMode = false;
         IsEngraveMode = false;
+        IsEmbossMode = false;
         measureFrom = null;
         measureTo = null;
         IsMeasureMode = true;
@@ -862,6 +1080,28 @@ public sealed class MainViewModel : INotifyPropertyChanged
         set => SetEngrave(engrave.Options with { OffsetV = value });
     }
 
+    /// <summary>
+    /// Where the pattern has been slid to, so the same handles that place lettering can slide it.
+    /// A pattern covers the whole face, so there is nothing to turn and nothing to draw a box
+    /// round - only the grip is any use here.
+    /// </summary>
+    public SurfacePlacement EngravePlacement
+    {
+        get => new(new Vector2(engrave.Options.OffsetU, engrave.Options.OffsetV), 0);
+        set => SetEngrave(engrave.Options with
+        {
+            OffsetU = Rounded(value.OffsetMm.X),
+            OffsetV = Rounded(value.OffsetMm.Y)
+        });
+    }
+
+    /// <summary>The face the pattern is laid on, for the handles to be dragged over.</summary>
+    public IPlacementSurface? EngraveSurface() =>
+        engrave.Face is { } face ? new PlanarSurface(face) : null;
+
+    /// <summary>Half the face, which is as far as the grip should ever need to go.</summary>
+    public Vector2 EngraveExtent => engrave.Face is { } face ? face.Size * 0.5f : Vector2.Zero;
+
     public string EngraveSummary => engrave.Describe();
     public string EngraveAdvice => engrave.Advice();
     public bool HasEngraveAdvice => EngraveAdvice.Length > 0;
@@ -881,10 +1121,12 @@ public sealed class MainViewModel : INotifyPropertyChanged
         Raise(nameof(EngraveDirectionApplies));
         Raise(nameof(EngraveOffsetU));
         Raise(nameof(EngraveOffsetV));
+        Raise(nameof(EngravePlacement));
         RaiseEngraveText();
 
         // The preview is drawn from these settings, so it has to be redrawn with them.
         EngraveFaceChanged?.Invoke();
+        PlacementChanged?.Invoke();
     }
 
     private void RaiseEngraveText()
@@ -1710,7 +1952,10 @@ public sealed class MainViewModel : INotifyPropertyChanged
     {
         if (Scene.Selection.Count != 1) return;
 
+        // Every one of these claims the click on the object, so only one can be on.
         IsSplitMode = false;
+        IsEmbossMode = false;
+        IsMeasureMode = false;
         IsEngraveMode = true;
         Status = "Click the face you want to engrave";
     }
@@ -1733,11 +1978,18 @@ public sealed class MainViewModel : INotifyPropertyChanged
             return false;
         }
 
+        // A fresh face means the old shift no longer refers to anything, so it starts level.
+        if (!SameFace(engrave.Face, face)) engrave.Options = engrave.Options with { OffsetU = 0, OffsetV = 0 };
+
         engrave.Pick(world, face);
 
         Raise(nameof(HasEngraveFace));
+        Raise(nameof(EngraveOffsetU));
+        Raise(nameof(EngraveOffsetV));
+        Raise(nameof(EngravePlacement));
         RaiseEngraveText();
         EngraveFaceChanged?.Invoke();
+        PlacementChanged?.Invoke();
 
         Status = EngraveSummary;
         return true;
@@ -1811,7 +2063,10 @@ public sealed class MainViewModel : INotifyPropertyChanged
     {
         if (Scene.Selection.Count == 0) return;
 
-        IsEngraveMode = false; // both modes claim the click, so only one can be on
+        // Every one of these claims the click on the object, so only one can be on.
+        IsEngraveMode = false;
+        IsEmbossMode = false;
+        IsMeasureMode = false;
         IsSplitMode = true;
         ResetSplitOffset();
         Status = "Drag the arrows to slide the split plane, the rings to tilt it";
@@ -2214,6 +2469,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
         Selected = selection.Count == 1 ? selection[0] : null;
         SelectionChanged?.Invoke();
         Raise(nameof(HasAnySelection));
+        Raise(nameof(ShowManipulatorBar));
         Raise(nameof(SelectionSummary));
         Raise(nameof(UndoLabel));
         if (IsSplitMode && selection.Count > 0) ResetSplitOffset();

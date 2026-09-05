@@ -84,6 +84,22 @@ public sealed class GizmoController
     public bool UniformScale { get; set; } = true;
 
     /// <summary>
+    /// Off while another tool owns the object. Lettering puts its own handles on the very same
+    /// object, and two sets of handles over one thing is a guess about which one a drag meant.
+    /// </summary>
+    public bool Enabled
+    {
+        get => enabled;
+        set
+        {
+            if (enabled == value) return;
+
+            enabled = value;
+            Reposition();
+        }
+    }
+
+    /// <summary>
     /// Hold the face opposite the handle still, so the object grows only the way it is dragged.
     /// Off by default, which matches how the old app behaved.
     /// </summary>
@@ -139,6 +155,8 @@ public sealed class GizmoController
     /// </summary>
     public bool NeedsReposition { get; private set; }
 
+    private bool enabled = true;
+
     /// <summary>
     /// Whether the handles still sit where the current projection says they should.
     ///
@@ -166,6 +184,13 @@ public sealed class GizmoController
     public void Reposition()
     {
         if (handles.Count == 0) return;
+
+        if (!enabled)
+        {
+            layer.Visibility = Visibility.Collapsed;
+            NeedsReposition = false;
+            return;
+        }
 
         var bounds = SelectionBounds();
         if (bounds.IsEmpty)
@@ -448,6 +473,7 @@ public sealed class GizmoController
     /// <summary>True when the press landed on a handle, meaning the gizmo owns this drag.</summary>
     public bool TryBeginDrag(Point screen, object? hitElement)
     {
+        if (!enabled) return false;
         if (hitElement is not FrameworkElement { Tag: Handle handle }) return false;
         if (handle.Kind is HandleKind.BoxOutline or HandleKind.Corner) return false;
 

@@ -89,6 +89,28 @@ public static class GizmoMath
         return Math.Round(destination / step) * step - start;
     }
 
+    /// <summary>
+    /// A screen drag turned back into a move across a surface, given how far one millimetre of
+    /// each of the surface's own directions carries on screen.
+    ///
+    /// Dragging something that lies on a face is not a move along one axis, so the single-axis
+    /// arithmetic above does not fit: the pointer has to be resolved into both directions at
+    /// once, which is a two-by-two solve. Null when the surface is edge-on - the two directions
+    /// then land on the same screen line and any split between them would be invention.
+    /// </summary>
+    public static Vector? AcrossSurface(Vector screenDelta, Vector acrossPerMm, Vector upPerMm)
+    {
+        double determinant = acrossPerMm.X * upPerMm.Y - acrossPerMm.Y * upPerMm.X;
+        double scale = acrossPerMm.Length * upPerMm.Length;
+
+        // Two degrees of separation. Below that the answer is enormous and mostly noise.
+        if (scale < 1e-9 || Math.Abs(determinant) < scale * 0.035) return null;
+
+        return new Vector(
+            (screenDelta.X * upPerMm.Y - screenDelta.Y * upPerMm.X) / determinant,
+            (acrossPerMm.X * screenDelta.Y - acrossPerMm.Y * screenDelta.X) / determinant);
+    }
+
     /// <summary>Folds an angle into (-180, 180] so the readout never drifts to 720 degrees.</summary>
     public static float NormaliseDegrees(float degrees)
     {

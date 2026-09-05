@@ -716,12 +716,53 @@
                             <TextBlock Text="mm" Foreground="#FF9AA0A8" VerticalAlignment="Center" />
                         </StackPanel>
 
-                        <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,2">
                             <TextBlock Text="Depth" Style="{StaticResource FieldLabel}" Width="62"
                                        ToolTip="How deep it is cut, or how far it stands proud" />
                             <TextBox Width="64" Style="{StaticResource NumberBox}" Tag="number"
                                      Text="{Binding EmbossDepth, StringFormat=N2, UpdateSourceTrigger=LostFocus}" />
                             <TextBlock Text="mm" Foreground="#FF9AA0A8" VerticalAlignment="Center" />
+                        </StackPanel>
+
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
+                            <TextBlock Text="Bevel" Style="{StaticResource FieldLabel}" Width="62"
+                                       ToolTip="Slopes the walls, so raised lettering has no step to bridge and cut lettering is not a slot one line wide. Zero leaves them upright." />
+                            <TextBox Width="64" Style="{StaticResource NumberBox}" Tag="number"
+                                     Text="{Binding EmbossBevel, StringFormat=N2, UpdateSourceTrigger=LostFocus}" />
+                            <TextBlock Text="mm" Foreground="#FF9AA0A8" VerticalAlignment="Center" />
+                        </StackPanel>
+
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
+                            <TextBlock Text="Wrap" Style="{StaticResource FieldLabel}" Width="62"
+                                       ToolTip="Flat on the face, or bent round the object as a barrel or a ball" />
+                            <ComboBox Width="130" ItemsSource="{Binding EmbossProjections}"
+                                      SelectedItem="{Binding EmbossProjection, Mode=TwoWay}" />
+                        </StackPanel>
+
+                        <!-- Where it sits. The scene handles drive the same three numbers, so a
+                             drag can be tidied up here and a number can be nudged with the arrows. -->
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,2">
+                            <TextBlock Text="Across" Style="{StaticResource FieldLabel}" Width="62"
+                                       ToolTip="How far from the middle, along the lettering" />
+                            <TextBox Width="64" Style="{StaticResource NumberBox}" Tag="number"
+                                     Text="{Binding EmbossAcross, StringFormat=N2, UpdateSourceTrigger=LostFocus}" />
+                            <TextBlock Text="mm" Foreground="#FF9AA0A8" VerticalAlignment="Center" />
+                        </StackPanel>
+
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,2">
+                            <TextBlock Text="Up" Style="{StaticResource FieldLabel}" Width="62"
+                                       ToolTip="How far from the middle, across the lettering" />
+                            <TextBox Width="64" Style="{StaticResource NumberBox}" Tag="number"
+                                     Text="{Binding EmbossUp, StringFormat=N2, UpdateSourceTrigger=LostFocus}" />
+                            <TextBlock Text="mm" Foreground="#FF9AA0A8" VerticalAlignment="Center" />
+                        </StackPanel>
+
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
+                            <TextBlock Text="Turn" Style="{StaticResource FieldLabel}" Width="62"
+                                       ToolTip="Which way up the lettering runs" />
+                            <TextBox Width="64" Style="{StaticResource NumberBox}" Tag="number"
+                                     Text="{Binding EmbossAngle, StringFormat=N1, UpdateSourceTrigger=LostFocus}" />
+                            <TextBlock Text="deg" Foreground="#FF9AA0A8" VerticalAlignment="Center" />
                         </StackPanel>
 
                         <CheckBox Content="Bold" IsChecked="{Binding EmbossBold, Mode=TwoWay}" Margin="0,0,0,4" />
@@ -875,6 +916,10 @@
             <!-- Handles for the split plane, on their own layer so the two never interleave. -->
             <Canvas x:Name="SplitGizmoLayer" ClipToBounds="True" Background="{x:Null}" />
 
+            <!-- Handles for placing lettering or a pattern on a face. Its own layer for the same
+                 reason as the split one: the two never interleave. -->
+            <Canvas x:Name="PlacementGizmoLayer" ClipToBounds="True" Background="{x:Null}" />
+
             <!-- The measuring tape, drawn over everything so it is never hidden by the model. -->
             <Canvas x:Name="MeasureLayer" ClipToBounds="True" Background="{x:Null}" IsHitTestVisible="False" />
 
@@ -998,7 +1043,7 @@
             <Border VerticalAlignment="Bottom" HorizontalAlignment="Center"
                     Margin="0,0,0,18" Padding="6,4" CornerRadius="6"
                     Background="#F2FFFFFF" BorderBrush="#FFC8CCD2" BorderThickness="1"
-                    Visibility="{Binding HasAnySelection, Converter={StaticResource BoolToVisibility}}">
+                    Visibility="{Binding ShowManipulatorBar, Converter={StaticResource BoolToVisibility}}">
                 <StackPanel Orientation="Horizontal">
                     <ToggleButton Style="{StaticResource ModeButton}" ToolTip="Move (M)"
                                   IsChecked="{Binding IsMoveMode, Mode=TwoWay}">

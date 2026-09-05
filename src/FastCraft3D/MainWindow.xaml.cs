@@ -6,6 +6,7 @@ using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
 using FastCraft3D.Geometry;
+using FastCraft3D.Geometry.Engraving;
 using FastCraft3D.Model;
 using FastCraft3D.Model.Commands;
 using FastCraft3D.Render;
@@ -29,6 +30,7 @@ public partial class MainWindow : Window
     private float plateShown;
     private GizmoController? gizmo;
     private SplitPlaneGizmo? splitGizmo;
+    private SurfacePlacementGizmo? placeGizmo;
     private SelectionListSync? listSync;
     private MeshGeometryModel3D? splitPlaneVisual;
 
@@ -76,10 +78,8 @@ public partial class MainWindow : Window
         viewModel.EngraveFaceChanged += () =>
         {
             // Both tools pick a face and draw on it; whichever is running owns the highlight.
-            if (viewModel.IsEmbossMode)
-                renderer.ShowFace(viewModel.EmbossFace, null, viewModel.EmbossPreview());
-            else
-                renderer.ShowFace(viewModel.EngraveFace, viewModel.EngravePreview);
+            if (viewModel.IsEmbossMode) ShowEmbossPreview();
+            else renderer.ShowFace(viewModel.EngraveFace, viewModel.EngravePreview);
         };
 
         listSync = new SelectionListSync(ObjectList, viewModel.Scene);
@@ -103,6 +103,19 @@ public partial class MainWindow : Window
         SplitGizmoLayer.PreviewMouseLeftButtonDown += OnSplitGizmoDown;
         SplitGizmoLayer.PreviewMouseMove += OnSplitGizmoMove;
         SplitGizmoLayer.PreviewMouseLeftButtonUp += OnSplitGizmoUp;
+
+        placeGizmo = new SurfacePlacementGizmo(PlacementGizmoLayer, new Viewport3DXProjector(View));
+        placeGizmo.Feedback += text => viewModel.Status = text;
+        placeGizmo.Changed += placement =>
+        {
+            if (viewModel.IsEmbossMode) viewModel.EmbossPlacement = placement;
+            else if (viewModel.IsEngraveMode) viewModel.EngravePlacement = placement;
+        };
+        PlacementGizmoLayer.PreviewMouseLeftButtonDown += OnTextGizmoDown;
+        PlacementGizmoLayer.PreviewMouseMove += OnTextGizmoMove;
+        PlacementGizmoLayer.PreviewMouseLeftButtonUp += OnTextGizmoUp;
+
+        viewModel.PlacementChanged += RefreshPlacementGizmo;
 
         // The handles are projected from the camera, so they have to follow it. Repositioning
         // only when something actually moved keeps this off the per-frame allocation path.
@@ -194,6 +207,82 @@ public partial class MainWindow : Window
         e.Handled = true;
     }
 
+    private void OnTextGizmoDown(object sender, MouseButtonEventArgs e)
+    {
+        if (placeGizmo is null) return;
+        if (!placeGizmo.TryBeginDrag(e.GetPosition(PlacementGizmoLayer), e.OriginalSource)) return;
+
+        PlacementGizmoLayer.CaptureMouse();
+        e.Handled = true;
+    }
+
+    private void OnTextGizmoMove(object sender, MouseEventArgs e)
+    {
+        if (placeGizmo is not { IsDragging: true }) return;
+        if (e.LeftButton != MouseButtonState.Pressed) return;
+
+        placeGizmo.ContinueDrag(e.GetPosition(PlacementGizmoLayer));
+        e.Handled = true;
+    }
+
+    private void OnTextGizmoUp(object sender, MouseButtonEventArgs e)
+    {
+        if (placeGizmo is not { IsDragging: true }) return;
+
+        PlacementGizmoLayer.ReleaseMouseCapture();
+        placeGizmo.EndDrag();
+        ShowEmbossPreview();
+        e.Handled = true;
+    }
+
+    /// <summary>
+    /// The lettering laid on the object, so its placement can be seen before it is committed.
+    ///
+    /// Wrapped lettering has to be divided finely enough to follow the curve, which is far too
+    /// much geometry to rebuild on every mouse move. During a drag the dashed box carries the
+    /// placement on its own and the lettering catches up when the handle is let go.
+    /// </summary>
+    private void ShowEmbossPreview()
+    {
+        if (renderer is null) return;
+
+        bool tooHeavy = viewModel.IsEmbossWrapped && placeGizmo is { IsDragging: true };
+        renderer.ShowFace(viewModel.EmbossFace, null, tooHeavy ? null : viewModel.EmbossPreview());
+    }
+
+    /// <summary>
+    /// Keeps the placement handles on whatever is being placed, and hides them outside the tools
+    /// that use them. Lettering gets all three handles; an engraved pattern covers the whole face
+    /// and has no angle, so it gets the grip alone.
+    /// </summary>
+    private void RefreshPlacementGizmo()
+    {
+        if (placeGizmo is null) return;
+
+        // A drag is already moving the handles; re-showing them from the value it just published
+        // would fight the pointer.
+        if (placeGizmo.IsDragging) return;
+
+        if (viewModel.IsEmbossMode)
+        {
+            placeGizmo.Noun = "Lettering";
+            placeGizmo.Show(
+                viewModel.HasEmbossFace, viewModel.EmbossSurface(),
+                viewModel.EmbossPlacement, viewModel.EmbossExtent);
+        }
+        else if (viewModel.IsEngraveMode)
+        {
+            placeGizmo.Noun = "Pattern";
+            placeGizmo.Show(
+                viewModel.HasEngraveFace, viewModel.EngraveSurface(),
+                viewModel.EngravePlacement, viewModel.EngraveExtent, PlacementHandles.Move);
+        }
+        else
+        {
+            placeGizmo.Show(false, null, SurfacePlacement.Middle, Vector2.Zero);
+        }
+    }
+
     private void OnSplitGizmoDown(object sender, MouseButtonEventArgs e)
     {
         if (splitGizmo is null) return;
@@ -246,6 +335,7 @@ public partial class MainWindow : Window
         if (gizmo is null) return;
         if (gizmo.NeedsReposition || gizmo.IsStale()) gizmo.Reposition();
         if (viewModel.IsSplitMode) splitGizmo?.Reposition();
+        if (viewModel.IsEmbossMode || viewModel.IsEngraveMode) placeGizmo?.Reposition();
 
         // The tape is anchored to the model rather than to the screen, so it is reprojected with
         // the camera. Only while it is out: this runs on every frame.
@@ -710,6 +800,17 @@ public partial class MainWindow : Window
         {
             if (gizmo is not null) gizmo.SnapRotation = viewModel.SnapRotation;
             if (splitGizmo is not null) splitGizmo.SnapRotation = viewModel.SnapRotation;
+            if (placeGizmo is not null) placeGizmo.SnapRotation = viewModel.SnapRotation;
+        }
+
+        if (e.PropertyName is nameof(MainViewModel.IsToolRunning)
+            or nameof(MainViewModel.IsEmbossMode)
+            or nameof(MainViewModel.IsEngraveMode))
+        {
+            // A tool that has taken the object over owns the handles on it, so the move and
+            // resize ones stand down rather than sitting underneath the placement ones.
+            if (gizmo is not null) gizmo.Enabled = !viewModel.IsToolRunning;
+            RefreshPlacementGizmo();
         }
 
         if (e.PropertyName is nameof(MainViewModel.IsSplitMode)
