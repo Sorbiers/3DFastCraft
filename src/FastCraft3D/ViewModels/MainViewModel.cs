@@ -30,6 +30,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
     private bool isEngraveMode;
     private bool? damaged;
     private bool scaleOneSide;
+    private bool stopOnContact;
     private bool showWireframe;
     private bool showXray;
     private bool showPlate = true;
@@ -330,6 +331,18 @@ public sealed class MainViewModel : INotifyPropertyChanged
     {
         get => scaleOneSide;
         set => Set(ref scaleOneSide, value);
+    }
+
+    /// <summary>
+    /// Stop a dragged object where it meets another rather than letting it pass through.
+    ///
+    /// Sliding a part up against its neighbour until it stops is how things get assembled. Off by
+    /// default, because parts often need to overlap on their way to a boolean. Shortcut: C.
+    /// </summary>
+    public bool StopOnContact
+    {
+        get => stopOnContact;
+        set => Set(ref stopOnContact, value);
     }
 
     /// <summary>
@@ -827,8 +840,30 @@ public sealed class MainViewModel : INotifyPropertyChanged
 
         int skipped = Scene.Selection.Count - roundable.Count;
 
-        var dialog = new RoundDialog(roundable) { Owner = Application.Current?.MainWindow };
-        if (dialog.ShowDialog() != true || dialog.Result is not { } radius) return;
+        // Rounding regenerates the shape, which also resets its scale, so the preview has to
+        // stand in for both - the mesh and the transform it will be built with.
+        var before = roundable.Select(o => (o.Mesh, o.Scale)).ToList();
+
+        var dialog = new RoundDialog(roundable, meshes =>
+        {
+            for (int i = 0; i < roundable.Count; i++)
+            {
+                roundable[i].Mesh = meshes is null ? before[i].Mesh : meshes[i];
+                roundable[i].Scale = meshes is null ? before[i].Scale : Vector3.One;
+            }
+        })
+        { Owner = Application.Current?.MainWindow };
+
+        bool accepted = dialog.ShowDialog() == true && dialog.Result is not null;
+
+        // Whatever the preview left behind, the undo step has to start from where the user did.
+        for (int i = 0; i < roundable.Count; i++)
+        {
+            roundable[i].Mesh = before[i].Mesh;
+            roundable[i].Scale = before[i].Scale;
+        }
+
+        if (!accepted || dialog.Result is not { } radius) return;
 
         var edges = dialog.Edges;
         var produced = roundable.Select(o =>

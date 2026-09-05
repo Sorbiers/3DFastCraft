@@ -1,4 +1,4 @@
-using System.Globalization;
+﻿using System.Globalization;
 using System.Numerics;
 using System.Windows;
 using System.Windows.Controls;
@@ -17,12 +17,19 @@ namespace FastCraft3D.View;
 public partial class RoundDialog : Window
 {
     private readonly IReadOnlyList<SceneObject> subjects;
+    private readonly Action<IReadOnlyList<Mesh>?> preview;
     private float maximum;
     private bool updating;
 
-    public RoundDialog(IReadOnlyList<SceneObject> subjects)
+    /// <param name="preview">
+    /// Shows a set of meshes on the plate, or puts the originals back when given null. Rounding
+    /// rebuilds the shape from its parameters rather than filleting it, so what a given radius
+    /// looks like is genuinely hard to picture - much easier to see.
+    /// </param>
+    public RoundDialog(IReadOnlyList<SceneObject> subjects, Action<IReadOnlyList<Mesh>?> preview)
     {
         this.subjects = subjects;
+        this.preview = preview;
         InitializeComponent();
 
         SubjectText.Text = subjects.Count == 1
@@ -44,10 +51,43 @@ public partial class RoundDialog : Window
         updating = false;
 
         UpdateSummary();
+        ShowPreview();
     }
 
     /// <summary>Null until the user confirms.</summary>
     public float? Result { get; private set; }
+
+    /// <summary>
+    /// Rebuilds each shape at the current radius and puts it on the plate. Cheap enough to do on
+    /// every slider move: these are primitives being regenerated from a handful of parameters,
+    /// not meshes being reworked.
+    /// </summary>
+    private void ShowPreview()
+    {
+        if (!IsInitialized) return;
+
+        var edges = SelectedEdges();
+        if (edges == RoundEdges.None || Radius <= 0)
+        {
+            preview(null);
+            return;
+        }
+
+        var rounded = new List<Mesh>(subjects.Count);
+        foreach (var o in subjects)
+        {
+            var size = new Vector3(o.SizeX, o.SizeY, o.SizeZ);
+            rounded.Add(RoundedPrimitives.Create(o.Origin!.Value, size, Radius, edges));
+        }
+
+        preview(rounded);
+    }
+
+    protected override void OnClosed(EventArgs e)
+    {
+        if (Result is null) preview(null);
+        base.OnClosed(e);
+    }
 
     /// <summary>Which edge groups the user asked for.</summary>
     public RoundEdges Edges { get; private set; } = RoundEdges.All;
@@ -92,6 +132,7 @@ public partial class RoundDialog : Window
         updating = false;
 
         UpdateSummary();
+        ShowPreview();
     }
 
     private float Radius
@@ -111,6 +152,7 @@ public partial class RoundDialog : Window
         RadiusBox.Text = RadiusSlider.Value.ToString("0.##", CultureInfo.CurrentCulture);
         updating = false;
         UpdateSummary();
+        ShowPreview();
     }
 
     private void OnRadiusTyped(object sender, TextChangedEventArgs e)
@@ -122,6 +164,7 @@ public partial class RoundDialog : Window
         RadiusSlider.Value = Math.Clamp(typed, 0, maximum);
         updating = false;
         UpdateSummary();
+        ShowPreview();
     }
 
     /// <summary>

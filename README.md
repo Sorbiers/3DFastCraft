@@ -82,7 +82,14 @@ twice the handle's travel. The toggle beside the proportions one - or **O** - ho
 opposite the handle exactly where it is, so the object grows by precisely what you dragged and
 only the way you dragged it. That is what you want when a part has to keep meeting its neighbour.
 
-**Snap** in the manipulator bar constrains drags to whole millimetres or 5 mm. It snaps where the
+**Snap** in the manipulator bar constrains drags to whole millimetres or 5 mm.
+
+**Stop on contact** - the toggle beside it, or **C** - stops a dragged object where it meets
+another rather than letting it pass through, which is how parts get slid together without typing
+coordinates for them. It works on bounding boxes: for the boxes, plates and walls this is mostly
+used for, the box is the shape, and on a rounded or angled face it stops a little early rather
+than late, so nothing ever passes through anything. Two parts that already overlap are left free
+to move - they were put that way on purpose, usually on the way to a boolean. It snaps where the
 object *lands*, not how far it travels, so two parts dragged onto the same grid meet exactly.
 
 Shortcuts: `Ctrl+Z` / `Ctrl+Y` undo & redo, `Delete`, `Ctrl+C` / `Ctrl+V` copy & paste,
@@ -188,7 +195,7 @@ is watertight.
 ### Rounding edges
 
 **Round...** on the Object tab rebuilds a **cube** or **cylinder** with rounded edges at a radius
-you choose, on whichever edge groups you tick:
+you choose, shown on the plate as you set it, on whichever edge groups you tick:
 
 | | Cube | Cylinder |
 |---|---|---|

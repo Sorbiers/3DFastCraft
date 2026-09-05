@@ -89,6 +89,15 @@ public sealed class GizmoController
     /// </summary>
     public bool ScaleOneSide { get; set; }
 
+    /// <summary>
+    /// Stop a move where the object meets another rather than letting it pass through.
+    ///
+    /// Sliding one part up against another until it stops is how things get assembled, and it
+    /// beats typing coordinates for it. Off by default, because parts often need to overlap on
+    /// their way to a boolean.
+    /// </summary>
+    public bool StopOnContact { get; set; }
+
     /// <summary>Millimetres to snap a move to, or zero for free movement.</summary>
     public double SnapStep { get; set; }
 
@@ -481,6 +490,38 @@ public sealed class GizmoController
         Rebuild();
     }
 
+    /// <summary>
+    /// How far this drag may actually go before something is in the way.
+    ///
+    /// Measured from where the drag started rather than from where the objects are now, so
+    /// pushing further into an obstacle and easing back off behaves the same as approaching it
+    /// for the first time.
+    /// </summary>
+    private float ContactLimit(float travel)
+    {
+        var moving = new List<Bounds>(dragObjects.Count);
+        for (int i = 0; i < dragObjects.Count; i++)
+            moving.Add(BoundsAt(dragObjects[i], dragBefore[i]));
+
+        var obstacles = new List<Bounds>();
+        foreach (var o in scene.Objects)
+            if (!dragObjects.Contains(o))
+                obstacles.Add(o.WorldBounds);
+
+        return CollisionSweep.Limit(moving, obstacles, active!.Axis, travel);
+    }
+
+    /// <summary>The object's world bounds as they were when the drag began.</summary>
+    private static Bounds BoundsAt(SceneObject o, TransformState state)
+    {
+        var was = TransformState.Capture(o);
+        state.ApplyTo(o);
+        var bounds = o.WorldBounds;
+        was.ApplyTo(o);
+
+        return bounds;
+    }
+
     private void DragMove(Point screen)
     {
         if (!TryAxisScreenScale(active!.Axis, out Vector axisScreen, out double pixelsPerMm)) return;
@@ -492,12 +533,22 @@ public sealed class GizmoController
         // the whole selection, so a group lands on the grid without being pulled apart.
         millimetres = GizmoMath.SnapTravel(Component(dragBefore[0].Position, active.Axis), millimetres, SnapStep);
 
+        bool stopped = false;
+        if (StopOnContact)
+        {
+            float allowed = ContactLimit((float)millimetres);
+            stopped = Math.Abs(allowed - millimetres) > 1e-4;
+            millimetres = allowed;
+        }
+
         Vector3 offset = AxisVector(active.Axis) * (float)millimetres;
         for (int i = 0; i < dragObjects.Count; i++)
             dragObjects[i].Position = dragBefore[i].Position + offset;
 
         dragChanged = true;
-        Feedback?.Invoke($"Move {active.Axis} {millimetres:+0.##;-0.##;0} mm");
+        Feedback?.Invoke(stopped
+            ? $"Move {active.Axis} {millimetres:+0.##;-0.##;0} mm - stopped against another object"
+            : $"Move {active.Axis} {millimetres:+0.##;-0.##;0} mm");
     }
 
     private static float Along(Vector3 point, Axis axis) =>

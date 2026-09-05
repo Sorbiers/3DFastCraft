@@ -948,6 +948,15 @@
                                  IsChecked="{Binding SnapFive, Mode=TwoWay}" ToolTip="Snap moves to 5 mm" />
                     <TextBlock Text="mm" Style="{StaticResource GizmoUnit}" />
 
+                    <ToggleButton Style="{StaticResource ModeButton}" Margin="6,0,0,0"
+                                  ToolTip="Stop where the object meets another rather than passing through it (C)"
+                                  IsChecked="{Binding StopOnContact, Mode=TwoWay}">
+                        <!-- Two blocks meeting, with the contact marked. -->
+                        <Path Data="M2,5 L9,5 L9,15 L2,15 M18,5 L11,5 L11,15 L18,15 M10,3 L10,17"
+                              Stroke="#FF33383F" StrokeThickness="1.8" Fill="{x:Null}"
+                              Stretch="Uniform" Width="15" Height="15" />
+                    </ToggleButton>
+
                     <Rectangle Width="1" Margin="6,3" Fill="#FFD8DBE0" />
 
                     <StackPanel Orientation="Horizontal"
