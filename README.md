@@ -45,7 +45,7 @@ dotnet test
 | **Align** | Line the selection up on X, Y or Z: flush to either edge, centred, or spread evenly |
 | **Edit** | Repair, rebuild, simplify, hollow, undo, redo |
 | **File** | New, open, recent, save, save as, save a version, versions, export STL/OBJ |
-| **View** | Zoom to fit, top / front / right / isometric, wireframe, x-ray, build plate size and visibility |
+| **View** | Zoom to fit, top / front / right / isometric, measure, wireframe, x-ray, build plate size and visibility |
 
 **Camera:** left-drag orbits, right-drag pans, the wheel zooms. Dragging horizontally turns the
 scene around the vertical **Z** axis, like a turntable - the plate never rolls onto its side.
@@ -126,6 +126,19 @@ What it will not do is guess. A mesh that overlaps itself cannot be mended by pa
 locally - the tools that manage it voxelise the model and rebuild the surface, which would
 flatten every detail this app exists to cut. Faced with damage it cannot understand it hands the
 mesh straight back and says so, rather than tearing it further.
+
+### Measuring
+
+**Measure** on the View tab reads the distance between two points. Click one, click another, and
+the tape is drawn over the model with the distance on it - along with the gap broken down by
+axis, since a single number hides which way it runs. A third click starts a fresh measurement.
+
+**Snap to corners and edges** pulls each click onto the nearest corner or edge midpoint, which is
+what makes the reading exact rather than approximately wherever the pointer landed. It is on by
+default.
+
+The tape is drawn over the viewport rather than in it, so it is never hidden behind the model -
+the whole point is to read it.
 
 ### Seeing inside
 

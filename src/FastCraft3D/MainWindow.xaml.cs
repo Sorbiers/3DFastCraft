@@ -25,6 +25,7 @@ public partial class MainWindow : Window
 {
     private readonly MainViewModel viewModel = new();
     private SceneRenderer? renderer;
+    private MeasureOverlay? measure;
     private float plateShown;
     private GizmoController? gizmo;
     private SplitPlaneGizmo? splitGizmo;
@@ -69,6 +70,9 @@ public partial class MainWindow : Window
 
         renderer = new SceneRenderer(ContentGroup, viewModel.Scene);
 
+        measure = new MeasureOverlay(MeasureLayer, new Viewport3DXProjector(View));
+        viewModel.MeasureChanged += () => measure.Show(viewModel.MeasureFrom, viewModel.MeasureTo);
+
         viewModel.EngraveFaceChanged += () =>
             renderer.ShowFace(viewModel.EngraveFace, viewModel.EngravePreview);
 
@@ -100,7 +104,7 @@ public partial class MainWindow : Window
 
         // A resize changes where everything projects to without touching the camera, so the
         // dirty check above would not notice on its own.
-        View.SizeChanged += (_, _) => gizmo?.Reposition();
+        View.SizeChanged += (_, _) => { gizmo?.Reposition(); measure?.Reposition(); };
 
         viewModel.ZoomExtentsRequested += () => Dispatcher.BeginInvoke(new Action(ZoomExtents));
         viewModel.PropertyChanged += OnViewModelChanged;
@@ -236,6 +240,10 @@ public partial class MainWindow : Window
         if (gizmo is null) return;
         if (gizmo.NeedsReposition || gizmo.IsStale()) gizmo.Reposition();
         if (viewModel.IsSplitMode) splitGizmo?.Reposition();
+
+        // The tape is anchored to the model rather than to the screen, so it is reprojected with
+        // the camera. Only while it is out: this runs on every frame.
+        if (viewModel.IsMeasureMode) measure?.Reposition();
     }
 
     public IEffectsManager EffectsManager { get; }
@@ -298,6 +306,15 @@ public partial class MainWindow : Window
             return; // unhandled, so the camera gesture takes over
         }
 
+        // Measuring takes over the click before anything else does; the tape is the only
+        // thing a click means while it is out.
+        if (viewModel.IsMeasureMode)
+        {
+            viewModel.TakeMeasurePoint(SnappedPoint(target, ToVector3(hit!.PointHit)));
+            e.Handled = true;
+            return;
+        }
+
         // While a face is being picked the click means something else entirely, so it never
         // reaches the selection logic. Clicking a different object switches the selection to it
         // first, which is the only way to engrave something else without leaving the mode.
@@ -326,6 +343,23 @@ public partial class MainWindow : Window
 
         View.CaptureMouse();
         e.Handled = true; // suppress camera orbit while moving an object
+    }
+
+    /// <summary>
+    /// Pulls a picked point onto the nearest corner or edge midpoint of the object clicked.
+    ///
+    /// The radius is generous in world terms but the click has already landed on this object, so
+    /// there is no risk of catching something else; measuring corner to corner is the common case
+    /// and worth being forgiving about.
+    /// </summary>
+    private Vector3 SnappedPoint(SceneObject target, Vector3 hit)
+    {
+        if (!viewModel.MeasureSnap) return hit;
+
+        var world = target.ToWorldMesh();
+        float radius = Math.Max(target.WorldBounds.Diagonal * 0.04f, 0.5f);
+
+        return VertexSnap.Nearest(world, hit, radius);
     }
 
     /// <summary>

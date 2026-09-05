@@ -28,6 +28,10 @@ public sealed class MainViewModel : INotifyPropertyChanged
     private SplitKeep splitKeep = SplitKeep.Both;
     private bool isSplitMode;
     private bool isEngraveMode;
+    private bool isMeasureMode;
+    private bool measureSnap = true;
+    private Vector3? measureFrom;
+    private Vector3? measureTo;
     private bool? damaged;
     private bool scaleOneSide;
     private bool stopOnContact;
@@ -81,6 +85,8 @@ public sealed class MainViewModel : INotifyPropertyChanged
         RebuildCommand = AsyncRelayCommand.Simple(RebuildObjects, () => Scene.Objects.Count > 0);
         SimplifyCommand = AsyncRelayCommand.Simple(SimplifySelection, () => Scene.Selection.Count > 0);
         HollowCommand = AsyncRelayCommand.Simple(HollowSelection, () => Scene.Selection.Count > 0);
+        BeginMeasureCommand = RelayCommand.Simple(BeginMeasure, () => Scene.Objects.Count > 0);
+        CancelMeasureCommand = RelayCommand.Simple(() => IsMeasureMode = false);
         BeginEngraveCommand = RelayCommand.Simple(BeginEngrave, () => Scene.Selection.Count == 1);
         ApplyEngraveCommand = AsyncRelayCommand.Simple(ApplyEngrave, () => isEngraveMode && engrave.HasFace);
         CancelEngraveCommand = RelayCommand.Simple(() => IsEngraveMode = false);
@@ -133,6 +139,8 @@ public sealed class MainViewModel : INotifyPropertyChanged
     public System.Windows.Input.ICommand RebuildCommand { get; }
     public System.Windows.Input.ICommand SimplifyCommand { get; }
     public System.Windows.Input.ICommand HollowCommand { get; }
+    public System.Windows.Input.ICommand BeginMeasureCommand { get; }
+    public System.Windows.Input.ICommand CancelMeasureCommand { get; }
     public System.Windows.Input.ICommand BeginEngraveCommand { get; }
     public System.Windows.Input.ICommand ApplyEngraveCommand { get; }
     public System.Windows.Input.ICommand CancelEngraveCommand { get; }
@@ -418,6 +426,97 @@ public sealed class MainViewModel : INotifyPropertyChanged
     }
 
     public bool HasEngraveFace => engrave.HasFace;
+
+    // --- Measuring -----------------------------------------------------------------
+
+    /// <summary>Raised when the tape moves, so the viewport can redraw it.</summary>
+    public event Action? MeasureChanged;
+
+    /// <summary>
+    /// While this is on, clicking takes a measurement rather than selecting. Its own mode for
+    /// the same reason splitting and engraving are: the click means something else.
+    /// </summary>
+    public bool IsMeasureMode
+    {
+        get => isMeasureMode;
+        set
+        {
+            if (isMeasureMode == value) return;
+
+            Set(ref isMeasureMode, value);
+            if (!value) { measureFrom = null; measureTo = null; }
+
+            RaiseMeasure();
+        }
+    }
+
+    /// <summary>Pull each click onto the nearest corner or edge midpoint.</summary>
+    public bool MeasureSnap
+    {
+        get => measureSnap;
+        set => Set(ref measureSnap, value);
+    }
+
+    public Vector3? MeasureFrom => measureFrom;
+    public Vector3? MeasureTo => measureTo;
+
+    public bool HasMeasurement => measureFrom is not null && measureTo is not null;
+
+    /// <summary>The reading, including the axis-by-axis gaps that a single number hides.</summary>
+    public string MeasureSummary
+    {
+        get
+        {
+            if (measureFrom is not { } a) return "Click the first point.";
+            if (measureTo is not { } b) return "Click the second point.";
+
+            var gap = Vector3.Abs(b - a);
+            return $"{Vector3.Distance(a, b):0.##} mm    "
+                 + $"X {gap.X:0.##}    Y {gap.Y:0.##}    Z {gap.Z:0.##} mm";
+        }
+    }
+
+    private void BeginMeasure()
+    {
+        IsSplitMode = false;
+        IsEngraveMode = false;
+        measureFrom = null;
+        measureTo = null;
+        IsMeasureMode = true;
+
+        Status = "Click two points to measure between them";
+    }
+
+    /// <summary>
+    /// Takes one end of a measurement. The third click starts a fresh one, so measuring several
+    /// things in a row needs no button between them.
+    /// </summary>
+    public void TakeMeasurePoint(Vector3 world)
+    {
+        if (!isMeasureMode) return;
+
+        if (measureFrom is null || measureTo is not null)
+        {
+            measureFrom = world;
+            measureTo = null;
+        }
+        else
+        {
+            measureTo = world;
+        }
+
+        RaiseMeasure();
+        Status = MeasureSummary;
+    }
+
+    private void RaiseMeasure()
+    {
+        Raise(nameof(MeasureFrom));
+        Raise(nameof(MeasureTo));
+        Raise(nameof(HasMeasurement));
+        Raise(nameof(MeasureSummary));
+        MeasureChanged?.Invoke();
+    }
 
     /// <summary>
     /// Whether anything on the plate would fail to print, which is what raises the repair
