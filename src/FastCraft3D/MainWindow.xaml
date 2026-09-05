@@ -372,6 +372,10 @@
 
             <TabItem Header="Edit">
                 <WrapPanel Margin="4">
+                    <Button Style="{StaticResource ToolButton}" Content="Repair" Tag="{StaticResource IconRepair}"
+                            Command="{Binding RepairCommand}"
+                            ToolTip="Mend objects that would not print: fill holes, drop slivers, turn faces the right way round" />
+                    <Separator Margin="8,0" />
                     <Button Style="{StaticResource ToolButton}" Content="{Binding UndoLabel}" Tag="{StaticResource IconUndo}"
                             Command="{Binding UndoCommand}" MinWidth="120" />
                     <Button Style="{StaticResource ToolButton}" Content="Redo" Tag="{StaticResource IconRedo}"
@@ -823,6 +827,29 @@
                         </ToggleButton>
                     </StackPanel>
                 </StackPanel>
+            </Border>
+
+            <!-- Repair banner, as in 3D Builder: the model says it is broken and offers to mend it -->
+            <Border VerticalAlignment="Bottom" HorizontalAlignment="Right" Margin="0,0,18,18"
+                    Background="#FFFFFFFF" BorderBrush="#FFD64545" BorderThickness="4,1,1,1"
+                    CornerRadius="2" Padding="0"
+                    Visibility="{Binding HasDamagedObjects, Converter={StaticResource BoolToVisibility}}">
+                <Border.Effect>
+                    <DropShadowEffect BlurRadius="10" ShadowDepth="1" Opacity="0.28" />
+                </Border.Effect>
+                <Button Command="{Binding RepairCommand}" Padding="14,10" Background="Transparent"
+                        BorderThickness="0" Cursor="Hand"
+                        ToolTip="Fill holes, drop slivers and turn faces the right way round">
+                    <StackPanel Orientation="Horizontal">
+                        <Path Data="{StaticResource IconRepair}" Stroke="#FF5A5F66" StrokeThickness="1.4"
+                              Fill="Transparent" Width="24" Height="24" Stretch="Uniform"
+                              VerticalAlignment="Center" Margin="0,0,12,0" />
+                        <StackPanel VerticalAlignment="Center">
+                            <TextBlock Text="One or more objects are invalidly defined." Foreground="#FF33383F" />
+                            <TextBlock Text="Click here to repair." Foreground="#FF5A5F66" />
+                        </StackPanel>
+                    </StackPanel>
+                </Button>
             </Border>
 
             <!-- Floating manipulator bar: mode buttons, then the live values for that mode -->

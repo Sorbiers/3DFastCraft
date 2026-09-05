@@ -6,7 +6,18 @@ namespace FastCraft3D.Geometry.Engraving;
 /// <param name="Mesh">The engraved mesh.</param>
 /// <param name="Grooves">How many groove rectangles the pattern produced.</param>
 /// <param name="CutterTriangles">Size of the solid that was subtracted, for reporting.</param>
-public readonly record struct EngraveResult(Mesh Mesh, int Grooves, int CutterTriangles);
+/// <param name="Health">What the result came out like.</param>
+public readonly record struct EngraveResult(
+    Mesh Mesh, int Grooves, int CutterTriangles, MeshHealth Health)
+{
+    /// <summary>
+    /// Whether the result is worth keeping. A pattern cut into a facet of a curved surface can
+    /// come back torn - the cutter is a thicket of thin walls in a slab a fraction of a
+    /// millimetre deep, and the boolean does not always survive it - and handing that to someone
+    /// as a finished model is worse than not cutting it.
+    /// </summary>
+    public bool IsPrintable => Health.IsWatertight && Mesh.TriangleCount > 0;
+}
 
 /// <summary>
 /// Cuts a pattern into one flat face of a mesh.
@@ -43,14 +54,21 @@ public static class Engraver
         options = options.Sane();
 
         var grooves = Grooves(face, options);
-        if (grooves.IsEmpty) return new EngraveResult(mesh, 0, 0);
+        if (grooves.IsEmpty) return Nothing(mesh);
 
         var cutter = GrooveSolid.Build(grooves, face, options.Depth);
-        if (cutter.TriangleCount == 0) return new EngraveResult(mesh, grooves.Count, 0);
+        if (cutter.TriangleCount == 0) return Nothing(mesh, grooves.Count);
 
-        return new EngraveResult(
-            CsgSolid.Subtract(mesh, cutter), grooves.Count, cutter.TriangleCount);
+        // Repair before judging it. The automatic pass inside the boolean handles the ordinary
+        // leftovers; this catches the rest, and declines when it cannot help, so what is
+        // measured here is the best the result is going to get.
+        var cut = MeshHealer.Heal(CsgSolid.Subtract(mesh, cutter)).Mesh;
+
+        return new EngraveResult(cut, grooves.Count, cutter.TriangleCount, cut.CheckHealth());
     }
+
+    private static EngraveResult Nothing(Mesh mesh, int grooves = 0) =>
+        new(mesh, grooves, 0, mesh.CheckHealth());
 
     /// <summary>
     /// The rectangle the pattern covers: the face's own extent, grown by the overshoot.

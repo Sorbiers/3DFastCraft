@@ -48,6 +48,12 @@ public static class GrooveSolid
     public const float Lift = 0.02f;
 
     /// <summary>
+    /// How far short of a fence the cutter stops. Enough that nothing lands exactly on the edge
+    /// the face shares with its neighbour, which is its own kind of trouble for the boolean.
+    /// </summary>
+    public const float FenceInset = 0.8f;
+
+    /// <summary>
     /// The solid formed by extruding <paramref name="grooves"/> from just above the face down to
     /// <paramref name="depth"/> below it. Empty when nothing is covered.
     /// </summary>
@@ -81,6 +87,7 @@ public static class GrooveSolid
         if (us.Length < 2 || vs.Length < 2) return;
 
         bool[,] covered = CoverCells(rectangles, us, vs);
+        Fence(covered, us, vs, face);
 
         for (int i = 0; i < us.Length - 1; i++)
         {
@@ -149,6 +156,33 @@ public static class GrooveSolid
         return covered;
     }
 
+    /// <summary>
+    /// Clears every cell that is not wholly inside the face's fences.
+    ///
+    /// All four corners are tested, not the centre: a cell straddling a fence would put the
+    /// cutter's wall a whole cell past it, and a fence exists precisely because there is
+    /// material just beyond it to be shaved. Being conservative costs at most one cell of
+    /// pattern along such an edge.
+    /// </summary>
+    private static void Fence(bool[,] covered, float[] us, float[] vs, FacePatch face)
+    {
+        if (face.Fences.Count == 0) return; // the ordinary case: a face that meets a real corner
+
+        for (int i = 0; i < us.Length - 1; i++)
+        {
+            for (int j = 0; j < vs.Length - 1; j++)
+            {
+                if (!covered[i, j]) continue;
+
+                covered[i, j] =
+                    face.Clears(new Vector2(us[i], vs[j]), FenceInset) &&
+                    face.Clears(new Vector2(us[i + 1], vs[j]), FenceInset) &&
+                    face.Clears(new Vector2(us[i + 1], vs[j + 1]), FenceInset) &&
+                    face.Clears(new Vector2(us[i], vs[j + 1]), FenceInset);
+            }
+        }
+    }
+
     /// <summary>Index of the last coordinate at or below <paramref name="value"/>.</summary>
     private static int Span(float[] coordinates, float value)
     {
@@ -172,6 +206,44 @@ public static class GrooveSolid
     /// averaging pinches the width slightly instead, which at these sizes nothing will notice.
     /// </summary>
     private static void AddRibbon(Mesh mesh, Polyline2 ribbon, FacePatch face, float depth)
+    {
+        foreach (var piece in Fenced(ribbon, face))
+            AddWholeRibbon(mesh, piece, face, depth);
+    }
+
+    /// <summary>
+    /// Splits a ribbon into the stretches that stay inside the face's fences, dropping the rest.
+    ///
+    /// The clearance includes half the ribbon's width, because it is the edge of the cut that
+    /// must not cross a fence, not its centre line. A face with no fences hands the ribbon back
+    /// untouched.
+    /// </summary>
+    private static List<Polyline2> Fenced(Polyline2 ribbon, FacePatch face)
+    {
+        if (face.Fences.Count == 0) return [ribbon];
+
+        float margin = FenceInset + ribbon.Width * 0.5f;
+        var pieces = new List<Polyline2>();
+        var run = new List<Vector2>();
+
+        foreach (var point in ribbon.Points)
+        {
+            if (face.Clears(point, margin))
+            {
+                run.Add(point);
+                continue;
+            }
+
+            if (run.Count >= 2) pieces.Add(new Polyline2(run, ribbon.Width));
+            run = [];
+        }
+
+        // A ring broken by a fence comes back as an open stretch, which is the honest result.
+        if (run.Count >= 2) pieces.Add(new Polyline2(run, ribbon.Width, ribbon.Closed && pieces.Count == 0));
+        return pieces;
+    }
+
+    private static void AddWholeRibbon(Mesh mesh, Polyline2 ribbon, FacePatch face, float depth)
     {
         if (!Edges(ribbon, out var points, out var left, out var right)) return;
 

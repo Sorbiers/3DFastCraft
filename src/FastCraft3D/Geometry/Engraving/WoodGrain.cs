@@ -180,25 +180,49 @@ public static class WoodGrain
 
             for (int ring = 0; ring < 2; ring++)
             {
-                float ry = room * (ring == 0 ? 0.52f : 0.26f);
-                float rx = ry * 2.4f;
-                var points = new List<Vector2>();
-
-                const int steps = 28;
-                for (int i = 0; i < steps; i++)
+                // A ring is only drawn where it fits. Squeezing one into a gap that is not
+                // there used to bend it back on itself, and a ribbon that doubles back has
+                // crossed its own edge - which the boolean cannot make sense of. Shrink until
+                // it fits or give the knot up; a missing ring costs nothing.
+                for (int attempt = 0; attempt < 3; attempt++)
                 {
-                    float angle = i / (float)steps * MathF.Tau;
-                    float u = knot.X + rx * MathF.Cos(angle);
-                    float v = knot.Y + ry * MathF.Sin(angle);
+                    float ry = room * (ring == 0 ? 0.52f : 0.26f) * MathF.Pow(0.65f, attempt);
+                    if (ry < width * 1.5f) break;
 
-                    points.Add(new Vector2(u, Clamped(u, v, gap, samples, lines)));
+                    if (Ellipse(knot, ry, ry * 2.4f, gap, samples, lines) is { } points)
+                    {
+                        rings.Add(new Polyline2(points, width, Closed: true));
+                        break;
+                    }
                 }
-
-                rings.Add(new Polyline2(points, width, Closed: true));
             }
         }
 
         return rings;
+    }
+
+    /// <summary>
+    /// A ring of the given size, or null when the grain has not left room for it anywhere along
+    /// its length. Nothing is clamped into place: a ring either fits or is not drawn.
+    /// </summary>
+    private static List<Vector2>? Ellipse(
+        Vector2 knot, float ry, float rx, float gap, float[] samples, List<float[]> lines)
+    {
+        const int steps = 28;
+        var points = new List<Vector2>(steps);
+
+        for (int i = 0; i < steps; i++)
+        {
+            float angle = i / (float)steps * MathF.Tau;
+            float u = knot.X + rx * MathF.Cos(angle);
+            float v = knot.Y + ry * MathF.Sin(angle);
+
+            if (Clamped(u, v, gap, samples, lines) != v) return null;
+
+            points.Add(new Vector2(u, v));
+        }
+
+        return points;
     }
 
     /// <summary>How far the grain has parted at a knot, measured on the lines either side of it.</summary>
@@ -233,8 +257,6 @@ public static class WoodGrain
             else floor = Math.Max(floor, line[column] + gap);
         }
 
-        // Where the grain has not parted far enough for the ring, it collapses to the middle of
-        // what room there is rather than pushing through a line.
         return floor >= ceiling ? (floor + ceiling) * 0.5f : Math.Clamp(v, floor, ceiling);
     }
 

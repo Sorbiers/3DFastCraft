@@ -28,6 +28,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
     private SplitKeep splitKeep = SplitKeep.Both;
     private bool isSplitMode;
     private bool isEngraveMode;
+    private bool? damaged;
     private readonly EngraveState engrave = new();
     private Vector3 splitNormal = Vector3.UnitZ;
     private readonly List<SceneObject> clipboard = new();
@@ -69,6 +70,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
         ApplySplitCommand = AsyncRelayCommand.Simple(ApplySplit, () => IsSplitMode);
         CancelSplitCommand = RelayCommand.Simple(() => IsSplitMode = false);
 
+        RepairCommand = AsyncRelayCommand.Simple(RepairObjects, () => Scene.Objects.Count > 0);
         BeginEngraveCommand = RelayCommand.Simple(BeginEngrave, () => Scene.Selection.Count == 1);
         ApplyEngraveCommand = AsyncRelayCommand.Simple(ApplyEngrave, () => isEngraveMode && engrave.HasFace);
         CancelEngraveCommand = RelayCommand.Simple(() => IsEngraveMode = false);
@@ -116,6 +118,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
     public System.Windows.Input.ICommand BeginSplitCommand { get; }
     public System.Windows.Input.ICommand ApplySplitCommand { get; }
     public System.Windows.Input.ICommand CancelSplitCommand { get; }
+    public System.Windows.Input.ICommand RepairCommand { get; }
     public System.Windows.Input.ICommand BeginEngraveCommand { get; }
     public System.Windows.Input.ICommand ApplyEngraveCommand { get; }
     public System.Windows.Input.ICommand CancelEngraveCommand { get; }
@@ -376,6 +379,13 @@ public sealed class MainViewModel : INotifyPropertyChanged
     }
 
     public bool HasEngraveFace => engrave.HasFace;
+
+    /// <summary>
+    /// Whether anything on the plate would fail to print, which is what raises the repair
+    /// banner. Worked out once per edit and remembered: checking a mesh means walking every
+    /// edge of it, which is not something to do on every redraw.
+    /// </summary>
+    public bool HasDamagedObjects => damaged ??= Scene.Objects.Any(o => !o.Mesh.CheckHealth().IsWatertight);
 
     /// <summary>The picked face, in world space, or null. Read by the renderer.</summary>
     public FacePatch? EngraveFace => engrave.Face;
@@ -936,6 +946,74 @@ public sealed class MainViewModel : INotifyPropertyChanged
         }
     }
 
+    /// <summary>
+    /// Repairs whatever is broken - the selection if there is one, otherwise everything.
+    ///
+    /// Objects the pass cannot help are left exactly as they were and counted, rather than being
+    /// quietly replaced by something no better.
+    /// </summary>
+    private async Task RepairObjects()
+    {
+        var targets = (Scene.Selection.Count > 0 ? Scene.Selection.ToList() : Scene.Objects.ToList())
+            .Where(o => !o.Mesh.CheckHealth().IsWatertight)
+            .ToList();
+
+        if (targets.Count == 0)
+        {
+            Status = "Nothing needs repairing - everything on the plate is watertight";
+            return;
+        }
+
+        IsBusy = true;
+        Status = $"Repairing {targets.Count} object(s)...";
+        try
+        {
+            var healed = await Task.Run(() => targets.Select(o => MeshHealer.Heal(o.Mesh)).ToList());
+
+            var replaced = new List<SceneObject>();
+            var produced = new List<SceneObject>();
+            int fixedUp = 0, beyond = 0;
+
+            for (int i = 0; i < targets.Count; i++)
+            {
+                if (!healed[i].Improved) { beyond++; continue; }
+
+                replaced.Add(targets[i]);
+                produced.Add(new SceneObject(targets[i].Name, healed[i].Mesh)
+                {
+                    Position = targets[i].Position,
+                    Rotation = targets[i].Rotation,
+                    Scale = targets[i].Scale,
+                    Colour = targets[i].Colour,
+                    Origin = targets[i].Origin
+                });
+
+                if (healed[i].After.IsWatertight) fixedUp++;
+            }
+
+            if (replaced.Count == 0)
+            {
+                Status = $"{targets.Count} object(s) are damaged in a way this cannot mend - they are unchanged";
+                return;
+            }
+
+            Undo.Execute(new ReplaceObjectsCommand("Repair", replaced, produced));
+            RefreshSelection();
+
+            Status = beyond == 0
+                ? $"Repaired {fixedUp} of {replaced.Count} object(s)"
+                : $"Repaired {fixedUp} object(s); {beyond} beyond mending and left alone";
+        }
+        catch (Exception ex)
+        {
+            Status = $"Repair failed: {ex.Message}";
+        }
+        finally
+        {
+            IsBusy = false;
+        }
+    }
+
     private void BeginEngrave()
     {
         if (Scene.Selection.Count != 1) return;
@@ -990,6 +1068,25 @@ public sealed class MainViewModel : INotifyPropertyChanged
             if (result.Grooves == 0 || result.Mesh.TriangleCount == 0)
             {
                 Status = "That pattern did not reach the face - try a smaller pattern size";
+                return;
+            }
+
+            // Nothing is applied unless it would print. Leaving the object alone and saying so
+            // is far better than handing back a model that looks right and slices wrong; it is
+            // usually a face that is one facet of a curved surface, where a flat pattern was
+            // never going to sit properly anyway.
+            if (!result.IsPrintable)
+            {
+                Status = $"Engraving that face came out unprintable - {result.Health.Describe()}. Nothing was changed.";
+                MessageBox.Show(
+                    "The pattern could not be cut into that face cleanly, so the object has been "
+                    + "left as it was.\n\n"
+                    + $"The result would have had {result.Health.Describe().ToLowerInvariant()}.\n\n"
+                    + "This happens on faces that are one facet of a curved surface, such as the "
+                    + "side of a cylinder or a cone. A flat face - the side of a box, a gable "
+                    + "end - will cut cleanly. A coarser pattern or a shallower depth may also "
+                    + "get through.",
+                    "3DFastCraft", MessageBoxButton.OK, MessageBoxImage.Warning);
                 return;
             }
 
@@ -1384,6 +1481,9 @@ public sealed class MainViewModel : INotifyPropertyChanged
     /// <summary>Called after anything touches the selection, including viewport clicks.</summary>
     public void RefreshSelection()
     {
+        damaged = null;
+        Raise(nameof(HasDamagedObjects));
+
         var selection = Scene.Selection;
         Selected = selection.Count == 1 ? selection[0] : null;
         SelectionChanged?.Invoke();
