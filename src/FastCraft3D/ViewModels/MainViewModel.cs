@@ -70,7 +70,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
             () => Scene.Selection.Count > 0);
 
         BooleanCommand = new AsyncRelayCommand(p => RunBoolean(p), _ => Scene.Selection.Count >= 2);
-        BeginSplitCommand = RelayCommand.Simple(BeginSplit, () => Scene.Selection.Count == 1);
+        BeginSplitCommand = RelayCommand.Simple(BeginSplit, () => Scene.Selection.Count > 0);
         ApplySplitCommand = AsyncRelayCommand.Simple(ApplySplit, () => IsSplitMode);
         CancelSplitCommand = RelayCommand.Simple(() => IsSplitMode = false);
 
@@ -1166,7 +1166,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
 
     private void BeginSplit()
     {
-        if (Scene.Selection.Count != 1) return;
+        if (Scene.Selection.Count == 0) return;
 
         IsEngraveMode = false; // both modes claim the click, so only one can be on
         IsSplitMode = true;
@@ -1177,9 +1177,14 @@ public sealed class MainViewModel : INotifyPropertyChanged
     private void ResetSplitOffset()
     {
         var selection = Scene.Selection;
-        if (selection.Count != 1) return;
+        if (selection.Count == 0) return;
 
-        var (min, max) = PlaneSplit.OffsetRange(selection[0].WorldBounds, splitNormal);
+        // Everything selected, so the plane and its handles span the whole group rather than
+        // whichever object happened to be first.
+        var together = Bounds.Empty;
+        foreach (var o in selection) together = together.Union(o.WorldBounds);
+
+        var (min, max) = PlaneSplit.OffsetRange(together, splitNormal);
         SplitMinimum = min;
         SplitMaximum = max;
         SplitOffset = (min + max) / 2f;
@@ -1187,39 +1192,68 @@ public sealed class MainViewModel : INotifyPropertyChanged
         Raise(nameof(SplitMaximum));
     }
 
+    /// <summary>
+    /// Puts one plane through everything selected.
+    ///
+    /// The plane belongs to the scene rather than to an object, so several parts are cut in the
+    /// same stroke and in one undo step - which is how you slice an assembly in half, and what
+    /// the old app did. Objects the plane misses are left alone rather than being dropped;
+    /// missing one of five is not a reason to refuse the other four.
+    /// </summary>
     private async Task ApplySplit()
     {
-        var selection = Scene.Selection;
-        if (selection.Count != 1) return;
+        var selection = Scene.Selection.ToList();
+        if (selection.Count == 0) return;
 
-        var source = selection[0];
-        var world = source.ToWorldMesh();
+        var meshes = selection.Select(o => o.ToWorldMesh()).ToList();
         var normal = splitNormal;
         float offset = splitOffset;
         var keep = splitKeep;
 
         IsBusy = true;
-        Status = "Splitting...";
+        Status = selection.Count == 1 ? "Splitting..." : $"Splitting {selection.Count} objects...";
         try
         {
-            var (front, back) = await Task.Run(() => PlaneSplit.Split(world, normal, offset, keep));
+            var halves = await Task.Run(
+                () => meshes.Select(mesh => PlaneSplit.Split(mesh, normal, offset, keep)).ToList());
 
+            var consumed = new List<SceneObject>();
             var produced = new List<SceneObject>();
-            if (front is not null)
-                produced.Add(new SceneObject(Scene.UniqueName($"{source.Name} {KeepFrontLabel}"), front) { Colour = source.Colour });
-            if (back is not null)
-                produced.Add(new SceneObject(Scene.UniqueName($"{source.Name} {KeepBackLabel}"), back) { Colour = source.Colour });
+            int missed = 0;
 
-            if (produced.Count == 0)
+            for (int i = 0; i < selection.Count; i++)
             {
-                Status = "The split plane missed the object";
+                var source = selection[i];
+                var (front, back) = halves[i];
+
+                if (front is null && back is null)
+                {
+                    missed++;
+                    continue;
+                }
+
+                consumed.Add(source);
+                if (front is not null)
+                    produced.Add(new SceneObject(Scene.UniqueName($"{source.Name} {KeepFrontLabel}"), front) { Colour = source.Colour });
+                if (back is not null)
+                    produced.Add(new SceneObject(Scene.UniqueName($"{source.Name} {KeepBackLabel}"), back) { Colour = source.Colour });
+            }
+
+            if (consumed.Count == 0)
+            {
+                Status = selection.Count == 1
+                    ? "The split plane missed the object"
+                    : "The split plane missed every selected object";
                 return;
             }
 
-            Undo.Execute(new ReplaceObjectsCommand("Split", [source], produced));
+            Undo.Execute(new ReplaceObjectsCommand("Split", consumed, produced));
             IsSplitMode = false;
             RefreshSelection();
-            Status = produced.Count == 2 ? "Split into two halves" : "Split applied";
+
+            Status = missed == 0
+                ? $"Split {consumed.Count} object(s) into {produced.Count} piece(s)"
+                : $"Split {consumed.Count} object(s) into {produced.Count} piece(s); the plane missed {missed}";
         }
         catch (Exception ex)
         {
@@ -1539,7 +1573,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
         Raise(nameof(HasAnySelection));
         Raise(nameof(SelectionSummary));
         Raise(nameof(UndoLabel));
-        if (IsSplitMode && selection.Count == 1) ResetSplitOffset();
+        if (IsSplitMode && selection.Count > 0) ResetSplitOffset();
     }
 
     private static bool TryParseAxis(object? parameter, out Axis axis)

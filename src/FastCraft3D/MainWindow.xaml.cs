@@ -215,8 +215,12 @@ public partial class MainWindow : Window
         if (splitGizmo is null) return;
 
         var selection = viewModel.Scene.Selection;
-        bool on = viewModel.IsSplitMode && selection.Count == 1;
-        Vector3 centre = on ? selection[0].WorldBounds.Center : Vector3.Zero;
+        bool on = viewModel.IsSplitMode && selection.Count > 0;
+
+        // Centred on everything the plane will cut, not on whichever object came first.
+        var bounds = Bounds.Empty;
+        if (on) foreach (var o in selection) bounds = bounds.Union(o.WorldBounds);
+        Vector3 centre = bounds.IsEmpty ? Vector3.Zero : bounds.Center;
 
         splitGizmo.Show(on, viewModel.SplitNormal, viewModel.SplitOffset, centre);
     }
@@ -676,9 +680,11 @@ public partial class MainWindow : Window
         if (!viewModel.IsSplitMode) return;
 
         var selection = viewModel.Scene.Selection;
-        if (selection.Count != 1) return;
+        if (selection.Count == 0) return;
 
-        var bounds = selection[0].WorldBounds;
+        // One plane cuts everything selected, so the slab has to span the whole group.
+        var bounds = Bounds.Empty;
+        foreach (var o in selection) bounds = bounds.Union(o.WorldBounds);
         Vector3 normal = viewModel.SplitNormal;
         float offset = viewModel.SplitOffset;
 
