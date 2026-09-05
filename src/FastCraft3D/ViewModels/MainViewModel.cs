@@ -80,6 +80,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
         SmoothCommand = RelayCommand.Simple(SmoothSelection, () => Scene.Selection.Count > 0);
         RebuildCommand = AsyncRelayCommand.Simple(RebuildObjects, () => Scene.Objects.Count > 0);
         SimplifyCommand = AsyncRelayCommand.Simple(SimplifySelection, () => Scene.Selection.Count > 0);
+        HollowCommand = AsyncRelayCommand.Simple(HollowSelection, () => Scene.Selection.Count > 0);
         BeginEngraveCommand = RelayCommand.Simple(BeginEngrave, () => Scene.Selection.Count == 1);
         ApplyEngraveCommand = AsyncRelayCommand.Simple(ApplyEngrave, () => isEngraveMode && engrave.HasFace);
         CancelEngraveCommand = RelayCommand.Simple(() => IsEngraveMode = false);
@@ -131,6 +132,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
     public System.Windows.Input.ICommand SmoothCommand { get; }
     public System.Windows.Input.ICommand RebuildCommand { get; }
     public System.Windows.Input.ICommand SimplifyCommand { get; }
+    public System.Windows.Input.ICommand HollowCommand { get; }
     public System.Windows.Input.ICommand BeginEngraveCommand { get; }
     public System.Windows.Input.ICommand ApplyEngraveCommand { get; }
     public System.Windows.Input.ICommand CancelEngraveCommand { get; }
@@ -1043,6 +1045,71 @@ public sealed class MainViewModel : INotifyPropertyChanged
         {
             Status = $"{op} failed: {ex.Message}";
             MessageBox.Show(ex.Message, "3DFastCraft", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+        finally
+        {
+            IsBusy = false;
+        }
+    }
+
+    /// <summary>
+    /// Turns the selection into shells of a chosen wall thickness, to save material.
+    /// </summary>
+    private async Task HollowSelection()
+    {
+        var selection = Scene.Selection.ToList();
+        if (selection.Count == 0) return;
+
+        var dialog = new HollowDialog(selection) { Owner = Application.Current?.MainWindow };
+        if (dialog.ShowDialog() != true || dialog.Result is not { } settings) return;
+
+        IsBusy = true;
+        Status = "Hollowing...";
+        try
+        {
+            // Baked to world space, as the other grid-based tools are: the grid is in world
+            // millimetres, so a wall on a stretched object would otherwise come out stretched.
+            var meshes = selection.Select(o => o.ToWorldMesh()).ToList();
+            var shells = await Task.Run(() => meshes
+                .Select(m => MeshHollow.Hollow(m, settings.WallMm, settings.Resolution))
+                .ToList());
+
+            var produced = new List<SceneObject>();
+            int untouched = 0;
+
+            for (int i = 0; i < selection.Count; i++)
+            {
+                if (shells[i].VolumeSavedCm3 <= 0)
+                {
+                    untouched++;
+                    continue;
+                }
+
+                produced.Add(new SceneObject(selection[i].Name, shells[i].Mesh)
+                {
+                    Colour = selection[i].Colour
+                });
+            }
+
+            if (produced.Count == 0)
+            {
+                Status = $"Nothing to hollow - a {settings.WallMm:0.##} mm wall leaves no room in "
+                         + (selection.Count == 1 ? "this part" : "any of these parts");
+                return;
+            }
+
+            var consumed = selection.Where((_, i) => shells[i].VolumeSavedCm3 > 0).ToList();
+            Undo.Execute(new ReplaceObjectsCommand("Hollow", consumed, produced));
+            RefreshSelection();
+
+            double saved = shells.Sum(s => s.VolumeSavedCm3);
+            Status = untouched == 0
+                ? $"Hollowed {produced.Count} object(s) to a {settings.WallMm:0.##} mm wall - {saved:0.#} cm3 saved"
+                : $"Hollowed {produced.Count}; {untouched} had no room for a {settings.WallMm:0.##} mm wall";
+        }
+        catch (Exception ex)
+        {
+            Status = $"Hollow failed: {ex.Message}";
         }
         finally
         {

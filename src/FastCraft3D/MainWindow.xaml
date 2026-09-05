@@ -422,6 +422,9 @@
                     <Button Style="{StaticResource ToolButton}" Content="Simplify..." Tag="{StaticResource IconSimplify}"
                             Command="{Binding SimplifyCommand}" MinWidth="82"
                             ToolTip="Cut the triangle count down while keeping the shape. The natural partner to Rebuild." />
+                    <Button Style="{StaticResource ToolButton}" Content="Hollow..." Tag="{StaticResource IconHollow}"
+                            Command="{Binding HollowCommand}" MinWidth="78"
+                            ToolTip="Turn a solid into a shell of a chosen wall thickness, to save material" />
                     <Separator Margin="8,0" />
                     <Button Style="{StaticResource ToolButton}" Content="{Binding UndoLabel}" Tag="{StaticResource IconUndo}"
                             Command="{Binding UndoCommand}" MinWidth="120" />

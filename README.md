@@ -43,7 +43,7 @@ dotnet test
 | **Insert** | Cube, cylinder, cone, sphere, pyramid, wedge, torus, hexagon, tetrahedron; import STL/OBJ |
 | **Object** | Subtract / Intersect / Merge, Smooth, Round edges, Split with a plane, Engrave a pattern, Colour, duplicate (beside or in place), delete, drop to plate, mirror |
 | **Align** | Line the selection up on X, Y or Z: flush to either edge, centred, or spread evenly |
-| **Edit** | Repair, rebuild, simplify, undo, redo |
+| **Edit** | Repair, rebuild, simplify, hollow, undo, redo |
 | **File** | New, open, recent, save, save as, save a version, versions, export STL/OBJ |
 | **View** | Zoom to fit, top / front / right / isometric, wireframe, x-ray, build plate size and visibility |
 
@@ -165,6 +165,19 @@ middle of a flat panel and a great deal to collapse one across a crease. Flat pa
 features stay.
 
 It is the natural partner to **Rebuild**, which produces a great many triangles by design.
+
+### Hollowing
+
+**Hollow...** on the Edit tab turns a solid into a shell of a chosen wall thickness, which is
+how a large print stops costing a spool of filament.
+
+The obvious way to do it - offset the surface inward and subtract it - is the one that does not
+work: offsetting a mesh folds itself inside out at any concave corner. This measures instead how
+deep inside the material each point sits and keeps only what lies within one wall of the surface.
+The outer face and the cavity come out of the same pass, correctly facing.
+
+The cavity is sealed. A resin print needs a drain hole, which a cylinder and **Subtract** will
+cut. A part with no room for the wall you asked for is left solid and says so.
 
 ### Rebuilding a broken model
 

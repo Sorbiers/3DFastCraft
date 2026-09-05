@@ -43,6 +43,36 @@ public static class VoxelRebuild
 
     public const int MinimumResolution = 24;
 
+    /// <param name="Inside">One flag per grid point, true where the model is.</param>
+    /// <param name="Origin">Where grid point (0,0,0) sits.</param>
+    /// <param name="Voxel">The spacing, in millimetres.</param>
+    internal readonly record struct Grid(bool[] Inside, Vector3 Origin, float Voxel, int Nx, int Ny, int Nz);
+
+    /// <summary>
+    /// Samples the model onto a grid, which is the half of rebuilding that hollowing also needs.
+    /// </summary>
+    internal static Grid Sample(Mesh mesh, int resolution)
+    {
+        resolution = Math.Clamp(resolution, MinimumResolution, MaximumResolution);
+
+        var bounds = mesh.ComputeBounds();
+        if (bounds.IsEmpty || mesh.TriangleCount == 0)
+            return new Grid([], Vector3.Zero, 0, 0, 0, 0);
+
+        float voxel = Math.Max(bounds.Size.X, Math.Max(bounds.Size.Y, bounds.Size.Z)) / resolution;
+        if (voxel <= 0) return new Grid([], Vector3.Zero, 0, 0, 0, 0);
+
+        const float pad = 2.5137f;
+        var origin = bounds.Min - new Vector3(voxel * pad);
+        var span = bounds.Size + new Vector3(voxel * pad * 2);
+
+        int nx = (int)MathF.Ceiling(span.X / voxel) + 1;
+        int ny = (int)MathF.Ceiling(span.Y / voxel) + 1;
+        int nz = (int)MathF.Ceiling(span.Z / voxel) + 1;
+
+        return new Grid(Occupancy(mesh, origin, voxel, nx, ny, nz), origin, voxel, nx, ny, nz);
+    }
+
     /// <summary>
     /// Rebuilds the surface at the given resolution, counted along the model's longest side.
     /// Blocks; callers on the UI thread should wrap it in Task.Run.
@@ -90,7 +120,7 @@ public static class VoxelRebuild
     /// zero. Parity alone - odd is in, even is out - would call the overlap of two solids
     /// outside, which is exactly backwards for the meshes this tool exists to mend.
     /// </summary>
-    private static bool[] Occupancy(Mesh mesh, Vector3 origin, float voxel, int nx, int ny, int nz)
+    internal static bool[] Occupancy(Mesh mesh, Vector3 origin, float voxel, int nx, int ny, int nz)
     {
         var inside = new bool[nx * ny * nz];
         var buckets = new Buckets(mesh, origin, voxel, ny, nz);
@@ -215,7 +245,7 @@ public static class VoxelRebuild
     /// vertex per connected piece of material in it, found by walking the cell's own edges, and
     /// a face takes the vertex belonging to the piece it actually touches.
     /// </summary>
-    private static Mesh SurfaceNets(bool[] inside, Vector3 origin, float voxel, int nx, int ny, int nz)
+    internal static Mesh SurfaceNets(bool[] inside, Vector3 origin, float voxel, int nx, int ny, int nz)
     {
         int At(int i, int j, int k) => (k * ny + j) * nx + i;
         int CellAt(int i, int j, int k) => (k * (ny - 1) + j) * (nx - 1) + i;
