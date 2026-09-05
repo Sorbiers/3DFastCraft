@@ -214,4 +214,90 @@ public class MeshSmoothingTests
         Assert.True(smoothed.ComputeSignedVolume() > 0, "it must not turn inside out");
         Assert.True(smoothed.ComputeSignedVolume() < cube.ComputeSignedVolume());
     }
+
+    // --- Subdividing, which is what lets a simple shape be smoothed at all --------
+
+    [Fact]
+    public void SubdividingSplitsEveryTriangleIntoFour()
+    {
+        var cube = Primitives.Box(20, 20, 20);
+
+        var finer = MeshSubdivision.Subdivide(cube, 1);
+
+        Assert.Equal(cube.TriangleCount * 4, finer.TriangleCount);
+        Assert.True(finer.CheckHealth().IsWatertight, finer.CheckHealth().Describe());
+    }
+
+    /// <summary>Nothing may move: it is the same shape, only described more finely.</summary>
+    [Fact]
+    public void SubdividingDoesNotChangeTheShape()
+    {
+        var cube = Primitives.Box(20, 20, 20);
+
+        var finer = MeshSubdivision.Subdivide(cube, 2);
+
+        Assert.Equal(cube.ComputeSignedVolume(), finer.ComputeSignedVolume(), 3);
+        Assert.Equal(cube.ComputeSurfaceArea(), finer.ComputeSurfaceArea(), 3);
+    }
+
+    /// <summary>
+    /// The midpoint of an edge has to be shared by the triangles either side of it, or the mesh
+    /// comes apart along every edge it was split on.
+    /// </summary>
+    [Fact]
+    public void TheMeshStaysJoinedTogether()
+    {
+        var finer = MeshSubdivision.Subdivide(Primitives.Create(PrimitiveKind.Sphere), 2);
+
+        Assert.Equal(0, finer.CheckHealth().BoundaryEdges);
+        Assert.Equal(1, MeshComponents.Count(finer));
+    }
+
+    /// <summary>The whole reason it exists: a cube can now be rounded.</summary>
+    [Fact]
+    public void ACubeCanBeRoundedOnceItHasBeenDividedUp()
+    {
+        var cube = Primitives.Box(20, 20, 20);
+
+        var rounded = MeshSmoothing.Smooth(MeshSubdivision.Subdivide(cube, 3), passes: 6);
+
+        Assert.True(rounded.CheckHealth().IsWatertight, rounded.CheckHealth().Describe());
+
+        // A rounded cube keeps most of its bulk; the earlier version, with nothing to work on,
+        // collapsed instead.
+        Assert.True(rounded.ComputeSignedVolume() > cube.ComputeSignedVolume() * 0.75,
+            $"volume fell from {cube.ComputeSignedVolume():N0} to {rounded.ComputeSignedVolume():N0}");
+
+        // And it is genuinely rounded: the corners have pulled in towards the middle. The
+        // bounding box is the wrong thing to measure - the flat faces dome very slightly outward
+        // as the corners come in, which is what makes a smoothed cube a pillow rather than a
+        // smaller cube, and is why the dialog reports the size it will end up.
+        float corner = rounded.Positions.Max(p => p.Length());
+        float wasCorner = MathF.Sqrt(3) * 10f;
+
+        Assert.True(corner < wasCorner - 0.5f,
+            $"corners did not pull in: {corner:0.##} mm from centre, was {wasCorner:0.##}");
+    }
+
+    [Fact]
+    public void ASimpleShapeIsOfferedMoreDivisionThanADenseOne()
+    {
+        Assert.True(MeshSubdivision.LevelsFor(Primitives.Box(20, 20, 20)) >= 3);
+        Assert.Equal(0, MeshSubdivision.LevelsFor(MeshSubdivision.Subdivide(Primitives.Create(PrimitiveKind.Sphere), 3)));
+    }
+
+    [Fact]
+    public void TheRimCanBeLetGoWhenAskedFor()
+    {
+        var box = Primitives.Box(20, 20, 20);
+        var open = new Mesh(box.Positions, box.Indices.Take(box.Indices.Count - 3).ToList());
+
+        var held = MeshSmoothing.Smooth(open, passes: 8);
+        var loose = MeshSmoothing.Smooth(open, passes: 8, moveRim: true);
+
+        double heldDrift = open.Positions.Select((p, i) => (double)(p - held.Positions[i]).Length()).Sum();
+        double looseDrift = open.Positions.Select((p, i) => (double)(p - loose.Positions[i]).Length()).Sum();
+
+        Assert.True(looseDrift > heldDrift, "letting the rim go should move more, not less");
+    }
 }

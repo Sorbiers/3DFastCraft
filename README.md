@@ -43,7 +43,7 @@ dotnet test
 | **Insert** | Cube, cylinder, cone, sphere, pyramid, wedge, torus, hexagon, tetrahedron; import STL/OBJ |
 | **Object** | Subtract / Intersect / Merge, Smooth, Round edges, Split with a plane, Engrave a pattern, Colour, duplicate (beside or in place), delete, drop to plate, mirror |
 | **Align** | Line the selection up on X, Y or Z: flush to either edge, centred, or spread evenly |
-| **Edit** | Repair, undo, redo |
+| **Edit** | Repair, rebuild, undo, redo |
 | **File** | New, open, recent, save, save as, save a version, versions, export STL/OBJ |
 | **View** | Zoom to fit, top / front / right / isometric, wireframe, x-ray, build plate size and visibility |
 
@@ -133,15 +133,33 @@ hidden altogether. It is rebuilt rather than stretched when the size changes: it
 
 ### Smoothing
 
-**Smooth** on the Object tab rounds the facets off by nudging each vertex toward the average of
-its neighbours. Press it again for more.
+**Smooth...** on the Object tab rounds a shape off, with the result shown on the plate as you set
+it. Two settings, because smoothing has two halves that are easy to confuse:
 
-It works with the vertices it is given and adds none, so it earns its keep on a dense import and
-does very little to a simple shape. A cube in fact collapses somewhat - with eight vertices there
-is no shape left once the roughness is filtered out - so rounding a box's corners remains
-**Round edges**' job. The status line says when there is little to work with.
+- **Smoothness** is how hard the surface is pulled toward its own average.
+- **Detail** is how finely the shape is divided up first. Smoothing can only move the points it
+  has, so a cube - which has eight - cannot be rounded at all until it has been divided. Each
+  step splits every triangle into four without moving anything, and the box is offered enough
+  by default.
 
-The rim of an open mesh is held still, so a hole keeps its shape.
+**Smooth open edges** lets the rim of an unclosed shape move too. Off by default, so an opening
+keeps its proper shape; it makes no difference to a closed model.
+
+Smoothing changes the part's size, so the dialog reports it: corners pull in while flat faces
+dome very slightly outward, which is what makes a smoothed cube a pillow rather than a smaller
+cube. A 20 mm cube comes back about 20.75 mm across.
+
+### Rebuilding a broken model
+
+When **Repair** declines, **Rebuild...** beside it mends the model a different way. Instead of
+working on the triangles, it decides for every point in a grid over the model whether it is
+inside, and builds a fresh surface between inside and out. That is watertight by construction, so
+it fixes anything - including a model whose surface passes through itself, which is what an
+import with lettering dropped onto its body rather than fused to it usually is.
+
+The cost is resolution: detail finer than one voxel is gone, and the triangle count quadruples
+every time the detail doubles. The dialog says both before you commit - a 20 mm cube at 160
+voxels across is over three hundred thousand triangles.
 
 ### The manipulator
 

@@ -1,4 +1,4 @@
-using System.Numerics;
+﻿using System.Numerics;
 
 namespace FastCraft3D.Geometry;
 
@@ -10,9 +10,9 @@ namespace FastCraft3D.Geometry;
 /// inward pass with a slightly stronger outward one. The two together leave the low frequencies -
 /// the shape - almost untouched while still removing the high ones, which is the faceting.
 ///
-/// Nothing is subdivided. Smoothing can only work with the vertices it is given, so it earns its
-/// keep on a dense import and does very little to a cube - which is the right outcome: a cube
-/// has no faceting to remove, and rounding its corners is what Round edges is for.
+/// Smoothing can only move the vertices it is given, so a shape with few of them has nothing to
+/// round. <see cref="MeshSubdivision"/> is what fixes that: split every triangle into four
+/// first, without moving anything, and the same smoothing turns a cube into a rounded cube.
 /// </summary>
 public static class MeshSmoothing
 {
@@ -26,12 +26,17 @@ public static class MeshSmoothing
     public const float Mu = -0.53f;
 
     /// <param name="passes">Each pass is one inward step and one outward one.</param>
-    public static Mesh Smooth(Mesh mesh, int passes = 5)
+    /// <param name="moveRim">
+    /// Whether the rim of an open mesh may move. Off by default: letting it drift pulls an
+    /// opening out of shape and moves the very edges that most need to stay where they are. A
+    /// closed model has no rim, so this changes nothing for one.
+    /// </param>
+    public static Mesh Smooth(Mesh mesh, int passes = 5, bool moveRim = false)
     {
         if (mesh.VertexCount == 0 || passes <= 0) return mesh;
 
         var neighbours = Neighbours(mesh);
-        var pinned = BoundaryVertices(mesh);
+        var pinned = moveRim ? new bool[mesh.VertexCount] : BoundaryVertices(mesh);
         var points = new Vector3[mesh.VertexCount];
         mesh.Positions.CopyTo(points);
 

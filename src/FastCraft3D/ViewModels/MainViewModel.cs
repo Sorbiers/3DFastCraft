@@ -76,7 +76,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
         CancelSplitCommand = RelayCommand.Simple(() => IsSplitMode = false);
 
         RepairCommand = AsyncRelayCommand.Simple(RepairObjects, () => Scene.Objects.Count > 0);
-        SmoothCommand = AsyncRelayCommand.Simple(SmoothSelection, () => Scene.Selection.Count > 0);
+        SmoothCommand = RelayCommand.Simple(SmoothSelection, () => Scene.Selection.Count > 0);
         RebuildCommand = AsyncRelayCommand.Simple(RebuildObjects, () => Scene.Objects.Count > 0);
         BeginEngraveCommand = RelayCommand.Simple(BeginEngrave, () => Scene.Selection.Count == 1);
         ApplyEngraveCommand = AsyncRelayCommand.Simple(ApplyEngrave, () => isEngraveMode && engrave.HasFace);
@@ -1075,55 +1075,55 @@ public sealed class MainViewModel : INotifyPropertyChanged
     /// <summary>
     /// Rounds the facets off the selection.
     ///
-    /// Applied a fixed amount at a time and meant to be repeated: it is far easier to judge how
-    /// much smoothing a shape wants by watching it than by choosing a number beforehand, and
-    /// each press is its own undo step.
+    /// Behind a dialog rather than a single button, because smoothing has two settings that are
+    /// easy to confuse and impossible to judge without seeing: how hard to pull the surface
+    /// toward its own average, and how finely to divide the shape up first. The result is shown
+    /// on the plate as the sliders move and put back if the dialog is cancelled.
     /// </summary>
-    private async Task SmoothSelection()
+    private void SmoothSelection()
     {
         var selection = Scene.Selection.ToList();
         if (selection.Count == 0) return;
 
-        IsBusy = true;
-        Status = "Smoothing...";
-        try
-        {
-            var meshes = selection.Select(o => o.Mesh).ToList();
-            var smoothed = await Task.Run(() => meshes.Select(m => MeshSmoothing.Smooth(m)).ToList());
+        var before = selection.Select(o => o.Mesh).ToList();
 
-            var produced = new List<SceneObject>();
-            for (int i = 0; i < selection.Count; i++)
+        var dialog = new SmoothDialog(selection, meshes =>
+        {
+            for (int i = 0; i < selection.Count && i < meshes.Count; i++)
+                selection[i].Mesh = meshes[i];
+        })
+        { Owner = Application.Current?.MainWindow };
+
+        bool accepted = dialog.ShowDialog() == true && dialog.Result is { } settings && settings.Passes > 0;
+
+        // Whatever the preview left on the plate, undo has to start from where the user did.
+        var after = selection.Select(o => o.Mesh).ToList();
+        for (int i = 0; i < selection.Count; i++) selection[i].Mesh = before[i];
+
+        if (!accepted)
+        {
+            Status = "Smoothing cancelled";
+            return;
+        }
+
+        var produced = new List<SceneObject>();
+        for (int i = 0; i < selection.Count; i++)
+        {
+            produced.Add(new SceneObject(selection[i].Name, after[i])
             {
-                produced.Add(new SceneObject(selection[i].Name, smoothed[i])
-                {
-                    Position = selection[i].Position,
-                    Rotation = selection[i].Rotation,
-                    Scale = selection[i].Scale,
-                    Colour = selection[i].Colour
-                    // Origin is deliberately dropped: the shape is no longer the primitive it
-                    // was, so it can no longer be rebuilt with rounded edges.
-                });
-            }
+                Position = selection[i].Position,
+                Rotation = selection[i].Rotation,
+                Scale = selection[i].Scale,
+                Colour = selection[i].Colour
+                // Origin is dropped: the shape is no longer the primitive it was, so it can no
+                // longer be rebuilt with rounded edges.
+            });
+        }
 
-            Undo.Execute(new ReplaceObjectsCommand("Smooth", selection, produced));
-            RefreshSelection();
+        Undo.Execute(new ReplaceObjectsCommand("Smooth", selection, produced));
+        RefreshSelection();
 
-            // Smoothing can only work with the vertices it is given, so on a shape with few of
-            // them almost nothing happens - which is worth saying rather than leaving someone
-            // pressing the button.
-            int vertices = smoothed.Sum(m => m.VertexCount);
-            Status = vertices < 200
-                ? $"Smoothed - though with only {vertices} vertices there is little to smooth"
-                : $"Smoothed {produced.Count} object(s)";
-        }
-        catch (Exception ex)
-        {
-            Status = $"Smooth failed: {ex.Message}";
-        }
-        finally
-        {
-            IsBusy = false;
-        }
+        Status = $"Smoothed {produced.Count} object(s) - {produced.Sum(o => o.Mesh.TriangleCount):N0} triangles";
     }
 
     /// <summary>
