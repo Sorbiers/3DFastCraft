@@ -7,6 +7,10 @@ them, and export a clean `.stl` or `.obj` for slicing.
 Everything is in **millimetres**, **Z-up**, on a 200 × 200 mm build plate — the conventions
 every slicer expects.
 
+![3DFastCraft](docs/screenshot.png)
+
+> *In loving memory of Windows 3D Builder. Rest in peace.*
+
 ## Requirements
 
 - Windows 10/11, 64-bit

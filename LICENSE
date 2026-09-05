@@ -1,0 +1,72 @@
+3DFastCraft — Proprietary Licence (No Commercial Use)
+
+Copyright (c) 2026 Andrey Ryabinin. All rights reserved.
+
+This software and its source code are made publicly readable, but they are NOT
+open source and NOT free software. All rights not expressly granted below are
+reserved by the copyright holder.
+
+1. PERMITTED USE
+
+   Subject to the restrictions below, you are granted a non-exclusive,
+   non-transferable, revocable licence to:
+
+   a) view and study the source code;
+   b) download, build and run the software for personal, private,
+      non-commercial purposes;
+   c) modify the source code for your own personal, non-commercial use;
+   d) use models you create with the software for any purpose, including
+      commercial ones. Your models are yours. This licence covers the software,
+      not its output.
+
+2. RESTRICTIONS
+
+   You may NOT:
+
+   a) use the software, or any part of it, for any commercial purpose. This
+      includes use within a business or by a sole trader in the course of
+      trade, use in providing a paid service, and use in producing goods for
+      sale — except as permitted by clause 1(d) regarding models you create;
+   b) sell, licence, rent, lease or otherwise distribute the software or any
+      derivative of it, whether modified or not, and whether for a fee or free
+      of charge;
+   c) incorporate the software or any part of its source code into another
+      product or project;
+   d) remove or alter this licence, the copyright notice, or any attribution.
+
+3. CONTRIBUTIONS
+
+   By submitting a contribution, you grant the copyright holder a perpetual,
+   irrevocable, worldwide, royalty-free licence to use, modify and distribute
+   it as part of the software under these terms.
+
+4. COMMERCIAL LICENSING
+
+   A commercial licence may be granted separately. Contact the copyright holder
+   to arrange one.
+
+5. NO WARRANTY
+
+   THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+   IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+   FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+   COPYRIGHT HOLDER BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY,
+   WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR
+   IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+   SOFTWARE.
+
+   The software generates geometry for 3D printing. It is your responsibility
+   to verify that any model is fit for its intended purpose before printing or
+   relying on it.
+
+6. TERMINATION
+
+   This licence terminates automatically if you breach any of its terms. On
+   termination you must stop using the software and destroy all copies in your
+   possession.
+
+7. THIRD-PARTY COMPONENTS
+
+   This software depends on third-party packages that carry their own licences,
+   listed in THIRD-PARTY-NOTICES.md. Those licences govern those components;
+   nothing in this licence restricts rights you hold under them.
