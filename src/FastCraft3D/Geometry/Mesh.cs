@@ -1,4 +1,4 @@
-using System.Numerics;
+﻿using System.Numerics;
 
 namespace FastCraft3D.Geometry;
 
@@ -30,6 +30,19 @@ public sealed class Mesh
     public Mesh Clone() => new(Positions, Indices);
 
     public Bounds ComputeBounds() => Bounds.FromPoints(Positions);
+
+    /// <summary>Total area of every triangle, in mm2.</summary>
+    public float ComputeSurfaceArea()
+    {
+        double area = 0;
+        for (int i = 0; i + 2 < Indices.Count; i += 3)
+        {
+            Vector3 a = Positions[Indices[i]];
+            area += Vector3.Cross(Positions[Indices[i + 1]] - a, Positions[Indices[i + 2]] - a).Length();
+        }
+
+        return (float)(area / 2);
+    }
 
     public void AddTriangle(Vector3 a, Vector3 b, Vector3 c)
     {

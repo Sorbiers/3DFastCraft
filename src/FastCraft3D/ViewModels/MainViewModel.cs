@@ -77,6 +77,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
 
         RepairCommand = AsyncRelayCommand.Simple(RepairObjects, () => Scene.Objects.Count > 0);
         SmoothCommand = AsyncRelayCommand.Simple(SmoothSelection, () => Scene.Selection.Count > 0);
+        RebuildCommand = AsyncRelayCommand.Simple(RebuildObjects, () => Scene.Objects.Count > 0);
         BeginEngraveCommand = RelayCommand.Simple(BeginEngrave, () => Scene.Selection.Count == 1);
         ApplyEngraveCommand = AsyncRelayCommand.Simple(ApplyEngrave, () => isEngraveMode && engrave.HasFace);
         CancelEngraveCommand = RelayCommand.Simple(() => IsEngraveMode = false);
@@ -126,6 +127,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
     public System.Windows.Input.ICommand CancelSplitCommand { get; }
     public System.Windows.Input.ICommand RepairCommand { get; }
     public System.Windows.Input.ICommand SmoothCommand { get; }
+    public System.Windows.Input.ICommand RebuildCommand { get; }
     public System.Windows.Input.ICommand BeginEngraveCommand { get; }
     public System.Windows.Input.ICommand ApplyEngraveCommand { get; }
     public System.Windows.Input.ICommand CancelEngraveCommand { get; }
@@ -1012,6 +1014,65 @@ public sealed class MainViewModel : INotifyPropertyChanged
     }
 
     /// <summary>
+    /// Rebuilds the surface of the selection - or of everything, if nothing is selected.
+    ///
+    /// The heavy option, and deliberately behind a dialog: it always works, and it always costs
+    /// detail, so it should never happen without someone choosing how much.
+    /// </summary>
+    private async Task RebuildObjects()
+    {
+        var targets = Scene.Selection.Count > 0 ? Scene.Selection.ToList() : Scene.Objects.ToList();
+        if (targets.Count == 0) return;
+
+        var dialog = new RebuildDialog(targets) { Owner = Application.Current?.MainWindow };
+        if (dialog.ShowDialog() != true || dialog.Result is not { } resolution) return;
+
+        IsBusy = true;
+        Status = $"Rebuilding {targets.Count} object(s)...";
+        try
+        {
+            // Baked to world space first, as booleans are: the grid is in world millimetres, so
+            // a stretched object would otherwise be voxelised at the wrong scale.
+            var meshes = targets.Select(o => o.ToWorldMesh()).ToList();
+            var rebuilt = await Task.Run(
+                () => meshes.Select(m => VoxelRebuild.Rebuild(m, resolution)).ToList());
+
+            var produced = new List<SceneObject>();
+            for (int i = 0; i < targets.Count; i++)
+            {
+                if (rebuilt[i].Mesh.TriangleCount == 0) continue;
+
+                produced.Add(new SceneObject(targets[i].Name, rebuilt[i].Mesh)
+                {
+                    Colour = targets[i].Colour
+                });
+            }
+
+            if (produced.Count == 0)
+            {
+                Status = "The rebuild produced nothing - try a finer setting";
+                return;
+            }
+
+            Undo.Execute(new ReplaceObjectsCommand("Rebuild", targets, produced));
+            RefreshSelection();
+
+            int mended = produced.Count(o => o.Mesh.CheckHealth().IsWatertight);
+            Status = $"Rebuilt {produced.Count} object(s) at {rebuilt[0].VoxelSizeMm:0.###} mm - "
+                     + $"{mended} watertight, {produced.Sum(o => o.Mesh.TriangleCount):N0} triangles";
+        }
+        catch (Exception ex)
+        {
+            Status = $"Rebuild failed: {ex.Message}";
+            MessageBox.Show(ex.Message, "3DFastCraft", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+        finally
+        {
+            IsBusy = false;
+        }
+    }
+
+    /// <summary>
     /// Rounds the facets off the selection.
     ///
     /// Applied a fixed amount at a time and meant to be repeated: it is far easier to judge how
@@ -1130,9 +1191,10 @@ public sealed class MainViewModel : INotifyPropertyChanged
                     + "Filling holes and turning faces round only works when the damage is local. "
                     + "A mesh whose surface passes through itself has no well-defined inside, and "
                     + "patching it piece by piece tears more than it closes." + Environment.NewLine + Environment.NewLine
-                    + "Meshes like this are usually mended by rebuilding the surface from scratch "
-                    + "rather than by patching - which also throws away fine detail, so it is not "
-                    + "something to do behind your back.",
+                    + "Rebuild, beside this button, mends it a different way: it works out what "
+                    + "is inside the model and what is outside and builds a fresh surface between "
+                    + "them, which always succeeds. The cost is that detail finer than its "
+                    + "setting is lost, so it asks first.",
                     "3DFastCraft", MessageBoxButton.OK, MessageBoxImage.Information);
                 return;
             }
