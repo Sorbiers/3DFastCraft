@@ -1,0 +1,48 @@
+using System.Collections.ObjectModel;
+using FastCraft3D.Geometry;
+
+namespace FastCraft3D.Model;
+
+public sealed class Scene
+{
+    /// <summary>Build plate edge length in millimetres, matching a common desktop printer bed.</summary>
+    public const float PlateSize = 200f;
+
+    public ObservableCollection<SceneObject> Objects { get; } = new();
+
+    public IReadOnlyList<SceneObject> Selection =>
+        Objects.Where(o => o.IsSelected).ToList();
+
+    public Bounds ComputeBounds()
+    {
+        var bounds = Bounds.Empty;
+        foreach (var o in Objects)
+            bounds = bounds.Union(o.WorldBounds);
+        return bounds;
+    }
+
+    public void SelectOnly(SceneObject? target)
+    {
+        foreach (var o in Objects)
+            o.IsSelected = ReferenceEquals(o, target);
+    }
+
+    public void ClearSelection()
+    {
+        foreach (var o in Objects)
+            o.IsSelected = false;
+    }
+
+    /// <summary>Gives a new object a name that does not collide with the existing ones.</summary>
+    public string UniqueName(string baseName)
+    {
+        var taken = new HashSet<string>(Objects.Select(o => o.Name), StringComparer.OrdinalIgnoreCase);
+        if (!taken.Contains(baseName)) return baseName;
+
+        for (int i = 2; ; i++)
+        {
+            string candidate = $"{baseName} {i}";
+            if (!taken.Contains(candidate)) return candidate;
+        }
+    }
+}

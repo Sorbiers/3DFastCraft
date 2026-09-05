@@ -1,0 +1,43 @@
+<Window x:Class="FastCraft3D.View.RoundDialog"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Round edges" SizeToContent="Height" Width="400"
+        WindowStartupLocation="CenterOwner" ResizeMode="NoResize"
+        ShowInTaskbar="False" Background="#FFF7F7F8">
+
+    <StackPanel Margin="18,14,18,14">
+        <TextBlock x:Name="SubjectText" TextWrapping="Wrap" Foreground="#FF33383F" Margin="0,0,0,12" />
+
+        <TextBlock Text="Which edges" FontWeight="SemiBold" Foreground="#FF33383F" Margin="0,0,0,6" />
+        <StackPanel Orientation="Horizontal" Margin="0,0,0,14">
+            <CheckBox x:Name="EdgeTop" Content="Top" IsChecked="True" Margin="0,0,16,0"
+                      Checked="OnEdgesChanged" Unchecked="OnEdgesChanged" />
+            <CheckBox x:Name="EdgeBottom" Content="Bottom" IsChecked="True" Margin="0,0,16,0"
+                      Checked="OnEdgesChanged" Unchecked="OnEdgesChanged" />
+            <CheckBox x:Name="EdgeSides" Content="Sides" IsChecked="True"
+                      Checked="OnEdgesChanged" Unchecked="OnEdgesChanged" />
+        </StackPanel>
+
+        <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
+            <TextBlock Text="Radius" VerticalAlignment="Center" Foreground="#FF5A5F66" Margin="0,0,8,0" />
+            <TextBox x:Name="RadiusBox" Width="64" Padding="4,3" HorizontalContentAlignment="Right"
+                     TextChanged="OnRadiusTyped" />
+            <TextBlock Text="mm" VerticalAlignment="Center" Foreground="#FF9AA0A8" Margin="6,0,0,0" />
+            <TextBlock x:Name="MaximumText" VerticalAlignment="Center" Foreground="#FF9AA0A8" Margin="12,0,0,0" />
+        </StackPanel>
+
+        <Slider x:Name="RadiusSlider" Minimum="0" TickFrequency="0.5" IsSnapToTickEnabled="False"
+                ValueChanged="OnRadiusDragged" />
+
+        <Border Margin="0,14,0,0" Padding="10,8" CornerRadius="3"
+                Background="#FFEFF1F4" BorderBrush="#FFDDE0E4" BorderThickness="1">
+            <TextBlock x:Name="SummaryText" TextWrapping="Wrap" Foreground="#FF3A3F45" />
+        </Border>
+
+        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,18,0,0">
+            <Button Content="Round" IsDefault="True" Click="OnAccept"
+                    MinWidth="88" Padding="10,6" Margin="0,0,8,0" />
+            <Button Content="Cancel" IsCancel="True" MinWidth="80" Padding="10,6" />
+        </StackPanel>
+    </StackPanel>
+</Window>

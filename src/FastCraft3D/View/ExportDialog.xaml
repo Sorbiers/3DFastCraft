@@ -1,0 +1,53 @@
+<Window x:Class="FastCraft3D.View.ExportDialog"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Export" SizeToContent="Height" Width="420"
+        WindowStartupLocation="CenterOwner" ResizeMode="NoResize"
+        ShowInTaskbar="False" Background="#FFF7F7F8">
+
+    <Window.Resources>
+        <Style x:Key="GroupHeader" TargetType="TextBlock">
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Foreground" Value="#FF33373D" />
+            <Setter Property="Margin" Value="0,14,0,6" />
+        </Style>
+        <Style TargetType="RadioButton">
+            <Setter Property="Margin" Value="2,3" />
+            <Setter Property="Foreground" Value="#FF33383F" />
+        </Style>
+    </Window.Resources>
+
+    <StackPanel Margin="18,14,18,14">
+        <TextBlock Text="What to export" Style="{StaticResource GroupHeader}" Margin="0,0,0,6" />
+        <RadioButton x:Name="ScopeAll" GroupName="Scope" IsChecked="True" Checked="OnOptionChanged" />
+        <RadioButton x:Name="ScopeSelected" GroupName="Scope" Checked="OnOptionChanged" />
+
+        <TextBlock Text="Format" Style="{StaticResource GroupHeader}" />
+        <RadioButton x:Name="FormatBinary" GroupName="Format" IsChecked="True"
+                     Content="Binary STL - smallest, the usual choice for slicing" Checked="OnOptionChanged" />
+        <RadioButton x:Name="FormatAscii" GroupName="Format"
+                     Content="ASCII STL - readable text, roughly five times larger" Checked="OnOptionChanged" />
+        <RadioButton x:Name="FormatObj" GroupName="Format"
+                     Content="Wavefront OBJ - keeps objects named and separate" Checked="OnOptionChanged" />
+
+        <CheckBox x:Name="DropToPlate" Margin="2,16,2,2" Foreground="#FF33383F"
+                  Content="Drop to the build plate"
+                  ToolTip="Move everything together so the lowest point rests on Z = 0"
+                  Checked="OnOptionChanged" Unchecked="OnOptionChanged" />
+
+        <Border Margin="0,16,0,0" Padding="10,8" CornerRadius="3"
+                Background="#FFEFF1F4" BorderBrush="#FFDDE0E4" BorderThickness="1">
+            <StackPanel>
+                <TextBlock x:Name="SummaryText" TextWrapping="Wrap" Foreground="#FF3A3F45" />
+                <TextBlock x:Name="WarningText" TextWrapping="Wrap" Margin="0,6,0,0"
+                           Foreground="#FFB3541E" FontWeight="SemiBold" Visibility="Collapsed" />
+            </StackPanel>
+        </Border>
+
+        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,18,0,0">
+            <Button Content="Export..." IsDefault="True" Click="OnExport"
+                    MinWidth="92" Padding="10,6" Margin="0,0,8,0" />
+            <Button Content="Cancel" IsCancel="True" MinWidth="80" Padding="10,6" />
+        </StackPanel>
+    </StackPanel>
+</Window>
