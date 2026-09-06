@@ -9,6 +9,40 @@
     <Window.Resources>
         <!-- Ribbon button: icon over label. The icon geometry travels in Tag, so adding one to
              a button is a single attribute rather than a nested StackPanel each time. -->
+        <!-- Buttons inside the side panels. The ribbon style keeps a square for an icon
+             above the label, and a panel button has no icon to put there - so it came out
+             half again as tall as it needed to be with a gap where the picture should be. -->
+        <Style x:Key="PanelButton" TargetType="Button">
+            <Setter Property="MinWidth" Value="62" />
+            <Setter Property="Margin" Value="0,0,4,0" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Foreground" Value="#FF2C3037" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Chrome" Background="#FFF7FAFF" BorderThickness="1"
+                                BorderBrush="#FFBCCADC" CornerRadius="3" Padding="10,4">
+                            <TextBlock Text="{TemplateBinding Content}" FontSize="12"
+                                       HorizontalAlignment="Center" VerticalAlignment="Center"
+                                       Foreground="{TemplateBinding Foreground}" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Chrome" Property="Background" Value="#FFE7EDF5" />
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="Chrome" Property="Background" Value="#FFD3E0EF" />
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter Property="Foreground" Value="#FFA8AEB6" />
+                                <Setter TargetName="Chrome" Property="BorderBrush" Value="#FFDCE2EA" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
         <Style x:Key="ToolButton" TargetType="Button">
             <Setter Property="MinWidth" Value="68" />
             <Setter Property="Margin" Value="1,0" />
@@ -139,6 +173,7 @@
 
         <BooleanToVisibilityConverter x:Key="BoolToVisibility" />
         <view:ColourToBrushConverter x:Key="ColourToBrush" />
+        <view:OutlinesToGeometryConverter x:Key="OutlinesToGeometry" />
 
         <!-- A palette swatch: the colour itself is the whole button, so the grid reads as paint
              rather than as a row of controls. -->
@@ -368,12 +403,6 @@
                     <Button Style="{StaticResource ToolButton}" Content="Colour..." Tag="{StaticResource IconColour}"
                             Command="{Binding PickColourCommand}" MinWidth="78"
                             ToolTip="Paint the selection. The palette in the right-hand panel is one click." />
-                    <Button Style="{StaticResource ToolButton}" Content="Text..." Tag="{StaticResource IconText}"
-                            Command="{Binding BeginEmbossCommand}" MinWidth="72"
-                            ToolTip="Cut lettering into a face, or raise it off one" />
-                    <Button Style="{StaticResource ToolButton}" Content="Engrave..." Tag="{StaticResource IconEngrave}"
-                            Command="{Binding BeginEngraveCommand}" MinWidth="82"
-                            ToolTip="Cut a brick, board or stripe pattern into one flat face" />
                     <Separator Margin="8,0" />
                     <Button Style="{StaticResource ToolButton}" Content="Duplicate" Tag="{StaticResource IconDuplicate}"
                             Command="{Binding DuplicateCommand}"
@@ -441,6 +470,13 @@
 
             <TabItem Header="Edit">
                 <WrapPanel Margin="4">
+                    <Button Style="{StaticResource ToolButton}" Content="Emboss..." Tag="{StaticResource IconText}"
+                            Command="{Binding BeginEmbossCommand}" MinWidth="78"
+                            ToolTip="Raise lettering or a drawing off a face, or cut it in" />
+                    <Button Style="{StaticResource ToolButton}" Content="Engrave..." Tag="{StaticResource IconEngrave}"
+                            Command="{Binding BeginEngraveCommand}" MinWidth="82"
+                            ToolTip="Put a brick, board or grain pattern on one flat face" />
+                    <Separator Margin="8,0" />
                     <Button Style="{StaticResource ToolButton}" Content="Repair" Tag="{StaticResource IconRepair}"
                             Command="{Binding RepairCommand}"
                             ToolTip="Mend objects that would not print: fill holes, drop slivers, turn faces the right way round" />
@@ -710,8 +746,8 @@
                             <RadioButton Content="{Binding KeepBackLabel}" Checked="OnSplitKeepChanged" Tag="Back" />
                         </StackPanel>
                         <StackPanel Orientation="Horizontal">
-                            <Button Content="Split" Style="{StaticResource ToolButton}" Command="{Binding ApplySplitCommand}" />
-                            <Button Content="Cancel" Style="{StaticResource ToolButton}" Command="{Binding CancelSplitCommand}" />
+                            <Button Content="Split" Style="{StaticResource PanelButton}" Command="{Binding ApplySplitCommand}" />
+                            <Button Content="Cancel" Style="{StaticResource PanelButton}" Command="{Binding CancelSplitCommand}" />
                         </StackPanel>
                     </StackPanel>
                 </Border>
@@ -727,7 +763,7 @@
                         <CheckBox Content="Snap to corners and edges" Margin="0,0,0,8"
                                   IsChecked="{Binding MeasureSnap, Mode=TwoWay}"
                                   ToolTip="Pull each click onto the nearest corner or edge midpoint, so the reading is exact" />
-                        <Button Content="Done" Style="{StaticResource ToolButton}"
+                        <Button Content="Done" Style="{StaticResource PanelButton}"
                                 Command="{Binding CancelMeasureCommand}" HorizontalAlignment="Left" />
                     </StackPanel>
                 </Border>
@@ -794,6 +830,10 @@
                             <TextBlock Text="mm" Foreground="#FF9AA0A8" VerticalAlignment="Center" />
                         </StackPanel>
 
+                        <CheckBox Content="Raised instead of cut" Margin="0,6,0,0"
+                                  IsChecked="{Binding EngraveRaised, Mode=TwoWay}"
+                                  ToolTip="Stand the bricks off the face rather than cutting the joints in. Separate pieces rather than one web of joints, which the boolean finds easier - and a raised line prints where a groove the same size is missed." />
+
                         <!-- Printing advice: what these settings will actually do on a printer -->
                         <Border Background="#FFFFF6E8" BorderBrush="#FFE8C88A" BorderThickness="1"
                                 CornerRadius="3" Padding="7,5" Margin="0,0,0,8"
@@ -802,9 +842,9 @@
                         </Border>
 
                         <StackPanel Orientation="Horizontal">
-                            <Button Content="Engrave" Style="{StaticResource ToolButton}"
+                            <Button Content="Engrave" Style="{StaticResource PanelButton}"
                                     Command="{Binding ApplyEngraveCommand}" />
-                            <Button Content="Cancel" Style="{StaticResource ToolButton}"
+                            <Button Content="Cancel" Style="{StaticResource PanelButton}"
                                     Command="{Binding CancelEngraveCommand}" />
                         </StackPanel>
                     </StackPanel>
@@ -815,18 +855,46 @@
                         BorderBrush="#FFB8D2F0" BorderThickness="1" CornerRadius="3"
                         Visibility="{Binding IsEmbossMode, Converter={StaticResource BoolToVisibility}}">
                     <StackPanel>
-                        <TextBlock Text="Lettering" FontWeight="SemiBold" Margin="0,0,0,6" />
+                        <TextBlock Text="Emboss" FontWeight="SemiBold" Margin="0,0,0,6" />
                         <TextBlock Text="{Binding EmbossSummary}" TextWrapping="Wrap"
                                    Foreground="#FF3A4550" Margin="0,0,0,8" />
 
                         <TextBox Text="{Binding EmbossText, UpdateSourceTrigger=PropertyChanged}"
-                                 Padding="4,3" Margin="0,0,0,6" FontSize="14" />
+                                 Padding="4,3" Margin="0,0,0,6" FontSize="14"
+                                 Visibility="{Binding UsesText, Converter={StaticResource BoolToVisibility}}" />
 
-                        <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,6"
+                                    Visibility="{Binding UsesText, Converter={StaticResource BoolToVisibility}}">
                             <TextBlock Text="Font" Style="{StaticResource FieldLabel}" Width="62" />
                             <ComboBox Width="130" IsEditable="True" ItemsSource="{Binding EmbossFonts}"
                                       Text="{Binding EmbossFont, UpdateSourceTrigger=LostFocus}" />
                         </StackPanel>
+
+                        <!-- A drawing instead of typed letters. It becomes outlines the moment it
+                             is read, so everything below applies to it unchanged. -->
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
+                            <Button Content="Drawing..." Style="{StaticResource PanelButton}"
+                                    Command="{Binding LoadDrawingCommand}"
+                                    ToolTip="Stamp the filled shapes of an SVG file instead of typing. Turn text into paths in the drawing program first." />
+                            <Button Content="Use text" Style="{StaticResource PanelButton}"
+                                    Command="{Binding ClearDrawingCommand}"
+                                    Visibility="{Binding HasDrawing, Converter={StaticResource BoolToVisibility}}" />
+                        </StackPanel>
+
+                        <!-- What the drawing actually looks like. A file name says nothing about
+                             whether the right thing came out of it - holes especially. -->
+                        <Border Background="White" BorderBrush="#FFB8D2F0" BorderThickness="1"
+                                CornerRadius="3" Padding="6" Margin="0,0,0,6"
+                                Visibility="{Binding HasDrawing, Converter={StaticResource BoolToVisibility}}">
+                            <StackPanel>
+                                <Path Height="72" Stretch="Uniform" Fill="#FF2C3037"
+                                      HorizontalAlignment="Center"
+                                      Data="{Binding DrawingShapes, Converter={StaticResource OutlinesToGeometry}}" />
+                                <TextBlock Text="{Binding SvgName}" Margin="0,6,0,0" FontSize="11"
+                                           HorizontalAlignment="Center" TextTrimming="CharacterEllipsis"
+                                           Foreground="#FF6B7480" ToolTip="{Binding SvgName}" />
+                            </StackPanel>
+                        </Border>
 
                         <StackPanel Orientation="Horizontal" Margin="0,0,0,2">
                             <TextBlock Text="Height" Style="{StaticResource FieldLabel}" Width="62" />
@@ -884,15 +952,16 @@
                             <TextBlock Text="deg" Foreground="#FF9AA0A8" VerticalAlignment="Center" />
                         </StackPanel>
 
-                        <CheckBox Content="Bold" IsChecked="{Binding EmbossBold, Mode=TwoWay}" Margin="0,0,0,4" />
+                        <CheckBox Content="Bold" IsChecked="{Binding EmbossBold, Mode=TwoWay}" Margin="0,0,0,4"
+                                  Visibility="{Binding UsesText, Converter={StaticResource BoolToVisibility}}" />
                         <CheckBox Content="Raised instead of cut" IsChecked="{Binding EmbossRaised, Mode=TwoWay}"
                                   Margin="0,0,0,8"
                                   ToolTip="Stand the lettering off the face rather than sinking it in" />
 
                         <StackPanel Orientation="Horizontal">
-                            <Button Content="Apply" Style="{StaticResource ToolButton}"
+                            <Button Content="Apply" Style="{StaticResource PanelButton}"
                                     Command="{Binding ApplyEmbossCommand}" />
-                            <Button Content="Cancel" Style="{StaticResource ToolButton}"
+                            <Button Content="Cancel" Style="{StaticResource PanelButton}"
                                     Command="{Binding CancelEmbossCommand}" />
                         </StackPanel>
                     </StackPanel>

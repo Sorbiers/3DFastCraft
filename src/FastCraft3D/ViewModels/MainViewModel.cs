@@ -35,6 +35,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
     private FacePatch? embossFace;
     private Mesh? embossMesh;
     private string embossText = "TEXT";
+    private string svgFile = "";
     private string embossFont = "Arial";
     private float embossHeight = 10f;
     private float embossDepth = 0.8f;
@@ -107,6 +108,9 @@ public sealed class MainViewModel : INotifyPropertyChanged
         BeginLayCommand = RelayCommand.Simple(BeginLay, () => Scene.Selection.Count == 1);
         ApplyEmbossCommand = AsyncRelayCommand.Simple(ApplyEmboss, () => isEmbossMode && embossFace is not null);
         CancelEmbossCommand = RelayCommand.Simple(() => IsEmbossMode = false);
+        LoadDrawingCommand = RelayCommand.Simple(LoadDrawing);
+        ClearDrawingCommand = RelayCommand.Simple(
+            () => { svgFile = ""; RefreshDrawing(); }, () => svgFile.Length > 0);
         BeginMeasureCommand = RelayCommand.Simple(BeginMeasure, () => Scene.Objects.Count > 0);
         CancelMeasureCommand = RelayCommand.Simple(() => IsMeasureMode = false);
         BeginEngraveCommand = RelayCommand.Simple(BeginEngrave, () => Scene.Selection.Count == 1);
@@ -166,6 +170,8 @@ public sealed class MainViewModel : INotifyPropertyChanged
     public System.Windows.Input.ICommand BeginLayCommand { get; }
     public System.Windows.Input.ICommand ApplyEmbossCommand { get; }
     public System.Windows.Input.ICommand CancelEmbossCommand { get; }
+    public System.Windows.Input.ICommand LoadDrawingCommand { get; }
+    public System.Windows.Input.ICommand ClearDrawingCommand { get; }
     public System.Windows.Input.ICommand BeginMeasureCommand { get; }
     public System.Windows.Input.ICommand CancelMeasureCommand { get; }
     public System.Windows.Input.ICommand BeginEngraveCommand { get; }
@@ -1105,12 +1111,78 @@ public sealed class MainViewModel : INotifyPropertyChanged
     private List<TextShape> Lettering()
     {
         if (embossFace is null) return [];
+        if (letteringCache is not null) return letteringCache;
 
-        return letteringCache ??= GlyphOutlines
+        if (svgFile.Length > 0)
+        {
+            try
+            {
+                return letteringCache = SvgOutlines.Read(svgFile, embossHeight);
+            }
+            catch (Exception ex)
+            {
+                // A file that has gone missing or will not parse drops the tool back to text
+                // rather than leaving it stuck on something it cannot read.
+                Status = $"Could not read {SvgName}: {ex.Message}";
+                svgFile = "";
+                RefreshDrawing();
+            }
+        }
+
+        return letteringCache = GlyphOutlines
             .Build(embossText, embossFont, embossHeight, embossBold)
             .Select(g => new TextShape(g.Outline, g.Holes))
             .ToList();
     }
+
+    /// <summary>
+    /// Stamps a shape from an SVG drawing instead of typed letters.
+    ///
+    /// Everything downstream sees the same thing either way - an outline and the loops inside it
+    /// - so the placement handles, the size, the bevel, the wrapping and the choice of cut or
+    /// raised all work on a logo exactly as they do on a word.
+    /// </summary>
+    private void LoadDrawing()
+    {
+        var dialog = new OpenFileDialog
+        {
+            Filter = "Drawing (*.svg)|*.svg|All files (*.*)|*.*",
+            Title = "Stamp a drawing"
+        };
+        if (dialog.ShowDialog() != true) return;
+
+        svgFile = dialog.FileName;
+        RefreshDrawing();
+
+        if (svgFile.Length > 0 && Lettering().Count == 0)
+            Status = $"{SvgName} has no filled shape in it - lines on their own have no area to stamp.";
+    }
+
+    private void RefreshDrawing()
+    {
+        Raise(nameof(HasDrawing));
+        Raise(nameof(UsesText));
+        Raise(nameof(SvgName));
+        Raise(nameof(DrawingShapes));
+        RefreshLettering();
+    }
+
+    /// <summary>Whether the lettering is coming from a drawing rather than from the text box.</summary>
+    public bool HasDrawing => svgFile.Length > 0;
+
+    /// <summary>
+    /// The loaded drawing's outlines, for the panel to show. The very ones that will be stamped,
+    /// so what is on screen is what will be on the object - which is the only way to see that a
+    /// drawing came in with its holes intact before committing to it.
+    /// </summary>
+    public IReadOnlyList<TextShape> DrawingShapes => HasDrawing ? Lettering() : [];
+
+    public bool UsesText => svgFile.Length == 0;
+
+    public string SvgName => Path.GetFileName(svgFile);
+
+    /// <summary>What is being stamped, for the messages that have to name it.</summary>
+    private string Stamped() => svgFile.Length > 0 ? SvgName : $"\"{embossText}\"";
 
     /// <summary>Throws the laid-out lettering away, for whatever would change how it reads.</summary>
     private void RefreshLettering()
@@ -1172,7 +1244,9 @@ public sealed class MainViewModel : INotifyPropertyChanged
         var shapes = EmbossShapes();
         if (shapes.Count == 0)
         {
-            Status = "Nothing to letter - type something first";
+            Status = svgFile.Length > 0
+                ? $"{SvgName} has nothing in it to stamp"
+                : "Nothing to letter - type something first";
             return;
         }
 
@@ -1216,7 +1290,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
             IsEmbossMode = false;
             RefreshSelection();
 
-            Status = $"{(raised ? "Raised" : "Cut")} \"{embossText}\" - {result.TriangleCount:N0} triangles";
+            Status = $"{(raised ? "Raised" : "Cut")} {Stamped()} - {result.TriangleCount:N0} triangles";
         }
         catch (Exception ex)
         {
@@ -1459,6 +1533,21 @@ public sealed class MainViewModel : INotifyPropertyChanged
     /// <summary>Only Stripes and Wood have a direction; brick courses are always level.</summary>
     public bool EngraveDirectionApplies => engrave.Options.Kind != PatternKind.Brick;
 
+    /// <summary>
+    /// Stand the pattern off the face rather than cutting it in.
+    ///
+    /// Worth having for more than looks. The bricks are separate pieces with mortar between them,
+    /// where the joints of a cut pattern are one connected web - and a web is what the boolean
+    /// struggles with. On a sweep of sixty-four walls, cutting tore four and raising tore two.
+    /// It also prints better: a raised line is laid down by the nozzle, where a groove the same
+    /// size is simply missed.
+    /// </summary>
+    public bool EngraveRaised
+    {
+        get => engrave.Options.Raised;
+        set => SetEngrave(engrave.Options with { Raised = value });
+    }
+
     private void SetEngrave(EngraveOptions options)
     {
         engrave.Options = options;
@@ -1469,6 +1558,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
         Raise(nameof(EngraveDepth));
         Raise(nameof(EngraveDirection));
         Raise(nameof(EngraveDirectionApplies));
+        Raise(nameof(EngraveRaised));
         Raise(nameof(EngraveOffsetU));
         Raise(nameof(EngraveOffsetV));
         Raise(nameof(EngravePlacement));

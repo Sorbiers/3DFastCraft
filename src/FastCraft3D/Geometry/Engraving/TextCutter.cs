@@ -1,4 +1,5 @@
-﻿using FastCraft3D.Geometry.Csg;
+﻿using System.Numerics;
+using FastCraft3D.Geometry.Csg;
 
 namespace FastCraft3D.Geometry.Engraving;
 
@@ -20,6 +21,39 @@ namespace FastCraft3D.Geometry.Engraving;
 /// </summary>
 public static class TextCutter
 {
+    /// <summary>
+    /// Lettering standing proud of a plain flat face, built into the face rather than unioned
+    /// onto it - so it cannot tear, and cannot split anything else in the model.
+    ///
+    /// It only takes the straightforward case: raised, upright walls, a face that is a filled
+    /// rectangle, and every outline clear of its edge. A bevel means sloping walls, which is a
+    /// solid rather than a step; anything wrapped is not flat; and lettering that runs off the
+    /// edge has to cut into whatever is round the corner. All of those still go to the boolean.
+    /// </summary>
+    private static Mesh? Retiled(
+        Mesh world, IReadOnlyList<TextShape> shapes, IPlacementSurface surface,
+        bool raised, float depthMm, float bevelMm)
+    {
+        if (!raised || bevelMm > 0 || surface is not PlanarSurface flat) return null;
+
+        var face = flat.Face;
+        float inset = Engraver.RaisedInset;
+        var area = new Rect2(
+            face.Min.X + inset, face.Min.Y + inset, face.Max.X - inset, face.Max.Y - inset);
+
+        var outlines = new List<IReadOnlyList<Vector2>>();
+        foreach (var shape in shapes)
+        {
+            outlines.Add(shape.Outline.Select(p => flat.Middle + p).ToList());
+
+            foreach (var hole in shape.Holes)
+                outlines.Add(hole.Select(p => flat.Middle + p).ToList());
+        }
+
+        var laid = FaceRelief.Apply(world, face, area, outlines, depthMm);
+        return laid is not null && laid.CheckHealth().IsWatertight ? laid : null;
+    }
+
     /// <summary>
     /// How far off the surface to stand, as a multiple of the surface's own clearance, and how
     /// far to slide along it in millimetres.
@@ -54,12 +88,14 @@ public static class TextCutter
         Mesh world, IReadOnlyList<TextShape> shapes, IPlacementSurface surface,
         bool raised, float depthMm, float bevelMm = 0)
     {
+        if (Retiled(world, shapes, surface, raised, depthMm, bevelMm) is { } laid) return laid;
+
         Mesh? best = null;
 
         foreach (var (factor, slide) in Nudges)
         {
             float clear = surface.ClearanceMm * factor;
-            var moved = new SurfacePlacement(new System.Numerics.Vector2(slide, 0), 0).Apply(shapes);
+            var moved = new SurfacePlacement(new Vector2(slide, 0), 0).Apply(shapes);
 
             var solid = raised
                 ? TextSolid.Build(moved, surface, -clear, depthMm, bevelMm)

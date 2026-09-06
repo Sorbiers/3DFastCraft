@@ -62,10 +62,10 @@ public static class GrooveSolid
         var mesh = new Mesh();
         if (grooves.IsEmpty || depth <= 0) return mesh;
 
-        AddRectangles(mesh, grooves.Rectangles, face, depth);
+        AddRectangles(mesh, grooves.Rectangles, face, Lift, -depth);
 
         foreach (var ribbon in grooves.Ribbons)
-            AddRibbon(mesh, ribbon, face, depth);
+            AddRibbon(mesh, ribbon, face, Lift, -depth);
 
         return mesh.Welded();
     }
@@ -74,10 +74,47 @@ public static class GrooveSolid
     public static Mesh Build(IReadOnlyList<Rect2> grooves, FacePatch face, float depth) =>
         Build(GrooveSet.Of(grooves), face, depth);
 
-    // --- Rectangles, resolved through a cell grid --------------------------------------
+    /// <summary>
+    /// How far a raised pattern reaches back into the face it stands on.
+    ///
+    /// Standing exactly on the surface would leave the two sharing a plane, which is the one
+    /// thing the boolean handles worst - the same reason lettering starts a little past the face
+    /// it is cut into. Sunk a hair instead, every join is an ordinary crossing.
+    /// </summary>
+    public const float Sink = 0.05f;
 
+    /// <summary>
+    /// The solid formed by standing <paramref name="shapes"/> off the face to
+    /// <paramref name="rise"/>, with their footings sunk into it.
+    /// </summary>
+    public static Mesh Raised(GrooveSet pattern, FacePatch face, float rise)
+    {
+        var mesh = new Mesh();
+        if (pattern.IsEmpty || rise <= 0) return mesh;
+
+        AddRectangles(mesh, pattern.Rectangles, face, rise, -Sink);
+
+        foreach (var ribbon in pattern.Ribbons)
+            AddRibbon(mesh, ribbon, face, rise, -Sink);
+
+        return mesh.Welded();
+    }
+
+    /// <summary>Convenience for the rectangle-only patterns, and for the tests.</summary>
+    public static Mesh Raised(IReadOnlyList<Rect2> shapes, FacePatch face, float rise) =>
+        Raised(GrooveSet.Of(shapes), face, rise);
+
+    // --- Rectangles, resolved through a cell grid --------------------------------------
+    //
+    // The grid is shared with FaceRelief, which retiles a flat face around the same cells
+    // rather than building a solid to union onto it. Same pattern, same cell boundaries -
+    // worth keeping in one place so the two cannot drift apart.
+
+    /// <param name="top">Where the solid's outer face sits, measured out of the face.</param>
+    /// <param name="bottom">Where its inner face sits. Below the surface for a cut, a hair below
+    /// it for something standing proud.</param>
     private static void AddRectangles(
-        Mesh mesh, IReadOnlyList<Rect2> grooves, FacePatch face, float depth)
+        Mesh mesh, IReadOnlyList<Rect2> grooves, FacePatch face, float top, float bottom)
     {
         var rectangles = grooves.Where(r => !r.IsEmpty).ToList();
         if (rectangles.Count == 0) return;
@@ -101,21 +138,21 @@ public static class GrooveSolid
                 var c = new Vector2(us[i + 1], vs[j + 1]);
                 var d = new Vector2(us[i], vs[j + 1]);
 
-                AddQuad(mesh, face, a, b, c, d, Lift);   // top
-                AddQuad(mesh, face, d, c, b, a, -depth); // bottom, facing the other way
+                AddQuad(mesh, face, a, b, c, d, top);      // outer
+                AddQuad(mesh, face, d, c, b, a, bottom);   // inner, facing the other way
 
                 // A wall only where the neighbour is not covered - between two covered cells
                 // there is no surface, which is exactly how the overlaps vanish.
-                if (!IsCovered(covered, i, j - 1)) AddWall(mesh, face, a, b, depth);
-                if (!IsCovered(covered, i + 1, j)) AddWall(mesh, face, b, c, depth);
-                if (!IsCovered(covered, i, j + 1)) AddWall(mesh, face, c, d, depth);
-                if (!IsCovered(covered, i - 1, j)) AddWall(mesh, face, d, a, depth);
+                if (!IsCovered(covered, i, j - 1)) AddWall(mesh, face, a, b, top, bottom);
+                if (!IsCovered(covered, i + 1, j)) AddWall(mesh, face, b, c, top, bottom);
+                if (!IsCovered(covered, i, j + 1)) AddWall(mesh, face, c, d, top, bottom);
+                if (!IsCovered(covered, i - 1, j)) AddWall(mesh, face, d, a, top, bottom);
             }
         }
     }
 
     /// <summary>Every distinct edge coordinate, which is where the cell grid can change state.</summary>
-    private static float[] Coordinates(
+    internal static float[] Coordinates(
         List<Rect2> rectangles, Func<Rect2, float> low, Func<Rect2, float> high)
     {
         var values = new List<float>(rectangles.Count * 2);
@@ -137,7 +174,7 @@ public static class GrooveSolid
         return distinct.ToArray();
     }
 
-    private static bool[,] CoverCells(List<Rect2> rectangles, float[] us, float[] vs)
+    internal static bool[,] CoverCells(List<Rect2> rectangles, float[] us, float[] vs)
     {
         var covered = new bool[us.Length - 1, vs.Length - 1];
 
@@ -164,7 +201,7 @@ public static class GrooveSolid
     /// material just beyond it to be shaved. Being conservative costs at most one cell of
     /// pattern along such an edge.
     /// </summary>
-    private static void Fence(bool[,] covered, float[] us, float[] vs, FacePatch face)
+    internal static void Fence(bool[,] covered, float[] us, float[] vs, FacePatch face)
     {
         if (face.Fences.Count == 0) return; // the ordinary case: a face that meets a real corner
 
@@ -192,7 +229,7 @@ public static class GrooveSolid
         return Math.Clamp(~index - 1, 0, coordinates.Length - 1);
     }
 
-    private static bool IsCovered(bool[,] covered, int i, int j) =>
+    internal static bool IsCovered(bool[,] covered, int i, int j) =>
         i >= 0 && j >= 0 && i < covered.GetLength(0) && j < covered.GetLength(1) && covered[i, j];
 
     // --- Ribbons, extruded along their own path ----------------------------------------
@@ -205,10 +242,11 @@ public static class GrooveSolid
     /// holds the width exact through a bend but runs off to infinity as the bend sharpens;
     /// averaging pinches the width slightly instead, which at these sizes nothing will notice.
     /// </summary>
-    private static void AddRibbon(Mesh mesh, Polyline2 ribbon, FacePatch face, float depth)
+    private static void AddRibbon(
+        Mesh mesh, Polyline2 ribbon, FacePatch face, float top, float bottom)
     {
         foreach (var piece in Fenced(ribbon, face))
-            AddWholeRibbon(mesh, piece, face, depth);
+            AddWholeRibbon(mesh, piece, face, top, bottom);
     }
 
     /// <summary>
@@ -243,7 +281,8 @@ public static class GrooveSolid
         return pieces;
     }
 
-    private static void AddWholeRibbon(Mesh mesh, Polyline2 ribbon, FacePatch face, float depth)
+    private static void AddWholeRibbon(
+        Mesh mesh, Polyline2 ribbon, FacePatch face, float top, float bottom)
     {
         if (!Edges(ribbon, out var points, out var left, out var right)) return;
 
@@ -254,18 +293,18 @@ public static class GrooveSolid
         {
             int j = (i + 1) % count;
 
-            AddQuad(mesh, face, right[i], right[j], left[j], left[i], Lift);
-            AddQuad(mesh, face, left[i], left[j], right[j], right[i], -depth);
+            AddQuad(mesh, face, right[i], right[j], left[j], left[i], top);
+            AddQuad(mesh, face, left[i], left[j], right[j], right[i], bottom);
 
             // The strip's two long edges are its only boundary, so the walls go there.
-            AddWall(mesh, face, right[i], right[j], depth);
-            AddWall(mesh, face, left[j], left[i], depth);
+            AddWall(mesh, face, right[i], right[j], top, bottom);
+            AddWall(mesh, face, left[j], left[i], top, bottom);
         }
 
         if (!ribbon.Closed)
         {
-            AddWall(mesh, face, left[0], right[0], depth);
-            AddWall(mesh, face, right[count - 1], left[count - 1], depth);
+            AddWall(mesh, face, left[0], right[0], top, bottom);
+            AddWall(mesh, face, right[count - 1], left[count - 1], top, bottom);
         }
     }
 
@@ -273,7 +312,7 @@ public static class GrooveSolid
     /// The two sides of a ribbon. Shared with the preview so that what is drawn on the face is
     /// built from the same path as what gets cut out of it.
     /// </summary>
-    private static bool Edges(
+    internal static bool Edges(
         Polyline2 ribbon, out List<Vector2> points, out Vector2[] left, out Vector2[] right)
     {
         points = Trimmed(ribbon.Points);
@@ -365,7 +404,7 @@ public static class GrooveSolid
 
     // --- Shared -------------------------------------------------------------------------
 
-    private static void AddQuad(
+    internal static void AddQuad(
         Mesh mesh, FacePatch face, Vector2 a, Vector2 b, Vector2 c, Vector2 d, float height)
     {
         mesh.AddTriangle(face.ToLocal(a, height), face.ToLocal(b, height), face.ToLocal(c, height));
@@ -376,10 +415,11 @@ public static class GrooveSolid
     /// The wall under one top edge. Walking the edge in the top face's own winding leaves the
     /// material on the left, so this ordering faces the wall outward.
     /// </summary>
-    private static void AddWall(Mesh mesh, FacePatch face, Vector2 a, Vector2 b, float depth)
+    internal static void AddWall(
+        Mesh mesh, FacePatch face, Vector2 a, Vector2 b, float top, float bottom)
     {
-        Vector3 topA = face.ToLocal(a, Lift), topB = face.ToLocal(b, Lift);
-        Vector3 lowA = face.ToLocal(a, -depth), lowB = face.ToLocal(b, -depth);
+        Vector3 topA = face.ToLocal(a, top), topB = face.ToLocal(b, top);
+        Vector3 lowA = face.ToLocal(a, bottom), lowB = face.ToLocal(b, bottom);
 
         mesh.AddTriangle(topA, lowA, lowB);
         mesh.AddTriangle(topA, lowB, topB);

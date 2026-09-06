@@ -32,6 +32,83 @@ public static class Polygon2
         return (loop, EarClip(loop));
     }
 
+    /// <summary>
+    /// Sorts a pile of loops into shapes: each outline with the loops that are holes in it.
+    ///
+    /// Which are holes is decided by containment rather than by winding direction. Fonts
+    /// disagree about which way round they draw a counter, drawing programs disagree about which
+    /// way round they draw anything, and flattened geometry does not always keep the convention
+    /// either; whether a loop sits inside an odd number of others is not a matter of opinion.
+    ///
+    /// A loop inside a hole is a shape again - an island in a lake - and is given its own entry,
+    /// which costs nothing to allow and is wrong to ignore.
+    /// </summary>
+    public static List<(List<Vector2> Outline, List<List<Vector2>> Holes)> Nest(
+        List<List<Vector2>> loops)
+    {
+        var depth = new int[loops.Count];
+        for (int i = 0; i < loops.Count; i++)
+            for (int j = 0; j < loops.Count; j++)
+                if (i != j && Contains(loops[j], loops[i][0]))
+                    depth[i]++;
+
+        var shapes = new List<(List<Vector2> Outline, List<List<Vector2>> Holes)>();
+        var index = new Dictionary<int, int>();
+
+        for (int i = 0; i < loops.Count; i++)
+        {
+            if (depth[i] % 2 != 0) continue;
+
+            index[i] = shapes.Count;
+            shapes.Add((loops[i], []));
+        }
+
+        for (int i = 0; i < loops.Count; i++)
+        {
+            if (depth[i] % 2 == 0) continue;
+
+            int parent = -1;
+            float smallest = float.MaxValue;
+
+            // Its immediate parent is the smallest loop one level up that contains it, which is
+            // what puts a letter inside a counter with the counter rather than with the letter.
+            for (int j = 0; j < loops.Count; j++)
+            {
+                if (i == j || depth[j] != depth[i] - 1) continue;
+                if (!Contains(loops[j], loops[i][0])) continue;
+
+                float area = Math.Abs(SignedArea(loops[j]));
+                if (area >= smallest) continue;
+
+                smallest = area;
+                parent = j;
+            }
+
+            if (parent >= 0 && index.TryGetValue(parent, out int at))
+                shapes[at].Holes.Add(loops[i]);
+        }
+
+        return shapes;
+    }
+
+    /// <summary>Crossing count along a ray: odd means inside.</summary>
+    public static bool Contains(IReadOnlyList<Vector2> loop, Vector2 point)
+    {
+        bool inside = false;
+
+        for (int i = 0, j = loop.Count - 1; i < loop.Count; j = i++)
+        {
+            if (loop[i].Y > point.Y == loop[j].Y > point.Y) continue;
+
+            float x = loop[i].X
+                + (point.Y - loop[i].Y) / (loop[j].Y - loop[i].Y) * (loop[j].X - loop[i].X);
+
+            if (point.X < x) inside = !inside;
+        }
+
+        return inside;
+    }
+
     /// <summary>Twice the signed area. Positive means the loop runs anticlockwise.</summary>
     public static float SignedArea(IReadOnlyList<Vector2> loop)
     {

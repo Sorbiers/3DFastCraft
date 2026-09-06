@@ -37,6 +37,20 @@ public readonly record struct EngraveResult(
 /// the BSP engine: the intersection leaves slivers along every trim edge, and although the
 /// trimmed cutter passes a watertightness check itself, subtracting it tears the result open.
 /// Clipping rectangles costs one line and cannot produce a sliver at all.
+///
+/// Cutting it in two passes - the courses, then the perpends - was tried and is worse, which is
+/// worth writing down because it sounds as though it ought to help. Each pass is then a set of
+/// separate slabs rather than one connected web, but the perpends run through the courses, so
+/// the second pass arrives with its floor in the same plane as the first pass's floor, and a
+/// shared plane is precisely what tears. Measured on sixty-four walls at awkward sizes: one pass
+/// tore four, two passes at the same depth tore sixteen of the thirty-eight that got that far.
+/// Giving the second pass a slightly deeper floor cures the shared plane and replaces it with a
+/// paper-thin ledge at every crossing - so much extra geometry that the sweep had not finished
+/// after twenty minutes, against two for one pass.
+///
+/// Raising the pattern instead of cutting it does help, and for the reason two passes did not:
+/// the bricks are genuinely separate, with mortar between them, so there is no web to begin
+/// with. Same sweep, raised: two of sixty-four.
 /// </summary>
 public static class Engraver
 {
@@ -101,18 +115,32 @@ public static class Engraver
                 GrooveWidth = options.GrooveWidth * width
             };
 
-            var grooves = Grooves(face, moved);
-            if (grooves.IsEmpty) return Nothing(mesh, moved);
+            var pattern = Pattern(face, moved);
+            if (pattern.IsEmpty) return Nothing(mesh, moved);
 
-            var cutter = GrooveSolid.Build(grooves, face, moved.Depth);
-            if (cutter.TriangleCount == 0) return Nothing(mesh, moved, grooves.Count);
+            var solid = moved.Raised
+                ? GrooveSolid.Raised(pattern, face, moved.Depth)
+                : GrooveSolid.Build(pattern, face, moved.Depth);
+
+            if (solid.TriangleCount == 0) return Nothing(mesh, moved, pattern.Count);
+
+            // A raised pattern on a plain flat face needs no boolean at all - the face is
+            // simply retiled around it, and comes back watertight by construction. Everything
+            // else, and anything the retiler declines, goes through the engine.
+            var retiled = moved.Raised
+                ? FaceRelief.Apply(mesh, face, RaisedArea(face), pattern, moved.Depth)
+                : null;
 
             // Repair before judging it. The automatic pass inside the boolean handles the
             // ordinary leftovers; this catches the rest, and declines when it cannot help, so
             // what is measured here is the best this attempt is going to get.
-            var cut = MeshHealer.Heal(CsgSolid.Subtract(mesh, cutter)).Mesh;
+            var worked = retiled ?? (moved.Raised
+                ? CsgSolid.Union(mesh, solid)
+                : CsgSolid.Subtract(mesh, solid));
+
+            var cut = MeshHealer.Heal(worked).Mesh;
             var result = new EngraveResult(
-                cut, grooves.Count, cutter.TriangleCount, cut.CheckHealth(), moved);
+                cut, pattern.Count, solid.TriangleCount, cut.CheckHealth(), moved);
 
             if (result.IsPrintable) return result;
 
@@ -138,9 +166,60 @@ public static class Engraver
         face.Max.X + EdgeOvershoot, face.Max.Y + EdgeOvershoot);
 
     /// <summary>
+    /// The rectangle a raised pattern covers: the face itself, with nothing added.
+    ///
+    /// A cutter may overshoot because the part hanging past the outline meets no material and
+    /// removes nothing. Something raised has no such licence - what hangs past the edge is real
+    /// and would be left standing in mid-air.
+    /// </summary>
+    public static Rect2 RaisedArea(FacePatch face) => new(
+        face.Min.X + RaisedInset, face.Min.Y + RaisedInset,
+        face.Max.X - RaisedInset, face.Max.Y - RaisedInset);
+
+    /// <summary>
+    /// How far a raised pattern stops short of the edge of its face.
+    ///
+    /// A brick reaching exactly to the corner has its side in the plane of the face next door,
+    /// and once that face is patterned too, its bricks arrive to meet it exactly - which is the
+    /// one thing to avoid.
+    ///
+    /// It is also what the face is retiled around: the strip it leaves is the frame joining
+    /// the pattern to the face's own outline, so it has to be there and has to be positive. A
+    /// twentieth of a millimetre is enough for both jobs and is not something anyone will find
+    /// on a printed wall.
+    /// </summary>
+    public const float RaisedInset = GrooveSolid.Sink;
+
+    /// <summary>
     /// The grooves for a face, held inside its rectangle. The preview draws these, and the cutter
     /// is built from exactly the same set, so what is shown is what gets cut.
     /// </summary>
+    /// <summary>
+    /// What the pattern puts on the face: the joints to cut away, or the bricks to stand proud.
+    /// </summary>
+    public static GrooveSet Pattern(FacePatch face, EngraveOptions options)
+    {
+        if (!options.Raised) return Grooves(face, options);
+
+        var area = RaisedArea(face);
+        var raised = GroovePattern.Raised(options.Sane(), area);
+
+        // A piece the edge has cut down to a sliver is thrown away rather than kept. It would be
+        // a wall a few hundredths of a millimetre thick standing on the face - nothing anyone
+        // could print or see, and exactly the sort of thing the boolean comes apart on.
+        float least = options.Sane().GrooveWidth;
+
+        return raised with
+        {
+            Rectangles = raised.Rectangles
+                .Select(piece => piece.ClippedTo(area))
+                .Where(piece => !piece.IsEmpty
+                             && piece.MaxU - piece.MinU >= least
+                             && piece.MaxV - piece.MinV >= least)
+                .ToList()
+        };
+    }
+
     public static GrooveSet Grooves(FacePatch face, EngraveOptions options)
     {
         var area = PatternArea(face);
@@ -158,7 +237,9 @@ public static class Engraver
 
     /// <summary>How many grooves the pattern would cut, without cutting them.</summary>
     public static int CountGrooves(FacePatch face, EngraveOptions options) =>
-        GroovePattern.Count(options, PatternArea(face));
+        options.Raised
+            ? GroovePattern.Raised(options.Sane(), RaisedArea(face)).Count
+            : GroovePattern.Count(options, PatternArea(face));
 
     /// <summary>
     /// How much material stands behind the face, so the dialog can say when a depth would cut

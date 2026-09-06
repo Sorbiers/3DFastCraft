@@ -80,9 +80,13 @@ public static class SurfaceSag
 /// </summary>
 public sealed class PlanarSurface(FacePatch face) : IPlacementSurface
 {
-    private readonly Vector2 middle = (face.Min + face.Max) * 0.5f;
+    /// <summary>The face itself, for the one caller that can do better than a boolean on it.</summary>
+    public FacePatch Face { get; } = face;
 
-    public Vector3 At(Vector2 uv, float height) => face.ToLocal(middle + uv, height);
+    /// <summary>Where the layout's origin sits in the face's own frame.</summary>
+    public Vector2 Middle { get; } = (face.Min + face.Max) * 0.5f;
+
+    public Vector3 At(Vector2 uv, float height) => face.ToLocal(Middle + uv, height);
 
     // A straight line in the layout is a straight line on the face, so nothing ever strays.
     public float Sag(Vector2 from, Vector2 to) => 0;

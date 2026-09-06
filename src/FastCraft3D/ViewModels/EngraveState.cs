@@ -46,7 +46,7 @@ public sealed class EngraveState
     /// has been picked.
     /// </summary>
     public GrooveSet Preview() =>
-        Face is null ? GrooveSet.Empty : Engraver.Grooves(Face, Options);
+        Face is null ? GrooveSet.Empty : Engraver.Pattern(Face, Options);
 
     /// <summary>The face's size and how many grooves the current settings would cut into it.</summary>
     public string Describe()
@@ -56,7 +56,9 @@ public sealed class EngraveState
         var size = Face.Size;
         int grooves = Engraver.CountGrooves(Face, Options);
 
-        return $"Face {size.X:0.#} x {size.Y:0.#} mm - about {grooves:N0} grooves at {Options.Depth:0.##} mm deep";
+        return Options.Raised
+            ? $"Face {size.X:0.#} x {size.Y:0.#} mm - about {grooves:N0} pieces standing {Options.Depth:0.##} mm proud"
+            : $"Face {size.X:0.#} x {size.Y:0.#} mm - about {grooves:N0} grooves at {Options.Depth:0.##} mm deep";
     }
 
     /// <summary>
@@ -71,6 +73,16 @@ public sealed class EngraveState
 
         var options = Options.Sane();
         float behind = Engraver.MaterialBehind(WorldMesh, Face);
+
+        // Standing proud adds material rather than taking it away, so none of the advice about
+        // cutting through the wall applies - and a raised line survives slicing where a groove of
+        // the same size is dropped, since the nozzle lays it down rather than having to miss it.
+        if (options.Raised)
+        {
+            return options.Depth < 0.2f
+                ? $"{options.Depth:0.##} mm is under one layer, so it will not show on an FDM print."
+                : "";
+        }
 
         if (options.Depth >= behind)
             return $"{options.Depth:0.##} mm is deeper than the {behind:0.#} mm of material behind this face - it will cut right through.";

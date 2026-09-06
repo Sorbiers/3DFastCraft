@@ -35,7 +35,8 @@ public readonly record struct EngraveOptions(
     float Depth = 0.6f,
     PatternDirection Direction = PatternDirection.Horizontal,
     float OffsetU = 0f,
-    float OffsetV = 0f)
+    float OffsetV = 0f,
+    bool Raised = false)
 {
     /// <summary>Below this the pattern is finer than the cutter can meaningfully resolve.</summary>
     public const float MinimumSize = 0.5f;
@@ -141,6 +142,131 @@ public static class GroovePattern
     /// <summary>The index of the first line at or below the start of the area.</summary>
     private static int FirstIndex(float anchor, float from, float pitch) =>
         (int)MathF.Floor((from - anchor) / pitch);
+
+    /// <summary>
+    /// The same pattern in the positive: the bricks and boards themselves rather than the joints
+    /// between them.
+    ///
+    /// Not the complement worked out afterwards - generated directly, because the complement of a
+    /// connected web of joints is a great many separate pieces and finding them is more work than
+    /// laying them out in the first place. The pieces come out disjoint by construction, which is
+    /// the whole point of raising a pattern rather than cutting it.
+    /// </summary>
+    public static GrooveSet Raised(EngraveOptions options, Rect2 area)
+    {
+        options = options.Sane();
+        if (area.IsEmpty) return GrooveSet.Empty;
+
+        bool turned = options.Direction == PatternDirection.Vertical;
+        var canvas = turned ? Transpose(area) : area;
+        var anchor = Anchor(canvas, options, turned);
+
+        // Grain is the exception, and it is the pattern that says what "raised" means. Brick and
+        // siding are made of pieces with joints between them, so raising them means the pieces:
+        // raising the joints would give a lattice, not a wall. Grain is not made of pieces - it
+        // is the lines - so raising it means the lines, standing proud like the hard grain of a
+        // weathered board rather than sunk into it.
+        if (options.Kind == PatternKind.Wood)
+        {
+            var grain = WoodGrain.Build(options, canvas, anchor)
+                .SelectMany(line => Held(line, canvas))
+                .ToList();
+
+            return GrooveSet.Of(turned ? grain.Select(Transpose).ToList() : grain);
+        }
+
+        var pieces = options.Kind == PatternKind.Brick
+            ? BrickFaces(options, canvas, anchor)
+            : BoardFaces(options, canvas, anchor);
+
+        return GrooveSet.Of(turned ? pieces.Select(Transpose).ToList() : pieces);
+    }
+
+    /// <summary>
+    /// The stretches of a grain line that stay inside the area, its own width taken into account.
+    ///
+    /// A cut line is allowed to run off the face - the part hanging over meets no material and
+    /// removes nothing. A raised one is real, and a raised line hanging over the edge would be a
+    /// ledge standing in mid air, so it is trimmed back to where the face can hold it. A line
+    /// that leaves and returns comes back as two, which is what the grain looks like anyway.
+    /// </summary>
+    private static IEnumerable<Polyline2> Held(Polyline2 line, Rect2 area)
+    {
+        float margin = line.Width * 0.5f;
+        var room = new Rect2(
+            area.MinU + margin, area.MinV + margin, area.MaxU - margin, area.MaxV - margin);
+
+        if (room.IsEmpty) yield break;
+
+        var run = new List<Vector2>();
+        bool whole = true;
+
+        foreach (var point in line.Points)
+        {
+            if (room.Contains(point.X, point.Y))
+            {
+                run.Add(point);
+                continue;
+            }
+
+            whole = false;
+            if (run.Count >= 2) yield return new Polyline2(run, line.Width);
+            run = [];
+        }
+
+        // A ring that never left stays a ring; one that did comes back as an open stretch.
+        if (run.Count >= 2) yield return new Polyline2(run, line.Width, line.Closed && whole);
+    }
+
+    /// <summary>The bricks: what is left of each course between one perpend and the next.</summary>
+    private static List<Rect2> BrickFaces(EngraveOptions options, Rect2 area, Vector2 anchor)
+    {
+        float height = options.Size / BrickAspect;
+        float groove = options.GrooveWidth;
+        float pitchV = height + groove;
+        float pitchU = options.Size + groove;
+
+        var faces = new List<Rect2>();
+
+        for (int course = FirstIndex(anchor.Y, area.MinV, pitchV); ; course++)
+        {
+            float v = anchor.Y + course * pitchV;
+            if (v > area.MaxV) break;
+
+            float low = v + groove, high = v + pitchV;
+            float offset = ((course % 2) + 2) % 2 == 0 ? 0 : pitchU * 0.5f;
+
+            for (int brick = FirstIndex(anchor.X + offset, area.MinU, pitchU); ; brick++)
+            {
+                float u = anchor.X + offset + brick * pitchU;
+                if (u > area.MaxU) break;
+
+                faces.Add(new Rect2(u + groove, low, u + pitchU, high));
+                if (faces.Count > MaximumGrooves) return faces;
+            }
+        }
+
+        return faces;
+    }
+
+    /// <summary>The boards: the band between one groove and the next.</summary>
+    private static List<Rect2> BoardFaces(EngraveOptions options, Rect2 area, Vector2 anchor)
+    {
+        var faces = new List<Rect2>();
+
+        for (int stripe = FirstIndex(anchor.Y, area.MinV, options.Size); ; stripe++)
+        {
+            float v = anchor.Y + stripe * options.Size;
+            if (v > area.MaxV) break;
+
+            faces.Add(new Rect2(
+                area.MinU, v + options.GrooveWidth, area.MaxU, v + options.Size));
+
+            if (faces.Count > MaximumGrooves) break;
+        }
+
+        return faces;
+    }
 
     private static List<Rect2> Brick(EngraveOptions options, Rect2 area, Vector2 anchor)
     {

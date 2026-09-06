@@ -19,7 +19,7 @@ every slicer expects.
 
 ## Building and running
 
-Double-click **`build.bat`** to produce a standalone `buildDFastCraft.exe` (~160 MB) that runs
+Double-click **`build.bat`** to produce a standalone `build\3DFastCraft.exe` (~160 MB) that runs
 on any 64-bit Windows PC with no .NET install, then **`run.bat`** to start it. `run.bat` falls
 back to running from source if no exe has been built yet.
 
@@ -41,9 +41,9 @@ dotnet test
 | Tab | What it does |
 |---|---|
 | **Insert** | Cube, cylinder, cone, sphere, pyramid, wedge, torus, hexagon, tetrahedron; import STL/OBJ |
-| **Object** | Subtract / Intersect / Merge, Smooth, Round edges, Split with a plane, Text, Engrave a pattern, Colour, duplicate (beside or in place), delete, drop to plate, lay on face, mirror |
+| **Object** | Subtract / Intersect / Merge, Smooth, Round edges, Split with a plane, Colour, duplicate (beside or in place), delete, drop to plate, lay on face, mirror |
 | **Align** | Line the selection up on X, Y or Z: flush to either edge, centred, or spread evenly |
-| **Edit** | Repair, rebuild, simplify, hollow, undo, redo |
+| **Edit** | Emboss lettering or a drawing, engrave a pattern, repair, rebuild, simplify, hollow, undo, redo |
 | **File** | New, open, recent, save, save as, save a version, versions, export STL/OBJ |
 | **View** | Zoom to fit, top / front / right / isometric, measure, wireframe, x-ray, build plate size and visibility |
 
@@ -248,7 +248,7 @@ dense imports (over 200k triangles) skip the outline and use the colour lift alo
 The status bar always shows the selected object's size, triangle count, volume, and whether it
 is watertight.
 
-**Split**, **Engrave** and **Text** take the object over while they run: the manipulator bar and
+**Split**, **Engrave** and **Emboss** take the object over while they run: the manipulator bar and
 its handles stand down, and the tool's own handles have the object to themselves. Starting one
 puts the others away, since each means something different by a click on the model. Cancel or
 apply, and the manipulator comes back.
@@ -296,15 +296,30 @@ unevenly afterwards will stretch the rounded edges.
 Closing, opening or starting a new model with unsaved changes asks first, and cancelling the
 prompt cancels the whole action — including the window close.
 
-### Lettering
+### Emboss: lettering and drawings
 
-**Text...** on the Object tab cuts words into a face or raises them off it. Select the object,
+**Emboss...** on the Edit tab raises words off a face or cuts them into it. Select the object,
 press it, click the face, and type: the lettering appears on the face as you set it up, with the
 font, height and depth alongside.
 
 Letters are real outlines rather than a bitmap, so an O has a proper hole in it and the result is
 a few hundred triangles rather than tens of thousands. **Raised instead of cut** stands the
 lettering proud of the face rather than sinking it in.
+
+#### A drawing instead of words
+
+**Drawing...** in the panel stamps the filled shapes of an **SVG** file - a logo, a badge, an
+icon - and the panel shows the shape it read so you can see it arrived with its holes intact
+before committing to it. **Use text** goes back to typing.
+
+A drawing becomes the same thing typed letters become: an outline and the loops inside it. So
+everything else in the panel applies to it unchanged - the size, the depth, the bevel, the wrap,
+the handles on the face, and the choice of cut or raised.
+
+Paths, rectangles, circles, ellipses, polygons and polylines are read, with `transform` followed
+down the tree and curves and arcs flattened. Two things are not: **text**, which needs the same
+fonts to mean anything (turn it into paths in the drawing program first), and `use`/`symbol`
+references. A drawing of nothing but unfilled lines has no area and comes back empty.
 
 #### Putting it where you want it
 
@@ -347,7 +362,7 @@ starting point.
 
 ### Engraving a pattern
 
-**Engrave...** on the Object tab cuts a repeating pattern into one flat face - brickwork on a
+**Engrave...** on the Edit tab puts a repeating pattern on one flat face - brickwork on a
 wall, boards on a shed, lap siding on a gable.
 
 Select the object, press **Engrave...**, then **click the face** you want. It highlights in
@@ -401,15 +416,30 @@ the number means. For most FDM work **0.5-0.8 mm deep with 1-1.5 mm lines** read
 prints without any support: the overhang at the top of a groove is only as wide as the groove is
 deep, which every printer bridges.
 
-Wood is cut differently from the other two. Brick and stripes are rectangles, resolved into one
-region so their joints can run into each other; grain is a set of curves, each extruded along its
-own path. The curves are generated freely and then walked in order with a minimum gap enforced
-between neighbours, because two of them crossing would leave a wall inside the material being
-removed and tear the result open. Where the gap bites, the grain flattens slightly - it can never
-fold.
+Wood is built differently from the other two. Brick and stripes are rectangles; grain is a set
+of curves. The curves are generated freely and then walked in order with a minimum gap enforced
+between neighbours, because two of them crossing has no sensible answer. Where the gap bites, the
+grain flattens slightly - it can never fold.
 
-Engraving is a boolean underneath, so the result is watertight and the object becomes plain
-geometry - as after a Merge, it can no longer be rounded.
+#### Raised instead of cut
+
+**Raised instead of cut** stands the pattern off the face rather than sinking it in: bricks with
+mortar between them, boards with a gap, grain standing proud like the hard rings of a weathered
+plank. It prints better than a cut pattern - the nozzle lays a raised line down where it has to
+miss a groove of the same size - and it is the mode to reach for on anything with four walls.
+
+A raised pattern on a plain flat face is not a boolean at all. The face's own triangles are
+thrown away and laid again around the pattern: a frame joining the pattern to the face's real
+outline, the pattern itself at two levels, and a wall where the two meet. Every vertex on the
+outline is one the model already had, so nothing else in the object is touched. The result is
+watertight by construction rather than by repair - and, because nothing accumulates, the fourth
+wall of a box is no harder than the first. It used to be impossible.
+
+Cutting still goes through the boolean, because a cut groove is allowed to run off the edge of
+its face and a raised one is not.
+
+A pattern cut with the boolean leaves the object plain geometry - as after a Merge, it can no
+longer be rounded.
 
 ### Versions
 
@@ -579,12 +609,18 @@ primitives headed to a slicer.
   hangs in mid-air and cuts nothing, so a gable end or a round cap comes out right, but a
   separate face lying in the same plane and inside that rectangle is engraved too, and an
   inside corner loses half a millimetre off the neighbouring face.
-- **A fine pattern on a face that has been cut about already** can refuse to go on. Every
+- **A fine pattern cut into a face that has been cut about already** can refuse to go on. Every
   earlier pattern left a notch wherever a groove met an edge, and the new one has to be cut
   around them; where two faces meet exactly rather than crossing, the boolean tears. It is
   retried from a slightly different pattern first - the status bar says when that happened -
   but it does not always get through. A coarser pattern, a shallower depth, or nudging
-  **Shift across** by a tenth of a millimetre usually does.
+  **Shift across** by a tenth of a millimetre usually does. **Raised instead of cut** does not
+  have this problem at all, since it never touches the boolean.
+- **A drawing whose shapes overlap each other** is stamped the slow way, and may not go on.
+  Which loops are holes is decided by asking whether one lies inside another, and for outlines
+  that cross, that question has no answer - so it falls back to the boolean, which builds each
+  shape separately and puts the walls of one inside the other. Merge overlapping shapes in the
+  drawing program first.
 - **Letters with an enclosed middle - O, B, A, D - wrapped round a barrel** are past what the
   boolean will do: the cutter is sound but the result comes back torn. It is refused rather than
   shipped, so the object is left as it was. Lettering without counters wraps fine, and **Rebuild**
@@ -601,7 +637,7 @@ src/FastCraft3D/
               Engraving/ (patterns, lettering, the surfaces they are laid on)
   Text/       the one place that asks the operating system about fonts
   Model/      scene objects, scene, Commands/ (undo-redo)
-  Io/         STL, OBJ, .3dfc project files, export composition
+  Io/         STL, OBJ, SVG outlines, .3dfc project files, export composition
   Render/     the only Direct3D-aware layer, plus the on-screen manipulator
   View/       selection mirroring between the object list and the scene
   ViewModels/ commands and application state
