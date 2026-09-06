@@ -132,6 +132,10 @@ public partial class MainWindow : Window
         AddHandler(GotFocusEvent, new RoutedEventHandler(OnFieldGotFocus), true);
         AddHandler(LostFocusEvent, new RoutedEventHandler(OnFieldLostFocus), true);
 
+        // Reaching a numeric field selects what is in it, so a new value can just be typed.
+        AddHandler(GotKeyboardFocusEvent, new KeyboardFocusChangedEventHandler(OnFieldFocused), true);
+        AddHandler(PreviewMouseLeftButtonDownEvent, new MouseButtonEventHandler(OnFieldClicked), true);
+
         // Arrow keys and the wheel nudge the numeric fields.
         AddHandler(PreviewKeyDownEvent, new KeyEventHandler(OnFieldKey), true);
         AddHandler(PreviewMouseWheelEvent, new MouseWheelEventHandler(OnFieldWheel), true);
@@ -671,6 +675,47 @@ public partial class MainWindow : Window
         if (e.OriginalSource is not TextBox { Tag: "transform" }) return;
         editObjects = viewModel.Scene.Selection.ToList();
         editBefore = editObjects.Select(TransformState.Capture).ToList();
+    }
+
+    /// <summary>
+    /// Selects the whole value when a numeric field is reached, so typing replaces it rather than
+    /// landing in the middle of what is already there.
+    /// </summary>
+    private void OnFieldFocused(object sender, KeyboardFocusChangedEventArgs e)
+    {
+        if (e.NewFocus is TextBox { Tag: "transform" or "number" } box) box.SelectAll();
+    }
+
+    /// <summary>
+    /// The first click on a field focuses it and goes no further.
+    ///
+    /// Without this the selection made above is undone immediately: focus arrives first, and the
+    /// click that caused it then puts the caret where the pointer was and clears the selection.
+    /// Swallowing that one click is the usual way round it, and a second click still places the
+    /// caret, so picking out a single digit still works.
+    /// </summary>
+    private void OnFieldClicked(object sender, MouseButtonEventArgs e)
+    {
+        if (e.OriginalSource is not DependencyObject source) return;
+
+        var box = FindTextBox(source);
+        if (box is null || box.IsKeyboardFocusWithin) return;
+
+        box.Focus();
+        e.Handled = true;
+    }
+
+    /// <summary>
+    /// The numeric field a click landed in. A click lands on whatever part of the box's template
+    /// is under the pointer, not on the box, so the tree has to be walked back up.
+    /// </summary>
+    private static TextBox? FindTextBox(DependencyObject from)
+    {
+        for (var at = from; at is not null; at = VisualTreeHelper.GetParent(at))
+            if (at is TextBox { Tag: "transform" or "number" } box)
+                return box;
+
+        return null;
     }
 
     private void OnFieldLostFocus(object sender, RoutedEventArgs e)

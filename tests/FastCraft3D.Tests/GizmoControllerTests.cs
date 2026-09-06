@@ -1,4 +1,4 @@
-using System.Numerics;
+﻿using System.Numerics;
 using System.Runtime.ExceptionServices;
 using System.Windows;
 using System.Windows.Controls;
@@ -154,6 +154,69 @@ public class GizmoControllerTests
             Assert.Equal(10f, cube.Position.X, 3);
             Assert.Equal(0f, cube.Position.Y, 3);
             Assert.Equal(0f, cube.Position.Z, 3);
+        });
+    }
+
+    /// <summary>
+    /// Stop on contact, driven through the manipulator as a real drag. A cone is the case the
+    /// bounding box gets worst: its box is its base, so a box sweep parks the ball a whole base
+    /// radius short of the slope it was being brought up against.
+    /// </summary>
+    [Fact]
+    public void StoppingOnContactMeetsTheShapeRatherThanItsBox()
+    {
+        RunSta(() =>
+        {
+            var scene = new Scene();
+            var ball = new SceneObject("Ball", Primitives.Create(PrimitiveKind.Sphere)) { IsSelected = true };
+            var cone = new SceneObject("Cone", Primitives.Create(PrimitiveKind.Cone))
+            {
+                Position = new Vector3(40, 0, 0)
+            };
+
+            scene.Objects.Add(ball);
+            scene.Objects.Add(cone);
+
+            var canvas = new Canvas();
+            var gizmo = Build(canvas, scene, new UndoStack(scene), GizmoMode.Move);
+            gizmo.StopOnContact = true;
+
+            gizmo.TryBeginDrag(new Point(0, 0), HandleFor(canvas, 0));
+            gizmo.ContinueDrag(new Point(4000, 0));   // far further than it can possibly go
+            gizmo.EndDrag();
+
+            // The box would have stopped it at 20 mm, where the boxes meet.
+            Assert.True(ball.Position.X > 23f, $"stopped short at {ball.Position.X:0.##} mm");
+
+            // And it is touching rather than through: the ball's surface meets the cone's slope.
+            var both = FastCraft3D.Geometry.Csg.CsgSolid.Intersect(ball.ToWorldMesh(), cone.ToWorldMesh());
+            Assert.True(
+                both.TriangleCount == 0 || Math.Abs(both.ComputeSignedVolume()) < 1e-3,
+                "the ball ended up inside the cone");
+        });
+    }
+
+    [Fact]
+    public void WithoutStopOnContactADragGoesStraightThrough()
+    {
+        RunSta(() =>
+        {
+            var scene = new Scene();
+            var cube = new SceneObject("Cube", Primitives.Box(20, 20, 20)) { IsSelected = true };
+            scene.Objects.Add(cube);
+            scene.Objects.Add(new SceneObject("Wall", Primitives.Box(20, 20, 20))
+            {
+                Position = new Vector3(30, 0, 0)
+            });
+
+            var canvas = new Canvas();
+            var gizmo = Build(canvas, scene, new UndoStack(scene), GizmoMode.Move);
+
+            gizmo.TryBeginDrag(new Point(0, 0), HandleFor(canvas, 0));
+            gizmo.ContinueDrag(new Point(200, 0));   // 50 mm
+            gizmo.EndDrag();
+
+            Assert.Equal(50f, cube.Position.X, 3);
         });
     }
 

@@ -1,4 +1,4 @@
-using System.Collections.ObjectModel;
+﻿using System.Collections.ObjectModel;
 using FastCraft3D.Geometry;
 
 namespace FastCraft3D.Model;
@@ -12,6 +12,16 @@ public sealed class Scene
 
     public IReadOnlyList<SceneObject> Selection =>
         Objects.Where(o => o.IsSelected).ToList();
+
+    /// <summary>
+    /// The same objects in the order they were picked, oldest first.
+    ///
+    /// Only the tools where the order carries meaning use this - a boolean, where the first is
+    /// the one kept and the rest are applied to it. Everything else wants the list order, which
+    /// is stable and matches what is on screen.
+    /// </summary>
+    public IReadOnlyList<SceneObject> SelectionInPickOrder =>
+        Objects.Where(o => o.IsSelected).OrderBy(o => o.PickedAt).ToList();
 
     public Bounds ComputeBounds()
     {

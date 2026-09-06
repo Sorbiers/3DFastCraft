@@ -180,6 +180,28 @@
             </Style.Triggers>
         </Style>
 
+        <!-- The same look as ModeButton, for the buttons in the bar that do something once
+             rather than staying on. A style cannot be shared between the two: ModeButton targets
+             ToggleButton, and WPF refuses it on a plain Button at runtime. -->
+        <Style x:Key="ModeAction" TargetType="Button">
+            <Setter Property="Width" Value="30" />
+            <Setter Property="Height" Value="28" />
+            <Setter Property="Margin" Value="1,0" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="BorderBrush" Value="Transparent" />
+            <Style.Triggers>
+                <Trigger Property="IsMouseOver" Value="True">
+                    <Setter Property="Background" Value="#FFEDF1F6" />
+                    <Setter Property="BorderBrush" Value="#FFC2CBD6" />
+                </Trigger>
+                <Trigger Property="IsEnabled" Value="False">
+                    <Setter Property="Opacity" Value="0.35" />
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+
         <Style x:Key="GizmoLabel" TargetType="TextBlock">
             <Setter Property="VerticalAlignment" Value="Center" />
             <Setter Property="Margin" Value="6,0,3,0" />
@@ -545,7 +567,101 @@
                     <RowDefinition Height="*" />
                 </Grid.RowDefinitions>
 
-                <TextBlock Text="Objects" Style="{StaticResource SectionHeader}" Margin="0,0,0,4" />
+                <!-- Selection, on the right as the old app had it. Collapsible, and it keeps
+                     the state it was left in. -->
+                <StackPanel>
+                    <ToggleButton Style="{StaticResource MenuChevron}" HorizontalAlignment="Left"
+                                  IsChecked="{Binding IsSelectionMenuOpen, Mode=TwoWay}"
+                                  ToolTip="Show or hide the selection tools">
+                        <StackPanel Orientation="Horizontal">
+                            <Path Data="M 0,0 L 5,5 L 0,10" Stroke="#FF44494F" StrokeThickness="1.6"
+                                  Fill="{x:Null}" Width="8" Height="10" Stretch="Uniform"
+                                  VerticalAlignment="Center" RenderTransformOrigin="0.5,0.5">
+                                <Path.Style>
+                                    <Style TargetType="Path">
+                                        <!-- Points right when collapsed, down when expanded. -->
+                                        <Setter Property="RenderTransform">
+                                            <Setter.Value><RotateTransform Angle="0" /></Setter.Value>
+                                        </Setter>
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding IsSelectionMenuOpen}" Value="True">
+                                                <Setter Property="RenderTransform">
+                                                    <Setter.Value><RotateTransform Angle="90" /></Setter.Value>
+                                                </Setter>
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </Path.Style>
+                            </Path>
+                            <TextBlock Text="Selection" FontWeight="SemiBold" Foreground="#FF33373D"
+                                       Margin="8,0,0,0" VerticalAlignment="Center" />
+                        </StackPanel>
+                    </ToggleButton>
+
+                <StackPanel Visibility="{Binding IsSelectionMenuOpen,
+                                         Converter={StaticResource BoolToVisibility}}">
+                    <Button Style="{StaticResource SelectionMenuItem}" Command="{Binding GroupCommand}"
+                            ToolTip="Combine the selected objects into one">
+                        <StackPanel Orientation="Horizontal">
+                            <Path Style="{StaticResource MenuIcon}"
+                                  Data="M 1,1 L 11,1 L 11,11 L 1,11 Z M 5,5 L 15,5 L 15,15 L 5,15 Z" />
+                            <TextBlock Text="Group" Style="{StaticResource MenuLabel}" />
+                        </StackPanel>
+                    </Button>
+
+                    <Button Style="{StaticResource SelectionMenuItem}" Command="{Binding UngroupCommand}"
+                            ToolTip="Split the selection into its separate pieces">
+                        <StackPanel Orientation="Horizontal">
+                            <Path Style="{StaticResource MenuIcon}"
+                                  Data="M 0,0 L 7,0 L 7,7 L 0,7 Z M 10,10 L 17,10 L 17,17 L 10,17 Z" />
+                            <TextBlock Text="Ungroup" Style="{StaticResource MenuLabel}" />
+                        </StackPanel>
+                    </Button>
+
+                    <Rectangle Height="1" Margin="8,4" Fill="#FFDDE0E4" />
+
+                    <Button Style="{StaticResource SelectionMenuItem}" Command="{Binding SelectAllCommand}"
+                            ToolTip="Select every object (Ctrl+A)">
+                        <StackPanel Orientation="Horizontal">
+                            <Path Style="{StaticResource MenuIcon}"
+                                  Data="M 1,1 L 17,1 L 17,17 L 1,17 Z M 5,5 L 13,5 L 13,13 L 5,13 Z" />
+                            <TextBlock Text="Select all" Style="{StaticResource MenuLabel}" />
+                        </StackPanel>
+                    </Button>
+
+                    <Button Style="{StaticResource SelectionMenuItem}" Command="{Binding DeselectAllCommand}"
+                            ToolTip="Clear the selection">
+                        <StackPanel Orientation="Horizontal">
+                            <Path Style="{StaticResource MenuIcon}"
+                                  Data="M 9,1 A 8,8 0 1 1 8.9,1 Z" />
+                            <TextBlock Text="Deselect all" Style="{StaticResource MenuLabel}" />
+                        </StackPanel>
+                    </Button>
+
+                    <Button Style="{StaticResource SelectionMenuItem}" Command="{Binding InvertSelectionCommand}"
+                            ToolTip="Select everything that is not selected, and vice versa">
+                        <StackPanel Orientation="Horizontal">
+                            <Path Style="{StaticResource MenuIcon}"
+                                  Data="M 9,1 A 8,8 0 1 1 8.9,1 Z M 9,1 L 9,17 A 8,8 0 0 0 9,1 Z" />
+                            <TextBlock Text="Invert selection" Style="{StaticResource MenuLabel}" />
+                        </StackPanel>
+                    </Button>
+
+                    <Rectangle Height="1" Margin="8,4" Fill="#FFDDE0E4" />
+
+                    <ToggleButton Style="{StaticResource SelectionMenuToggle}"
+                                  IsChecked="{Binding StickySelection, Mode=TwoWay}"
+                                  ToolTip="On: clicking an object adds or removes just that object, leaving the rest selected">
+                        <StackPanel Orientation="Horizontal">
+                            <Path Style="{StaticResource MenuIcon}"
+                                  Data="M 9,1 A 8,8 0 1 1 8.9,1 Z M 9,5 L 14,14 L 4,14 Z" />
+                            <TextBlock Text="Sticky selection" Style="{StaticResource MenuLabel}" />
+                        </StackPanel>
+                    </ToggleButton>
+                </StackPanel>
+
+                    <TextBlock Text="Objects" Style="{StaticResource SectionHeader}" Margin="0,6,0,4" />
+                </StackPanel>
 
                 <!-- Selection is mirrored by SelectionListSync, not by an IsSelected binding:
                      a container generated later would push its initial false into the model. -->
@@ -923,99 +1039,6 @@
             <!-- The measuring tape, drawn over everything so it is never hidden by the model. -->
             <Canvas x:Name="MeasureLayer" ClipToBounds="True" Background="{x:Null}" IsHitTestVisible="False" />
 
-            <!-- Selection menu, as in 3D Builder: pinned to the right edge of the viewport -->
-            <Border HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,10,10,0"
-                    Background="#F5FAFAFB" BorderBrush="#FFC8CCD2" BorderThickness="1"
-                    CornerRadius="4" MinWidth="46">
-                <StackPanel>
-                    <ToggleButton Style="{StaticResource MenuChevron}"
-                                  IsChecked="{Binding IsSelectionMenuOpen, Mode=TwoWay}"
-                                  ToolTip="Show or hide the selection menu">
-                        <Path Data="M 0,0 L 5,5 L 0,10" Stroke="#FF44494F" StrokeThickness="1.6"
-                              Fill="{x:Null}" Width="10" Height="12" Stretch="Uniform"
-                              RenderTransformOrigin="0.5,0.5">
-                            <Path.Style>
-                                <Style TargetType="Path">
-                                    <!-- Points right when collapsed, down when expanded. -->
-                                    <Setter Property="RenderTransform">
-                                        <Setter.Value><RotateTransform Angle="0" /></Setter.Value>
-                                    </Setter>
-                                    <Style.Triggers>
-                                        <DataTrigger Binding="{Binding IsSelectionMenuOpen}" Value="True">
-                                            <Setter Property="RenderTransform">
-                                                <Setter.Value><RotateTransform Angle="90" /></Setter.Value>
-                                            </Setter>
-                                        </DataTrigger>
-                                    </Style.Triggers>
-                                </Style>
-                            </Path.Style>
-                        </Path>
-                    </ToggleButton>
-
-                    <StackPanel Visibility="{Binding IsSelectionMenuOpen,
-                                             Converter={StaticResource BoolToVisibility}}">
-                        <Button Style="{StaticResource SelectionMenuItem}" Command="{Binding GroupCommand}"
-                                ToolTip="Combine the selected objects into one">
-                            <StackPanel Orientation="Horizontal">
-                                <Path Style="{StaticResource MenuIcon}"
-                                      Data="M 1,1 L 11,1 L 11,11 L 1,11 Z M 5,5 L 15,5 L 15,15 L 5,15 Z" />
-                                <TextBlock Text="Group" Style="{StaticResource MenuLabel}" />
-                            </StackPanel>
-                        </Button>
-
-                        <Button Style="{StaticResource SelectionMenuItem}" Command="{Binding UngroupCommand}"
-                                ToolTip="Split the selection into its separate pieces">
-                            <StackPanel Orientation="Horizontal">
-                                <Path Style="{StaticResource MenuIcon}"
-                                      Data="M 0,0 L 7,0 L 7,7 L 0,7 Z M 10,10 L 17,10 L 17,17 L 10,17 Z" />
-                                <TextBlock Text="Ungroup" Style="{StaticResource MenuLabel}" />
-                            </StackPanel>
-                        </Button>
-
-                        <Rectangle Height="1" Margin="8,4" Fill="#FFDDE0E4" />
-
-                        <Button Style="{StaticResource SelectionMenuItem}" Command="{Binding SelectAllCommand}"
-                                ToolTip="Select every object (Ctrl+A)">
-                            <StackPanel Orientation="Horizontal">
-                                <Path Style="{StaticResource MenuIcon}"
-                                      Data="M 1,1 L 17,1 L 17,17 L 1,17 Z M 5,5 L 13,5 L 13,13 L 5,13 Z" />
-                                <TextBlock Text="Select all" Style="{StaticResource MenuLabel}" />
-                            </StackPanel>
-                        </Button>
-
-                        <Button Style="{StaticResource SelectionMenuItem}" Command="{Binding DeselectAllCommand}"
-                                ToolTip="Clear the selection">
-                            <StackPanel Orientation="Horizontal">
-                                <Path Style="{StaticResource MenuIcon}"
-                                      Data="M 9,1 A 8,8 0 1 1 8.9,1 Z" />
-                                <TextBlock Text="Deselect all" Style="{StaticResource MenuLabel}" />
-                            </StackPanel>
-                        </Button>
-
-                        <Button Style="{StaticResource SelectionMenuItem}" Command="{Binding InvertSelectionCommand}"
-                                ToolTip="Select everything that is not selected, and vice versa">
-                            <StackPanel Orientation="Horizontal">
-                                <Path Style="{StaticResource MenuIcon}"
-                                      Data="M 9,1 A 8,8 0 1 1 8.9,1 Z M 9,1 L 9,17 A 8,8 0 0 0 9,1 Z" />
-                                <TextBlock Text="Invert selection" Style="{StaticResource MenuLabel}" />
-                            </StackPanel>
-                        </Button>
-
-                        <Rectangle Height="1" Margin="8,4" Fill="#FFDDE0E4" />
-
-                        <ToggleButton Style="{StaticResource SelectionMenuToggle}"
-                                      IsChecked="{Binding StickySelection, Mode=TwoWay}"
-                                      ToolTip="On: clicking an object adds or removes just that object, leaving the rest selected">
-                            <StackPanel Orientation="Horizontal">
-                                <Path Style="{StaticResource MenuIcon}"
-                                      Data="M 9,1 A 8,8 0 1 1 8.9,1 Z M 9,5 L 14,14 L 4,14 Z" />
-                                <TextBlock Text="Sticky selection" Style="{StaticResource MenuLabel}" />
-                            </StackPanel>
-                        </ToggleButton>
-                    </StackPanel>
-                </StackPanel>
-            </Border>
-
             <!-- Repair banner, as in 3D Builder: the model says it is broken and offers to mend it -->
             <Border VerticalAlignment="Bottom" HorizontalAlignment="Right" Margin="0,0,18,18"
                     Background="#FFFFFFFF" BorderBrush="#FFD64545" BorderThickness="4,1,1,1"
@@ -1052,9 +1075,16 @@
                     </ToggleButton>
                     <ToggleButton Style="{StaticResource ModeButton}" ToolTip="Rotate (R)"
                                   IsChecked="{Binding IsRotateMode, Mode=TwoWay}">
-                        <Path Data="M10,2 A8,8 0 1 1 2.5,13 M10,2 L10,6 M10,2 L6,4.5"
-                              Stroke="#FF33383F" StrokeThickness="1.8" Fill="{x:Null}"
-                              Stretch="Uniform" Width="16" Height="16" />
+                        <!-- Three quarters of a circle with a solid head. The old one drew the
+                             arrow as two loose strokes, which read as a stray tick. -->
+                        <Viewbox Width="16" Height="16">
+                            <Canvas Width="20" Height="20">
+                                <Path Data="M10,3.5 A6.5,6.5 0 1 1 3.5,10"
+                                      Stroke="#FF33383F" StrokeThickness="1.9" Fill="{x:Null}"
+                                      StrokeStartLineCap="Round" StrokeEndLineCap="Round" />
+                                <Path Data="M9.4,0.4 L14.2,3.5 L9.4,6.6 Z" Fill="#FF33383F" />
+                            </Canvas>
+                        </Viewbox>
                     </ToggleButton>
                     <ToggleButton Style="{StaticResource ModeButton}" ToolTip="Resize (S)"
                                   IsChecked="{Binding IsScaleMode, Mode=TwoWay}">
@@ -1065,16 +1095,23 @@
 
                     <Rectangle Width="1" Margin="6,3" Fill="#FFD8DBE0" />
 
-                    <TextBlock Text="Snap" Style="{StaticResource GizmoLabel}" />
-                    <RadioButton Content="off" GroupName="Snap" VerticalAlignment="Center" Margin="0,0,7,0"
-                                 IsChecked="{Binding SnapOff, Mode=TwoWay}" />
-                    <RadioButton Content="1" GroupName="Snap" VerticalAlignment="Center" Margin="0,0,7,0"
-                                 IsChecked="{Binding SnapOne, Mode=TwoWay}" ToolTip="Snap moves to whole millimetres" />
-                    <RadioButton Content="5" GroupName="Snap" VerticalAlignment="Center" Margin="0,0,3,0"
-                                 IsChecked="{Binding SnapFive, Mode=TwoWay}" ToolTip="Snap moves to 5 mm" />
-                    <TextBlock Text="mm" Style="{StaticResource GizmoUnit}" />
+                    <!-- Snapping in millimetres is about where a thing lands, so it belongs to
+                         moving alone. Turning has its own snap in degrees, and resizing has no
+                         grid to land on. -->
+                    <StackPanel Orientation="Horizontal"
+                                Visibility="{Binding IsMoveMode, Converter={StaticResource BoolToVisibility}}">
+                        <TextBlock Text="Snap" Style="{StaticResource GizmoLabel}" />
+                        <RadioButton Content="off" GroupName="Snap" VerticalAlignment="Center" Margin="0,0,7,0"
+                                     IsChecked="{Binding SnapOff, Mode=TwoWay}" />
+                        <RadioButton Content="1" GroupName="Snap" VerticalAlignment="Center" Margin="0,0,7,0"
+                                     IsChecked="{Binding SnapOne, Mode=TwoWay}" ToolTip="Snap moves to whole millimetres" />
+                        <RadioButton Content="5" GroupName="Snap" VerticalAlignment="Center" Margin="0,0,3,0"
+                                     IsChecked="{Binding SnapFive, Mode=TwoWay}" ToolTip="Snap moves to 5 mm" />
+                        <TextBlock Text="mm" Style="{StaticResource GizmoUnit}" />
+                    </StackPanel>
 
                     <ToggleButton Style="{StaticResource ModeButton}" Margin="6,0,0,0"
+                                  Visibility="{Binding IsMoveMode, Converter={StaticResource BoolToVisibility}}"
                                   ToolTip="Stop where the object meets another rather than passing through it (C)"
                                   IsChecked="{Binding StopOnContact, Mode=TwoWay}">
                         <!-- Two blocks meeting, with the contact marked. -->
@@ -1087,32 +1124,67 @@
 
                     <StackPanel Orientation="Horizontal"
                                 Visibility="{Binding IsMoveMode, Converter={StaticResource BoolToVisibility}}">
-                        <StackPanel Orientation="Horizontal" DataContext="{Binding Selected}">
+                        <StackPanel Orientation="Horizontal" DataContext="{Binding Selected}"
+                                    Visibility="{Binding DataContext.HasOneSelected,
+                                                 RelativeSource={RelativeSource AncestorType=Window},
+                                                 Converter={StaticResource BoolToVisibility}}">
                             <TextBlock Text="X" Style="{StaticResource GizmoLabel}" />
                             <TextBox Style="{StaticResource GizmoBox}" Tag="transform"
-                                     Text="{Binding PositionX, StringFormat=N1, UpdateSourceTrigger=LostFocus}" />
+                                     Text="{Binding PositionX, StringFormat=N2, UpdateSourceTrigger=LostFocus}" />
                             <TextBlock Text="Y" Style="{StaticResource GizmoLabel}" />
                             <TextBox Style="{StaticResource GizmoBox}" Tag="transform"
-                                     Text="{Binding PositionY, StringFormat=N1, UpdateSourceTrigger=LostFocus}" />
+                                     Text="{Binding PositionY, StringFormat=N2, UpdateSourceTrigger=LostFocus}" />
                             <TextBlock Text="Z" Style="{StaticResource GizmoLabel}" />
                             <TextBox Style="{StaticResource GizmoBox}" Tag="transform"
-                                     Text="{Binding PositionZ, StringFormat=N1, UpdateSourceTrigger=LostFocus}" />
+                                     Text="{Binding PositionZ, StringFormat=N2, UpdateSourceTrigger=LostFocus}" />
+                        </StackPanel>
+
+                        <!-- Several selected: the middle of the lot. Typing into it carries the
+                             whole group there, keeping its shape, rather than piling them up. -->
+                        <StackPanel Orientation="Horizontal"
+                                    Visibility="{Binding HasManySelected, Converter={StaticResource BoolToVisibility}}">
+                            <TextBlock Text="X" Style="{StaticResource GizmoLabel}" />
+                            <TextBox Style="{StaticResource GizmoBox}" Tag="transform"
+                                     Text="{Binding GroupX, StringFormat=N2, UpdateSourceTrigger=LostFocus}" />
+                            <TextBlock Text="Y" Style="{StaticResource GizmoLabel}" />
+                            <TextBox Style="{StaticResource GizmoBox}" Tag="transform"
+                                     Text="{Binding GroupY, StringFormat=N2, UpdateSourceTrigger=LostFocus}" />
+                            <TextBlock Text="Z" Style="{StaticResource GizmoLabel}" />
+                            <TextBox Style="{StaticResource GizmoBox}" Tag="transform"
+                                     Text="{Binding GroupZ, StringFormat=N2, UpdateSourceTrigger=LostFocus}" />
                         </StackPanel>
                         <TextBlock Text="mm" Style="{StaticResource GizmoUnit}" />
                     </StackPanel>
 
                     <StackPanel Orientation="Horizontal"
                                 Visibility="{Binding IsRotateMode, Converter={StaticResource BoolToVisibility}}">
-                        <StackPanel Orientation="Horizontal" DataContext="{Binding Selected}">
+                        <StackPanel Orientation="Horizontal" DataContext="{Binding Selected}"
+                                    Visibility="{Binding DataContext.HasOneSelected,
+                                                 RelativeSource={RelativeSource AncestorType=Window},
+                                                 Converter={StaticResource BoolToVisibility}}">
                             <TextBlock Text="Roll" Style="{StaticResource GizmoLabel}" />
                             <TextBox Style="{StaticResource GizmoBox}" Tag="transform"
-                                     Text="{Binding RotationX, StringFormat=N0, UpdateSourceTrigger=LostFocus}" />
+                                     Text="{Binding RotationX, StringFormat=N1, UpdateSourceTrigger=LostFocus}" />
                             <TextBlock Text="Pitch" Style="{StaticResource GizmoLabel}" />
                             <TextBox Style="{StaticResource GizmoBox}" Tag="transform"
-                                     Text="{Binding RotationY, StringFormat=N0, UpdateSourceTrigger=LostFocus}" />
+                                     Text="{Binding RotationY, StringFormat=N1, UpdateSourceTrigger=LostFocus}" />
                             <TextBlock Text="Yaw" Style="{StaticResource GizmoLabel}" />
                             <TextBox Style="{StaticResource GizmoBox}" Tag="transform"
-                                     Text="{Binding RotationZ, StringFormat=N0, UpdateSourceTrigger=LostFocus}" />
+                                     Text="{Binding RotationZ, StringFormat=N1, UpdateSourceTrigger=LostFocus}" />
+                        </StackPanel>
+                        <!-- Several selected: what they have in common, and typing sets all of
+                             them to it. A group has no turn of its own to show. -->
+                        <StackPanel Orientation="Horizontal"
+                                    Visibility="{Binding HasManySelected, Converter={StaticResource BoolToVisibility}}">
+                            <TextBlock Text="Roll" Style="{StaticResource GizmoLabel}" />
+                            <TextBox Style="{StaticResource GizmoBox}" Tag="transform"
+                                     Text="{Binding GroupRoll, StringFormat=N1, UpdateSourceTrigger=LostFocus}" />
+                            <TextBlock Text="Pitch" Style="{StaticResource GizmoLabel}" />
+                            <TextBox Style="{StaticResource GizmoBox}" Tag="transform"
+                                     Text="{Binding GroupPitch, StringFormat=N1, UpdateSourceTrigger=LostFocus}" />
+                            <TextBlock Text="Yaw" Style="{StaticResource GizmoLabel}" />
+                            <TextBox Style="{StaticResource GizmoBox}" Tag="transform"
+                                     Text="{Binding GroupYaw, StringFormat=N1, UpdateSourceTrigger=LostFocus}" />
                         </StackPanel>
                         <TextBlock Text="deg" Style="{StaticResource GizmoUnit}" />
                         <ToggleButton Style="{StaticResource ModeButton}" Margin="4,0,0,0"
@@ -1122,20 +1194,54 @@
                                   Stroke="#FF33383F" StrokeThickness="1.8" Fill="{x:Null}"
                                   Stretch="Uniform" Width="15" Height="15" />
                         </ToggleButton>
+
+                        <Button Style="{StaticResource ModeAction}" Margin="2,0,0,0"
+                                Command="{Binding AlignToAxesCommand}"
+                                ToolTip="Set the angles back to zero without moving the object, so the resize arrows line up with the world again">
+                            <!-- A corner of the world axes, with a turn sweeping back onto it. -->
+                            <Viewbox Width="15" Height="15">
+                                <Canvas Width="20" Height="20">
+                                    <Path Data="M3,3 L3,17 L17,17"
+                                          Stroke="#FF33383F" StrokeThickness="1.8" Fill="{x:Null}"
+                                          StrokeStartLineCap="Round" StrokeEndLineCap="Round" />
+                                    <Path Data="M7,13 A7,7 0 0 1 15,6"
+                                          Stroke="#FF33383F" StrokeThickness="1.8" Fill="{x:Null}"
+                                          StrokeStartLineCap="Round" />
+                                    <Path Data="M11.6,5.2 L16.2,5.4 L14.2,9.6 Z" Fill="#FF33383F" />
+                                </Canvas>
+                            </Viewbox>
+                        </Button>
                     </StackPanel>
 
                     <StackPanel Orientation="Horizontal"
                                 Visibility="{Binding IsScaleMode, Converter={StaticResource BoolToVisibility}}">
-                        <StackPanel Orientation="Horizontal" DataContext="{Binding Selected}">
+                        <StackPanel Orientation="Horizontal" DataContext="{Binding Selected}"
+                                    Visibility="{Binding DataContext.HasOneSelected,
+                                                 RelativeSource={RelativeSource AncestorType=Window},
+                                                 Converter={StaticResource BoolToVisibility}}">
                             <TextBlock Text="X" Style="{StaticResource GizmoLabel}" />
                             <TextBox Style="{StaticResource GizmoBox}" Tag="transform"
-                                     Text="{Binding SizeX, StringFormat=N1, UpdateSourceTrigger=LostFocus}" />
+                                     Text="{Binding SizeX, StringFormat=N2, UpdateSourceTrigger=LostFocus}" />
                             <TextBlock Text="Y" Style="{StaticResource GizmoLabel}" />
                             <TextBox Style="{StaticResource GizmoBox}" Tag="transform"
-                                     Text="{Binding SizeY, StringFormat=N1, UpdateSourceTrigger=LostFocus}" />
+                                     Text="{Binding SizeY, StringFormat=N2, UpdateSourceTrigger=LostFocus}" />
                             <TextBlock Text="Z" Style="{StaticResource GizmoLabel}" />
                             <TextBox Style="{StaticResource GizmoBox}" Tag="transform"
-                                     Text="{Binding SizeZ, StringFormat=N1, UpdateSourceTrigger=LostFocus}" />
+                                     Text="{Binding SizeZ, StringFormat=N2, UpdateSourceTrigger=LostFocus}" />
+                        </StackPanel>
+                        <!-- Several selected: how far the whole lot reaches. Typing carries the
+                             parts with it, so the box comes out the size asked for. -->
+                        <StackPanel Orientation="Horizontal"
+                                    Visibility="{Binding HasManySelected, Converter={StaticResource BoolToVisibility}}">
+                            <TextBlock Text="X" Style="{StaticResource GizmoLabel}" />
+                            <TextBox Style="{StaticResource GizmoBox}" Tag="transform"
+                                     Text="{Binding GroupSizeX, StringFormat=N2, UpdateSourceTrigger=LostFocus}" />
+                            <TextBlock Text="Y" Style="{StaticResource GizmoLabel}" />
+                            <TextBox Style="{StaticResource GizmoBox}" Tag="transform"
+                                     Text="{Binding GroupSizeY, StringFormat=N2, UpdateSourceTrigger=LostFocus}" />
+                            <TextBlock Text="Z" Style="{StaticResource GizmoLabel}" />
+                            <TextBox Style="{StaticResource GizmoBox}" Tag="transform"
+                                     Text="{Binding GroupSizeZ, StringFormat=N2, UpdateSourceTrigger=LostFocus}" />
                         </StackPanel>
                         <TextBlock Text="mm" Style="{StaticResource GizmoUnit}" />
                         <ToggleButton Style="{StaticResource ModeButton}" Margin="4,0,0,0"

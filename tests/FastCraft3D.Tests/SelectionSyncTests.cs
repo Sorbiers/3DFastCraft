@@ -1,4 +1,4 @@
-using System.Runtime.ExceptionServices;
+﻿using System.Runtime.ExceptionServices;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Data;
@@ -235,5 +235,76 @@ public class SelectionSyncTests
                 Assert.Empty(scene.Selection);
             });
         });
+    }
+}
+
+/// <summary>
+/// Which object a boolean keeps comes from the order the clicks were made in, and nothing else
+/// records that. Before this the answer was read off the object list, so clicking the two parts
+/// in the other order made no difference at all.
+/// </summary>
+public class SelectionOrderTests
+{
+    private static (Scene Scene, SceneObject First, SceneObject Second) TwoParts()
+    {
+        var scene = new Scene();
+        var a = new SceneObject("Outer", Primitives.Box(20, 20, 20));
+        var b = new SceneObject("Inner", Primitives.Box(8, 8, 8));
+
+        scene.Objects.Add(a);
+        scene.Objects.Add(b);
+
+        return (scene, a, b);
+    }
+
+    [Fact]
+    public void PickOrderFollowsTheClicksRatherThanTheList()
+    {
+        var (scene, outer, inner) = TwoParts();
+
+        inner.IsSelected = true;
+        outer.IsSelected = true;
+
+        Assert.Equal(["Inner", "Outer"], scene.SelectionInPickOrder.Select(o => o.Name));
+        Assert.Equal(["Outer", "Inner"], scene.Selection.Select(o => o.Name));
+    }
+
+    [Fact]
+    public void PickingTheOtherWayRoundGivesTheOtherOrder()
+    {
+        var (scene, outer, inner) = TwoParts();
+
+        outer.IsSelected = true;
+        inner.IsSelected = true;
+
+        Assert.Equal(["Outer", "Inner"], scene.SelectionInPickOrder.Select(o => o.Name));
+    }
+
+    /// <summary>Picking something again moves it to the end, as clicking it again would.</summary>
+    [Fact]
+    public void PickingAgainCountsAsAFreshPick()
+    {
+        var (scene, outer, inner) = TwoParts();
+
+        outer.IsSelected = true;
+        inner.IsSelected = true;
+
+        outer.IsSelected = false;
+        outer.IsSelected = true;
+
+        Assert.Equal(["Inner", "Outer"], scene.SelectionInPickOrder.Select(o => o.Name));
+    }
+
+    /// <summary>Setting it to what it already is must not quietly reorder the selection.</summary>
+    [Fact]
+    public void SayingItIsSelectedTwiceChangesNothing()
+    {
+        var (scene, outer, inner) = TwoParts();
+
+        outer.IsSelected = true;
+        inner.IsSelected = true;
+        outer.IsSelected = true;
+
+        Assert.Equal(["Outer", "Inner"], scene.SelectionInPickOrder.Select(o => o.Name));
     }
 }

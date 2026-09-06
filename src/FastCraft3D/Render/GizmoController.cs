@@ -62,8 +62,19 @@ public sealed class GizmoController
     private Handle? active;
     private Point dragStart;
     private Vector3 dragCentre;
+    /// <summary>The box the drag started against, so a long drag cannot chase its own tail.</summary>
+    private Frame dragFrame;
+
     private List<SceneObject> dragObjects = [];
     private List<TransformState> dragBefore = [];
+
+    /// <summary>
+    /// How far this drag may go each way before contact, worked out once and then only clamped
+    /// to. Nothing about the answer changes as the pointer moves: it is measured from where the
+    /// drag began, against a scene that is not moving, so working it out again on every mouse
+    /// event would be the same sum with the same answer.
+    /// </summary>
+    private float? contactAhead, contactBehind;
     private bool dragChanged;
 
     public GizmoController(Canvas layer, IScreenProjector projector, Scene scene, UndoStack undo)
@@ -200,8 +211,9 @@ public sealed class GizmoController
             return;
         }
 
-        Vector3 centre = bounds.Center;
-        UpdateScreenBox(bounds);
+        var frame = CurrentFrame(bounds);
+        Vector3 centre = frame.Centre;
+        UpdateScreenBox(frame);
 
         if (!CanLayOut(bounds))
         {
@@ -220,10 +232,10 @@ public sealed class GizmoController
         {
             switch (handle.Kind)
             {
-                case HandleKind.AxisArrow: PositionArrow(handle, bounds, centre); break;
+                case HandleKind.AxisArrow: PositionArrow(handle, frame, centre); break;
                 case HandleKind.Ring: PositionRing(handle, bounds, centre); break;
-                case HandleKind.BoxOutline: PositionOutline(handle, bounds); break;
-                case HandleKind.Corner: PositionCorner(handle, bounds); break;
+                case HandleKind.BoxOutline: PositionOutline(handle, frame); break;
+                case HandleKind.Corner: PositionCorner(handle, frame); break;
             }
         }
     }
@@ -302,12 +314,63 @@ public sealed class GizmoController
         layer.Children.Add(handle.Visual);
     }
 
+    // --- The box the handles are laid out on -------------------------------------------
+
+    /// <summary>
+    /// Where the handles sit and which way they point.
+    ///
+    /// Resizing works on the object's own box, turned with it. Moving and turning work on the
+    /// world-aligned box round the selection, because along X and about Z mean the world's X and
+    /// Z there - the position boxes say so.
+    ///
+    /// Resizing cannot: the size boxes give the object's own width, height and depth, and the
+    /// scale behind them is applied before the turn. Pointing the arrows along the world axes
+    /// while the drag stretched the object along its own was the whole complaint - the arrow said
+    /// one thing and the object did another as soon as anything was turned.
+    /// </summary>
+    private readonly record struct Frame(Vector3 Centre, Vector3 X, Vector3 Y, Vector3 Z, Vector3 Size)
+    {
+        public Vector3 Along(Axis axis) => axis switch { Axis.X => X, Axis.Y => Y, _ => Z };
+
+        public float Reach(Axis axis) =>
+            axis switch { Axis.X => Size.X, Axis.Y => Size.Y, _ => Size.Z };
+
+        public Vector3 Corner(int index) => Centre
+            + X * (((index & 1) == 0 ? -0.5f : 0.5f) * Size.X)
+            + Y * (((index & 2) == 0 ? -0.5f : 0.5f) * Size.Y)
+            + Z * (((index & 4) == 0 ? -0.5f : 0.5f) * Size.Z);
+    }
+
+    /// <summary>
+    /// The object's own box while resizing one thing, and the world-aligned box otherwise. A
+    /// group has no shared frame to turn the arrows into, so a multiple selection keeps the
+    /// world axes and each part still scales along its own, as it always did.
+    /// </summary>
+    private Frame CurrentFrame(Bounds bounds)
+    {
+        if (mode == GizmoMode.Scale && scene.Selection.Count == 1)
+        {
+            var o = scene.Selection[0];
+            var turn = MeshTransform.Rotation(o.Rotation);
+
+            return new Frame(
+                Vector3.Transform(o.LocalCentre, o.Transform),
+                Vector3.Normalize(Vector3.TransformNormal(Vector3.UnitX, turn)),
+                Vector3.Normalize(Vector3.TransformNormal(Vector3.UnitY, turn)),
+                Vector3.Normalize(Vector3.TransformNormal(Vector3.UnitZ, turn)),
+                new Vector3(o.SizeX, o.SizeY, o.SizeZ));
+        }
+
+        return new Frame(
+            bounds.Center, Vector3.UnitX, Vector3.UnitY, Vector3.UnitZ, bounds.Size);
+    }
+
     // --- Placement --------------------------------------------------------------------
 
-    private void PositionArrow(Handle handle, Bounds bounds, Vector3 centre)
+    private void PositionArrow(Handle handle, Frame frame, Vector3 centre)
     {
-        Vector3 direction = AxisVector(handle.Axis) * handle.Sign;
-        Vector3 anchor = centre + direction * (Extent(bounds, handle.Axis) / 2f);
+        Vector3 direction = frame.Along(handle.Axis) * handle.Sign;
+        Vector3 anchor = centre + direction * (frame.Reach(handle.Axis) / 2f);
 
         if (!TryProject(centre, out Point centreScreen) ||
             !TryProject(anchor, out Point anchorScreen) ||
@@ -379,7 +442,7 @@ public sealed class GizmoController
     }
 
     /// <summary>Screen-space bounds of the selection, recomputed once per layout pass.</summary>
-    private void UpdateScreenBox(Bounds bounds)
+    private void UpdateScreenBox(Frame frame)
     {
         screenBoxValid = false;
         double minX = double.MaxValue, minY = double.MaxValue;
@@ -387,7 +450,7 @@ public sealed class GizmoController
 
         for (int i = 0; i < 8; i++)
         {
-            if (!TryProject(CornerOf(bounds, i), out Point p)) return;
+            if (!TryProject(frame.Corner(i), out Point p)) return;
             minX = Math.Min(minX, p.X);
             minY = Math.Min(minY, p.Y);
             maxX = Math.Max(maxX, p.X);
@@ -431,13 +494,13 @@ public sealed class GizmoController
         Canvas.SetTop(handle.Visual, minY);
     }
 
-    private void PositionOutline(Handle handle, Bounds bounds)
+    private void PositionOutline(Handle handle, Frame frame)
     {
         // One stroke that walks all twelve edges without lifting the pen.
         int[] order = [0, 1, 3, 2, 0, 4, 5, 7, 6, 4, 5, 1, 3, 7, 6, 2];
         var points = new List<Point>(order.Length);
         foreach (int index in order)
-            if (TryProject(CornerOf(bounds, index), out Point p))
+            if (TryProject(frame.Corner(index), out Point p))
                 points.Add(p);
 
         var polyline = (Polyline)handle.Visual;
@@ -456,9 +519,9 @@ public sealed class GizmoController
         Canvas.SetTop(polyline, minY);
     }
 
-    private void PositionCorner(Handle handle, Bounds bounds)
+    private void PositionCorner(Handle handle, Frame frame)
     {
-        if (!TryProject(CornerOf(bounds, handle.Sign), out Point p))
+        if (!TryProject(frame.Corner(handle.Sign), out Point p))
         {
             handle.Visual.Visibility = Visibility.Collapsed;
             return;
@@ -483,9 +546,12 @@ public sealed class GizmoController
         active = handle;
         dragStart = screen;
         dragCentre = SelectionBounds().Center;
+        dragFrame = CurrentFrame(SelectionBounds());
         dragObjects = selection.ToList();
         dragBefore = dragObjects.Select(TransformState.Capture).ToList();
         dragChanged = false;
+        contactAhead = null;
+        contactBehind = null;
         return true;
     }
 
@@ -525,27 +591,44 @@ public sealed class GizmoController
     /// </summary>
     private float ContactLimit(float travel)
     {
-        var moving = new List<Bounds>(dragObjects.Count);
-        for (int i = 0; i < dragObjects.Count; i++)
-            moving.Add(BoundsAt(dragObjects[i], dragBefore[i]));
+        if (travel == 0) return 0;
 
-        var obstacles = new List<Bounds>();
-        foreach (var o in scene.Objects)
-            if (!dragObjects.Contains(o))
-                obstacles.Add(o.WorldBounds);
+        int direction = travel > 0 ? 1 : -1;
+        float allowed = direction > 0
+            ? contactAhead ??= ContactDistance(1)
+            : contactBehind ??= ContactDistance(-1);
 
-        return CollisionSweep.Limit(moving, obstacles, active!.Axis, travel);
+        return Math.Min(Math.Abs(travel), allowed) * direction;
     }
 
-    /// <summary>The object's world bounds as they were when the drag began.</summary>
-    private static Bounds BoundsAt(SceneObject o, TransformState state)
+    /// <summary>
+    /// How far the selection can go this way before it meets something, measured on the shapes
+    /// themselves. The box each shape sits in is a poor stand-in for a cone or anything turned,
+    /// and stopping short of the thing you were trying to touch is the whole complaint.
+    /// </summary>
+    private float ContactDistance(int direction)
+    {
+        var moving = new List<Mesh>(dragObjects.Count);
+        for (int i = 0; i < dragObjects.Count; i++)
+            moving.Add(WorldMeshAt(dragObjects[i], dragBefore[i]));
+
+        var obstacles = new List<Mesh>();
+        foreach (var o in scene.Objects)
+            if (!dragObjects.Contains(o))
+                obstacles.Add(o.ToWorldMesh());
+
+        return MeshSweep.Distance(moving, obstacles, active!.Axis, direction);
+    }
+
+    /// <summary>The object in world space as it was when the drag began.</summary>
+    private static Mesh WorldMeshAt(SceneObject o, TransformState state)
     {
         var was = TransformState.Capture(o);
         state.ApplyTo(o);
-        var bounds = o.WorldBounds;
+        var mesh = o.ToWorldMesh();
         was.ApplyTo(o);
 
-        return bounds;
+        return mesh;
     }
 
     private void DragMove(Point screen)
@@ -577,27 +660,25 @@ public sealed class GizmoController
             : $"Move {active.Axis} {millimetres:+0.##;-0.##;0} mm");
     }
 
-    private static float Along(Vector3 point, Axis axis) =>
-        axis switch { Axis.X => point.X, Axis.Y => point.Y, _ => point.Z };
-
     private void DragScale(Point screen)
     {
-        if (!TryAxisScreenScale(active!.Axis, out Vector axisScreen, out double pixelsPerMm)) return;
+        // Measured along the object's own axis, which is the one the arrow is drawn on. On
+        // anything turned, that is not the world axis of the same name: the scale is applied
+        // before the turn, so stretching X stretches the object's X wherever it now points.
+        Vector3 direction = dragFrame.Along(active!.Axis);
+        if (!TryScreenScale(direction, out Vector axisScreen, out double pixelsPerMm)) return;
 
         var delta = new Vector(screen.X - dragStart.X, screen.Y - dragStart.Y);
         // Folding in the handle's sign means dragging outward always grows, on either face.
         double millimetres = GizmoMath.MillimetresAlongAxis(delta, axisScreen, pixelsPerMm) * active.Sign;
 
-        float startExtent = Extent(StartBounds(), active.Axis);
+        float startExtent = dragFrame.Reach(active.Axis);
         if (startExtent < 1e-4f) return;
 
         float ratio = GizmoMath.ScaleRatio(startExtent, millimetres, aboutCentre: !ScaleOneSide);
 
-        // The face that stays put: whichever one the handle is not on.
-        var bounds = StartBounds();
-        float anchor = ScaleOneSide
-            ? Along(active.Sign > 0 ? bounds.Min : bounds.Max, active.Axis)
-            : 0f;
+        // A point on the face that stays put: whichever one the handle is not on.
+        Vector3 held = dragFrame.Centre - direction * (active.Sign * startExtent / 2f);
 
         for (int i = 0; i < dragObjects.Count; i++)
         {
@@ -617,19 +698,15 @@ public sealed class GizmoController
             if (!ScaleOneSide) continue;
 
             Vector3 was = dragBefore[i].Position;
-            dragObjects[i].Position = active.Axis switch
-            {
-                Axis.X => was with { X = GizmoMath.ScaledAbout(anchor, was.X, ratio) },
-                Axis.Y => was with { Y = GizmoMath.ScaledAbout(anchor, was.Y, ratio) },
-                _ => was with { Z = GizmoMath.ScaledAbout(anchor, was.Z, ratio) }
-            };
+            dragObjects[i].Position =
+                was + direction * (Vector3.Dot(was - held, direction) * (ratio - 1f));
         }
 
         dragChanged = true;
-        string held = ScaleOneSide ? ", far side held" : "";
+        string stillThere = ScaleOneSide ? ", far side held" : "";
         Feedback?.Invoke(UniformScale
-            ? $"Resize {ratio * 100:0.#}% (uniform{held})"
-            : $"Resize {active.Axis} {ratio * 100:0.#}%{held}");
+            ? $"Resize {ratio * 100:0.#}% (uniform{stillThere})"
+            : $"Resize {active.Axis} {ratio * 100:0.#}%{stillThere}");
     }
 
     private void DragRotate(Point screen)
@@ -639,29 +716,27 @@ public sealed class GizmoController
         double degrees = GizmoMath.RotationDegrees(
             centre, dragStart, screen, FacingSign(active!.Axis), SnapRotation, RotationSnapDegrees);
 
+        // Turned about the world axis the ring is drawn on, by composing with what the object
+        // already had. Adding the amount to one of the three angles instead is the obvious thing
+        // and is wrong: the three are applied in order, so only the last of them lines up with
+        // the world and the other two turn the object about its own axes. After one turn a
+        // second went somewhere other than where the ring said it would.
+        float radians = (float)(degrees * Math.PI / 180.0);
+        var turn = active.Axis switch
+        {
+            Axis.X => Matrix4x4.CreateRotationX(radians),
+            Axis.Y => Matrix4x4.CreateRotationY(radians),
+            _ => Matrix4x4.CreateRotationZ(radians)
+        };
+
         for (int i = 0; i < dragObjects.Count; i++)
         {
-            Vector3 before = dragBefore[i].Rotation;
-            dragObjects[i].Rotation = active.Axis switch
-            {
-                Axis.X => before with { X = GizmoMath.NormaliseDegrees(before.X + (float)degrees) },
-                Axis.Y => before with { Y = GizmoMath.NormaliseDegrees(before.Y + (float)degrees) },
-                _ => before with { Z = GizmoMath.NormaliseDegrees(before.Z + (float)degrees) }
-            };
+            dragObjects[i].Rotation =
+                MeshTransform.EulerFrom(MeshTransform.Rotation(dragBefore[i].Rotation) * turn);
         }
 
         dragChanged = true;
         Feedback?.Invoke($"Rotate {active.Axis} {degrees:+0.#;-0.#;0} deg{(SnapRotation ? " (snapped)" : "")}");
-    }
-
-    /// <summary>The selection's extent as it was when the drag started.</summary>
-    private Bounds StartBounds()
-    {
-        var current = dragObjects.Select(TransformState.Capture).ToList();
-        for (int i = 0; i < dragObjects.Count; i++) dragBefore[i].ApplyTo(dragObjects[i]);
-        var bounds = SelectionBounds();
-        for (int i = 0; i < dragObjects.Count; i++) current[i].ApplyTo(dragObjects[i]);
-        return bounds;
     }
 
     /// <summary>+1 when the axis points towards the camera, -1 when away.</summary>
@@ -672,12 +747,19 @@ public sealed class GizmoController
     /// The unit screen direction of a world axis, plus how many pixels one millimetre spans
     /// along it. Every drag is measured against this.
     /// </summary>
-    private bool TryAxisScreenScale(Axis axis, out Vector screenDirection, out double pixelsPerMm)
+    private bool TryAxisScreenScale(Axis axis, out Vector screenDirection, out double pixelsPerMm) =>
+        TryScreenScale(AxisVector(axis), out screenDirection, out pixelsPerMm);
+
+    /// <summary>
+    /// Where a world direction points on screen, and how many pixels one millimetre spans along
+    /// it. Takes a direction rather than an axis because resizing works along the object's own
+    /// axes, which are only world axes while nothing is turned.
+    /// </summary>
+    private bool TryScreenScale(Vector3 direction, out Vector screenDirection, out double pixelsPerMm)
     {
         screenDirection = default;
         pixelsPerMm = 0;
 
-        Vector3 direction = AxisVector(axis);
         if (!TryProject(dragCentre, out Point a) ||
             !TryProject(dragCentre + direction * (float)AxisReferenceLength, out Point b))
         {
@@ -725,18 +807,6 @@ public sealed class GizmoController
         Axis.Y => v.Y,
         _ => v.Z
     };
-
-    private static float Extent(Bounds bounds, Axis axis) => axis switch
-    {
-        Axis.X => bounds.Size.X,
-        Axis.Y => bounds.Size.Y,
-        _ => bounds.Size.Z
-    };
-
-    private static Vector3 CornerOf(Bounds bounds, int index) => new(
-        (index & 1) == 0 ? bounds.Min.X : bounds.Max.X,
-        (index & 2) == 0 ? bounds.Min.Y : bounds.Max.Y,
-        (index & 4) == 0 ? bounds.Min.Z : bounds.Max.Z);
 
     private static Color ColourFor(Axis axis) => axis switch
     {

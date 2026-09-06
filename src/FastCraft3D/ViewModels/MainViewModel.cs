@@ -93,6 +93,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
 
         BooleanCommand = new AsyncRelayCommand(p => RunBoolean(p), _ => Scene.Selection.Count >= 2);
         BeginSplitCommand = RelayCommand.Simple(BeginSplit, () => Scene.Selection.Count > 0);
+        AlignToAxesCommand = RelayCommand.Simple(AlignToAxes, AnythingTurned);
         ApplySplitCommand = AsyncRelayCommand.Simple(ApplySplit, () => IsSplitMode);
         CancelSplitCommand = RelayCommand.Simple(() => IsSplitMode = false);
 
@@ -151,6 +152,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
     public System.Windows.Input.ICommand DeselectAllCommand { get; }
     public System.Windows.Input.ICommand BooleanCommand { get; }
     public System.Windows.Input.ICommand BeginSplitCommand { get; }
+    public System.Windows.Input.ICommand AlignToAxesCommand { get; }
     public System.Windows.Input.ICommand ApplySplitCommand { get; }
     public System.Windows.Input.ICommand CancelSplitCommand { get; }
     public System.Windows.Input.ICommand RepairCommand { get; }
@@ -222,6 +224,266 @@ public sealed class MainViewModel : INotifyPropertyChanged
 
     /// <summary>Anything selected. The handles work on a group even when the fields cannot.</summary>
     public bool HasAnySelection => Scene.Selection.Count > 0;
+
+    public bool HasOneSelected => Scene.Selection.Count == 1;
+
+    public bool HasManySelected => Scene.Selection.Count > 1;
+
+    /// <summary>
+    /// The middle of everything selected, and where to carry it to.
+    ///
+    /// One object shows its own position; several have no single position to show, and leaving
+    /// the boxes blank - which is what happened before - loses the readout exactly when a group
+    /// is hardest to place by eye. The middle of the lot is the honest answer, and typing into it
+    /// moves the whole group by the difference, so the parts keep their arrangement.
+    ///
+    /// Measured on the bounding box rather than by averaging the objects' own positions, because
+    /// an object's position is wherever its origin happens to sit and a big part would otherwise
+    /// drag the middle towards itself.
+    /// </summary>
+    public float GroupX
+    {
+        get => GroupCentre().X;
+        set => MoveGroupTo(Axis.X, value);
+    }
+
+    public float GroupY
+    {
+        get => GroupCentre().Y;
+        set => MoveGroupTo(Axis.Y, value);
+    }
+
+    public float GroupZ
+    {
+        get => GroupCentre().Z;
+        set => MoveGroupTo(Axis.Z, value);
+    }
+
+    /// <summary>
+    /// The turn every selected object shares, or nothing when they disagree.
+    ///
+    /// Typing one sets all of them to it. Dragging the rings adds the same amount to each, which
+    /// is the same idea: a group has no rotation of its own, so the honest thing to show is what
+    /// they have in common.
+    /// </summary>
+    public float GroupRoll
+    {
+        get => Shared(o => o.RotationX);
+        set => TurnGroup(Axis.X, value);
+    }
+
+    public float GroupPitch
+    {
+        get => Shared(o => o.RotationY);
+        set => TurnGroup(Axis.Y, value);
+    }
+
+    public float GroupYaw
+    {
+        get => Shared(o => o.RotationZ);
+        set => TurnGroup(Axis.Z, value);
+    }
+
+    /// <summary>
+    /// How far the whole selection reaches, and what to stretch it to.
+    ///
+    /// Typing a size here moves the parts as well as scaling them, about the middle of the lot,
+    /// so the box really does come out the size asked for. Dragging a handle grows each part
+    /// where it stands and leaves the gaps between them alone - which is what you want from a
+    /// drag, and not what you want from a number that has to be met exactly.
+    /// </summary>
+    public float GroupSizeX
+    {
+        get => GroupExtent().X;
+        set => ResizeGroup(Axis.X, value);
+    }
+
+    public float GroupSizeY
+    {
+        get => GroupExtent().Y;
+        set => ResizeGroup(Axis.Y, value);
+    }
+
+    public float GroupSizeZ
+    {
+        get => GroupExtent().Z;
+        set => ResizeGroup(Axis.Z, value);
+    }
+
+    private float Shared(Func<SceneObject, float> of)
+    {
+        var selection = Scene.Selection;
+        if (selection.Count == 0) return 0f;
+
+        float first = of(selection[0]);
+        foreach (var o in selection)
+            if (MathF.Abs(of(o) - first) > 0.05f) return 0f;
+
+        return first;
+    }
+
+    /// <summary>
+    /// Puts the three angles back to zero without moving the object.
+    ///
+    /// The turn is folded into the geometry instead: every vertex is moved to where it was
+    /// already being drawn, and the transform is left with nothing to do. The object does not
+    /// budge - what changes is that its own axes are now the world's, so the resize arrows and
+    /// the box round it line up with the plate again instead of leaning with the object.
+    ///
+    /// Zeroing the angles on their own would not do: that swings the object back to how it was
+    /// built, which throws away the very turn that was wanted. Nor would leaving the turn where
+    /// it is, because then the arrows go on leaning.
+    ///
+    /// The scale goes in with it. The two cannot be separated on anything stretched unevenly -
+    /// scaling then turning is not the same as turning then scaling - so both are baked and the
+    /// size boxes go on reading the same millimetres as before.
+    /// </summary>
+    private void AlignToAxes()
+    {
+        var selection = Scene.Selection.ToList();
+        if (selection.Count == 0) return;
+
+        var aligned = new List<SceneObject>(selection.Count);
+
+        foreach (var o in selection)
+        {
+            var baked = MeshTransform.Transformed(
+                o.Mesh, Matrix4x4.CreateScale(o.Scale) * MeshTransform.Rotation(o.Rotation));
+
+            aligned.Add(new SceneObject(o.Name, baked)
+            {
+                Colour = o.Colour,
+                Position = o.Position,
+                Origin = o.Origin
+            });
+        }
+
+        Undo.Execute(new ReplaceObjectsCommand("Align to axes", selection, aligned));
+        RefreshSelection();
+
+        Status = selection.Count == 1
+            ? $"{selection[0].Name} aligned with the world axes"
+            : $"{selection.Count} objects aligned with the world axes";
+    }
+
+    /// <summary>Whether anything selected is turned. Nothing to align if none of it is.</summary>
+    private bool AnythingTurned()
+    {
+        foreach (var o in Scene.Selection)
+            if (o.Rotation != Vector3.Zero) return true;
+
+        return false;
+    }
+
+    private void TurnGroup(Axis axis, float degrees)
+    {
+        if (!float.IsFinite(degrees) || Scene.Selection.Count == 0) return;
+
+        float wanted = GizmoMath.NormaliseDegrees(degrees);
+
+        foreach (var o in Scene.Selection)
+        {
+            var was = o.Rotation;
+            o.Rotation = axis switch
+            {
+                Axis.X => was with { X = wanted },
+                Axis.Y => was with { Y = wanted },
+                _ => was with { Z = wanted }
+            };
+        }
+
+        RaiseGroup();
+    }
+
+    private void ResizeGroup(Axis axis, float millimetres)
+    {
+        if (!float.IsFinite(millimetres) || millimetres < 0.01f) return;
+        if (Scene.Selection.Count == 0) return;
+
+        float now = Along(GroupExtent(), axis);
+        if (now < 1e-3f) return;
+
+        float ratio = millimetres / now;
+        if (MathF.Abs(ratio - 1f) < 1e-4f) return;
+
+        float anchor = Along(GroupCentre(), axis);
+
+        foreach (var o in Scene.Selection)
+        {
+            var scale = o.Scale;
+            o.Scale = UniformScale
+                ? scale * ratio
+                : axis switch
+                {
+                    Axis.X => scale with { X = scale.X * ratio },
+                    Axis.Y => scale with { Y = scale.Y * ratio },
+                    _ => scale with { Z = scale.Z * ratio }
+                };
+
+            var at = o.Position;
+            o.Position = axis switch
+            {
+                Axis.X => at with { X = GizmoMath.ScaledAbout(anchor, at.X, ratio) },
+                Axis.Y => at with { Y = GizmoMath.ScaledAbout(anchor, at.Y, ratio) },
+                _ => at with { Z = GizmoMath.ScaledAbout(anchor, at.Z, ratio) }
+            };
+        }
+
+        RaiseGroup();
+    }
+
+    private static float Along(Vector3 v, Axis axis) =>
+        axis switch { Axis.X => v.X, Axis.Y => v.Y, _ => v.Z };
+
+    private Vector3 GroupExtent()
+    {
+        var bounds = Bounds.Empty;
+        foreach (var o in Scene.Selection) bounds = bounds.Union(o.WorldBounds);
+
+        return bounds.IsEmpty ? Vector3.Zero : bounds.Size;
+    }
+
+    private void RaiseGroup()
+    {
+        Raise(nameof(GroupX));
+        Raise(nameof(GroupY));
+        Raise(nameof(GroupZ));
+        Raise(nameof(GroupRoll));
+        Raise(nameof(GroupPitch));
+        Raise(nameof(GroupYaw));
+        Raise(nameof(GroupSizeX));
+        Raise(nameof(GroupSizeY));
+        Raise(nameof(GroupSizeZ));
+        IsDirty = true;
+    }
+
+    private Vector3 GroupCentre()
+    {
+        var bounds = Bounds.Empty;
+        foreach (var o in Scene.Selection) bounds = bounds.Union(o.WorldBounds);
+
+        return bounds.IsEmpty ? Vector3.Zero : bounds.Center;
+    }
+
+    private void MoveGroupTo(Axis axis, float where)
+    {
+        if (!float.IsFinite(where) || Scene.Selection.Count == 0) return;
+
+        var centre = GroupCentre();
+        float travel = where - axis switch { Axis.X => centre.X, Axis.Y => centre.Y, _ => centre.Z };
+        if (MathF.Abs(travel) < 1e-4f) return;
+
+        var offset = axis switch
+        {
+            Axis.X => new Vector3(travel, 0, 0),
+            Axis.Y => new Vector3(0, travel, 0),
+            _ => new Vector3(0, 0, travel)
+        };
+
+        foreach (var o in Scene.Selection) o.Position += offset;
+
+        RaiseGroup();
+    }
 
     /// <summary>
     /// The floating move/rotate/resize strip. Out of the way while a tool is running, along with
@@ -861,7 +1123,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
             var lettered = new SceneObject(Scene.UniqueName($"{source.Name} text"), result)
             {
                 Colour = source.Colour
-            };
+            }.Centred();
 
             Undo.Execute(new ReplaceObjectsCommand(raised ? "Raise text" : "Cut text", [source], [lettered]));
             IsEmbossMode = false;
@@ -1527,7 +1789,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
         var grouped = new SceneObject(Scene.UniqueName("Group"), combined)
         {
             Colour = selection[0].Colour
-        };
+        }.Centred();
 
         Undo.Execute(new ReplaceObjectsCommand("Group", selection, [grouped]));
         RefreshSelection();
@@ -1561,7 +1823,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
                     Rotation = o.Rotation,
                     Scale = o.Scale,
                     Colour = o.Colour
-                });
+                }.Centred());
             }
         }
 
@@ -1580,7 +1842,9 @@ public sealed class MainViewModel : INotifyPropertyChanged
     {
         if (parameter is not BooleanOp op && !(parameter is string s && Enum.TryParse(s, out op))) return;
 
-        var selection = Scene.Selection;
+        // In the order they were picked: for a subtraction the first is the one kept, and
+        // which that is can only come from the order the clicks were made in.
+        var selection = Scene.SelectionInPickOrder;
         if (selection.Count < 2) return;
 
         IsBusy = true;
@@ -1595,14 +1859,23 @@ public sealed class MainViewModel : INotifyPropertyChanged
                 var accumulator = meshes[0];
                 for (int i = 1; i < meshes.Count; i++)
                     accumulator = CsgSolid.Apply(accumulator, meshes[i], op);
-                return accumulator;
+
+                // Mended before it is handed over. A boolean splits one polygon without always
+                // splitting the one beside it, which leaves the two sides of an edge disagreeing
+                // about where their corners are - closed to look at, torn as a list of triangles,
+                // and reported to the user as a broken model they could do nothing about.
+                return MeshHealer.Heal(accumulator).Mesh;
             });
 
             if (result.TriangleCount == 0)
             {
                 Status = $"{op} removed everything - nothing left to keep";
                 MessageBox.Show(
-                    "That operation left no geometry behind.",
+                    op == BooleanOp.Subtract
+                        ? $"Subtracting left nothing behind: all of \"{selection[0].Name}\" was "
+                          + "inside what was taken away.\n\nThe first object you click is the one "
+                          + "kept, so click the part you want to keep first."
+                        : "That operation left no geometry behind.",
                     "3DFastCraft", MessageBoxButton.OK, MessageBoxImage.Information);
                 return;
             }
@@ -1610,13 +1883,14 @@ public sealed class MainViewModel : INotifyPropertyChanged
             var combined = new SceneObject(Scene.UniqueName(op.ToString()), result)
             {
                 Colour = selection[0].Colour
-            };
+            }.Centred();
 
             Undo.Execute(new ReplaceObjectsCommand(op.ToString(), selection, [combined]));
             RefreshSelection();
 
             var health = result.CheckHealth();
-            Status = $"{op}: {health.TriangleCount:N0} triangles, {health.Describe()}";
+            string kept = op == BooleanOp.Subtract ? $" from {selection[0].Name}" : "";
+            Status = $"{op}{kept}: {health.TriangleCount:N0} triangles, {health.Describe()}";
         }
         catch (Exception ex)
         {
@@ -1665,7 +1939,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
                 produced.Add(new SceneObject(selection[i].Name, shells[i].Mesh)
                 {
                     Colour = selection[i].Colour
-                });
+                }.Centred());
             }
 
             if (produced.Count == 0)
@@ -1725,7 +1999,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
                     Rotation = selection[i].Rotation,
                     Scale = selection[i].Scale,
                     Colour = selection[i].Colour
-                });
+                }.Centred());
             }
 
             Undo.Execute(new ReplaceObjectsCommand("Simplify", selection, produced));
@@ -1777,7 +2051,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
                 produced.Add(new SceneObject(targets[i].Name, rebuilt[i].Mesh)
                 {
                     Colour = targets[i].Colour
-                });
+                }.Centred());
             }
 
             if (produced.Count == 0)
@@ -1849,7 +2123,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
                 Colour = selection[i].Colour
                 // Origin is dropped: the shape is no longer the primitive it was, so it can no
                 // longer be rebuilt with rounded edges.
-            });
+            }.Centred());
         }
 
         Undo.Execute(new ReplaceObjectsCommand("Smooth", selection, produced));
@@ -1898,7 +2172,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
                     Scale = targets[i].Scale,
                     Colour = targets[i].Colour,
                     Origin = targets[i].Origin
-                });
+                }.Centred());
 
                 if (healed[i].After.IsWatertight) fixedUp++;
             }
@@ -2039,7 +2313,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
             var engraved = new SceneObject(Scene.UniqueName($"{source.Name} {options.Kind}"), result.Mesh)
             {
                 Colour = source.Colour
-            };
+            }.Centred();
 
             Undo.Execute(new ReplaceObjectsCommand($"Engrave {options.Kind}", [source], [engraved]));
             IsEngraveMode = false;
@@ -2132,9 +2406,9 @@ public sealed class MainViewModel : INotifyPropertyChanged
 
                 consumed.Add(source);
                 if (front is not null)
-                    produced.Add(new SceneObject(Scene.UniqueName($"{source.Name} {KeepFrontLabel}"), front) { Colour = source.Colour });
+                    produced.Add(new SceneObject(Scene.UniqueName($"{source.Name} {KeepFrontLabel}"), front) { Colour = source.Colour }.Centred());
                 if (back is not null)
-                    produced.Add(new SceneObject(Scene.UniqueName($"{source.Name} {KeepBackLabel}"), back) { Colour = source.Colour });
+                    produced.Add(new SceneObject(Scene.UniqueName($"{source.Name} {KeepBackLabel}"), back) { Colour = source.Colour }.Centred());
             }
 
             if (consumed.Count == 0)
@@ -2363,7 +2637,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
                     imported.Add(new SceneObject(Scene.UniqueName(name), mesh)
                     {
                         Colour = NextAutomaticColour()
-                    });
+                    }.Centred());
             }
             else
             {
@@ -2372,7 +2646,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
                     Scene.UniqueName(Path.GetFileNameWithoutExtension(dialog.FileName)), mesh)
                 {
                     Colour = NextAutomaticColour()
-                });
+                }.Centred());
             }
 
             if (imported.Count == 0)
@@ -2469,6 +2743,9 @@ public sealed class MainViewModel : INotifyPropertyChanged
         Selected = selection.Count == 1 ? selection[0] : null;
         SelectionChanged?.Invoke();
         Raise(nameof(HasAnySelection));
+        Raise(nameof(HasOneSelected));
+        Raise(nameof(HasManySelected));
+        RaiseGroup();
         Raise(nameof(ShowManipulatorBar));
         Raise(nameof(SelectionSummary));
         Raise(nameof(UndoLabel));

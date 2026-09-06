@@ -1,4 +1,4 @@
-using System.ComponentModel;
+﻿using System.ComponentModel;
 using System.Numerics;
 using System.Runtime.CompilerServices;
 using FastCraft3D.Geometry;
@@ -49,10 +49,18 @@ public sealed class SceneObject : INotifyPropertyChanged
                 size.X > 1e-5f ? size.X : 1f,
                 size.Y > 1e-5f ? size.Y : 1f,
                 size.Z > 1e-5f ? size.Z : 1f);
+            LocalCentre = value.ComputeBounds().Center;
             Raise(nameof(Mesh));
             RaiseDerived();
         }
     }
+
+    /// <summary>
+    /// The middle of the geometry in its own coordinates. Usually the origin, since primitives
+    /// are built centred, but not after a boolean - and the resize handles need the middle of
+    /// the object's own box, not of the world-aligned one round it.
+    /// </summary>
+    public Vector3 LocalCentre { get; private set; }
 
     public string Name
     {
@@ -76,8 +84,26 @@ public sealed class SceneObject : INotifyPropertyChanged
     public bool IsSelected
     {
         get => isSelected;
-        set => Set(ref isSelected, value);
+        set
+        {
+            if (isSelected == value) return;
+            if (value) PickedAt = ++picks;
+
+            Set(ref isSelected, value);
+        }
     }
+
+    /// <summary>
+    /// When this was last picked, for putting a selection back into the order it was made in.
+    ///
+    /// The scene keeps its objects in the order they were created, which is the right order for
+    /// the list and the wrong one for a boolean: subtracting needs to know which one you meant to
+    /// keep, and the only thing that says so is which you clicked first. Without this the order
+    /// of the two clicks made no difference at all, because the answer was read off the list.
+    /// </summary>
+    public long PickedAt { get; private set; }
+
+    private static long picks;
 
     /// <summary>Diffuse colour, components in 0..1.</summary>
     public Vector3 Colour
@@ -168,6 +194,31 @@ public sealed class SceneObject : INotifyPropertyChanged
     /// The cache is dropped whenever the transform or the mesh changes.
     /// </summary>
     public Bounds WorldBounds => worldBounds ??= ToWorldMesh().ComputeBounds();
+
+    /// <summary>
+    /// Moves the geometry onto the object's own origin and takes the position with it, so the
+    /// object stays exactly where it was drawn.
+    ///
+    /// Anything made from geometry that is already in build-plate coordinates - a boolean, a
+    /// group, a split, an import - arrives with its shape out at whatever corner of the bed it
+    /// belongs to and its position still reading nothing at all. It looks right and it is right,
+    /// but the position boxes then describe somewhere else entirely, and typing a coordinate
+    /// into one measures from the wrong place. This puts the two back in step.
+    /// </summary>
+    public SceneObject Centred()
+    {
+        var centre = mesh.ComputeBounds().Center;
+        if (centre.LengthSquared() < 1e-10f) return this;
+
+        Mesh = MeshTransform.Transformed(mesh, Matrix4x4.CreateTranslation(-centre));
+
+        // Shifting the geometry one way and the translation the other leaves the object where it
+        // was, whatever turn and scale sit between the two.
+        Position += Vector3.TransformNormal(
+            centre, Matrix4x4.CreateScale(scale) * MeshTransform.Rotation(rotation));
+
+        return this;
+    }
 
     public SceneObject Clone() => new(Name, mesh.Clone())
     {

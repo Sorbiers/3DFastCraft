@@ -68,6 +68,16 @@ public static class MeshHealer
 
         int dropped = 0, filled = 0, flipped = 0;
 
+        // Before anything else: two sides of the same edge that do not agree where their
+        // corners are. Nothing below can see that as damage - there is no hole and nothing is
+        // facing the wrong way - so it has to be settled first or every later pass is working
+        // from a mesh that only looks torn.
+        //
+        // Only when there is something wrong. Stitching a sound mesh would add triangles to fix
+        // nothing, and a boolean that came out clean is the common case.
+        if (!current.CheckHealth().IsWatertight)
+            current = MeshStitch.CloseTJunctions(current, tolerance);
+
         for (int pass = 0; pass < maxPasses; pass++)
         {
             int was = current.TriangleCount;
