@@ -41,7 +41,7 @@ dotnet test
 | Tab | What it does |
 |---|---|
 | **Insert** | Cube, cylinder, cone, sphere, pyramid, wedge, torus, hexagon, tetrahedron; import STL/OBJ |
-| **Object** | Subtract / Intersect / Merge, Smooth, Round edges, Split with a plane, Text, Engrave a pattern, Colour, duplicate (beside or in place), delete, drop to plate, mirror |
+| **Object** | Subtract / Intersect / Merge, Smooth, Round edges, Split with a plane, Text, Engrave a pattern, Colour, duplicate (beside or in place), delete, drop to plate, lay on face, mirror |
 | **Align** | Line the selection up on X, Y or Z: flush to either edge, centred, or spread evenly |
 | **Edit** | Repair, rebuild, simplify, hollow, undo, redo |
 | **File** | New, open, recent, save, save as, save a version, versions, export STL/OBJ |
@@ -86,11 +86,16 @@ only the way you dragged it. That is what you want when a part has to keep meeti
 
 **Stop on contact** - the toggle beside it, or **C** - stops a dragged object where it meets
 another rather than letting it pass through, which is how parts get slid together without typing
-coordinates for them. It works on bounding boxes: for the boxes, plates and walls this is mostly
-used for, the box is the shape, and on a rounded or angled face it stops a little early rather
-than late, so nothing ever passes through anything. Two parts that already overlap are left free
-to move - they were put that way on purpose, usually on the way to a boolean. It snaps where the
-object *lands*, not how far it travels, so two parts dragged onto the same grid meet exactly.
+coordinates for them. It is measured on the **shapes themselves**, not on the boxes round them,
+so a ball brought up to a cone stops touching the slope rather than a base radius short of it, and
+a part that has been turned stops where it actually meets rather than where its box does. Two
+parts that already overlap are left free to move - they were put that way on purpose, usually on
+the way to a boolean. It snaps where the object *lands*, not how far it travels, so two parts
+dragged onto the same grid meet exactly.
+
+A drag works its answer out once, on the way down, so none of that measuring happens as the mouse
+moves. Something too dense to flatten - an import in the hundreds of thousands of triangles -
+falls back to its bounding box rather than stalling the drag.
 
 Shortcuts: `Ctrl+Z` / `Ctrl+Y` undo & redo, `Delete`, `Ctrl+C` / `Ctrl+V` copy & paste,
 `Ctrl+A` select all, `Ctrl+D` deselect all, `Ctrl+N/O/S` new/open/save, `Ctrl+I` import,
@@ -213,8 +218,23 @@ live values for whichever is active. Colours follow the axis indicator in the co
 | Mode | Handles | Readout |
 |---|---|---|
 | **Move** (`M`) | A double arrow on each of the six box faces. Drag one to slide along that axis only. | X / Y / Z in mm |
-| **Rotate** (`R`) | A ring per axis. Drag a ring to turn around it. The toggle snaps to 15° steps. | Roll / Pitch / Yaw in degrees |
-| **Resize** (`S`) | The bounding box with corner markers, plus the six axis arrows. Resizing works about the centre, so both faces move. The toggle keeps proportions. | X / Y / Z in mm |
+| **Rotate** (`R`) | A ring per **world** axis. Drag a ring to turn around it - on the second turn as much as the first. One toggle snaps to 15° steps; the other squares the object up with the world without moving it. | Roll / Pitch / Yaw in degrees |
+| **Resize** (`S`) | The object's **own** box with corner markers, turned with it, plus the six axis arrows. Resizing works about the centre, so both faces move. The toggle keeps proportions. | X / Y / Z in mm |
+
+Turning and resizing work in different frames on purpose. The rings are world axes, because
+turning *about Z* means the world's Z - it is what the plate is square to. The resize arrows are
+the object's own, because the size boxes give its own width, height and depth, and the scale
+behind them is applied before the turn. Pointing the arrows along the world while the drag
+stretched the object along its own was simply wrong as soon as anything was rotated.
+
+**Align to axes** - the second button in Rotate mode - sets the three angles back to zero
+*without moving the object*: the turn is folded into the geometry instead. Use it when a part has
+been turned into place and you now want to resize it along the plate. Zeroing the angles by hand
+is not the same thing - that swings the object back to how it was built.
+
+With **several objects selected** the readouts still fill in: position shows the middle of the
+lot, rotation shows what they have in common, and size shows how far the whole selection reaches.
+Typing carries the group there, keeping its arrangement.
 
 Every drag is one undo step, however many mouse-move events it took, and a drag that changes
 nothing adds no step at all. Typing into the readout boxes works the same way as the side
@@ -232,6 +252,15 @@ is watertight.
 its handles stand down, and the tool's own handles have the object to themselves. Starting one
 puts the others away, since each means something different by a click on the model. Cancel or
 apply, and the manipulator comes back.
+
+### Laying a part on its face
+
+**Lay on face** on the Object tab answers the printing question of which way up to put a part.
+Press it, click the face you want on the bed, and the object tips over onto it and settles.
+
+It takes the shortest turn that gets there, so the object looks tipped rather than spun, and it
+works on a facet of anything round as well - laying it on the tangent there. One click is the
+whole job; there is no panel and no second step.
 
 ### Rounding edges
 
@@ -520,6 +549,20 @@ short one round the barrel is not. Splitting by length quadrupled the whole soli
 handful of edges — 147,456 triangles and 24.8 seconds for one short word, with thousands of torn
 edges in the result. Splitting only what strays gives 1,168 triangles and 124 ms.
 
+**A boolean leaves T-junctions, and no amount of repairing will mend them.** Where it splits one
+polygon it need not split the one beside it in the same place, so a long edge on one side ends up
+facing two shorter ones with a vertex partway along it. The surface is closed to look at and
+prints perfectly; it is not closed as a list of triangles. Repair could see nothing wrong -
+there is no hole and nothing is inside out - so a fifth of all rounded-box booleans came back
+reported as broken and could not be fixed. `MeshStitch` splits those edges so both sides share
+their corners, which cannot change the shape: the corners were on the edge already.
+
+Two attempts that did not work are recorded where they were made. Splitting one edge per triangle
+per pass never settles, because the two triangles either side of an edge each split whichever of
+their own edges came first. And sizing the vertex grid by the cube root of the count leaves
+scores of vertices in every cell, since a mesh's vertices sit on a surface rather than filling
+the space - 139 seconds on an 84k mesh, against 569 ms once it was square-rooted.
+
 **GPU use is confined to rendering.** Direct3D 11 via `HelixToolkit.SharpDX.Core.Wpf` gives
 MSAA and handles imported meshes of millions of triangles. Booleans stay on the CPU
 deliberately: BSP tree work is serial and branch-heavy, and GPU voxel/SDF booleans — robust as
@@ -536,6 +579,12 @@ primitives headed to a slicer.
   hangs in mid-air and cuts nothing, so a gable end or a round cap comes out right, but a
   separate face lying in the same plane and inside that rectangle is engraved too, and an
   inside corner loses half a millimetre off the neighbouring face.
+- **A fine pattern on a face that has been cut about already** can refuse to go on. Every
+  earlier pattern left a notch wherever a groove met an edge, and the new one has to be cut
+  around them; where two faces meet exactly rather than crossing, the boolean tears. It is
+  retried from a slightly different pattern first - the status bar says when that happened -
+  but it does not always get through. A coarser pattern, a shallower depth, or nudging
+  **Shift across** by a tenth of a millimetre usually does.
 - **Letters with an enclosed middle - O, B, A, D - wrapped round a barrel** are past what the
   boolean will do: the cutter is sound but the result comes back torn. It is refused rather than
   shipped, so the object is left as it was. Lettering without counters wraps fine, and **Rebuild**

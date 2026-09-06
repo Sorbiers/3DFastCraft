@@ -7,8 +7,13 @@ namespace FastCraft3D.Geometry.Engraving;
 /// <param name="Grooves">How many groove rectangles the pattern produced.</param>
 /// <param name="CutterTriangles">Size of the solid that was subtracted, for reporting.</param>
 /// <param name="Health">What the result came out like.</param>
+/// <param name="Used">
+/// The settings that actually cut it, which are not always the ones asked for: a cut that will
+/// not go through is retried from a slightly different pattern, and the caller has to be able to
+/// say so rather than quietly showing one thing and building another.
+/// </param>
 public readonly record struct EngraveResult(
-    Mesh Mesh, int Grooves, int CutterTriangles, MeshHealth Health)
+    Mesh Mesh, int Grooves, int CutterTriangles, MeshHealth Health, EngraveOptions Used)
 {
     /// <summary>
     /// Whether the result is worth keeping. A pattern cut into a facet of a curved surface can
@@ -46,6 +51,37 @@ public static class Engraver
     public const float EdgeOvershoot = 0.5f;
 
     /// <summary>
+    /// What to change when a cut comes out torn: how far to slide the pattern, and by how much to
+    /// stretch it.
+    ///
+    /// Sliding alone is not enough, and the reason is worth writing down. A cut tears where two
+    /// faces meet exactly instead of crossing, and that can happen two ways. Against the model -
+    /// a groove landing on a notch an earlier pattern left - is cured by sliding, since the two
+    /// move apart. Against itself is not: a perpend joint touching the corner of another leaves
+    /// the material between them pinched to nothing along a line, and sliding the whole pattern
+    /// carries that coincidence along with it, unchanged, however far it goes.
+    ///
+    /// So the later attempts stretch the pattern a little as well, which is the only thing that
+    /// moves its own parts relative to each other.
+    ///
+    /// The distances are measured in groove widths, not millimetres, and that matters as much as
+    /// the stretching. A pattern repeats every couple of millimetres, and so do the notches left
+    /// by the pattern before it - they are the same pattern, on the face next door. Sliding by a
+    /// few microns against something that comes round again every two millimetres lands in very
+    /// nearly the same place; escaping it takes a fair fraction of a groove. A tenth of a
+    /// millimetre on a five millimetre brick is not something anyone will see, and the tool says
+    /// which settings it actually used.
+    /// </summary>
+    private static readonly (float Across, float Along, float Size, float Width)[] Nudges =
+    [
+        (0f, 0f, 1f, 1f),
+        (0.41f, 0.23f, 1f, 1f),
+        (-0.67f, 0.44f, 1.004f, 1f),
+        (1.29f, -0.83f, 0.997f, 1.011f),
+        (-1.73f, 1.31f, 1.009f, 0.986f)
+    ];
+
+    /// <summary>
     /// Runs the whole operation. Blocks while a big-stack thread does the boolean work, so a
     /// caller on the UI thread must wrap this in Task.Run.
     /// </summary>
@@ -53,22 +89,42 @@ public static class Engraver
     {
         options = options.Sane();
 
-        var grooves = Grooves(face, options);
-        if (grooves.IsEmpty) return Nothing(mesh);
+        EngraveResult? best = null;
 
-        var cutter = GrooveSolid.Build(grooves, face, options.Depth);
-        if (cutter.TriangleCount == 0) return Nothing(mesh, grooves.Count);
+        foreach (var (across, along, size, width) in Nudges)
+        {
+            var moved = options with
+            {
+                OffsetU = options.OffsetU + across * options.GrooveWidth,
+                OffsetV = options.OffsetV + along * options.GrooveWidth,
+                Size = options.Size * size,
+                GrooveWidth = options.GrooveWidth * width
+            };
 
-        // Repair before judging it. The automatic pass inside the boolean handles the ordinary
-        // leftovers; this catches the rest, and declines when it cannot help, so what is
-        // measured here is the best the result is going to get.
-        var cut = MeshHealer.Heal(CsgSolid.Subtract(mesh, cutter)).Mesh;
+            var grooves = Grooves(face, moved);
+            if (grooves.IsEmpty) return Nothing(mesh, moved);
 
-        return new EngraveResult(cut, grooves.Count, cutter.TriangleCount, cut.CheckHealth());
+            var cutter = GrooveSolid.Build(grooves, face, moved.Depth);
+            if (cutter.TriangleCount == 0) return Nothing(mesh, moved, grooves.Count);
+
+            // Repair before judging it. The automatic pass inside the boolean handles the
+            // ordinary leftovers; this catches the rest, and declines when it cannot help, so
+            // what is measured here is the best this attempt is going to get.
+            var cut = MeshHealer.Heal(CsgSolid.Subtract(mesh, cutter)).Mesh;
+            var result = new EngraveResult(
+                cut, grooves.Count, cutter.TriangleCount, cut.CheckHealth(), moved);
+
+            if (result.IsPrintable) return result;
+
+            // Kept so a run that never succeeds still says what went wrong.
+            best ??= result;
+        }
+
+        return best!.Value;
     }
 
-    private static EngraveResult Nothing(Mesh mesh, int grooves = 0) =>
-        new(mesh, grooves, 0, mesh.CheckHealth());
+    private static EngraveResult Nothing(Mesh mesh, EngraveOptions options, int grooves = 0) =>
+        new(mesh, grooves, 0, mesh.CheckHealth(), options);
 
     /// <summary>
     /// The rectangle the pattern covers: the face's own extent, grown by the overshoot.

@@ -75,12 +75,7 @@ public partial class MainWindow : Window
         measure = new MeasureOverlay(MeasureLayer, new Viewport3DXProjector(View));
         viewModel.MeasureChanged += () => measure.Show(viewModel.MeasureFrom, viewModel.MeasureTo);
 
-        viewModel.EngraveFaceChanged += () =>
-        {
-            // Both tools pick a face and draw on it; whichever is running owns the highlight.
-            if (viewModel.IsEmbossMode) ShowEmbossPreview();
-            else renderer.ShowFace(viewModel.EngraveFace, viewModel.EngravePreview);
-        };
+        viewModel.EngraveFaceChanged += ShowFacePreview;
 
         listSync = new SelectionListSync(ObjectList, viewModel.Scene);
         listSync.ChangedFromList += viewModel.RefreshSelection;
@@ -235,8 +230,24 @@ public partial class MainWindow : Window
 
         PlacementGizmoLayer.ReleaseMouseCapture();
         placeGizmo.EndDrag();
-        ShowEmbossPreview();
+        ShowFacePreview();
         e.Handled = true;
+    }
+
+    /// <summary>
+    /// Redraws whatever the running tool is showing on the face.
+    ///
+    /// Both tools share the one highlight, so whichever is running has to be the one asked. Going
+    /// straight to the lettering while engraving was what made the pattern vanish the moment its
+    /// grip was let go: there is no lettering face then, and drawing nothing takes the highlight,
+    /// the outline and the pattern away with it.
+    /// </summary>
+    private void ShowFacePreview()
+    {
+        if (renderer is null) return;
+
+        if (viewModel.IsEmbossMode) ShowEmbossPreview();
+        else renderer.ShowFace(viewModel.EngraveFace, viewModel.EngravePreview);
     }
 
     /// <summary>
@@ -411,6 +422,13 @@ public partial class MainWindow : Window
         if (viewModel.IsMeasureMode)
         {
             viewModel.TakeMeasurePoint(SnappedPoint(target, ToVector3(hit!.PointHit)));
+            e.Handled = true;
+            return;
+        }
+
+        if (viewModel.IsLayMode)
+        {
+            viewModel.LayOnFace(target, ToVector3(hit!.PointHit), ToVector3(hit.NormalAtHit));
             e.Handled = true;
             return;
         }

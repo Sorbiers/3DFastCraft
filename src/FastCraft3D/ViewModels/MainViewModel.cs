@@ -31,6 +31,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
     private bool isEngraveMode;
     private bool isMeasureMode;
     private bool isEmbossMode;
+    private bool isLayMode;
     private FacePatch? embossFace;
     private Mesh? embossMesh;
     private string embossText = "TEXT";
@@ -103,6 +104,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
         SimplifyCommand = AsyncRelayCommand.Simple(SimplifySelection, () => Scene.Selection.Count > 0);
         HollowCommand = AsyncRelayCommand.Simple(HollowSelection, () => Scene.Selection.Count > 0);
         BeginEmbossCommand = RelayCommand.Simple(BeginEmboss, () => Scene.Selection.Count == 1);
+        BeginLayCommand = RelayCommand.Simple(BeginLay, () => Scene.Selection.Count == 1);
         ApplyEmbossCommand = AsyncRelayCommand.Simple(ApplyEmboss, () => isEmbossMode && embossFace is not null);
         CancelEmbossCommand = RelayCommand.Simple(() => IsEmbossMode = false);
         BeginMeasureCommand = RelayCommand.Simple(BeginMeasure, () => Scene.Objects.Count > 0);
@@ -161,6 +163,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
     public System.Windows.Input.ICommand SimplifyCommand { get; }
     public System.Windows.Input.ICommand HollowCommand { get; }
     public System.Windows.Input.ICommand BeginEmbossCommand { get; }
+    public System.Windows.Input.ICommand BeginLayCommand { get; }
     public System.Windows.Input.ICommand ApplyEmbossCommand { get; }
     public System.Windows.Input.ICommand CancelEmbossCommand { get; }
     public System.Windows.Input.ICommand BeginMeasureCommand { get; }
@@ -526,7 +529,21 @@ public sealed class MainViewModel : INotifyPropertyChanged
         get
         {
             string name = projectPath is null ? "Untitled" : Path.GetFileNameWithoutExtension(projectPath);
-            return $"{name}{(isDirty ? " *" : string.Empty)} - 3DFastCraft";
+            return $"{name}{(isDirty ? " *" : string.Empty)} - 3DFastCraft {Version}";
+        }
+    }
+
+    /// <summary>
+    /// The version, from the assembly rather than a constant here, so there is one place to
+    /// change it and no way for the two to disagree. Three parts, matching what the release is
+    /// called - the fourth is always zero and would be nothing but noise.
+    /// </summary>
+    public static string Version
+    {
+        get
+        {
+            var version = System.Reflection.Assembly.GetEntryAssembly()?.GetName().Version;
+            return version is null ? "" : $"{version.Major}.{version.Minor}.{version.Build}";
         }
     }
 
@@ -700,7 +717,24 @@ public sealed class MainViewModel : INotifyPropertyChanged
     /// strip that goes with them, stand down while one of them is running rather than sitting
     /// underneath and leaving it to the pointer to decide which was meant.
     /// </summary>
-    public bool IsToolRunning => isSplitMode || isEngraveMode || isEmbossMode;
+    public bool IsToolRunning => isSplitMode || isEngraveMode || isEmbossMode || isLayMode;
+
+    /// <summary>
+    /// While this is on, clicking a face tips the object over onto it. One click does the whole
+    /// job, so unlike the other face tools there is no panel and no second step.
+    /// </summary>
+    public bool IsLayMode
+    {
+        get => isLayMode;
+        set
+        {
+            if (isLayMode == value) return;
+
+            Set(ref isLayMode, value);
+            Raise(nameof(IsToolRunning));
+            Raise(nameof(ShowManipulatorBar));
+        }
+    }
 
     // --- Engraving -----------------------------------------------------------------
 
@@ -954,6 +988,58 @@ public sealed class MainViewModel : INotifyPropertyChanged
         }
     }
 
+    private void BeginLay()
+    {
+        if (Scene.Selection.Count != 1) return;
+
+        IsSplitMode = false;
+        IsEngraveMode = false;
+        IsEmbossMode = false;
+        IsMeasureMode = false;
+        IsLayMode = true;
+
+        Status = "Click the face you want it to stand on";
+    }
+
+    /// <summary>
+    /// Tips the object over so the face under the click ends up flat on the plate.
+    ///
+    /// The face's outward direction is turned to point straight down and the object is dropped
+    /// onto the bed. Which face was clicked is all that is needed - not a flat patch of them, as
+    /// engraving wants - so this works on a facet of anything round as well, laying it on the
+    /// tangent there.
+    ///
+    /// One click and it is done: the mode ends itself, because there is nothing else to say.
+    /// </summary>
+    public bool LayOnFace(SceneObject target, Vector3 worldPoint, Vector3 worldNormal)
+    {
+        if (!isLayMode) return false;
+        if (worldNormal.LengthSquared() < 1e-12f) return false;
+
+        var facing = Vector3.Normalize(worldNormal);
+
+        // The hit reports the triangle's own direction, which may be the inward one. It is the
+        // outward face that has to end up against the bed.
+        if (Vector3.Dot(facing, worldPoint - target.WorldBounds.Center) < 0) facing = -facing;
+
+        var before = new[] { TransformState.Capture(target) };
+
+        var turn = MeshTransform.TurnFromTo(facing, -Vector3.UnitZ);
+        target.Rotation = MeshTransform.EulerFrom(MeshTransform.Rotation(target.Rotation) * turn);
+
+        // Tipping it over will have left it through the bed or above it.
+        target.Position = target.Position with { Z = target.Position.Z - target.WorldBounds.Min.Z };
+
+        if (TransformCommand.CreateIfChanged("Lay on face", [target], before) is { } command)
+            Undo.Execute(command);
+
+        IsLayMode = false;
+        RefreshSelection();
+        Status = $"{target.Name} laid on the picked face";
+
+        return true;
+    }
+
     private void BeginEmboss()
     {
         if (Scene.Selection.Count != 1) return;
@@ -961,6 +1047,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
         IsSplitMode = false;
         IsEngraveMode = false;
         IsMeasureMode = false;
+        IsLayMode = false;
         IsEmbossMode = true;
 
         Status = "Click the face you want to letter";
@@ -1196,6 +1283,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
         IsSplitMode = false;
         IsEngraveMode = false;
         IsEmbossMode = false;
+        IsLayMode = false;
         measureFrom = null;
         measureTo = null;
         IsMeasureMode = true;
@@ -2230,6 +2318,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
         IsSplitMode = false;
         IsEmbossMode = false;
         IsMeasureMode = false;
+        IsLayMode = false;
         IsEngraveMode = true;
         Status = "Click the face you want to engrave";
     }
@@ -2289,21 +2378,24 @@ public sealed class MainViewModel : INotifyPropertyChanged
                 return;
             }
 
-            // Nothing is applied unless it would print. Leaving the object alone and saying so
-            // is far better than handing back a model that looks right and slices wrong; it is
-            // usually a face that is one facet of a curved surface, where a flat pattern was
-            // never going to sit properly anyway.
+            // Nothing is applied unless it would print. Leaving the object alone and saying so is
+            // far better than handing back a model that looks right and slices wrong.
             if (!result.IsPrintable)
             {
                 Status = $"Engraving that face came out unprintable - {result.Health.Describe()}. Nothing was changed.";
                 MessageBox.Show(
                     "The pattern could not be cut into that face cleanly, so the object has been "
-                    + "left as it was.\n\n"
-                    + $"The result would have had {result.Health.Describe().ToLowerInvariant()}.\n\n"
-                    + "This happens on faces that are one facet of a curved surface, such as the "
-                    + "side of a cylinder or a cone. A flat face - the side of a box, a gable "
-                    + "end - will cut cleanly. A coarser pattern or a shallower depth may also "
-                    + "get through.",
+                    + "left as it was." + Environment.NewLine + Environment.NewLine
+                    + $"The result would have had {result.Health.Describe().ToLowerInvariant()}."
+                    + Environment.NewLine + Environment.NewLine
+                    + "The cut tears where the pattern lands on something already in the model. It "
+                    + "shows up most on a face that has been cut about already - every groove that "
+                    + "reached an edge left a notch there for the next pattern to land on - and on "
+                    + "a face that is one facet of something round, where a flat pattern was never "
+                    + "going to sit properly anyway." + Environment.NewLine + Environment.NewLine
+                    + "A coarser pattern, a shallower depth, or nudging Shift across by a fraction "
+                    + "will usually get through. Rebuild, on the Edit tab, remakes the surface from "
+                    + "scratch and always does.",
                     "3DFastCraft", MessageBoxButton.OK, MessageBoxImage.Warning);
                 return;
             }
@@ -2321,6 +2413,19 @@ public sealed class MainViewModel : INotifyPropertyChanged
 
             var health = result.Mesh.CheckHealth();
             Status = $"Engraved {result.Grooves:N0} grooves - {health.TriangleCount:N0} triangles, {health.Describe()}";
+
+            // A cut that will not go through is retried from a slightly different pattern. Small,
+            // but the object would otherwise not be the one the panel was describing.
+            var asked = options.Sane();
+            var used = result.Used;
+
+            if (MathF.Abs(used.OffsetU - asked.OffsetU) > 1e-4f
+                || MathF.Abs(used.OffsetV - asked.OffsetV) > 1e-4f
+                || MathF.Abs(used.Size - asked.Size) > 1e-4f
+                || MathF.Abs(used.GrooveWidth - asked.GrooveWidth) > 1e-4f)
+            {
+                Status += " - the pattern was moved a little to get the cut through";
+            }
         }
         catch (Exception ex)
         {
@@ -2341,6 +2446,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
         IsEngraveMode = false;
         IsEmbossMode = false;
         IsMeasureMode = false;
+        IsLayMode = false;
         IsSplitMode = true;
         ResetSplitOffset();
         Status = "Drag the arrows to slide the split plane, the rings to tilt it";

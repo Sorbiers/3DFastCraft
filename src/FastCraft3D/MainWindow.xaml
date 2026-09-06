@@ -385,6 +385,9 @@
                             Command="{Binding DeleteCommand}" />
                     <Button Style="{StaticResource ToolButton}" Content="Drop to plate" Tag="{StaticResource IconDropToPlate}"
                             Command="{Binding AlignToPlateCommand}" MinWidth="90" />
+                    <Button Style="{StaticResource ToolButton}" Content="Lay on face" Tag="{StaticResource IconLayOnFace}"
+                            Command="{Binding BeginLayCommand}" MinWidth="86"
+                            ToolTip="Pick a face and the object is tipped over to stand on it" />
                     <Separator Margin="8,0" />
                     <Button Style="{StaticResource ToolButton}" Content="Mirror X" Tag="{StaticResource IconMirror}"
                             Command="{Binding MirrorCommand}" CommandParameter="X" />

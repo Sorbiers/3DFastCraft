@@ -133,6 +133,37 @@ public static class MeshTransform
     }
 
     /// <summary>
+    /// The shortest turn that brings one direction onto another.
+    ///
+    /// Shortest because there are infinitely many turns that would do it - any amount of spin
+    /// about the destination can be added - and the one that moves everything else least is the
+    /// one that looks like the object was simply tipped over.
+    /// </summary>
+    public static Matrix4x4 TurnFromTo(Vector3 from, Vector3 to)
+    {
+        if (from.LengthSquared() < 1e-12f || to.LengthSquared() < 1e-12f) return Matrix4x4.Identity;
+
+        var a = Vector3.Normalize(from);
+        var b = Vector3.Normalize(to);
+
+        float along = Math.Clamp(Vector3.Dot(a, b), -1f, 1f);
+        if (along > 0.999999f) return Matrix4x4.Identity;
+
+        var axis = Vector3.Cross(a, b);
+        if (axis.LengthSquared() < 1e-12f)
+        {
+            // Pointing exactly the wrong way: it has to be turned right over, and any axis
+            // across it will do the job.
+            axis = Vector3.Cross(a, MathF.Abs(a.X) < 0.9f ? Vector3.UnitX : Vector3.UnitY);
+        }
+
+        // Turned about the cross product by the angle the dot product gives. The sign is easy to
+        // get backwards and there is nothing in the arithmetic to catch it - the wrong one sends
+        // the picked face to the ceiling rather than the bed - so it is pinned by test.
+        return Matrix4x4.CreateFromAxisAngle(Vector3.Normalize(axis), MathF.Acos(along));
+    }
+
+    /// <summary>
     /// The nearest turn that leaves the object square with the world.
     ///
     /// Not the same as throwing the turn away. Something stood on its side and then nudged a few
