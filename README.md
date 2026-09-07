@@ -295,13 +295,81 @@ The dialog reports the riser and going in real millimetres for the scene's scale
 plainly when the result is not something anyone could climb - a riser of 150 to 190 mm on a going
 of 240 mm or more is the range it checks against.
 
-### Model scale
+### Model scale, and working in real units
 
-**Scale 1:** on the View tab says what the model is drawn to - 1:87 for HO, 1:160 for N, 1:1 for
-life size, or anything typed in. **No geometry changes**: millimetres stay millimetres and the
-export is identical. What it buys is being told what a dimension *means*: the properties panel
-reads `9.57 x 7.83 x 2.61 m` under the size boxes, and the stair tool reports its risers in real
-units rather than model ones.
+**Scale 1:** on the View tab says what the model is drawn to. The list names each standard
+rather than leaving you to remember the number - `87 (HO)`, `160 (N)`, `76 (OO)`, `220 (Z)`,
+`48 (O)`, `24 (G)`, `35 (military)`, `12 (dolls' house)`, `1 (full size)` - and any other number
+can be typed in. Picking one takes effect at once; typing waits until the box is left, so `160`
+is not read as 1 and then 16 on its way in.
+
+Set one, and the manipulator bar grows a **second set of boxes in metres** beside the
+millimetres, in Move and in Resize:
+
+```
+X  0.00   Y  0.00   Z  15.00  mm  |  X  0.000   Y  0.000   Z  1.305  m at 1:87   (Move)
+W 110.00   D 12.00   H 30.00  mm  |  W 9.570   D 1.044   H 2.610  m at 1:87   (Resize)
+```
+
+The unit carries the scale with it. "m" on its own leaves the reader working out whose metres
+they are looking at.
+
+**Sizes read W, D, H; positions read X, Y, Z.** A dimension is not a coordinate, and for a single
+object these are its own extents - `SizeX` is the local size, so it does not change when the part
+is turned. The letters keep axis order, because the scene is Z-up: width along X, depth along Y,
+height along Z, matching the boxes beside them and the coloured gizmo handles. It also means a
+glance at the bar says which mode you are in, which two identical `X Y Z` triples did not.
+
+With several objects selected the size boxes describe the bounding box of the lot, so "width"
+there means how wide the group sits rather than any one part's own.
+
+The field names automation uses are unchanged - `SizeX`, `SizeY`, `SizeZ` - because every model
+script in `tools/ui` sets fields by those names.
+
+They are fields, not a read-out, and **each follows the other**. Type `2.61` into the metres box
+at 1:87 and the part moves to 30 mm; type `30` into the millimetres box and the metres box reads
+`2.610`. Drag a handle and both keep up. Several objects selected works the same way: the boxes
+describe the whole group, and typing into either one carries the parts with it.
+
+Only the millimetres are stored. **The scale changes no geometry and the export is byte for byte
+identical** - an STL has no notion of scale, and a slicer reads millimetres and nothing else. The
+metres are a view of the same number, which is why they are hidden at 1:1, where the two would
+say the same thing twice.
+
+The stair tool uses the same scale to report its riser and going in real units, and the side
+panel prints the selection's real size under the size boxes.
+
+### Subtracting with a tolerance
+
+**Subtract...** opens its options on the right rather than cutting straight away, because a
+boolean can only be taken back by undo and two of its settings change what comes out.
+
+| | |
+|---|---|
+| **Tolerance** | how much bigger than the cutter the opening comes out, on every side |
+| **Keep what is taken away** | leaves the cutter on the plate afterwards |
+
+> Model the pin at its real Ø3, take it away from the block with **Tolerance 0.2**, and the bore
+> is Ø3.4. Change the pin to Ø4 and the bore follows to Ø4.4.
+
+Before this, every fit in a model was two numbers typed in two places and a hope that they stayed
+related. The hinged box has four of them - a 3 mm pin in a 3.4 mm bore, a 25.2 mm knuckle in a
+26 mm notch, window frames 0.4 under their openings, panes 0.2 under their lights - and not one
+of them was derived from the part it had to fit.
+
+The cutter grows in **its own frame**, so a pin lying on its side gains the tolerance on its
+radius and on each end rather than on the plate's axes. It does not move: a tolerance grows a
+hole, it does not shift it. Zero subtracts exactly as before.
+
+**Keeping the cutter** matters more than it sounds. A pin that bored its own hole is usually a
+part in its own right, and the alternative - modelling it twice, once to cut with and once to
+print - is precisely how the two stop matching.
+
+**A tolerance is refused on anything with a sloped face.** Growing each dimension by twice the
+tolerance is the true offset for a cube, a cylinder and a sphere and for nothing else - on a cone
+or a pyramid the sloped surface ends up nearer than asked, by a factor of the cosine of the
+slope, and a gap quietly smaller than the number typed is the one direction that jams a printed
+part. Better to say so than to under-deliver silently.
 
 ### Does it fit?
 

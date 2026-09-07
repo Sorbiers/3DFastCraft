@@ -186,6 +186,44 @@ public sealed class SceneObject : INotifyPropertyChanged
     public Mesh ToWorldMesh() => MeshTransform.Transformed(mesh, Transform);
 
     /// <summary>
+    /// Whether this can be grown by a clearance and still mean it.
+    ///
+    /// Growing each dimension by twice the clearance is the true offset for these three and
+    /// nothing else. On a cone or a pyramid the sloped face ends up nearer than asked - the
+    /// clearance comes out as c times the cosine of the slope - and a clearance that is quietly
+    /// smaller than the number typed is the one direction that jams a printed part.
+    /// </summary>
+    public bool CanTakeClearance =>
+        Origin is PrimitiveKind.Cube or PrimitiveKind.Cylinder or PrimitiveKind.Sphere;
+
+    /// <summary>
+    /// The same geometry in build-plate coordinates, grown by <paramref name="clearance"/> on
+    /// every side - the cutter for a hole that a part this size will actually go into.
+    ///
+    /// Grown in the object's own frame, so a turned part grows along its own axes rather than
+    /// the plate's. A cylinder gains the clearance on its radius and on each end; a cube on each
+    /// of its six faces.
+    /// </summary>
+    public Mesh ToWorldMeshGrown(float clearance)
+    {
+        if (clearance <= 0f) return ToWorldMesh();
+
+        var grown = new Vector3(
+            Grow(scale.X, SizeX, clearance),
+            Grow(scale.Y, SizeY, clearance),
+            Grow(scale.Z, SizeZ, clearance));
+
+        return MeshTransform.Transformed(mesh, MeshTransform.Compose(position, rotation, grown));
+    }
+
+    /// <summary>
+    /// The scale that adds a clearance to each side. The sign is kept: a mirrored object has a
+    /// negative scale, and flipping it here would turn the cutter inside out.
+    /// </summary>
+    private static float Grow(float scale, float size, float clearance) =>
+        size <= 1e-4f ? scale : scale * ((size + 2f * clearance) / size);
+
+    /// <summary>
     /// Bounds in build-plate coordinates.
     ///
     /// Cached because working this out means transforming every vertex, and the manipulator

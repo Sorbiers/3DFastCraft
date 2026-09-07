@@ -389,15 +389,16 @@
                  Object and Smooth under it too. -->
             <TabItem Header="Object">
                 <WrapPanel Margin="4">
-                    <Button Style="{StaticResource ToolButton}" Content="Subtract" Tag="{StaticResource IconSubtract}"
-                            Command="{Binding BooleanCommand}" CommandParameter="Subtract"
-                            ToolTip="Subtract the later selection from the first. Select two or more objects." />
+                    <Button Style="{StaticResource ToolButton}" Content="Subtract..." Tag="{StaticResource IconSubtract}"
+                            Command="{Binding BeginSubtractCommand}" MinWidth="80"
+                            ToolTip="Take the later selection away from the first. Opens the options on the right: a tolerance, and whether to keep what was taken away." />
                     <Button Style="{StaticResource ToolButton}" Content="Intersect" Tag="{StaticResource IconIntersect}"
                             Command="{Binding BooleanCommand}" CommandParameter="Intersect"
                             ToolTip="Keep only the overlapping volume" />
                     <Button Style="{StaticResource ToolButton}" Content="Merge" Tag="{StaticResource IconMerge}"
                             Command="{Binding BooleanCommand}" CommandParameter="Union"
                             ToolTip="Fuse the selection into one solid" />
+
                     <Button Style="{StaticResource ToolButton}" Content="Split..." Tag="{StaticResource IconSplit}"
                             Command="{Binding BeginSplitCommand}"
                             ToolTip="Cut the selected object in two with a plane, or with a face you pick" />
@@ -592,11 +593,16 @@
                                   ToolTip="The printer's bed size in millimetres. A guide, not a limit." />
                         <TextBlock Text="mm" Foreground="#FF9AA0A8" VerticalAlignment="Center" Margin="5,0,0,0" />
                         <TextBlock Text="Scale 1:" Style="{StaticResource FieldLabel}" Margin="14,0,0,0"
-                                   ToolTip="What the model is drawn to. Sizes stay in millimetres; this is what they mean." />
-                        <ComboBox Width="72" IsEditable="True" ItemsSource="{Binding ModelScales}"
+                                   ToolTip="What the model is drawn to. It changes no geometry and no field - the millimetres stay millimetres, because that is what a slicer reads. What it changes is the grey reading beside them, which says what those millimetres come to at this scale." />
+                        <!-- SelectionChanged as well as the Text binding: the binding commits on
+                             focus loss, which is right while someone is typing "160" and wrong
+                             when they pick a row - the scale would sit unchanged until they
+                             clicked somewhere else. -->
+                        <ComboBox Width="118" IsEditable="True" ItemsSource="{Binding ModelScales}"
                                   AutomationProperties.AutomationId="ModelScale"
-                                  Text="{Binding ModelScale, UpdateSourceTrigger=LostFocus}"
-                                  ToolTip="1:87 is HO, 1:160 is N, 1:1 is life size." />
+                                  SelectionChanged="OnScaleChosen"
+                                  Text="{Binding ModelScaleText, UpdateSourceTrigger=LostFocus}"
+                                  ToolTip="1:87 is HO, 1:160 is N, 1:12 a dolls' house, 1:1 life size. Select something to see the reading." />
                     </StackPanel>
                 </WrapPanel>
             </TabItem>
@@ -635,6 +641,7 @@
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto" />
                     <RowDefinition Height="180" />
+                    <RowDefinition Height="Auto" />
                     <RowDefinition Height="Auto" />
                     <RowDefinition Height="Auto" />
                     <RowDefinition Height="Auto" />
@@ -1027,7 +1034,43 @@
                 <!-- Colour. Bound to the view model rather than to Selected, because painting
                      applies to the whole selection and Selected is null once more than one
                      object is picked. -->
-                <StackPanel Grid.Row="6"
+                <!-- Subtract panel. A boolean cannot be taken back except by undo, and the two
+                     settings here change what it produces, so it asks before it cuts. -->
+                <Border Grid.Row="6" Margin="0,10,0,0" Padding="8" Background="#FFEFF5FF"
+                        BorderBrush="#FFB8D2F0" BorderThickness="1" CornerRadius="3"
+                        Visibility="{Binding IsSubtractMode, Converter={StaticResource BoolToVisibility}}">
+                    <StackPanel>
+                        <TextBlock Text="Subtract" FontWeight="SemiBold" Margin="0,0,0,6" />
+                        <TextBlock Text="{Binding SubtractSummary}" TextWrapping="Wrap"
+                                   Foreground="#FF3A4550" Margin="0,0,0,8" />
+
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,2">
+                            <TextBlock Text="Tolerance" Style="{StaticResource FieldLabel}" Width="76"
+                                       ToolTip="How much bigger than the cutter the opening comes out, on every side. A 3 mm pin subtracted with 0.2 leaves a 3.4 mm bore." />
+                            <TextBox Width="64" Style="{StaticResource NumberBox}" Tag="number"
+                                     AutomationProperties.AutomationId="SubtractTolerance"
+                                     ToolTip="Millimetres per side. Exact on a cube, a cylinder or a sphere; refused on anything with a sloped face, where the gap would come out smaller than asked. 0 subtracts exactly as before."
+                                     Text="{Binding SubtractTolerance, StringFormat=N2, UpdateSourceTrigger=LostFocus}" />
+                            <TextBlock Text="mm" Foreground="#FF9AA0A8" VerticalAlignment="Center" Margin="5,0,0,0" />
+                        </StackPanel>
+
+                        <CheckBox Content="Keep what is taken away" Margin="0,6,0,10"
+                                  AutomationProperties.AutomationId="SubtractKeepsCutter"
+                                  IsChecked="{Binding SubtractKeepsCutter, Mode=TwoWay}"
+                                  ToolTip="Leave the cutter on the plate afterwards. A pin that bored its own hole is usually a part in its own right, and modelling it twice is how the two stop matching." />
+
+                        <StackPanel Orientation="Horizontal">
+                            <Button Content="Apply" Style="{StaticResource PanelButton}"
+                                    AutomationProperties.AutomationId="SubtractApply"
+                                    Command="{Binding ApplySubtractCommand}" />
+                            <Button Content="Cancel" Style="{StaticResource PanelButton}"
+                                    AutomationProperties.AutomationId="SubtractCancel"
+                                    Command="{Binding CancelSubtractCommand}" />
+                        </StackPanel>
+                    </StackPanel>
+                </Border>
+
+                <StackPanel Grid.Row="7"
                             Visibility="{Binding HasAnySelection, Converter={StaticResource BoolToVisibility}}">
                     <TextBlock Text="Colour" Style="{StaticResource SectionHeader}" />
                     <ItemsControl ItemsSource="{Binding Swatches}">
@@ -1053,7 +1096,7 @@
                 </StackPanel>
 
                 <!-- Properties -->
-                <ScrollViewer Grid.Row="7" VerticalScrollBarVisibility="Auto" Margin="0,6,0,0"
+                <ScrollViewer Grid.Row="8" VerticalScrollBarVisibility="Auto" Margin="0,6,0,0"
                               DataContext="{Binding Selected}">
                     <StackPanel>
                         <StackPanel.Style>
@@ -1103,13 +1146,22 @@
                                 <ColumnDefinition Width="Auto" />
                                 <ColumnDefinition Width="*" />
                             </Grid.ColumnDefinitions>
-                            <TextBlock Text="X" Style="{StaticResource FieldLabel}" />
+                            <!-- W, D, H rather than X, Y, Z: these are dimensions, not
+                                 coordinates, and for a single object they are its own extents -
+                                 SizeX is the local size, so it does not change when the part is
+                                 turned. In a Z-up scene the axes read across as width, depth,
+                                 height, so the letters keep the same order as the boxes beside
+                                 them and as the gizmo handles. -->
+                            <TextBlock Text="W" Style="{StaticResource FieldLabel}"
+                                       ToolTip="Width - along X" />
                             <TextBox AutomationProperties.AutomationId="SizeX" Grid.Column="1" Style="{StaticResource NumberBox}" Tag="transform"
                                      Text="{Binding SizeX, StringFormat=N2, UpdateSourceTrigger=LostFocus}" />
-                            <TextBlock Grid.Column="2" Text="Y" Style="{StaticResource FieldLabel}" />
+                            <TextBlock Grid.Column="2" Text="D" Style="{StaticResource FieldLabel}"
+                                       ToolTip="Depth - along Y" />
                             <TextBox AutomationProperties.AutomationId="SizeY" Grid.Column="3" Style="{StaticResource NumberBox}" Tag="transform"
                                      Text="{Binding SizeY, StringFormat=N2, UpdateSourceTrigger=LostFocus}" />
-                            <TextBlock Grid.Column="4" Text="Z" Style="{StaticResource FieldLabel}" />
+                            <TextBlock Grid.Column="4" Text="H" Style="{StaticResource FieldLabel}"
+                                       ToolTip="Height - along Z" />
                             <TextBox AutomationProperties.AutomationId="SizeZ" Grid.Column="5" Style="{StaticResource NumberBox}" Tag="transform"
                                      Text="{Binding SizeZ, StringFormat=N2, UpdateSourceTrigger=LostFocus}" />
                         </Grid>
@@ -1203,11 +1255,13 @@
                     Visibility="{Binding ShowManipulatorBar, Converter={StaticResource BoolToVisibility}}">
                 <StackPanel Orientation="Horizontal">
                     <ToggleButton Style="{StaticResource ModeButton}" ToolTip="Move (M)"
+                                  AutomationProperties.Name="Move"
                                   IsChecked="{Binding IsMoveMode, Mode=TwoWay}">
                         <Path Data="M10,0 L13,3 L11,3 L11,9 L17,9 L17,7 L20,10 L17,13 L17,11 L11,11 L11,17 L13,17 L10,20 L7,17 L9,17 L9,11 L3,11 L3,13 L0,10 L3,7 L3,9 L9,9 L9,3 L7,3 Z"
                               Fill="#FF33383F" Stretch="Uniform" Width="16" Height="16" />
                     </ToggleButton>
                     <ToggleButton Style="{StaticResource ModeButton}" ToolTip="Rotate (R)"
+                                  AutomationProperties.Name="Rotate"
                                   IsChecked="{Binding IsRotateMode, Mode=TwoWay}">
                         <!-- Three quarters of a circle with a solid head. The old one drew the
                              arrow as two loose strokes, which read as a stray tick. -->
@@ -1221,6 +1275,7 @@
                         </Viewbox>
                     </ToggleButton>
                     <ToggleButton Style="{StaticResource ModeButton}" ToolTip="Resize (S)"
+                                  AutomationProperties.Name="Resize"
                                   IsChecked="{Binding IsScaleMode, Mode=TwoWay}">
                         <Path Data="M2,2 L18,2 L18,18 L2,18 Z M2,2 L2,7 M2,2 L7,2 M18,18 L13,18 M18,18 L18,13"
                               Stroke="#FF33383F" StrokeThickness="1.8" Fill="{x:Null}"
@@ -1288,6 +1343,29 @@
                                      Text="{Binding GroupZ, StringFormat=N2, UpdateSourceTrigger=LostFocus}" />
                         </StackPanel>
                         <TextBlock Text="mm" Style="{StaticResource GizmoUnit}" />
+
+                        <!-- The same numbers at the scene's scale, and editable: type metres
+                             here or millimetres there and each follows the other. Only the
+                             millimetres are stored - an STL has no notion of scale. Hidden at
+                             1:1, where the two would say the same thing twice. -->
+                        <StackPanel Orientation="Horizontal" Margin="8,0,0,0"
+                                    Visibility="{Binding ScaleApplies, Converter={StaticResource BoolToVisibility}}">
+                            <Rectangle Width="1" Margin="2,3,8,3" Fill="#FFD8DBE0" />
+                            <TextBlock Text="X" Style="{StaticResource GizmoLabel}" />
+                            <TextBox Style="{StaticResource GizmoBox}" Tag="transform"
+                                     AutomationProperties.AutomationId="RealPosX"
+                                     ToolTip="Where it is at the scene's scale. Editing it sets the millimetres beside it."
+                                     Text="{Binding RealX, StringFormat=N3, UpdateSourceTrigger=LostFocus}" />
+                            <TextBlock Text="Y" Style="{StaticResource GizmoLabel}" />
+                            <TextBox Style="{StaticResource GizmoBox}" Tag="transform"
+                                     AutomationProperties.AutomationId="RealPosY"
+                                     Text="{Binding RealY, StringFormat=N3, UpdateSourceTrigger=LostFocus}" />
+                            <TextBlock Text="Z" Style="{StaticResource GizmoLabel}" />
+                            <TextBox Style="{StaticResource GizmoBox}" Tag="transform"
+                                     AutomationProperties.AutomationId="RealPosZ"
+                                     Text="{Binding RealZ, StringFormat=N3, UpdateSourceTrigger=LostFocus}" />
+                            <TextBlock Text="{Binding RealUnit}" Style="{StaticResource GizmoUnit}" />
+                        </StackPanel>
                     </StackPanel>
 
                     <StackPanel Orientation="Horizontal"
@@ -1353,13 +1431,13 @@
                                     Visibility="{Binding DataContext.HasOneSelected,
                                                  RelativeSource={RelativeSource AncestorType=Window},
                                                  Converter={StaticResource BoolToVisibility}}">
-                            <TextBlock Text="X" Style="{StaticResource GizmoLabel}" />
+                            <TextBlock Text="W" Style="{StaticResource GizmoLabel}" ToolTip="Width - along X" />
                             <TextBox Style="{StaticResource GizmoBox}" Tag="transform"
                                      Text="{Binding SizeX, StringFormat=N2, UpdateSourceTrigger=LostFocus}" />
-                            <TextBlock Text="Y" Style="{StaticResource GizmoLabel}" />
+                            <TextBlock Text="D" Style="{StaticResource GizmoLabel}" ToolTip="Depth - along Y" />
                             <TextBox Style="{StaticResource GizmoBox}" Tag="transform"
                                      Text="{Binding SizeY, StringFormat=N2, UpdateSourceTrigger=LostFocus}" />
-                            <TextBlock Text="Z" Style="{StaticResource GizmoLabel}" />
+                            <TextBlock Text="H" Style="{StaticResource GizmoLabel}" ToolTip="Height - along Z" />
                             <TextBox Style="{StaticResource GizmoBox}" Tag="transform"
                                      Text="{Binding SizeZ, StringFormat=N2, UpdateSourceTrigger=LostFocus}" />
                         </StackPanel>
@@ -1367,17 +1445,44 @@
                              parts with it, so the box comes out the size asked for. -->
                         <StackPanel Orientation="Horizontal"
                                     Visibility="{Binding HasManySelected, Converter={StaticResource BoolToVisibility}}">
-                            <TextBlock Text="X" Style="{StaticResource GizmoLabel}" />
+                            <!-- Several selected: the bounding box of the lot, so "width" here
+                                 is how wide the group sits rather than any one part's own. -->
+                            <TextBlock Text="W" Style="{StaticResource GizmoLabel}" ToolTip="Width of the selection - along X" />
                             <TextBox Style="{StaticResource GizmoBox}" Tag="transform"
                                      Text="{Binding GroupSizeX, StringFormat=N2, UpdateSourceTrigger=LostFocus}" />
-                            <TextBlock Text="Y" Style="{StaticResource GizmoLabel}" />
+                            <TextBlock Text="D" Style="{StaticResource GizmoLabel}" ToolTip="Depth of the selection - along Y" />
                             <TextBox Style="{StaticResource GizmoBox}" Tag="transform"
                                      Text="{Binding GroupSizeY, StringFormat=N2, UpdateSourceTrigger=LostFocus}" />
-                            <TextBlock Text="Z" Style="{StaticResource GizmoLabel}" />
+                            <TextBlock Text="H" Style="{StaticResource GizmoLabel}" ToolTip="Height of the selection - along Z" />
                             <TextBox Style="{StaticResource GizmoBox}" Tag="transform"
                                      Text="{Binding GroupSizeZ, StringFormat=N2, UpdateSourceTrigger=LostFocus}" />
                         </StackPanel>
                         <TextBlock Text="mm" Style="{StaticResource GizmoUnit}" />
+
+                        <!-- The same numbers at the scene's scale, and editable: type metres
+                             here or millimetres there and each follows the other. Only the
+                             millimetres are stored - an STL has no notion of scale. Hidden at
+                             1:1, where the two would say the same thing twice. -->
+                        <StackPanel Orientation="Horizontal" Margin="8,0,0,0"
+                                    Visibility="{Binding ScaleApplies, Converter={StaticResource BoolToVisibility}}">
+                            <Rectangle Width="1" Margin="2,3,8,3" Fill="#FFD8DBE0" />
+                            <TextBlock Text="W" Style="{StaticResource GizmoLabel}" ToolTip="Width - along X" />
+                            <TextBox Style="{StaticResource GizmoBox}" Tag="transform"
+                                     AutomationProperties.AutomationId="RealSizeW"
+                                     ToolTip="How big it is at the scene's scale. Editing it sets the millimetres beside it."
+                                     Text="{Binding RealW, StringFormat=N3, UpdateSourceTrigger=LostFocus}" />
+                            <TextBlock Text="D" Style="{StaticResource GizmoLabel}" ToolTip="Depth - along Y" />
+                            <TextBox Style="{StaticResource GizmoBox}" Tag="transform"
+                                     AutomationProperties.AutomationId="RealSizeD"
+                                     Text="{Binding RealD, StringFormat=N3, UpdateSourceTrigger=LostFocus}" />
+                            <TextBlock Text="H" Style="{StaticResource GizmoLabel}" ToolTip="Height - along Z" />
+                            <TextBox Style="{StaticResource GizmoBox}" Tag="transform"
+                                     AutomationProperties.AutomationId="RealSizeH"
+                                     Text="{Binding RealH, StringFormat=N3, UpdateSourceTrigger=LostFocus}" />
+                            <TextBlock Text="{Binding RealUnit}" Style="{StaticResource GizmoUnit}" />
+                        </StackPanel>
+
+
                         <ToggleButton Style="{StaticResource ModeButton}" Margin="4,0,0,0"
                                       ToolTip="Keep proportions while resizing"
                                       IsChecked="{Binding UniformScale, Mode=TwoWay}">

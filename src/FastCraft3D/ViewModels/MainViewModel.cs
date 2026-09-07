@@ -45,6 +45,9 @@ public sealed class MainViewModel : INotifyPropertyChanged
     private bool isSplitMode;
     private bool isEngraveMode;
     private bool isMeasureMode;
+    private bool isSubtractMode;
+    private bool subtractKeepsCutter;
+    private float subtractTolerance;
     private bool isEmbossMode;
     private bool isLayMode;
     private FacePatch? embossFace;
@@ -111,6 +114,9 @@ public sealed class MainViewModel : INotifyPropertyChanged
             () => Scene.Selection.Count > 0);
 
         BooleanCommand = new AsyncRelayCommand(p => RunBoolean(p), _ => Scene.Selection.Count >= 2);
+        BeginSubtractCommand = RelayCommand.Simple(BeginSubtract, () => Scene.Selection.Count >= 2);
+        ApplySubtractCommand = new AsyncRelayCommand(_ => ApplySubtract(), _ => Scene.Selection.Count >= 2);
+        CancelSubtractCommand = RelayCommand.Simple(() => IsSubtractMode = false);
         BeginSplitCommand = RelayCommand.Simple(BeginSplit, () => Scene.Selection.Count > 0);
         AlignToAxesCommand = RelayCommand.Simple(AlignToAxes, AnythingTurned);
         ApplySplitCommand = AsyncRelayCommand.Simple(ApplySplit, () => IsSplitMode);
@@ -179,6 +185,9 @@ public sealed class MainViewModel : INotifyPropertyChanged
     public System.Windows.Input.ICommand UngroupCommand { get; }
     public System.Windows.Input.ICommand DeselectAllCommand { get; }
     public System.Windows.Input.ICommand BooleanCommand { get; }
+    public System.Windows.Input.ICommand BeginSubtractCommand { get; }
+    public System.Windows.Input.ICommand ApplySubtractCommand { get; }
+    public System.Windows.Input.ICommand CancelSubtractCommand { get; }
     public System.Windows.Input.ICommand BeginSplitCommand { get; }
     public System.Windows.Input.ICommand AlignToAxesCommand { get; }
     public System.Windows.Input.ICommand ApplySplitCommand { get; }
@@ -246,12 +255,21 @@ public sealed class MainViewModel : INotifyPropertyChanged
         get => selected;
         private set
         {
+            // The real-unit fields are the millimetre ones divided by the scale, so they have to
+            // hear about every move and resize - including one made by dragging a handle, which
+            // never passes through this class at all. The object is the only thing that knows.
+            if (selected is not null) selected.PropertyChanged -= OnSelectedTransformed;
             selected = value;
+            if (selected is not null) selected.PropertyChanged += OnSelectedTransformed;
+
             Raise(nameof(Selected));
             Raise(nameof(HasSelection));
             Raise(nameof(SelectionSummary));
+            RaiseReal();
         }
     }
+
+    private void OnSelectedTransformed(object? sender, PropertyChangedEventArgs e) => RaiseReal();
 
     /// <summary>One object selected - the numeric fields in the manipulator bar need exactly one.</summary>
     public bool HasSelection => selected is not null;
@@ -488,6 +506,11 @@ public sealed class MainViewModel : INotifyPropertyChanged
         Raise(nameof(GroupSizeX));
         Raise(nameof(GroupSizeY));
         Raise(nameof(GroupSizeZ));
+
+        // The real-unit fields are derived from all of the above, so they have to be told too -
+        // without this they showed what the selection measured when it was picked, and went on
+        // showing it while the parts moved under the pointer.
+        RaiseReal();
         IsDirty = true;
     }
 
@@ -1024,6 +1047,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
         if (Scene.Selection.Count != 1) return;
 
         IsSplitMode = false;
+        IsSubtractMode = false;
         IsEngraveMode = false;
         IsEmbossMode = false;
         IsMeasureMode = false;
@@ -1076,6 +1100,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
         if (Scene.Selection.Count != 1) return;
 
         IsSplitMode = false;
+        IsSubtractMode = false;
         IsEngraveMode = false;
         IsMeasureMode = false;
         IsLayMode = false;
@@ -1377,9 +1402,29 @@ public sealed class MainViewModel : INotifyPropertyChanged
         }
     }
 
+    private void BeginSubtract()
+    {
+        IsEngraveMode = false;
+        IsEmbossMode = false;
+        IsLayMode = false;
+        IsMeasureMode = false;
+        IsSplitMode = false;
+
+        IsSubtractMode = true;
+        Raise(nameof(SubtractSummary));
+        Status = SubtractSummary;
+    }
+
+    private async Task ApplySubtract()
+    {
+        await RunBoolean(BooleanOp.Subtract);
+        IsSubtractMode = false;
+    }
+
     private void BeginMeasure()
     {
         IsSplitMode = false;
+        IsSubtractMode = false;
         IsEngraveMode = false;
         IsEmbossMode = false;
         IsLayMode = false;
@@ -1505,31 +1550,220 @@ public sealed class MainViewModel : INotifyPropertyChanged
 
             Set(ref modelScale, wanted);
             Raise(nameof(ScaleLabel));
-            Raise(nameof(RealSize));
+            Raise(nameof(ModelScaleText));
+            Raise(nameof(RealUnit));
+            RaiseReal();
             RefreshSelection();
         }
     }
 
-    /// <summary>Scales a modeller is likely to want, and 1:1 for everyone else.</summary>
-    public IReadOnlyList<float> ModelScales { get; } = [1f, 12f, 24f, 35f, 48f, 72f, 76f, 87f, 100f, 144f, 160f, 200f, 220f];
+    /// <summary>
+    /// The same size and position in real units, as fields rather than a read-out.
+    ///
+    /// Typing 9.57 into the metres box makes the part 110 mm at 1:87, and typing 110 into the
+    /// millimetre box makes the metres box read 9.57. Both write the same underlying number -
+    /// the model is always stored in millimetres, because that is what an STL carries and what
+    /// a slicer reads. Nothing here is a second copy of the geometry.
+    /// </summary>
+    public bool ScaleApplies => modelScale > 1.001f && Scene.Selection.Count > 0;
 
-    public string ScaleLabel => modelScale <= 1.001f ? "1:1" : $"1:{modelScale:0.##}";
+    private float ToReal(float millimetres) => millimetres * modelScale / 1000f;
+
+    private float FromReal(float metres) => metres * 1000f / modelScale;
+
+    public float RealX
+    {
+        get => ToReal(HasOneSelected ? Selected!.PositionX : GroupX);
+        set
+        {
+            if (HasOneSelected) Selected!.PositionX = FromReal(value);
+            else GroupX = FromReal(value);
+            RaiseReal();
+        }
+    }
+
+    public float RealY
+    {
+        get => ToReal(HasOneSelected ? Selected!.PositionY : GroupY);
+        set
+        {
+            if (HasOneSelected) Selected!.PositionY = FromReal(value);
+            else GroupY = FromReal(value);
+            RaiseReal();
+        }
+    }
+
+    public float RealZ
+    {
+        get => ToReal(HasOneSelected ? Selected!.PositionZ : GroupZ);
+        set
+        {
+            if (HasOneSelected) Selected!.PositionZ = FromReal(value);
+            else GroupZ = FromReal(value);
+            RaiseReal();
+        }
+    }
+
+    public float RealW
+    {
+        get => ToReal(HasOneSelected ? Selected!.SizeX : GroupSizeX);
+        set
+        {
+            if (HasOneSelected) Selected!.SizeX = FromReal(value);
+            else GroupSizeX = FromReal(value);
+            RaiseReal();
+        }
+    }
+
+    public float RealD
+    {
+        get => ToReal(HasOneSelected ? Selected!.SizeY : GroupSizeY);
+        set
+        {
+            if (HasOneSelected) Selected!.SizeY = FromReal(value);
+            else GroupSizeY = FromReal(value);
+            RaiseReal();
+        }
+    }
+
+    public float RealH
+    {
+        get => ToReal(HasOneSelected ? Selected!.SizeZ : GroupSizeZ);
+        set
+        {
+            if (HasOneSelected) Selected!.SizeZ = FromReal(value);
+            else GroupSizeZ = FromReal(value);
+            RaiseReal();
+        }
+    }
+
+    private void RaiseReal()
+    {
+        Raise(nameof(ScaleApplies));
+        Raise(nameof(RealX));
+        Raise(nameof(RealY));
+        Raise(nameof(RealZ));
+        Raise(nameof(RealW));
+        Raise(nameof(RealD));
+        Raise(nameof(RealH));
+        Raise(nameof(RealSize));
+    }
 
     /// <summary>
-    /// The selection's size in real units, for the panel to show under the millimetres. Metres
+    /// The standard each scale belongs to. Nobody remembers that 1:87 is HO and 1:160 is N -
+    /// they remember the name and have to look up the number, which is the wrong way round for
+    /// a list you pick from.
+    /// </summary>
+    private static readonly (float Scale, string Standard)[] KnownScales =
+    [
+        (1f, "full size"),
+        (12f, "dolls' house"),
+        (24f, "G"),
+        (35f, "military"),
+        (48f, "O"),
+        (72f, "aircraft"),
+        (76f, "OO"),
+        (87f, "HO"),
+        (100f, "architectural"),
+        (144f, "aircraft"),
+        (160f, "N"),
+        (200f, "architectural"),
+        (220f, "Z")
+    ];
+
+    /// <summary>Scales a modeller is likely to want, named, and 1:1 for everyone else.</summary>
+    public IReadOnlyList<string> ModelScales { get; } =
+        KnownScales.Select(k => Named(k.Scale, k.Standard)).ToList();
+
+    private static string Named(float scale, string standard) =>
+        $"{scale:0.##} ({standard})";
+
+    /// <summary>The name for a scale, if it has one.</summary>
+    private static string? StandardFor(float scale)
+    {
+        foreach (var known in KnownScales)
+            if (Math.Abs(known.Scale - scale) < 0.001f) return known.Standard;
+
+        return null;
+    }
+
+    /// <summary>
+    /// What the scale box shows and accepts. A plain float binding cannot do this: the list has
+    /// to read "87 (HO)" to be worth having, and that string has to come back as 87 - so the
+    /// number is parsed off the front and anything in brackets is a label, not input.
+    /// </summary>
+    public string ModelScaleText
+    {
+        get
+        {
+            var standard = StandardFor(modelScale);
+            return standard is null ? $"{modelScale:0.##}" : Named(modelScale, standard);
+        }
+        set
+        {
+            if (string.IsNullOrWhiteSpace(value)) return;
+
+            var text = value.Trim();
+            int bracket = text.IndexOf('(');
+            if (bracket >= 0) text = text[..bracket].Trim();
+
+            if (float.TryParse(text, System.Globalization.NumberStyles.Float,
+                               System.Globalization.CultureInfo.CurrentCulture, out float parsed)
+                || float.TryParse(text, System.Globalization.NumberStyles.Float,
+                                  System.Globalization.CultureInfo.InvariantCulture, out parsed))
+            {
+                ModelScale = parsed;
+            }
+
+            // Right or wrong, put the box back in step with what the scale actually is.
+            Raise(nameof(ModelScaleText));
+        }
+    }
+
+    public string ScaleLabel
+    {
+        get
+        {
+            if (modelScale <= 1.001f) return "1:1";
+
+            var standard = StandardFor(modelScale);
+            return standard is null ? $"1:{modelScale:0.##}" : $"1:{modelScale:0.##} ({standard})";
+        }
+    }
+
+    /// <summary>
+    /// The unit on the real-size boxes, with the scale it is at. "m" alone leaves the reader
+    /// working out whose metres these are.
+    /// </summary>
+    public string RealUnit => modelScale <= 1.001f ? "m" : $"m at 1:{modelScale:0.##}";
+
+    /// <summary>
+    /// What the selection measures at the scene's scale, shown beside the millimetres. Metres
     /// once it passes one, because a 9570 mm wall is harder to read than 9.57 m.
+    ///
+    /// Any selection, not just a single object: it used to read <c>Selected</c>, which is null
+    /// whenever two or more are picked, so the whole scale control did nothing visible for
+    /// anyone working on more than one part - and a control that appears to do nothing is worse
+    /// than no control.
     /// </summary>
     public string RealSize
     {
         get
         {
-            if (Selected is not { } o || modelScale <= 1.001f) return "";
+            if (modelScale <= 1.001f) return "";
 
-            var size = new Vector3(o.SizeX, o.SizeY, o.SizeZ) * modelScale;
+            var selection = Scene.Selection;
+            if (selection.Count == 0) return "";
+
+            var size = (selection.Count == 1
+                ? new Vector3(selection[0].SizeX, selection[0].SizeY, selection[0].SizeZ)
+                : GroupExtent()) * modelScale;
+
+            if (size == Vector3.Zero) return "";
 
             return size.X >= 1000f || size.Y >= 1000f || size.Z >= 1000f
-                ? $"{size.X / 1000f:0.##} x {size.Y / 1000f:0.##} x {size.Z / 1000f:0.##} m"
-                : $"{size.X:0.#} x {size.Y:0.#} x {size.Z:0.#} mm";
+                ? $"{size.X / 1000f:0.##} x {size.Y / 1000f:0.##} x {size.Z / 1000f:0.##} m at {ScaleLabel}"
+                : $"{size.X:0.#} x {size.Y:0.#} x {size.Z:0.#} mm at {ScaleLabel}";
         }
     }
 
@@ -1644,6 +1878,60 @@ public sealed class MainViewModel : INotifyPropertyChanged
 
     /// <summary>Boarding and grain can run either way; courses of brick and tile are level.</summary>
     public bool EngraveDirectionApplies => GroovePattern.Turns(engrave.Options.Kind);
+
+    /// <summary>
+    /// While this is on, the subtract panel is open and nothing has been cut yet. Its own mode
+    /// for the same reason splitting and engraving are: there are settings to get right before
+    /// the thing happens, and a boolean cannot be taken back except by undo.
+    /// </summary>
+    public bool IsSubtractMode
+    {
+        get => isSubtractMode;
+        set
+        {
+            if (isSubtractMode == value) return;
+
+            Set(ref isSubtractMode, value);
+            Raise(nameof(SubtractSummary));
+        }
+    }
+
+    /// <summary>
+    /// How much bigger than the cutter the opening should come out, on every side.
+    ///
+    /// This is the number that was arithmetic by hand before: a 3 mm pin wants a 3.4 mm bore, so
+    /// somebody types 3.4 somewhere and remembers why. Here the pin is subtracted with 0.2 mm of
+    /// tolerance and the hole is derived from it - change the pin and the hole follows.
+    /// </summary>
+    public float SubtractTolerance
+    {
+        get => subtractTolerance;
+        set => Set(ref subtractTolerance, Math.Clamp(value, 0f, 5f));
+    }
+
+    /// <summary>
+    /// Leave the cutter on the plate afterwards. A pin that bored its own hole is usually a part
+    /// in its own right, and modelling it twice is how the two stop matching.
+    /// </summary>
+    public bool SubtractKeepsCutter
+    {
+        get => subtractKeepsCutter;
+        set => Set(ref subtractKeepsCutter, value);
+    }
+
+    /// <summary>What is about to happen to what, in the order the clicks were made.</summary>
+    public string SubtractSummary
+    {
+        get
+        {
+            var picked = Scene.SelectionInPickOrder;
+            if (picked.Count < 2)
+                return "Click the part to keep first, then what to take away from it.";
+
+            var cutters = string.Join(", ", picked.Skip(1).Select(o => o.Name));
+            return $"Take {cutters} away from {picked[0].Name}.";
+        }
+    }
 
     /// <summary>
     /// Stand the pattern off the face rather than cutting it in.
@@ -2303,8 +2591,34 @@ public sealed class MainViewModel : INotifyPropertyChanged
         Status = $"{op}...";
         try
         {
-            // Everything is baked to world space first: CSG has no concept of per-object transforms.
-            var meshes = selection.Select(o => o.ToWorldMesh()).ToList();
+            // Everything is baked to world space first: CSG has no concept of per-object
+            // transforms. On a subtraction the cutters - everything after the first - are grown
+            // by the clearance on the way, so the hole is bigger than the thing that cut it.
+            float clearance = op == BooleanOp.Subtract ? subtractTolerance : 0f;
+
+            if (clearance > 0f)
+            {
+                var awkward = selection.Skip(1).FirstOrDefault(o => !o.CanTakeClearance);
+                if (awkward is not null)
+                {
+                    Status = $"{awkward.Name} cannot take a clearance";
+                    MessageBox.Show(
+                        $"\"{awkward.Name}\" cannot be grown by a clearance.\n\n"
+                        + "A clearance is only exact on a cube, a cylinder or a sphere. On a "
+                        + "sloped face - a cone, a pyramid, a wedge - growing each dimension "
+                        + "leaves less clearance than you asked for, and a gap smaller than the "
+                        + "number typed is the one direction that jams a printed part. It is "
+                        + "refused rather than quietly under-delivered.\n\n"
+                        + "Subtract with the clearance at 0 and size the cutter yourself, or "
+                        + "make the cutter from a cube or a cylinder.",
+                        "3DFastCraft", MessageBoxButton.OK, MessageBoxImage.Information);
+                    return;
+                }
+            }
+
+            var meshes = selection
+                .Select((o, i) => i == 0 ? o.ToWorldMesh() : o.ToWorldMeshGrown(clearance))
+                .ToList();
 
             var result = await Task.Run(() =>
             {
@@ -2337,12 +2651,25 @@ public sealed class MainViewModel : INotifyPropertyChanged
                 Colour = selection[0].Colour
             }.Centred();
 
-            Undo.Execute(new ReplaceObjectsCommand(op.ToString(), selection, [combined]));
+            // Kept cutters are removed and put back, so they end up after the result in the
+            // list. Their geometry is untouched: what was grown was a copy made for the cut.
+            var keptCutters = op == BooleanOp.Subtract && subtractKeepsCutter
+                ? selection.Skip(1).ToList()
+                : [];
+
+            List<SceneObject> added = [combined, .. keptCutters];
+            Undo.Execute(new ReplaceObjectsCommand(op.ToString(), selection, added));
             RefreshSelection();
 
+            // One line, not three. Two of these used to be set in a row and the last one won,
+            // so the tolerance was applied and never mentioned.
             var health = result.CheckHealth();
-            string kept = op == BooleanOp.Subtract ? $" from {selection[0].Name}" : "";
-            Status = $"{op}{kept}: {health.TriangleCount:N0} triangles, {health.Describe()}";
+            string from = op == BooleanOp.Subtract ? $" from {selection[0].Name}" : "";
+            string tolerance = clearance > 0f ? $", {clearance:0.##} mm tolerance" : "";
+            string keeping = keptCutters.Count > 0 ? ", cutter kept" : "";
+
+            Status = $"{op}{from}{tolerance}{keeping}: "
+                   + $"{health.TriangleCount:N0} triangles, {health.Describe()}";
         }
         catch (Exception ex)
         {
@@ -2680,6 +3007,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
 
         // Every one of these claims the click on the object, so only one can be on.
         IsSplitMode = false;
+        IsSubtractMode = false;
         IsEmbossMode = false;
         IsMeasureMode = false;
         IsLayMode = false;
@@ -2891,6 +3219,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
 
             Undo.Execute(new ReplaceObjectsCommand("Split", consumed, produced));
             IsSplitMode = false;
+        IsSubtractMode = false;
             RefreshSelection();
 
             Status = missed == 0
@@ -3236,6 +3565,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
         RaiseGroup();
         Raise(nameof(ShowManipulatorBar));
         Raise(nameof(SelectionSummary));
+        Raise(nameof(SubtractSummary));
         Raise(nameof(UndoLabel));
         if (IsSplitMode && selection.Count > 0) ResetSplitOffset();
     }

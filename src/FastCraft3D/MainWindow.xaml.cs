@@ -1066,6 +1066,16 @@ public partial class MainWindow : Window
         menu.IsOpen = true;
     }
 
+    /// <summary>
+    /// A scale picked from the list takes effect at once. Typing still waits for the field to
+    /// be left, so "160" is not read as 1 and then 16 on its way in.
+    /// </summary>
+    private void OnScaleChosen(object sender, SelectionChangedEventArgs e)
+    {
+        if (sender is ComboBox box && box.SelectedItem is string chosen)
+            viewModel.ModelScaleText = chosen;
+    }
+
     private void OnAbout(object sender, RoutedEventArgs e) =>
         new AboutDialog { Owner = this }.ShowDialog();
 
