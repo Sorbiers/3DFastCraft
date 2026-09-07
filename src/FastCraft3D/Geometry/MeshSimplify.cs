@@ -1,4 +1,4 @@
-using System.Numerics;
+﻿using System.Numerics;
 
 namespace FastCraft3D.Geometry;
 
@@ -25,20 +25,22 @@ public static class MeshSimplify
     private const float MaximumFlip = 0.1f;
 
     /// <summary>Reduces to a fraction of the original triangle count, 0 to 1.</summary>
-    public static Mesh ByFraction(Mesh mesh, float keep) =>
+    public static Mesh ByFraction(Mesh mesh, float keep, CancellationToken token = default) =>
         To(mesh, (int)(mesh.TriangleCount * Math.Clamp(keep, 0.001f, 1f)));
 
     /// <summary>
     /// Reduces to about <paramref name="targetTriangles"/>. Blocks; a caller on the UI thread
     /// should wrap it in Task.Run.
     /// </summary>
-    public static Mesh To(Mesh mesh, int targetTriangles)
+    public static Mesh To(Mesh mesh, int targetTriangles, CancellationToken token = default)
     {
+        token.ThrowIfCancellationRequested();
+
         int triangleCount = mesh.TriangleCount;
         if (triangleCount == 0 || targetTriangles >= triangleCount) return mesh;
 
         var work = new Simplifier(mesh);
-        work.Reduce(Math.Max(targetTriangles, 4));
+        work.Reduce(Math.Max(targetTriangles, 4), token);
 
         return work.ToMesh();
     }
@@ -80,7 +82,7 @@ public static class MeshSimplify
             onRim = RimVertices();
         }
 
-        public void Reduce(int target)
+        public void Reduce(int target, CancellationToken token = default)
         {
             var queue = new PriorityQueue<(int A, int B, int Version), double>();
             var version = new int[points.Count];
@@ -89,8 +91,17 @@ public static class MeshSimplify
                 for (int k = 0; k < 3; k++)
                     Offer(queue, version, corners[t * 3 + k], corners[t * 3 + (k + 1) % 3]);
 
+            int since = 0;
+
             while (alive > target && queue.TryDequeue(out var edge, out _))
             {
+                // A collapse is small, so counted rather than checked every time round.
+                if (++since >= 1024)
+                {
+                    since = 0;
+                    token.ThrowIfCancellationRequested();
+                }
+
                 var (a, b, stamp) = edge;
 
                 // Lazily discarded rather than removed: an edge whose ends have moved since it

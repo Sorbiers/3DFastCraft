@@ -1,4 +1,4 @@
-using System.Numerics;
+﻿using System.Numerics;
 using FastCraft3D.Geometry.Csg;
 
 namespace FastCraft3D.Geometry;
@@ -29,15 +29,19 @@ public static class PlaneSplit
         _ => Vector3.UnitZ
     };
 
-    public static (Mesh? Front, Mesh? Back) Split(Mesh mesh, Axis axis, float offset, SplitKeep keep) =>
-        Split(mesh, NormalFor(axis), offset, keep);
+    public static (Mesh? Front, Mesh? Back) Split(Mesh mesh, Axis axis, float offset, SplitKeep keep,
+                                                 CancellationToken token = default) =>
+        Split(mesh, NormalFor(axis), offset, keep, token);
 
     /// <summary>
     /// Splits at <paramref name="offset"/> millimetres along <paramref name="normal"/>.
     /// A half is null when the plane misses the solid entirely.
     /// </summary>
-    public static (Mesh? Front, Mesh? Back) Split(Mesh mesh, Vector3 normal, float offset, SplitKeep keep)
+    public static (Mesh? Front, Mesh? Back) Split(Mesh mesh, Vector3 normal, float offset, SplitKeep keep,
+                                                 CancellationToken token = default)
     {
+        token.ThrowIfCancellationRequested();
+
         var bounds = mesh.ComputeBounds();
         if (bounds.IsEmpty) return (null, null);
 
@@ -45,11 +49,11 @@ public static class PlaneSplit
         var halfSpace = BuildHalfSpaceBox(bounds, normal, offset);
 
         Mesh? front = keep is SplitKeep.Front or SplitKeep.Both
-            ? NullIfEmpty(CsgSolid.Subtract(mesh, halfSpace))
+            ? NullIfEmpty(CsgSolid.Subtract(mesh, halfSpace, token: token))
             : null;
 
         Mesh? back = keep is SplitKeep.Back or SplitKeep.Both
-            ? NullIfEmpty(CsgSolid.Intersect(mesh, halfSpace))
+            ? NullIfEmpty(CsgSolid.Intersect(mesh, halfSpace, token: token))
             : null;
 
         return (front, back);

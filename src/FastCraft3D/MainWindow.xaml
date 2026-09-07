@@ -349,6 +349,7 @@
         <KeyBinding Key="I" Modifiers="Control" Command="{Binding ImportCommand}" />
     </Window.InputBindings>
 
+    <Grid>
     <DockPanel>
 
         <!-- Ribbon -->
@@ -411,7 +412,7 @@
                             ToolTip="Copy the selection without moving it - what you want before a boolean or a mirror (Ctrl+Shift+D)" />
                     <Button Style="{StaticResource ToolButton}" Content="Repeat..." Tag="{StaticResource IconRepeat}"
                             Command="{Binding RepeatCommand}" MinWidth="76"
-                            ToolTip="Repeat the selection along a line, growing as it goes - a flight of steps, a row of dowels, a run of courses" />
+                            ToolTip="Repeat the selection along a line or round a circle, growing as it goes - a flight of steps, a row of dowels, a ring of pins, a spiral stair" />
                     <Button Style="{StaticResource ToolButton}" Content="Delete" Tag="{StaticResource IconDelete}"
                             Command="{Binding DeleteCommand}"
                             ToolTip="Remove the selection (Del)" />
@@ -1518,4 +1519,37 @@
             </TextBlock>
         </Grid>
     </DockPanel>
+
+    <!-- Over everything while a long operation runs.
+         A filled Border takes every mouse event that would have reached the ribbon or the
+         viewport, which is the whole of the blocking: the keyboard is stopped in the code
+         behind, because a shortcut fires wherever the pointer happens to be. -->
+    <Border Name="BusyOverlay" Background="#66202428" Panel.ZIndex="10"
+            KeyboardNavigation.TabNavigation="Cycle"
+            Visibility="{Binding IsBusy, Converter={StaticResource BoolToVisibility}}">
+        <Border Background="White" BorderBrush="#FFD4D8DE" BorderThickness="1" CornerRadius="4"
+                Padding="24,20" MinWidth="320" MaxWidth="400"
+                HorizontalAlignment="Center" VerticalAlignment="Center">
+            <StackPanel>
+                <TextBlock Text="{Binding BusyTitle}" FontSize="15" FontWeight="SemiBold"
+                           Foreground="#FF2C3037" TextWrapping="Wrap"
+                           AutomationProperties.AutomationId="BusyTitle" />
+                <TextBlock Text="{Binding BusyElapsed}" Foreground="#FF8A9098" Margin="0,4,0,0"
+                           AutomationProperties.AutomationId="BusyElapsed" />
+
+                <ProgressBar IsIndeterminate="True" Height="4" Margin="0,16,0,0"
+                             Background="#FFEDEFF2" BorderThickness="0" Foreground="#FF3E7BD6" />
+
+                <TextBlock Text="{Binding BusyHint}" Margin="0,16,0,0" TextWrapping="Wrap"
+                           Foreground="#FF5A5F66" />
+
+                <Button Name="AbortButton" Content="Abort" HorizontalAlignment="Right"
+                        Margin="0,18,0,0" MinWidth="92" Padding="12,6" Cursor="Hand"
+                        AutomationProperties.AutomationId="Abort"
+                        IsEnabled="{Binding CanAbort}" Command="{Binding AbortCommand}"
+                        ToolTip="Stop and leave the model as it is (Esc)" />
+            </StackPanel>
+        </Border>
+    </Border>
+    </Grid>
 </Window>

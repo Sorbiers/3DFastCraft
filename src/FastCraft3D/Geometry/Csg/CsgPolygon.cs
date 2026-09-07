@@ -1,4 +1,4 @@
-namespace FastCraft3D.Geometry.Csg;
+﻿namespace FastCraft3D.Geometry.Csg;
 
 /// <summary>
 /// A convex polygon carrying its own plane. Only positions are tracked - shading normals
@@ -156,12 +156,19 @@ internal static class PolygonSplitter
     /// chunked across cores; each chunk fills buckets with identical aliasing and they are
     /// concatenated in order, so the output matches the serial path exactly (unit-tested).
     /// </summary>
-    public static void SplitMany(in CsgPlane plane, List<CsgPolygon> polygons, in SplitBuckets buckets, bool parallel)
+    public static void SplitMany(in CsgPlane plane, List<CsgPolygon> polygons, in SplitBuckets buckets,
+                                bool parallel, CancellationToken token = default)
     {
         if (!parallel || polygons.Count < ParallelThreshold)
         {
-            foreach (var p in polygons)
-                Split(plane, p, buckets);
+            // Every so often rather than every polygon. The root node of a dense mesh is one
+            // call holding hundreds of thousands of them, and without a look at the token in
+            // here Abort could only be honoured once that one call had finished.
+            for (int i = 0; i < polygons.Count; i++)
+            {
+                if ((i & 1023) == 0) token.ThrowIfCancellationRequested();
+                Split(plane, polygons[i], buckets);
+            }
             return;
         }
 
@@ -171,13 +178,19 @@ internal static class PolygonSplitter
         var planeCopy = plane;
         var template = buckets;
 
-        Parallel.For(0, chunks, c =>
+        // The token goes to Parallel.For as well as being read inside the chunk: given to the
+        // options it surfaces as a plain OperationCanceledException rather than an
+        // AggregateException wrapping one per worker.
+        Parallel.For(0, chunks, new ParallelOptions { CancellationToken = token }, c =>
         {
             var local = template.CreateLocal();
             int start = c * chunkSize;
             int end = Math.Min(start + chunkSize, polygons.Count);
             for (int i = start; i < end; i++)
+            {
+                if ((i & 1023) == 0) token.ThrowIfCancellationRequested();
                 Split(planeCopy, polygons[i], local);
+            }
             locals[c] = local;
         });
 

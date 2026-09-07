@@ -99,14 +99,19 @@ public static class Engraver
     /// Runs the whole operation. Blocks while a big-stack thread does the boolean work, so a
     /// caller on the UI thread must wrap this in Task.Run.
     /// </summary>
-    public static EngraveResult Engrave(Mesh mesh, FacePatch face, EngraveOptions options)
+    public static EngraveResult Engrave(Mesh mesh, FacePatch face, EngraveOptions options,
+                                       CancellationToken token = default)
     {
+        token.ThrowIfCancellationRequested();
+
         options = options.Sane();
 
         EngraveResult? best = null;
 
         foreach (var (across, along, size, width) in Nudges)
         {
+            token.ThrowIfCancellationRequested();
+
             var moved = options with
             {
                 OffsetU = options.OffsetU + across * options.GrooveWidth,
@@ -135,10 +140,10 @@ public static class Engraver
             // ordinary leftovers; this catches the rest, and declines when it cannot help, so
             // what is measured here is the best this attempt is going to get.
             var worked = retiled ?? (moved.Raised
-                ? CsgSolid.Union(mesh, solid)
-                : CsgSolid.Subtract(mesh, solid));
+                ? CsgSolid.Union(mesh, solid, token: token)
+                : CsgSolid.Subtract(mesh, solid, token: token));
 
-            var cut = MeshHealer.Heal(worked).Mesh;
+            var cut = MeshHealer.Heal(worked, token: token).Mesh;
             var result = new EngraveResult(
                 cut, pattern.Count, solid.TriangleCount, cut.CheckHealth(), moved);
 

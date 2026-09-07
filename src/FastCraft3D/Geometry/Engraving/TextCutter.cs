@@ -86,14 +86,18 @@ public static class TextCutter
     /// </returns>
     public static Mesh? Apply(
         Mesh world, IReadOnlyList<TextShape> shapes, IPlacementSurface surface,
-        bool raised, float depthMm, float bevelMm = 0)
+        bool raised, float depthMm, float bevelMm = 0, CancellationToken token = default)
     {
+        token.ThrowIfCancellationRequested();
+
         if (Retiled(world, shapes, surface, raised, depthMm, bevelMm) is { } laid) return laid;
 
         Mesh? best = null;
 
         foreach (var (factor, slide) in Nudges)
         {
+            token.ThrowIfCancellationRequested();
+
             float clear = surface.ClearanceMm * factor;
             var moved = new SurfacePlacement(new Vector2(slide, 0), 0).Apply(shapes);
 
@@ -103,11 +107,13 @@ public static class TextCutter
 
             if (solid.TriangleCount == 0) return null;
 
-            var cut = raised ? CsgSolid.Union(world, solid) : CsgSolid.Subtract(world, solid);
+            var cut = raised
+                ? CsgSolid.Union(world, solid, token: token)
+                : CsgSolid.Subtract(world, solid, token: token);
 
             foreach (var candidate in new[] { cut, cut.Welded(CoarseWeldMm) })
             {
-                var result = MeshHealer.Heal(candidate).Mesh;
+                var result = MeshHealer.Heal(candidate, token: token).Mesh;
                 if (result.CheckHealth().IsWatertight) return result;
 
                 // Kept so the caller has something to report on, and so a run that never

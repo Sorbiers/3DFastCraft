@@ -284,6 +284,33 @@ anchored face is the one it travels away from; where it is not travelling - a fl
 grows upward while it moves along - the lower face is the one standing on something, so that is
 the one held still. A twelve-step flight lands exactly on `z = 0`.
 
+### Repeating round a circle
+
+The same dialog does rings. **Round a circle** asks for a centre, a radius, an angle between
+copies, a rise, and whether each copy turns - a bolt circle, a ring of teeth, crenellations round
+a tower, and with a rise, a spiral stair, which the straight repeat cannot make at all.
+
+The radius is filled in from where the selection already stands, so choosing the circle and
+pressing Repeat leaves it where it is. Type a different number and the whole ring moves in or
+out, **the original with it** - a ring whose first object is still out at the old radius is not a
+ring. That move and the copies are one undo step.
+
+**Spread evenly over a full turn** divides 360 by the copies *plus one*, because the original is
+one of the objects on the circle: five copies of one thing is six at 60 degrees, not five at 72
+with a gap where the sixth should be. Untick it to set the angle yourself and sweep an arc
+instead - the summary line says what came out either way.
+
+**Turn each copy to face the centre** is on by default: gear teeth, crenellations, the treads of
+a spiral stair. Untick it for a bolt circle, where a round hole does not care which way it
+points.
+
+A selection of several objects travels as one rigid group, so the three parts of a bracket keep
+their arrangement rather than each snapping onto the circle separately. The ring turns about the
+vertical axis only - transforms compose so that a turn about world Z is exactly an addition to
+the Z angle, with no matrix to decompose back into Euler angles and none of the trouble that has
+near the poles. A radius of nothing is not refused: an off-centre part spun about the middle is a
+rosette.
+
 ### A stair
 
 **Stair...** on the Insert tab takes a rise, a run, a width and a number of risers, and builds
@@ -627,6 +654,28 @@ Select both (`Ctrl+A`) and press **Subtract**. The status bar should read
 Boolean order follows the object list: the first selected object is the one the others are cut
 out of.
 
+### Stopping a long operation
+
+Merging, engraving, lettering, splitting, hollowing, simplifying, rebuilding and repairing all
+run off the UI thread. While one does, a panel covers the window with what is running, how long
+it has been going, and an **Abort** button. Escape does the same.
+
+**Aborting changes nothing.** Every one of these builds its result on a background thread and
+only reaches the scene once that returns, so there is never a half-applied model to recover from
+- the status bar reads *"Subtract aborted - nothing was changed"* and the objects are exactly as
+they were. That is why the button is offered without a warning first.
+
+Stopping is cooperative, so it takes as long as the work takes to reach its next look at the
+token: inside a boolean that is once per node of the tree and every thousand polygons within a
+node, during a rebuild or a hollow it is once per grid slice, while repairing it is between each
+mending step, and while simplifying it is every thousand collapses. In practice it is immediate.
+The panel says *Stopping* rather than simply vanishing, because a button that appears to do
+nothing gets pressed again.
+
+The window is genuinely blocked, not merely dimmed. The panel takes the mouse; the keyboard is
+shut separately, because a shortcut does not need the pointer - `Ctrl+Z` during a rebuild would
+otherwise undo the step the rebuild is about to replace.
+
 ## Formats
 
 | Format | Notes |
@@ -755,7 +804,8 @@ primitives headed to a slicer.
 ## Known limits
 
 - Boolean operations on imported meshes above ~200k triangles are slow (the app warns on
-  import). The GPU renders them fine; the BSP tree is the bottleneck.
+  import). The GPU renders them fine; the BSP tree is the bottleneck. **Abort** stops one that is
+  taking longer than it is worth, and leaves the model untouched.
 - `SharpDX` 4.2.0 is unmaintained upstream. It works on Windows 11 and is fully managed, but it
   is the one long-term liability — the renderer-agnostic core is the insurance.
 - Engraving covers the face's **rectangular extent**. On anything convex the overshoot

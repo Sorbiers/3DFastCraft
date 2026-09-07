@@ -61,8 +61,11 @@ public static class MeshHealer
     /// </summary>
     public const float SliverHeightMm = 1e-7f;
 
-    public static HealResult Heal(Mesh mesh, float tolerance = 1e-4f, int maxPasses = 4)
+    public static HealResult Heal(Mesh mesh, float tolerance = 1e-4f, int maxPasses = 4,
+                                 CancellationToken token = default)
     {
+        token.ThrowIfCancellationRequested();
+
         var before = mesh.CheckHealth();
         var current = mesh.Welded(tolerance);
 
@@ -80,17 +83,26 @@ public static class MeshHealer
 
         for (int pass = 0; pass < maxPasses; pass++)
         {
+            // Between the steps rather than inside them: each is a pass over the mesh, so four
+            // checks a round is a short enough wait, and none of the repairs has to learn about
+            // cancelling. Whatever is abandoned is thrown away whole - the caller still holds
+            // the mesh it handed in.
+            token.ThrowIfCancellationRequested();
+
             int was = current.TriangleCount;
 
             current = MeshRepair.Repair(current, tolerance);
+            token.ThrowIfCancellationRequested();
 
             var (trimmed, slivers) = DropSlivers(current);
             current = trimmed;
             dropped += slivers;
+            token.ThrowIfCancellationRequested();
 
             var (turned, flips) = UnifyWinding(current);
             current = turned;
             flipped += flips;
+            token.ThrowIfCancellationRequested();
 
             var (capped, holes) = FillHoles(current);
             current = capped;

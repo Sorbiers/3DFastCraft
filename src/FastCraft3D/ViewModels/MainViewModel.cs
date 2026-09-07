@@ -3,6 +3,7 @@ using System.IO;
 using System.Numerics;
 using System.Runtime.CompilerServices;
 using System.Windows;
+using System.Windows.Threading;
 using FastCraft3D.Geometry;
 using FastCraft3D.Geometry.Csg;
 using FastCraft3D.Geometry.Engraving;
@@ -36,6 +37,12 @@ public sealed class MainViewModel : INotifyPropertyChanged
     private int colourCursor;
     private string status = "Ready";
     private bool isBusy;
+    private bool isStopping;
+    private string busyTitle = "";
+    private string busyElapsed = "";
+    private CancellationTokenSource? work;
+    private DispatcherTimer? workClock;
+    private DateTime workStarted;
     private string? projectPath;
     private bool isDirty;
     private SceneObject? selected;
@@ -135,6 +142,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
         ClearDrawingCommand = RelayCommand.Simple(
             () => { svgFile = ""; RefreshDrawing(); }, () => svgFile.Length > 0);
         RepeatCommand = RelayCommand.Simple(RepeatSelection, () => Scene.Selection.Count > 0);
+        AbortCommand = RelayCommand.Simple(AbortWork, () => CanAbort);
         AlignToSelectionCommand = RelayCommand.Simple(
             AlignToSelection, () => Scene.Selection.Count == 2);
         FitCheckCommand = RelayCommand.Simple(FitCheck, () => Scene.Selection.Count == 2);
@@ -198,6 +206,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
     public System.Windows.Input.ICommand SimplifyCommand { get; }
     public System.Windows.Input.ICommand HollowCommand { get; }
     public System.Windows.Input.ICommand RepeatCommand { get; }
+    public System.Windows.Input.ICommand AbortCommand { get; }
     public System.Windows.Input.ICommand AlignToSelectionCommand { get; }
     public System.Windows.Input.ICommand FitCheckCommand { get; }
     public System.Windows.Input.ICommand BeginEmbossCommand { get; }
@@ -558,10 +567,148 @@ public sealed class MainViewModel : INotifyPropertyChanged
     public bool IsBusy
     {
         get => isBusy;
-        set => Set(ref isBusy, value);
+        private set
+        {
+            Set(ref isBusy, value);
+            Raise(nameof(CanAbort));
+        }
     }
 
+    /// <summary>What is running, named on the panel that covers the window while it does.</summary>
+    public string BusyTitle
+    {
+        get => busyTitle;
+        private set => Set(ref busyTitle, value);
+    }
+
+    /// <summary>
+    /// How long it has been going.
+    ///
+    /// Shown because the honest answer to "is it stuck?" is a number that keeps moving. A bar
+    /// that sweeps back and forth says only that the window is still being painted.
+    /// </summary>
+    public string BusyElapsed
+    {
+        get => busyElapsed;
+        private set => Set(ref busyElapsed, value);
+    }
+
+    /// <summary>Abort has been pressed and the work has not reached a checkpoint yet.</summary>
+    public bool IsStopping
+    {
+        get => isStopping;
+        private set
+        {
+            Set(ref isStopping, value);
+            Raise(nameof(CanAbort));
+            Raise(nameof(BusyHint));
+        }
+    }
+
+    public bool CanAbort => isBusy && !isStopping;
+
+    /// <summary>
+    /// Why aborting is safe, and - once pressed - why it has not happened yet.
+    ///
+    /// Worth saying outright: every one of these operations builds its result on a background
+    /// thread and only reaches the scene once that returns, so there is never a half-applied
+    /// model to recover from.
+    /// </summary>
+    public string BusyHint => isStopping
+        ? "Stopping - waiting for the current step to reach a point it can leave off at."
+        : "Aborting changes nothing: the result is only applied once the work has finished.";
+
     public string UndoLabel => Undo.NextUndoLabel is { } label ? $"Undo {label}" : "Undo";
+
+    /// <summary>
+    /// Marks the start of a long operation: covers the window, starts the clock, and hands back
+    /// the token the work has to watch.
+    /// </summary>
+    private CancellationToken StartWork(string title)
+    {
+        work?.Dispose();
+        work = new CancellationTokenSource();
+
+        BusyTitle = title;
+        BusyElapsed = "";
+        IsStopping = false;
+        IsBusy = true;
+        Status = $"{title}...";
+
+        workStarted = DateTime.UtcNow;
+        workClock ??= CreateClock();
+        workClock.Start();
+
+        return work.Token;
+    }
+
+    private void EndWork()
+    {
+        workClock?.Stop();
+
+        IsBusy = false;
+        IsStopping = false;
+        BusyElapsed = "";
+
+        // Only ever disposed here, which is reached in a finally after the work has been awaited,
+        // so nothing is still reading the token by this point.
+        work?.Dispose();
+        work = null;
+    }
+
+    /// <summary>
+    /// Asks the running operation to stop.
+    ///
+    /// Cooperative, so it takes as long as the work takes to reach its next look at the token -
+    /// under a tenth of a second inside a boolean, up to one grid slice during a rebuild. The
+    /// panel says it is stopping rather than simply vanishing, because a button that appears to
+    /// do nothing for half a second gets pressed again.
+    /// </summary>
+    private void AbortWork()
+    {
+        if (work is null || isStopping) return;
+
+        IsStopping = true;
+        Status = $"Stopping {busyTitle}...";
+        work.Cancel();
+    }
+
+    private DispatcherTimer CreateClock()
+    {
+        // A quarter of a second: often enough that the number never looks frozen, rare enough
+        // that it is not competing with the work for the dispatcher.
+        var clock = new DispatcherTimer(DispatcherPriority.Normal)
+        {
+            Interval = TimeSpan.FromMilliseconds(250)
+        };
+
+        clock.Tick += (_, _) =>
+        {
+            var elapsed = DateTime.UtcNow - workStarted;
+
+            // Nothing at first. Most operations are over well inside a second, and a counter
+            // that flashes up "0 s" and disappears is worse than no counter at all.
+            BusyElapsed = elapsed.TotalSeconds < 0.7 ? "" : Elapsed(elapsed);
+        };
+
+        return clock;
+    }
+
+    private static string Elapsed(TimeSpan elapsed) => elapsed.TotalSeconds < 60
+        ? $"{elapsed.TotalSeconds:0} s"
+        : $"{(int)elapsed.TotalMinutes} m {elapsed.Seconds:00} s";
+
+    /// <summary>
+    /// Whether a failure was really the user pressing Abort.
+    ///
+    /// Parallel.For is given the token so that cancelling surfaces as a plain
+    /// OperationCanceledException, but a body that throws one per worker can still arrive
+    /// wrapped, and a wrapped abort must not be reported as a crash.
+    /// </summary>
+    private static bool WasAborted(Exception ex) =>
+        ex is OperationCanceledException
+        || (ex is AggregateException all && all.InnerExceptions.Count > 0
+            && all.InnerExceptions.All(inner => inner is OperationCanceledException));
 
     /// <summary>Whether there are changes that have not been written to the project file.</summary>
     public bool IsDirty
@@ -1308,12 +1455,13 @@ public sealed class MainViewModel : INotifyPropertyChanged
         // there to cap, so it is held to the depth it has room to slope over.
         float bevel = Math.Min(embossBevel, amount * 0.9f);
 
-        IsBusy = true;
-        Status = raised ? "Raising lettering..." : "Cutting lettering...";
+        if (IsBusy) return;
+
+        var token = StartWork(raised ? "Raising lettering" : "Cutting lettering");
         try
         {
             var result = await Task.Run(
-                () => TextCutter.Apply(world, shapes, surface, raised, amount, bevel));
+                () => TextCutter.Apply(world, shapes, surface, raised, amount, bevel, token));
 
             if (result is null || result.TriangleCount == 0)
             {
@@ -1342,6 +1490,10 @@ public sealed class MainViewModel : INotifyPropertyChanged
 
             Status = $"{(raised ? "Raised" : "Cut")} {Stamped()} - {result.TriangleCount:N0} triangles";
         }
+        catch (Exception abort) when (WasAborted(abort))
+        {
+            Status = $"{busyTitle} aborted - nothing was changed";
+        }
         catch (Exception ex)
         {
             Status = $"Lettering failed: {ex.Message}";
@@ -1349,7 +1501,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
         }
         finally
         {
-            IsBusy = false;
+            EndWork();
         }
     }
 
@@ -2139,7 +2291,15 @@ public sealed class MainViewModel : INotifyPropertyChanged
         if (selection.Count == 0) return;
 
         var dialog = new RepeatDialog(selection) { Owner = Application.Current?.MainWindow };
-        if (dialog.ShowDialog() != true || dialog.Result is not { } settings) return;
+        if (dialog.ShowDialog() != true) return;
+
+        if (dialog.RingResult is { } ring)
+        {
+            RepeatRound(selection, ring);
+            return;
+        }
+
+        if (dialog.Result is not { } settings) return;
 
         var copies = RepeatArray.Make(selection, settings, Scene.UniqueName);
         if (copies.Count == 0) return;
@@ -2147,6 +2307,36 @@ public sealed class MainViewModel : INotifyPropertyChanged
         Undo.Execute(new AddObjectsCommand("Repeat", copies));
         RefreshSelection();
         Status = $"Repeated - {copies.Count} new object(s)";
+    }
+
+    /// <summary>
+    /// Repeats the selection round a circle: a ring of pins, a row of teeth, a spiral stair.
+    ///
+    /// The radius may differ from where the selection already sits, in which case the originals
+    /// move onto the circle as well - a ring with one object left behind at the old radius is not
+    /// something anyone asked for. That move and the copies go on the undo stack as one step.
+    /// </summary>
+    private void RepeatRound(IReadOnlyList<SceneObject> selection, RingSettings ring)
+    {
+        var before = selection.Select(TransformState.Capture).ToList();
+
+        var made = RepeatArray.MakeRing(selection, ring, Scene.UniqueName);
+        if (made.Copies.Count == 0) return;
+
+        List<IUndoableCommand> steps = [];
+
+        // Only when the ring is somewhere other than where the selection stands; asking for the
+        // radius it is already at should not put a no-op move on the undo stack.
+        if (before.Where((state, i) => !state.Equals(made.Seats[i])).Any())
+            steps.Add(new TransformCommand("Repeat", selection, before, made.Seats));
+
+        steps.Add(new AddObjectsCommand("Repeat", made.Copies));
+
+        Undo.Execute(steps.Count == 1 ? steps[0] : new CompoundCommand("Repeat round a circle", steps));
+        RefreshSelection();
+
+        string where = ring.Radius < 1e-3f ? "in place" : $"at {ring.Radius:0.##} mm";
+        Status = $"Repeated round a circle {where} - {made.Copies.Count} new object(s)";
     }
 
     /// <summary>
@@ -2587,8 +2777,9 @@ public sealed class MainViewModel : INotifyPropertyChanged
         var selection = Scene.SelectionInPickOrder;
         if (selection.Count < 2) return;
 
-        IsBusy = true;
-        Status = $"{op}...";
+        if (IsBusy) return;
+
+        var token = StartWork(op.ToString());
         try
         {
             // Everything is baked to world space first: CSG has no concept of per-object
@@ -2624,13 +2815,13 @@ public sealed class MainViewModel : INotifyPropertyChanged
             {
                 var accumulator = meshes[0];
                 for (int i = 1; i < meshes.Count; i++)
-                    accumulator = CsgSolid.Apply(accumulator, meshes[i], op);
+                    accumulator = CsgSolid.Apply(accumulator, meshes[i], op, token: token);
 
                 // Mended before it is handed over. A boolean splits one polygon without always
                 // splitting the one beside it, which leaves the two sides of an edge disagreeing
                 // about where their corners are - closed to look at, torn as a list of triangles,
                 // and reported to the user as a broken model they could do nothing about.
-                return MeshHealer.Heal(accumulator).Mesh;
+                return MeshHealer.Heal(accumulator, token: token).Mesh;
             });
 
             if (result.TriangleCount == 0)
@@ -2671,6 +2862,10 @@ public sealed class MainViewModel : INotifyPropertyChanged
             Status = $"{op}{from}{tolerance}{keeping}: "
                    + $"{health.TriangleCount:N0} triangles, {health.Describe()}";
         }
+        catch (Exception abort) when (WasAborted(abort))
+        {
+            Status = $"{busyTitle} aborted - nothing was changed";
+        }
         catch (Exception ex)
         {
             Status = $"{op} failed: {ex.Message}";
@@ -2678,7 +2873,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
         }
         finally
         {
-            IsBusy = false;
+            EndWork();
         }
     }
 
@@ -2693,15 +2888,16 @@ public sealed class MainViewModel : INotifyPropertyChanged
         var dialog = new HollowDialog(selection) { Owner = Application.Current?.MainWindow };
         if (dialog.ShowDialog() != true || dialog.Result is not { } settings) return;
 
-        IsBusy = true;
-        Status = "Hollowing...";
+        if (IsBusy) return;
+
+        var token = StartWork("Hollowing");
         try
         {
             // Baked to world space, as the other grid-based tools are: the grid is in world
             // millimetres, so a wall on a stretched object would otherwise come out stretched.
             var meshes = selection.Select(o => o.ToWorldMesh()).ToList();
             var shells = await Task.Run(() => meshes
-                .Select(m => MeshHollow.Hollow(m, settings.WallMm, settings.Resolution, settings.Open))
+                .Select(m => MeshHollow.Hollow(m, settings.WallMm, settings.Resolution, settings.Open, token))
                 .ToList());
 
             var produced = new List<SceneObject>();
@@ -2737,13 +2933,17 @@ public sealed class MainViewModel : INotifyPropertyChanged
                 ? $"Hollowed {produced.Count} object(s) to a {settings.WallMm:0.##} mm wall - {saved:0.#} cm3 saved"
                 : $"Hollowed {produced.Count}; {untouched} had no room for a {settings.WallMm:0.##} mm wall";
         }
+        catch (Exception abort) when (WasAborted(abort))
+        {
+            Status = $"{busyTitle} aborted - nothing was changed";
+        }
         catch (Exception ex)
         {
             Status = $"Hollow failed: {ex.Message}";
         }
         finally
         {
-            IsBusy = false;
+            EndWork();
         }
     }
 
@@ -2761,13 +2961,14 @@ public sealed class MainViewModel : INotifyPropertyChanged
         var dialog = new SimplifyDialog(selection) { Owner = Application.Current?.MainWindow };
         if (dialog.ShowDialog() != true || dialog.Result is not { } keep) return;
 
-        IsBusy = true;
-        Status = "Simplifying...";
+        if (IsBusy) return;
+
+        var token = StartWork("Simplifying");
         try
         {
             var meshes = selection.Select(o => o.Mesh).ToList();
             var reduced = await Task.Run(
-                () => meshes.Select(m => MeshSimplify.ByFraction(m, keep)).ToList());
+                () => meshes.Select(m => MeshSimplify.ByFraction(m, keep, token)).ToList());
 
             var produced = new List<SceneObject>();
             for (int i = 0; i < selection.Count; i++)
@@ -2788,13 +2989,17 @@ public sealed class MainViewModel : INotifyPropertyChanged
             int after = reduced.Sum(m => m.TriangleCount);
             Status = $"Simplified {before:N0} triangles to {after:N0}";
         }
+        catch (Exception abort) when (WasAborted(abort))
+        {
+            Status = $"{busyTitle} aborted - nothing was changed";
+        }
         catch (Exception ex)
         {
             Status = $"Simplify failed: {ex.Message}";
         }
         finally
         {
-            IsBusy = false;
+            EndWork();
         }
     }
 
@@ -2812,15 +3017,16 @@ public sealed class MainViewModel : INotifyPropertyChanged
         var dialog = new RebuildDialog(targets) { Owner = Application.Current?.MainWindow };
         if (dialog.ShowDialog() != true || dialog.Result is not { } resolution) return;
 
-        IsBusy = true;
-        Status = $"Rebuilding {targets.Count} object(s)...";
+        if (IsBusy) return;
+
+        var token = StartWork($"Rebuilding {targets.Count} object(s)");
         try
         {
             // Baked to world space first, as booleans are: the grid is in world millimetres, so
             // a stretched object would otherwise be voxelised at the wrong scale.
             var meshes = targets.Select(o => o.ToWorldMesh()).ToList();
             var rebuilt = await Task.Run(
-                () => meshes.Select(m => VoxelRebuild.Rebuild(m, resolution)).ToList());
+                () => meshes.Select(m => VoxelRebuild.Rebuild(m, resolution, token)).ToList());
 
             var produced = new List<SceneObject>();
             for (int i = 0; i < targets.Count; i++)
@@ -2846,6 +3052,10 @@ public sealed class MainViewModel : INotifyPropertyChanged
             Status = $"Rebuilt {produced.Count} object(s) at {rebuilt[0].VoxelSizeMm:0.###} mm - "
                      + $"{mended} watertight, {produced.Sum(o => o.Mesh.TriangleCount):N0} triangles";
         }
+        catch (Exception abort) when (WasAborted(abort))
+        {
+            Status = $"{busyTitle} aborted - nothing was changed";
+        }
         catch (Exception ex)
         {
             Status = $"Rebuild failed: {ex.Message}";
@@ -2853,7 +3063,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
         }
         finally
         {
-            IsBusy = false;
+            EndWork();
         }
     }
 
@@ -2929,11 +3139,12 @@ public sealed class MainViewModel : INotifyPropertyChanged
             return;
         }
 
-        IsBusy = true;
-        Status = $"Repairing {targets.Count} object(s)...";
+        if (IsBusy) return;
+
+        var token = StartWork($"Repairing {targets.Count} object(s)");
         try
         {
-            var healed = await Task.Run(() => targets.Select(o => MeshHealer.Heal(o.Mesh)).ToList());
+            var healed = await Task.Run(() => targets.Select(o => MeshHealer.Heal(o.Mesh, token: token)).ToList());
 
             var replaced = new List<SceneObject>();
             var produced = new List<SceneObject>();
@@ -2991,13 +3202,17 @@ public sealed class MainViewModel : INotifyPropertyChanged
                 ? $"Repaired {fixedUp} of {replaced.Count} object(s)"
                 : $"Repaired {fixedUp} object(s); {beyond} beyond mending and left alone";
         }
+        catch (Exception abort) when (WasAborted(abort))
+        {
+            Status = $"{busyTitle} aborted - nothing was changed";
+        }
         catch (Exception ex)
         {
             Status = $"Repair failed: {ex.Message}";
         }
         finally
         {
-            IsBusy = false;
+            EndWork();
         }
     }
 
@@ -3058,11 +3273,12 @@ public sealed class MainViewModel : INotifyPropertyChanged
         var source = Scene.Selection[0];
         var options = engrave.Options;
 
-        IsBusy = true;
-        Status = $"Engraving {options.Kind}...";
+        if (IsBusy) return;
+
+        var token = StartWork($"Engraving {options.Kind}");
         try
         {
-            var result = await Task.Run(() => Engraver.Engrave(world, face, options));
+            var result = await Task.Run(() => Engraver.Engrave(world, face, options, token));
 
             if (result.Grooves == 0 || result.Mesh.TriangleCount == 0)
             {
@@ -3119,6 +3335,10 @@ public sealed class MainViewModel : INotifyPropertyChanged
                 Status += " - the pattern was moved a little to get the cut through";
             }
         }
+        catch (Exception abort) when (WasAborted(abort))
+        {
+            Status = $"{busyTitle} aborted - nothing was changed";
+        }
         catch (Exception ex)
         {
             Status = $"Engrave failed: {ex.Message}";
@@ -3126,7 +3346,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
         }
         finally
         {
-            IsBusy = false;
+            EndWork();
         }
     }
 
@@ -3180,12 +3400,13 @@ public sealed class MainViewModel : INotifyPropertyChanged
         float offset = splitOffset;
         var keep = splitKeep;
 
-        IsBusy = true;
-        Status = selection.Count == 1 ? "Splitting..." : $"Splitting {selection.Count} objects...";
+        if (IsBusy) return;
+
+        var token = StartWork(selection.Count == 1 ? "Splitting" : $"Splitting {selection.Count} objects");
         try
         {
             var halves = await Task.Run(
-                () => meshes.Select(mesh => PlaneSplit.Split(mesh, normal, offset, keep)).ToList());
+                () => meshes.Select(mesh => PlaneSplit.Split(mesh, normal, offset, keep, token)).ToList());
 
             var consumed = new List<SceneObject>();
             var produced = new List<SceneObject>();
@@ -3226,13 +3447,17 @@ public sealed class MainViewModel : INotifyPropertyChanged
                 ? $"Split {consumed.Count} object(s) into {produced.Count} piece(s)"
                 : $"Split {consumed.Count} object(s) into {produced.Count} piece(s); the plane missed {missed}";
         }
+        catch (Exception abort) when (WasAborted(abort))
+        {
+            Status = $"{busyTitle} aborted - nothing was changed";
+        }
         catch (Exception ex)
         {
             Status = $"Split failed: {ex.Message}";
         }
         finally
         {
-            IsBusy = false;
+            EndWork();
         }
     }
 

@@ -51,7 +51,7 @@ public static class VoxelRebuild
     /// <summary>
     /// Samples the model onto a grid, which is the half of rebuilding that hollowing also needs.
     /// </summary>
-    internal static Grid Sample(Mesh mesh, int resolution)
+    internal static Grid Sample(Mesh mesh, int resolution, CancellationToken token = default)
     {
         resolution = Math.Clamp(resolution, MinimumResolution, MaximumResolution);
 
@@ -70,15 +70,18 @@ public static class VoxelRebuild
         int ny = (int)MathF.Ceiling(span.Y / voxel) + 1;
         int nz = (int)MathF.Ceiling(span.Z / voxel) + 1;
 
-        return new Grid(Occupancy(mesh, origin, voxel, nx, ny, nz), origin, voxel, nx, ny, nz);
+        return new Grid(Occupancy(mesh, origin, voxel, nx, ny, nz, token), origin, voxel, nx, ny, nz);
     }
 
     /// <summary>
     /// Rebuilds the surface at the given resolution, counted along the model's longest side.
     /// Blocks; callers on the UI thread should wrap it in Task.Run.
     /// </summary>
-    public static RebuildResult Rebuild(Mesh mesh, int resolution = DefaultResolution)
+    public static RebuildResult Rebuild(Mesh mesh, int resolution = DefaultResolution,
+                                        CancellationToken token = default)
     {
+        token.ThrowIfCancellationRequested();
+
         resolution = Math.Clamp(resolution, MinimumResolution, MaximumResolution);
 
         var bounds = mesh.ComputeBounds();
@@ -103,8 +106,13 @@ public static class VoxelRebuild
         int ny = (int)MathF.Ceiling(span.Y / voxel) + 1;
         int nz = (int)MathF.Ceiling(span.Z / voxel) + 1;
 
-        bool[] inside = Occupancy(mesh, origin, voxel, nx, ny, nz);
+        bool[] inside = Occupancy(mesh, origin, voxel, nx, ny, nz, token);
+
+        // The netting and the smoothing are quick beside the sampling, so a checkpoint between
+        // the phases is as fine as this needs to be.
+        token.ThrowIfCancellationRequested();
         var surface = SurfaceNets(inside, origin, voxel, nx, ny, nz);
+        token.ThrowIfCancellationRequested();
 
         // The grid leaves a faint terracing on anything that was not aligned to it. A couple of
         // passes take that off without moving the shape anywhere.
@@ -120,7 +128,8 @@ public static class VoxelRebuild
     /// zero. Parity alone - odd is in, even is out - would call the overlap of two solids
     /// outside, which is exactly backwards for the meshes this tool exists to mend.
     /// </summary>
-    internal static bool[] Occupancy(Mesh mesh, Vector3 origin, float voxel, int nx, int ny, int nz)
+    internal static bool[] Occupancy(Mesh mesh, Vector3 origin, float voxel, int nx, int ny, int nz,
+                                     CancellationToken token = default)
     {
         var inside = new bool[nx * ny * nz];
         var buckets = new Buckets(mesh, origin, voxel, ny, nz);
@@ -128,6 +137,10 @@ public static class VoxelRebuild
 
         for (int k = 0; k < nz; k++)
         {
+            // Once a slice. There are a few hundred of them and each is a pass over the model,
+            // so this is the granularity Abort is felt at during a rebuild or a hollow.
+            token.ThrowIfCancellationRequested();
+
             float z = origin.Z + k * voxel;
 
             for (int j = 0; j < ny; j++)

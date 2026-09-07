@@ -134,11 +134,22 @@ public partial class MainWindow : Window
         AddHandler(GotKeyboardFocusEvent, new KeyboardFocusChangedEventHandler(OnFieldFocused), true);
         AddHandler(PreviewMouseLeftButtonDownEvent, new MouseButtonEventHandler(OnFieldClicked), true);
 
+        // Ahead of everything else: while a long operation runs the keyboard has to be shut
+        // as firmly as the panel shuts the mouse.
+        AddHandler(PreviewKeyDownEvent, new KeyEventHandler(OnBusyKey), true);
+
         // Arrow keys and the wheel nudge the numeric fields.
         AddHandler(PreviewKeyDownEvent, new KeyEventHandler(OnFieldKey), true);
         AddHandler(PreviewMouseWheelEvent, new MouseWheelEventHandler(OnFieldWheel), true);
 
         PreviewKeyDown += OnWindowKeyDown;
+
+        // The panel appears with nothing focused, so Tab would start from wherever the user
+        // last was - behind it. Focusing Abort puts the only thing they can still do first.
+        BusyOverlay.IsVisibleChanged += (_, e) =>
+        {
+            if (e.NewValue is true) AbortButton.Focus();
+        };
 
         MeasureLayer.PreviewMouseLeftButtonDown += OnMeasureDown;
         MeasureLayer.PreviewMouseMove += OnMeasureMove;
@@ -159,6 +170,32 @@ public partial class MainWindow : Window
             renderer?.Dispose();
             (EffectsManager as IDisposable)?.Dispose();
         };
+    }
+
+    /// <summary>
+    /// Swallows the keyboard while a long operation runs.
+    ///
+    /// The panel over the window stops the mouse, but a shortcut does not need the pointer: the
+    /// InputBindings on the window fire wherever focus is, so Ctrl+Z during a rebuild would undo
+    /// the step the rebuild is about to replace. Handling the event here is also what stops
+    /// those, since a KeyBinding only runs on a key that came through unhandled.
+    /// </summary>
+    private void OnBusyKey(object sender, KeyEventArgs e)
+    {
+        if (!viewModel.IsBusy) return;
+
+        if (e.Key == Key.Escape)
+        {
+            if (viewModel.CanAbort) viewModel.AbortCommand.Execute(null);
+            e.Handled = true;
+            return;
+        }
+
+        // Tab and the keys that press a button belong to the panel - it cycles focus within
+        // itself, so they cannot reach anything behind it.
+        if (e.Key is Key.Tab or Key.Space or Key.Enter) return;
+
+        e.Handled = true;
     }
 
     /// <summary>

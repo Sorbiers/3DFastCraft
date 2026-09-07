@@ -1,4 +1,4 @@
-namespace FastCraft3D.Geometry.Csg;
+﻿namespace FastCraft3D.Geometry.Csg;
 
 public enum BooleanOp
 {
@@ -16,54 +16,65 @@ public enum BooleanOp
 /// </summary>
 public static class CsgSolid
 {
-    public static Mesh Union(Mesh a, Mesh b, bool parallel = true) => Apply(a, b, BooleanOp.Union, parallel);
-    public static Mesh Subtract(Mesh a, Mesh b, bool parallel = true) => Apply(a, b, BooleanOp.Subtract, parallel);
-    public static Mesh Intersect(Mesh a, Mesh b, bool parallel = true) => Apply(a, b, BooleanOp.Intersect, parallel);
+    public static Mesh Union(Mesh a, Mesh b, bool parallel = true, CancellationToken token = default)
+        => Apply(a, b, BooleanOp.Union, parallel, token);
+
+    public static Mesh Subtract(Mesh a, Mesh b, bool parallel = true, CancellationToken token = default)
+        => Apply(a, b, BooleanOp.Subtract, parallel, token);
+
+    public static Mesh Intersect(Mesh a, Mesh b, bool parallel = true, CancellationToken token = default)
+        => Apply(a, b, BooleanOp.Intersect, parallel, token);
 
     /// <summary>
     /// Runs a boolean operation. Blocks the calling thread while a dedicated big-stack
     /// thread does the work, so callers on the UI thread must wrap this in Task.Run.
+    ///
+    /// Cancelling throws rather than returning half a result: a BSP abandoned part-way through
+    /// is not a solid, and there is no meaningful thing to hand back. Nothing has been touched
+    /// at that point, because the caller only reaches the scene once this returns.
     /// </summary>
-    public static Mesh Apply(Mesh a, Mesh b, BooleanOp op, bool parallel = true)
-        => CsgRunner.Run(() => Execute(a, b, op, parallel));
+    public static Mesh Apply(Mesh a, Mesh b, BooleanOp op, bool parallel = true,
+                             CancellationToken token = default)
+        => CsgRunner.Run(() => Execute(a, b, op, parallel, token));
 
-    private static Mesh Execute(Mesh meshA, Mesh meshB, BooleanOp op, bool parallel)
+    private static Mesh Execute(Mesh meshA, Mesh meshB, BooleanOp op, bool parallel,
+                                CancellationToken token)
     {
         var a = new CsgNode();
-        a.Build(ToPolygons(meshA), parallel);
+        a.Build(ToPolygons(meshA), parallel, token);
         var b = new CsgNode();
-        b.Build(ToPolygons(meshB), parallel);
+        b.Build(ToPolygons(meshB), parallel, token);
 
         switch (op)
         {
             case BooleanOp.Union:
-                a.ClipTo(b, parallel);
-                b.ClipTo(a, parallel);
-                b.Invert();
-                b.ClipTo(a, parallel);
-                b.Invert();
-                a.Build(b.AllPolygons(), parallel);
+                a.ClipTo(b, parallel, token);
+                b.ClipTo(a, parallel, token);
+                b.Invert(token);
+                b.ClipTo(a, parallel, token);
+                b.Invert(token);
+                a.Build(b.AllPolygons(), parallel, token);
                 break;
 
             case BooleanOp.Subtract:
-                a.Invert();
-                a.ClipTo(b, parallel);
-                b.ClipTo(a, parallel);
-                b.Invert();
-                b.ClipTo(a, parallel);
-                b.Invert();
-                a.Build(b.AllPolygons(), parallel);
-                a.Invert();
+                a.Invert(token);
+                a.ClipTo(b, parallel, token);
+                b.ClipTo(a, parallel, token);
+                b.Invert(token);
+                b.ClipTo(a, parallel, token);
+                b.Invert(token);
+                a.Build(b.AllPolygons(), parallel, token);
+                a.Invert(token);
                 break;
 
             case BooleanOp.Intersect:
-                a.Invert();
-                b.ClipTo(a, parallel);
-                b.Invert();
-                a.ClipTo(b, parallel);
-                b.ClipTo(a, parallel);
-                a.Build(b.AllPolygons(), parallel);
-                a.Invert();
+                a.Invert(token);
+                b.ClipTo(a, parallel, token);
+                b.Invert(token);
+                a.ClipTo(b, parallel, token);
+                b.ClipTo(a, parallel, token);
+                a.Build(b.AllPolygons(), parallel, token);
+                a.Invert(token);
                 break;
 
             default:

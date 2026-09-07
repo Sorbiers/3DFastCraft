@@ -57,11 +57,13 @@ public static class MeshHollow
     /// </param>
     public static HollowResult Hollow(
         Mesh mesh, float wallMm, int resolution = VoxelRebuild.DefaultResolution,
-        OpenSide open = OpenSide.None)
+        OpenSide open = OpenSide.None, CancellationToken token = default)
     {
+        token.ThrowIfCancellationRequested();
+
         wallMm = Math.Max(wallMm, MinimumWallMm);
 
-        var grid = VoxelRebuild.Sample(mesh, resolution);
+        var grid = VoxelRebuild.Sample(mesh, resolution, token);
         if (grid.Inside.Length == 0) return new HollowResult(mesh, wallMm, 0);
 
         // Where the open side's plane is, and which way is out of it.
@@ -69,7 +71,9 @@ public static class MeshHollow
         var outward = Outward(open);
         float openAt = outward == Vector3.Zero ? 0 : Vector3.Dot(outward, Corner(bounds, outward));
 
+        token.ThrowIfCancellationRequested();
         var depth = DepthInside(grid);
+        token.ThrowIfCancellationRequested();
 
         // The shell is what lies within one wall of the surface. Everything deeper becomes the
         // cavity, and the extraction finds both faces of the wall in one pass.

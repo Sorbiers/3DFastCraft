@@ -1,4 +1,4 @@
-using System.Numerics;
+﻿using System.Numerics;
 
 namespace FastCraft3D.Model.Commands;
 
@@ -166,6 +166,28 @@ public sealed class ReplaceObjectsCommand(
             scene.Objects.Insert(Math.Min(index, scene.Objects.Count), o);
             o.IsSelected = true;
         }
+    }
+}
+
+/// <summary>
+/// Several commands that have to undo as one.
+///
+/// Written for the circular repeat, which both moves the originals onto the circle and adds the
+/// copies: two commands, but one thing happened, and one Ctrl+Z has to take all of it back. Undone
+/// in reverse, because the later steps were built on the state the earlier ones left.
+/// </summary>
+public sealed class CompoundCommand(string label, IReadOnlyList<IUndoableCommand> steps) : IUndoableCommand
+{
+    public string Label { get; } = label;
+
+    public void Apply(Scene scene)
+    {
+        foreach (var step in steps) step.Apply(scene);
+    }
+
+    public void Revert(Scene scene)
+    {
+        for (int i = steps.Count - 1; i >= 0; i--) steps[i].Revert(scene);
     }
 }
 
