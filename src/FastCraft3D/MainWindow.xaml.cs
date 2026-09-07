@@ -446,6 +446,15 @@ public partial class MainWindow : Window
             return;
         }
 
+        // Splitting on a picked face: the click sets the plane rather than the selection. The
+        // gizmo handles its own drags before this, so only a click on the model itself lands here.
+        if (viewModel.IsSplitMode && viewModel.PickSplitPlane(
+                target, ToVector3(hit!.PointHit), ToVector3(hit.NormalAtHit)))
+        {
+            e.Handled = true;
+            return;
+        }
+
         // While a face is being picked the click means something else entirely, so it never
         // reaches the selection logic. Clicking a different object switches the selection to it
         // first, which is the only way to engrave something else without leaving the mode.
@@ -763,6 +772,16 @@ public partial class MainWindow : Window
 
     private void OnFieldKey(object sender, KeyEventArgs e)
     {
+        // Enter commits whatever has been typed, in any box. Everything here writes back on
+        // losing focus, which is right for undo - but it means a value typed and left sitting
+        // there never takes effect, and the last field anyone fills in is exactly the one they
+        // do not tab out of.
+        if (e.Key == Key.Enter && e.OriginalSource is TextBox typed)
+        {
+            typed.GetBindingExpression(TextBox.TextProperty)?.UpdateSource();
+            return;
+        }
+
         if (e.OriginalSource is not TextBox { Tag: "transform" or "number" } box) return;
 
         double direction = e.Key switch { Key.Up => 1, Key.Down => -1, _ => 0 };
@@ -969,7 +988,12 @@ public partial class MainWindow : Window
 
         var back = -camera.LookDirection;
         if (back.Length < 1e-6) return;
-        LookFrom(back, new Media3D.Vector3D(0, 0, 1));
+
+        // Keep whichever way up the view already is. Forcing Z-up reads as harmless until the
+        // camera is looking straight down, where up and the view direction are the same line -
+        // the camera degenerates and the viewport comes back empty, build plate and all. That is
+        // what Zoom to fit did in the Top view.
+        LookFrom(back, camera.UpDirection);
     }
 
     /// <summary>
@@ -1007,9 +1031,44 @@ public partial class MainWindow : Window
     private void OnViewIso(object sender, RoutedEventArgs e) =>
         LookFrom(new Media3D.Vector3D(0.8, -1, 0.7), new Media3D.Vector3D(0, 0, 1));
 
+    // A building has four walls and the views only reached two of them. Without these, bringing
+    // the back or the left of a model round to face the camera meant turning the object itself
+    // half a revolution and turning it back afterwards - which bakes the rotation into the mesh
+    // and shifts its centre a little every time.
+    private void OnViewBack(object sender, RoutedEventArgs e) =>
+        LookFrom(new Media3D.Vector3D(0, 1, 0), new Media3D.Vector3D(0, 0, 1));
+
+    private void OnViewLeft(object sender, RoutedEventArgs e) =>
+        LookFrom(new Media3D.Vector3D(-1, 0, 0), new Media3D.Vector3D(0, 0, 1));
+
+    private void OnViewBottom(object sender, RoutedEventArgs e) =>
+        LookFrom(new Media3D.Vector3D(0, 0, -1), new Media3D.Vector3D(0, 1, 0));
+
+    /// <summary>
+    /// An up vector the camera can actually use. Anything parallel to the way it is looking
+    /// leaves the view matrix with no left and no right, and the renderer draws nothing at all.
+    /// </summary>
+    private static Media3D.Vector3D Upright(Media3D.Vector3D direction, Media3D.Vector3D up)
+    {
+        direction.Normalize();
+
+        if (up.Length < 1e-6) up = new Media3D.Vector3D(0, 0, 1);
+        up.Normalize();
+
+        if (Math.Abs(Media3D.Vector3D.DotProduct(direction, up)) < 0.999) return up;
+
+        // Looking along the axis it was using: pick another. Straight up or down wants Y;
+        // everything else can have Z.
+        return Math.Abs(direction.Z) > 0.9
+            ? new Media3D.Vector3D(0, 1, 0)
+            : new Media3D.Vector3D(0, 0, 1);
+    }
+
     private void LookFrom(Media3D.Vector3D direction, Media3D.Vector3D up)
     {
         if (View.Camera is not PerspectiveCamera camera) return;
+
+        up = Upright(direction, up);
 
         var bounds = viewModel.Scene.ComputeBounds();
         var centre = bounds.IsEmpty ? new Vector3(0, 0, 0) : bounds.Center;

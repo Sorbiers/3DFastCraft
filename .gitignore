@@ -2,3 +2,6 @@ bin/
 obj/
 build/
 *.user
+
+# Python leaves these beside the verifier
+__pycache__/

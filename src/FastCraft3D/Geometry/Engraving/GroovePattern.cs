@@ -28,6 +28,11 @@ public enum PatternDirection
 /// <param name="Direction">Which way the courses, grain or stripes run.</param>
 /// <param name="OffsetU">Slides the pattern across the face, for lining a corner up.</param>
 /// <param name="OffsetV">Slides the pattern along the face.</param>
+/// <param name="Aspect">
+/// How many times longer each piece is than it is tall. Zero takes the default for the pattern,
+/// which is brick. A roof tile is nearer one and a half, and there was no way to say so - the
+/// tiles on the first house came out 39 x 13 cm where a pantile should be about 30 x 20.
+/// </param>
 public readonly record struct EngraveOptions(
     PatternKind Kind = PatternKind.Brick,
     float Size = 20f,
@@ -36,7 +41,8 @@ public readonly record struct EngraveOptions(
     PatternDirection Direction = PatternDirection.Horizontal,
     float OffsetU = 0f,
     float OffsetV = 0f,
-    bool Raised = false)
+    bool Raised = false,
+    float Aspect = 0f)
 {
     /// <summary>Below this the pattern is finer than the cutter can meaningfully resolve.</summary>
     public const float MinimumSize = 0.5f;
@@ -50,6 +56,11 @@ public readonly record struct EngraveOptions(
     /// allows rather than a sensible brick.
     /// </summary>
     public static EngraveOptions Default => new(PatternKind.Brick, 20f, 1.2f, 0.6f);
+
+    /// <summary>The proportions to use, with zero meaning "whatever the pattern normally is".</summary>
+    public float Courses => Aspect <= 0
+        ? GroovePattern.DefaultAspect
+        : Math.Clamp(Aspect, GroovePattern.MinimumAspect, GroovePattern.MaximumAspect);
 
     public EngraveOptions Sane() => this with
     {
@@ -76,7 +87,14 @@ public static class GroovePattern
     /// </summary>
     public const int MaximumGrooves = 20000;
 
-    private const float BrickAspect = 3f; // a brick is about three times as long as it is tall
+    /// <summary>A brick is about three times as long as it is tall, which is where this started.</summary>
+    public const float DefaultAspect = 3f;
+
+    /// <summary>Below this a course is taller than it is long, which is not a course.</summary>
+    public const float MinimumAspect = 0.2f;
+
+    /// <summary>And beyond this it is a stripe, which is its own pattern.</summary>
+    public const float MaximumAspect = 20f;
 
     /// <summary>
     /// The grooves covering <paramref name="area"/>, which should already be a little larger than
@@ -120,7 +138,7 @@ public static class GroovePattern
 
         return options.Kind switch
         {
-            PatternKind.Brick => Lines(canvas.Height, options.Size / BrickAspect + options.GrooveWidth)
+            PatternKind.Brick => Lines(canvas.Height, options.Size / Aspect(options) + options.GrooveWidth)
                 * (1 + Lines(canvas.Width, options.Size + options.GrooveWidth)),
             PatternKind.Wood => WoodGrain.Count(options, canvas),
             _ => Lines(canvas.Height, options.Size)
@@ -135,6 +153,8 @@ public static class GroovePattern
     private static Vector2 Anchor(Rect2 canvas, EngraveOptions options, bool turned) =>
         new(canvas.MinU + (turned ? options.OffsetV : options.OffsetU),
             canvas.MinV + (turned ? options.OffsetU : options.OffsetV));
+
+    private static float Aspect(EngraveOptions options) => options.Courses;
 
     private static int Lines(float span, float pitch) =>
         pitch <= 0 ? 0 : (int)(span / pitch) + 2;
@@ -221,7 +241,7 @@ public static class GroovePattern
     /// <summary>The bricks: what is left of each course between one perpend and the next.</summary>
     private static List<Rect2> BrickFaces(EngraveOptions options, Rect2 area, Vector2 anchor)
     {
-        float height = options.Size / BrickAspect;
+        float height = options.Size / Aspect(options);
         float groove = options.GrooveWidth;
         float pitchV = height + groove;
         float pitchU = options.Size + groove;
@@ -270,7 +290,7 @@ public static class GroovePattern
 
     private static List<Rect2> Brick(EngraveOptions options, Rect2 area, Vector2 anchor)
     {
-        float height = options.Size / BrickAspect;
+        float height = options.Size / Aspect(options);
         float groove = options.GrooveWidth;
         float pitchV = height + groove;
         float pitchU = options.Size + groove;

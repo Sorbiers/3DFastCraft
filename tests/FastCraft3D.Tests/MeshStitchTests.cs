@@ -1,4 +1,4 @@
-using System.Numerics;
+﻿using System.Numerics;
 using FastCraft3D.Geometry;
 using FastCraft3D.Geometry.Csg;
 using Xunit;
@@ -108,14 +108,19 @@ public class RoundedBooleanTests
         Assert.True(healed.CheckHealth().IsWatertight, healed.CheckHealth().Describe());
     }
 
-    /// <summary>Mending it must not quietly reshape it.</summary>
+    /// <summary>
+    /// Mending must not quietly reshape it.
+    ///
+    /// This pair used to come out torn and is the reason the stitching exists. It comes out
+    /// clean now - the plane epsilon was a hundred times finer than a float can hold at these
+    /// coordinates, so faces that were coplanar were being classified either side at random -
+    /// but the healer still has to leave a sound mesh exactly as it found it.
+    /// </summary>
     [Fact]
     public void MendingKeepsTheShape()
     {
         var outer = RoundedPrimitives.RoundedBox(50, 50, 20, 3f, RoundEdges.All);
         var raw = CsgSolid.Apply(outer, Tray(3f, 3f, 3f, 4f), BooleanOp.Union);
-
-        Assert.False(raw.CheckHealth().IsWatertight, "this pair used to come out torn");
 
         var healed = MeshHealer.Heal(raw).Mesh;
 

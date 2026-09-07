@@ -57,6 +57,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
     private bool showXray;
     private bool showPlate = true;
     private float plateSize = Scene.PlateSize;
+    private float modelScale = 1f;
     private readonly EngraveState engrave = new();
     private Vector3 splitNormal = Vector3.UnitZ;
     private readonly List<SceneObject> clipboard = new();
@@ -80,6 +81,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
         Scene.Objects.CollectionChanged += (_, _) => RefreshSelection();
 
         InsertCommand = new RelayCommand(p => Insert(p));
+        InsertStairCommand = RelayCommand.Simple(InsertStair);
         DeleteCommand = RelayCommand.Simple(Delete, () => Scene.Selection.Count > 0);
         DuplicateCommand = new RelayCommand(p => Duplicate(offset: !Equals(p, "InPlace")),
             _ => Scene.Selection.Count > 0);
@@ -111,6 +113,10 @@ public sealed class MainViewModel : INotifyPropertyChanged
         LoadDrawingCommand = RelayCommand.Simple(LoadDrawing);
         ClearDrawingCommand = RelayCommand.Simple(
             () => { svgFile = ""; RefreshDrawing(); }, () => svgFile.Length > 0);
+        RepeatCommand = RelayCommand.Simple(RepeatSelection, () => Scene.Selection.Count > 0);
+        AlignToSelectionCommand = RelayCommand.Simple(
+            AlignToSelection, () => Scene.Selection.Count == 2);
+        FitCheckCommand = RelayCommand.Simple(FitCheck, () => Scene.Selection.Count == 2);
         BeginMeasureCommand = RelayCommand.Simple(BeginMeasure, () => Scene.Objects.Count > 0);
         CancelMeasureCommand = RelayCommand.Simple(() => IsMeasureMode = false);
         BeginEngraveCommand = RelayCommand.Simple(BeginEngrave, () => Scene.Selection.Count == 1);
@@ -147,6 +153,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
     public UndoStack Undo { get; }
 
     public System.Windows.Input.ICommand InsertCommand { get; }
+    public System.Windows.Input.ICommand InsertStairCommand { get; }
     public System.Windows.Input.ICommand DeleteCommand { get; }
     public System.Windows.Input.ICommand DuplicateCommand { get; }
     public System.Windows.Input.ICommand MirrorCommand { get; }
@@ -166,6 +173,9 @@ public sealed class MainViewModel : INotifyPropertyChanged
     public System.Windows.Input.ICommand RebuildCommand { get; }
     public System.Windows.Input.ICommand SimplifyCommand { get; }
     public System.Windows.Input.ICommand HollowCommand { get; }
+    public System.Windows.Input.ICommand RepeatCommand { get; }
+    public System.Windows.Input.ICommand AlignToSelectionCommand { get; }
+    public System.Windows.Input.ICommand FitCheckCommand { get; }
     public System.Windows.Input.ICommand BeginEmbossCommand { get; }
     public System.Windows.Input.ICommand BeginLayCommand { get; }
     public System.Windows.Input.ICommand ApplyEmbossCommand { get; }
@@ -1446,6 +1456,52 @@ public sealed class MainViewModel : INotifyPropertyChanged
     /// <summary>Common bed sizes, so the usual ones are one click rather than a typed number.</summary>
     public IReadOnlyList<float> PlateSizes { get; } = [120f, 180f, 200f, 220f, 250f, 300f, 350f, 400f];
 
+    /// <summary>
+    /// What the model is drawn to: 87 means 1:87, and 1 means the part is the size it says.
+    ///
+    /// Nothing about the geometry changes - millimetres stay millimetres. What it buys is being
+    /// told what a dimension means. Building a house at 1:87 meant dividing by 87 by hand for
+    /// every wall, every riser and every door, and a number worked out on paper is a number that
+    /// can be wrong without anything noticing.
+    /// </summary>
+    public float ModelScale
+    {
+        get => modelScale;
+        set
+        {
+            float wanted = Math.Clamp(value, 1f, 5000f);
+            if (Math.Abs(wanted - modelScale) < 0.001f) return;
+
+            Set(ref modelScale, wanted);
+            Raise(nameof(ScaleLabel));
+            Raise(nameof(RealSize));
+            RefreshSelection();
+        }
+    }
+
+    /// <summary>Scales a modeller is likely to want, and 1:1 for everyone else.</summary>
+    public IReadOnlyList<float> ModelScales { get; } = [1f, 12f, 24f, 35f, 48f, 72f, 76f, 87f, 100f, 144f, 160f, 200f, 220f];
+
+    public string ScaleLabel => modelScale <= 1.001f ? "1:1" : $"1:{modelScale:0.##}";
+
+    /// <summary>
+    /// The selection's size in real units, for the panel to show under the millimetres. Metres
+    /// once it passes one, because a 9570 mm wall is harder to read than 9.57 m.
+    /// </summary>
+    public string RealSize
+    {
+        get
+        {
+            if (Selected is not { } o || modelScale <= 1.001f) return "";
+
+            var size = new Vector3(o.SizeX, o.SizeY, o.SizeZ) * modelScale;
+
+            return size.X >= 1000f || size.Y >= 1000f || size.Z >= 1000f
+                ? $"{size.X / 1000f:0.##} x {size.Y / 1000f:0.##} x {size.Z / 1000f:0.##} m"
+                : $"{size.X:0.#} x {size.Y:0.#} x {size.Z:0.#} mm";
+        }
+    }
+
     public bool HasDamagedObjects => damaged ??= Scene.Objects.Any(o => !o.Mesh.CheckHealth().IsWatertight);
 
     /// <summary>The picked face, in world space, or null. Read by the renderer.</summary>
@@ -1530,6 +1586,19 @@ public sealed class MainViewModel : INotifyPropertyChanged
     public string EngraveAdvice => engrave.Advice();
     public bool HasEngraveAdvice => EngraveAdvice.Length > 0;
 
+    /// <summary>
+    /// How many times longer each course is than it is tall. Brick is about three; a roof tile is
+    /// nearer one and a half, and before this there was no way to ask for one.
+    /// </summary>
+    public float EngraveAspect
+    {
+        get => engrave.Options.Courses;
+        set => SetEngrave(engrave.Options with { Aspect = Math.Clamp(value, 0.2f, 20f) });
+    }
+
+    /// <summary>Stripes and grain have no courses, so their proportions mean nothing.</summary>
+    public bool EngraveAspectApplies => engrave.Options.Kind == PatternKind.Brick;
+
     /// <summary>Only Stripes and Wood have a direction; brick courses are always level.</summary>
     public bool EngraveDirectionApplies => engrave.Options.Kind != PatternKind.Brick;
 
@@ -1558,6 +1627,8 @@ public sealed class MainViewModel : INotifyPropertyChanged
         Raise(nameof(EngraveDepth));
         Raise(nameof(EngraveDirection));
         Raise(nameof(EngraveDirectionApplies));
+        Raise(nameof(EngraveAspect));
+        Raise(nameof(EngraveAspectApplies));
         Raise(nameof(EngraveRaised));
         Raise(nameof(EngraveOffsetU));
         Raise(nameof(EngraveOffsetV));
@@ -1624,6 +1695,36 @@ public sealed class MainViewModel : INotifyPropertyChanged
     {
         get => splitOffset;
         set => Set(ref splitOffset, value);
+    }
+
+    /// <summary>
+    /// Sets the cutting plane to the face under the click.
+    ///
+    /// The split engine has always taken an arbitrary plane; it was only the panel that was
+    /// bound to the three axes, so any sloping cut - a roof, a chamfer, a hip - meant rotating a
+    /// cutter box and working out where its face landed. Picking the face says it directly, the
+    /// same way Lay on face already does.
+    /// </summary>
+    public bool PickSplitPlane(SceneObject target, Vector3 worldPoint, Vector3 worldNormal)
+    {
+        if (!isSplitMode) return false;
+
+        var face = FacePatch.Find(target.ToWorldMesh(), worldPoint, worldNormal);
+        if (face is null) return false;
+
+        SplitNormal = face.Normal;
+
+        // The offset the split works in is measured along the normal from the plate's origin,
+        // which is exactly where the face's own plane sits.
+        SplitOffset = Vector3.Dot(face.Normal, face.Origin);
+
+        var (front, back) = DominantAxisLabels();
+        Status = $"Cutting on the face you picked - keeps {front} or {back}";
+
+        Raise(nameof(KeepFrontLabel));
+        Raise(nameof(KeepBackLabel));
+        ViewChanged?.Invoke();
+        return true;
     }
 
     public float SplitMinimum { get; private set; } = -100;
@@ -1693,6 +1794,121 @@ public sealed class MainViewModel : INotifyPropertyChanged
         Undo.Execute(new AddObjectsCommand(offset ? "Duplicate" : "Duplicate in place", copies));
         RefreshSelection();
         Status = offset ? "Duplicated" : "Duplicated in place";
+    }
+
+    /// <summary>
+    /// Repeats the selection along a line, growing as it goes if asked.
+    ///
+    /// One operation and one undo, where a staircase used to be a dozen objects typed in by
+    /// hand. The arithmetic lives in <see cref="RepeatArray"/> so it can be tested on its own.
+    /// </summary>
+    private void RepeatSelection()
+    {
+        var selection = Scene.Selection.ToList();
+        if (selection.Count == 0) return;
+
+        var dialog = new RepeatDialog(selection) { Owner = Application.Current?.MainWindow };
+        if (dialog.ShowDialog() != true || dialog.Result is not { } settings) return;
+
+        var copies = RepeatArray.Make(selection, settings, Scene.UniqueName);
+        if (copies.Count == 0) return;
+
+        Undo.Execute(new AddObjectsCommand("Repeat", copies));
+        RefreshSelection();
+        Status = $"Repeated - {copies.Count} new object(s)";
+    }
+
+    /// <summary>
+    /// Moves the first-picked object so its box lines up with the second's, on whichever axes
+    /// they are not already level.
+    ///
+    /// The dowels in the house model line up because both were worked out from the same four
+    /// numbers by hand. Nothing in the app could have checked it, and when they came out wrong
+    /// nothing said so.
+    /// </summary>
+    private void AlignToSelection()
+    {
+        var picked = Scene.SelectionInPickOrder;
+        if (picked.Count != 2) return;
+
+        var mover = picked[0];
+        var target = picked[1];
+        var before = TransformState.Capture(mover);
+
+        var shift = target.WorldBounds.Center - mover.WorldBounds.Center;
+        mover.Position += shift;
+
+        Undo.Execute(new TransformCommand("Align", [mover], [before], [TransformState.Capture(mover)]));
+        RefreshSelection();
+        Status = $"Aligned {mover.Name} to {target.Name}";
+    }
+
+    /// <summary>
+    /// Says whether two parts actually meet, and by how much.
+    ///
+    /// A dowel with no hole above it, a frame too big for its opening, a wall bored through by a
+    /// socket that was meant to be 4 mm deep - all of them look right on screen and none of them
+    /// print. This is the cheap version of the question: where do the two overlap, and is that
+    /// overlap a fit, a clash, or nothing at all.
+    /// </summary>
+    private void FitCheck()
+    {
+        var picked = Scene.SelectionInPickOrder;
+        if (picked.Count != 2) return;
+
+        var a = picked[0].WorldBounds;
+        var b = picked[1].WorldBounds;
+
+        var low = Vector3.Max(a.Min, b.Min);
+        var high = Vector3.Min(a.Max, b.Max);
+        var overlap = high - low;
+
+        if (overlap.X <= 0 || overlap.Y <= 0 || overlap.Z <= 0)
+        {
+            var gap = Vector3.Max(Vector3.Max(b.Min - a.Max, a.Min - b.Max), Vector3.Zero);
+
+            Status = $"{picked[0].Name} and {picked[1].Name} do not meet - "
+                   + $"{gap.Length():0.##} mm apart at the nearest.";
+            return;
+        }
+
+        double volume = CsgSolid.Intersect(picked[0].ToWorldMesh(), picked[1].ToWorldMesh())
+            .ComputeSignedVolume();
+
+        Status = Math.Abs(volume) < 1e-6
+            ? $"{picked[0].Name} and {picked[1].Name} touch but do not overlap - a clearance fit."
+            : $"{picked[0].Name} and {picked[1].Name} overlap by {overlap.X:0.##} x {overlap.Y:0.##} "
+              + $"x {overlap.Z:0.##} mm, {Math.Abs(volume) / 1000.0:0.###} cm3 of shared material.";
+    }
+
+    /// <summary>
+    /// Inserts a straight flight of steps.
+    ///
+    /// Its own tool rather than another primitive because the numbers are the whole of the job:
+    /// rise, run and how many risers that divides into, with the dialog saying in real
+    /// millimetres whether the result is a stair or a ladder. Built as one closed solid, so it
+    /// carries none of the coplanar seams a stack of boxes does.
+    /// </summary>
+    private void InsertStair()
+    {
+        var dialog = new StairDialog(modelScale) { Owner = Application.Current?.MainWindow };
+        if (dialog.ShowDialog() != true || dialog.Result is not { } s) return;
+
+        var mesh = StairBuilder.Build(s.Rise, s.Run, s.Width, s.Steps);
+        if (mesh.TriangleCount == 0) return;
+
+        var o = new SceneObject(Scene.UniqueName("Stair"), mesh)
+        {
+            Colour = NextAutomaticColour(),
+            Position = new Vector3(0, 0, mesh.ComputeBounds().Size.Z / 2f)
+        };
+
+        Undo.Execute(new AddObjectsCommand("Insert stair", [o]));
+        RefreshSelection();
+
+        var check = StairBuilder.Measure(s.Rise, s.Run, s.Steps, modelScale);
+        Status = $"Inserted a flight of {s.Steps} - {check.RiserMm:0.#} mm risers on "
+               + $"{check.GoingMm:0.#} mm treads{(check.IsClimbable ? "" : ", which is steep")}";
     }
 
     private void Mirror(object? parameter)
@@ -1963,6 +2179,9 @@ public sealed class MainViewModel : INotifyPropertyChanged
         var selection = Scene.Selection;
         if (selection.Count < 2) return;
 
+        // Left unwelded on purpose. Welding would fuse parts that touch into one connected run
+        // of triangles, and Ungroup finds its pieces geometrically - so a group of touching
+        // parts would never come apart again.
         var combined = Mesh.Combine(selection.Select(o => o.ToWorldMesh()));
         var grouped = new SceneObject(Scene.UniqueName("Group"), combined)
         {
@@ -1971,7 +2190,19 @@ public sealed class MainViewModel : INotifyPropertyChanged
 
         Undo.Execute(new ReplaceObjectsCommand("Group", selection, [grouped]));
         RefreshSelection();
-        Status = $"Grouped {selection.Count} objects";
+
+        // Said here rather than left to surface as a torn boolean later: everything downstream
+        // of a group that is not a solid inherits the damage, and by then the cause is three
+        // operations back.
+        // Judged on a welded copy, which is the only way to see it. Concatenating two shells that
+        // meet on a face leaves that face inside the group with material both sides of it; left
+        // unwelded the two copies of it never meet, every edge still counts twice, and a group
+        // that is not a solid at all reports itself ready to print. Everything built on it
+        // afterwards inherits the damage, and by then the cause is three operations back.
+        Status = combined.Welded().CheckHealth().IsWatertight
+            ? $"Grouped {selection.Count} objects"
+            : $"Grouped {selection.Count} objects - they touch each other, so the group is not a "
+              + "solid. Use Merge rather than Group if you meant to fuse them.";
     }
 
     /// <summary>
@@ -2100,7 +2331,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
             // millimetres, so a wall on a stretched object would otherwise come out stretched.
             var meshes = selection.Select(o => o.ToWorldMesh()).ToList();
             var shells = await Task.Run(() => meshes
-                .Select(m => MeshHollow.Hollow(m, settings.WallMm, settings.Resolution))
+                .Select(m => MeshHollow.Hollow(m, settings.WallMm, settings.Resolution, settings.Open))
                 .ToList());
 
             var produced = new List<SceneObject>();
@@ -2939,6 +3170,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
         Selected = selection.Count == 1 ? selection[0] : null;
         SelectionChanged?.Invoke();
         Raise(nameof(HasAnySelection));
+        Raise(nameof(RealSize));
         Raise(nameof(HasOneSelected));
         Raise(nameof(HasManySelected));
         RaiseGroup();

@@ -52,10 +52,10 @@ public static class FaceRelief
     public static Mesh? Apply(
         Mesh mesh, FacePatch face, Rect2 area, GrooveSet pattern, float rise)
     {
-        if (!Ready(mesh, face, area, rise, out var sides)) return null;
-        if (!TryPattern(face, area, pattern, rise, out var inside, out var inner)) return null;
+        if (!Ready(mesh, face, area, rise, out var sides, out var holes)) return null;
+        if (!TryPattern(face, area, pattern, holes, rise, out var inside, out var inner)) return null;
 
-        return Assemble(mesh, face, sides, inner, inside);
+        return Assemble(mesh, face, sides, holes, inner, inside);
     }
 
     /// <summary>
@@ -67,27 +67,38 @@ public static class FaceRelief
         Mesh mesh, FacePatch face, Rect2 area,
         IReadOnlyList<IReadOnlyList<Vector2>> outlines, float rise)
     {
-        if (!Ready(mesh, face, area, rise, out var sides)) return null;
-        if (face.Fences.Count > 0) return null;
+        if (!Ready(mesh, face, area, rise, out var sides, out var holes)) return null;
+        if (face.Fences.Count > 0 || holes.Count > 0) return null;
         if (!FaceTiling.TryFill(face, area, outlines, rise, out var inside, out var inner)) return null;
 
-        return Assemble(mesh, face, sides, inner, inside);
+        return Assemble(mesh, face, sides, holes, inner, inside);
     }
 
-    /// <summary>Whether this is a face that can be retiled, and where its outline runs if so.</summary>
+    /// <summary>
+    /// A window or a door already cut through the wall: a rectangular hole in the face, with the
+    /// coordinates its own boundary vertices sit on so the retiling can land on them exactly.
+    /// </summary>
+    private readonly record struct Hole(Rect2 Bounds, List<float> Us, List<float> Vs);
+
+    /// <summary>Whether this is a face that can be retiled, its outline, and any holes in it.</summary>
     private static bool Ready(
-        Mesh mesh, FacePatch face, Rect2 area, float rise, out List<int>[] sides)
+        Mesh mesh, FacePatch face, Rect2 area, float rise,
+        out List<int>[] sides, out List<Hole> holes)
     {
         sides = [];
+        holes = [];
 
         if (rise <= 0 || area.IsEmpty || !ReferenceEquals(face.Mesh, mesh)) return false;
-        if (!IsFilledRectangle(face)) return false;
+        if (!TryLoops(face, out var loops)) return false;
+        if (!TryHoles(face, area, loops, out var outer, out holes)) return false;
+        if (!FillsItsRectangle(face, holes)) return false;
 
-        return TryOutline(face, out var outline) && TrySides(face, outline, out sides);
+        return TrySides(face, outer, out sides);
     }
 
     private static Mesh Assemble(
-        Mesh mesh, FacePatch face, List<int>[] sides, List<Vector2>[] inner, Mesh inside)
+        Mesh mesh, FacePatch face, List<int>[] sides, List<Hole> holes,
+        List<Vector2>[] inner, Mesh inside)
     {
         var built = WithoutFace(mesh, face);
         AddFrame(built, mesh, face, sides, inner);
@@ -100,26 +111,32 @@ public static class FaceRelief
     /// Whether the face fills its own bounding rectangle. A gable end or a round cap does not,
     /// and retiling one would flatten the part of the outline the rectangle does not follow.
     /// </summary>
-    private static bool IsFilledRectangle(FacePatch face)
+    private static bool FillsItsRectangle(FacePatch face, List<Hole> holes)
     {
         var size = face.Size;
         if (size.X <= 0 || size.Y <= 0) return false;
 
         float flat = size.X * size.Y;
-        return Math.Abs(face.Area - flat) <= flat * 1e-3f;
+        float missing = holes.Sum(h => h.Bounds.Width * h.Bounds.Height);
+
+        return Math.Abs(face.Area - (flat - missing)) <= flat * 1e-3f;
     }
 
     // --- Which decomposition -----------------------------------------------------------------
 
     private static bool TryPattern(
-        FacePatch face, Rect2 area, GrooveSet pattern, float rise,
+        FacePatch face, Rect2 area, GrooveSet pattern, List<Hole> holes, float rise,
         out Mesh inside, out List<Vector2>[] inner)
     {
         if (pattern.Ribbons.Count == 0)
-            return TryCells(face, area, pattern.Rectangles, rise, out inside, out inner);
+            return TryCells(face, area, pattern.Rectangles, holes, rise, out inside, out inner);
 
         inside = new Mesh();
         inner = [];
+
+        // A curve laid round a window is a harder question than a grid of cells, and not one the
+        // house needed answering.
+        if (holes.Count > 0) return false;
 
         // A fence is a line the pattern must stop short of, and the cell grid clears the cells
         // that cross one. Trapezoids have no such notion, so a face carrying fences - a cylinder
@@ -143,7 +160,7 @@ public static class FaceRelief
     /// per cell at whichever level that cell belongs to and a wall where the two meet.
     /// </summary>
     private static bool TryCells(
-        FacePatch face, Rect2 area, IReadOnlyList<Rect2> rectangles, float rise,
+        FacePatch face, Rect2 area, IReadOnlyList<Rect2> rectangles, List<Hole> holes, float rise,
         out Mesh inside, out List<Vector2>[] inner)
     {
         inside = new Mesh();
@@ -152,10 +169,13 @@ public static class FaceRelief
         var pieces = rectangles.Where(piece => !piece.IsEmpty).ToList();
         if (pieces.Count == 0) return false;
 
-        // The area's own edges join the pattern's, so the grid reaches the frame exactly.
+        // The area's own edges join the pattern's, and so do every hole's, so the grid reaches
+        // both the frame and the window reveals exactly.
         var spanning = new List<Rect2>(pieces) { area };
-        float[] us = GrooveSolid.Coordinates(spanning, r => r.MinU, r => r.MaxU);
-        float[] vs = GrooveSolid.Coordinates(spanning, r => r.MinV, r => r.MaxV);
+        spanning.AddRange(holes.Select(h => h.Bounds));
+
+        float[] us = GrooveSolid.Coordinates(spanning, r => r.MinU, r => r.MaxU, holes.SelectMany(h => h.Us));
+        float[] vs = GrooveSolid.Coordinates(spanning, r => r.MinV, r => r.MaxV, holes.SelectMany(h => h.Vs));
 
         if (us.Length < 2 || vs.Length < 2) return false;
         if ((long)(us.Length - 1) * (vs.Length - 1) > MaximumCells) return false;
@@ -163,7 +183,11 @@ public static class FaceRelief
         bool[,] covered = GrooveSolid.CoverCells(pieces, us, vs);
         GrooveSolid.Fence(covered, us, vs, face);
 
-        AddCells(inside, face, us, vs, covered, rise);
+        // Where a window is there is no face to lay at all - the reveal the boolean already cut
+        // is the surface there, and anything laid over it would close the opening.
+        bool[,] empty = GrooveSolid.CoverCells(holes.Select(h => h.Bounds).ToList(), us, vs);
+
+        AddCells(inside, face, us, vs, covered, empty, rise);
 
         inner =
         [
@@ -178,30 +202,105 @@ public static class FaceRelief
 
     // --- The outline the surrounding mesh shares -----------------------------------------
 
-    /// <summary>The face's boundary vertices in winding order, or false if it is not one loop.</summary>
-    private static bool TryOutline(FacePatch face, out List<int> loop)
+    /// <summary>
+    /// Every boundary loop of the face, in winding order.
+    ///
+    /// A plain wall has one. A wall with windows cut through it has one for the outline and one
+    /// more for each opening, and the openings are what used to make this hand the face back.
+    /// </summary>
+    private static bool TryLoops(FacePatch face, out List<List<int>> loops)
     {
-        loop = new List<int>();
+        loops = [];
 
         var next = new Dictionary<int, int>(face.Boundary.Count);
         foreach (var (a, b) in face.Boundary)
-            if (!next.TryAdd(a, b)) return false; // the outline pinches, so it is not one loop
+            if (!next.TryAdd(a, b)) return false; // the outline pinches on itself
 
         if (next.Count == 0) return false;
 
-        int start = face.Boundary[0].A;
-        int at = start;
+        var walked = new HashSet<int>();
 
-        do
+        foreach (var (from, _) in face.Boundary)
         {
-            loop.Add(at);
-            if (!next.TryGetValue(at, out at)) return false;
-        }
-        while (at != start && loop.Count <= next.Count);
+            if (walked.Contains(from)) continue;
 
-        // Anything left over is a second loop, which means the face has a hole in it.
-        return at == start && loop.Count == next.Count;
+            var loop = new List<int>();
+            int at = from;
+
+            do
+            {
+                loop.Add(at);
+                walked.Add(at);
+                if (!next.TryGetValue(at, out at)) return false;
+            }
+            while (at != from && loop.Count <= next.Count);
+
+            if (at != from) return false;
+            loops.Add(loop);
+        }
+
+        return loops.Count > 0;
     }
+
+    /// <summary>
+    /// Sorts the loops into the outline and the holes.
+    ///
+    /// A hole has to be a rectangle standing clear inside the patterned area: the tiling lays
+    /// cells on a grid, and a hole whose edges do not fall on grid lines cannot be left empty
+    /// exactly. Windows and doors are rectangles, which is the case worth having. Anything else
+    /// is handed back.
+    /// </summary>
+    private static bool TryHoles(
+        FacePatch face, Rect2 area, List<List<int>> loops, out List<int> outer, out List<Hole> holes)
+    {
+        outer = [];
+        holes = [];
+
+        // The outline is the loop that runs round everything else.
+        var uv = loops.Select(l => l.Select(v => face.ToUv(face.Mesh.Positions[v])).ToList()).ToList();
+        int widest = 0;
+
+        for (int i = 1; i < uv.Count; i++)
+            if (MathF.Abs(Polygon2.SignedArea(uv[i])) > MathF.Abs(Polygon2.SignedArea(uv[widest])))
+                widest = i;
+
+        outer = loops[widest];
+
+        for (int i = 0; i < loops.Count; i++)
+        {
+            if (i == widest) continue;
+
+            var points = uv[i];
+            var bounds = new Rect2(
+                points.Min(p => p.X), points.Min(p => p.Y),
+                points.Max(p => p.X), points.Max(p => p.Y));
+
+            if (bounds.IsEmpty) return false;
+
+            // Rectangular, and clear of the frame ring by a whisker.
+            foreach (var p in points)
+                if (!OnRectangleEdge(p, bounds)) return false;
+
+            if (bounds.MinU < area.MinU + OnEdge || bounds.MaxU > area.MaxU - OnEdge ||
+                bounds.MinV < area.MinV + OnEdge || bounds.MaxV > area.MaxV - OnEdge)
+                return false;
+
+            // The coordinates its own vertices stand on, so the cells meet them exactly rather
+            // than leaving a vertex partway along an edge with nothing on the other side of it.
+            holes.Add(new Hole(
+                bounds,
+                points.Where(p => MathF.Abs(p.Y - bounds.MinV) < OnEdge || MathF.Abs(p.Y - bounds.MaxV) < OnEdge)
+                      .Select(p => p.X).ToList(),
+                points.Where(p => MathF.Abs(p.X - bounds.MinU) < OnEdge || MathF.Abs(p.X - bounds.MaxU) < OnEdge)
+                      .Select(p => p.Y).ToList()));
+        }
+
+        return true;
+    }
+
+    private static bool OnRectangleEdge(Vector2 p, Rect2 r) =>
+        MathF.Abs(p.X - r.MinU) < OnEdge || MathF.Abs(p.X - r.MaxU) < OnEdge ||
+        MathF.Abs(p.Y - r.MinV) < OnEdge || MathF.Abs(p.Y - r.MaxV) < OnEdge;
 
     /// <summary>
     /// The outline split at the rectangle's four corners, each side kept in winding order and
@@ -345,12 +444,14 @@ public static class FaceRelief
     /// above it, and a wall wherever the two levels meet.
     /// </summary>
     private static void AddCells(
-        Mesh built, FacePatch face, float[] us, float[] vs, bool[,] covered, float rise)
+        Mesh built, FacePatch face, float[] us, float[] vs, bool[,] covered, bool[,] empty, float rise)
     {
         for (int i = 0; i < us.Length - 1; i++)
         {
             for (int j = 0; j < vs.Length - 1; j++)
             {
+                if (empty[i, j]) continue;   // a window: the reveal is the surface here
+
                 var a = new Vector2(us[i], vs[j]);
                 var b = new Vector2(us[i + 1], vs[j]);
                 var c = new Vector2(us[i + 1], vs[j + 1]);
@@ -362,12 +463,18 @@ public static class FaceRelief
                 if (!up) continue;
 
                 // Walking the cell anticlockwise leaves the brick on the left, which faces the
-                // walls outward. Between two raised cells there is no step and so no wall.
-                if (!GrooveSolid.IsCovered(covered, i, j - 1)) GrooveSolid.AddWall(built, face, a, b, rise, 0f);
-                if (!GrooveSolid.IsCovered(covered, i + 1, j)) GrooveSolid.AddWall(built, face, b, c, rise, 0f);
-                if (!GrooveSolid.IsCovered(covered, i, j + 1)) GrooveSolid.AddWall(built, face, c, d, rise, 0f);
-                if (!GrooveSolid.IsCovered(covered, i - 1, j)) GrooveSolid.AddWall(built, face, d, a, rise, 0f);
+                // walls outward. Between two raised cells there is no step and so no wall - but
+                // a brick standing at the edge of a window needs one, because the reveal below
+                // it starts at the face and the brick stands proud of it.
+                if (!Raised(covered, empty, i, j - 1)) GrooveSolid.AddWall(built, face, a, b, rise, 0f);
+                if (!Raised(covered, empty, i + 1, j)) GrooveSolid.AddWall(built, face, b, c, rise, 0f);
+                if (!Raised(covered, empty, i, j + 1)) GrooveSolid.AddWall(built, face, c, d, rise, 0f);
+                if (!Raised(covered, empty, i - 1, j)) GrooveSolid.AddWall(built, face, d, a, rise, 0f);
             }
         }
     }
+
+    /// <summary>Whether the neighbour is standing at the same height, so no wall goes between.</summary>
+    private static bool Raised(bool[,] covered, bool[,] empty, int i, int j) =>
+        GrooveSolid.IsCovered(covered, i, j) && !GrooveSolid.IsCovered(empty, i, j);
 }

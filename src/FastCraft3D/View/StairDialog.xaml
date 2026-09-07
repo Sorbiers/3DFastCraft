@@ -1,0 +1,55 @@
+﻿<Window x:Class="FastCraft3D.View.StairDialog"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Stair" SizeToContent="Height" Width="430"
+        WindowStartupLocation="CenterOwner" ResizeMode="NoResize"
+        ShowInTaskbar="False" Background="#FFF7F7F8">
+
+    <StackPanel Margin="18,14,18,14">
+        <TextBlock Text="A straight flight, arriving level with the floor above."
+                   TextWrapping="Wrap" Foreground="#FF33383F" Margin="0,0,0,14" />
+
+        <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
+            <TextBlock Text="Rise" VerticalAlignment="Center" Foreground="#FF5A5F66" Width="86" />
+            <TextBox x:Name="RiseBox" Width="70" Padding="4,3" Text="26.5"
+                     AutomationProperties.AutomationId="StairRise" TextChanged="OnChanged" />
+            <TextBlock Text="mm, floor to floor" VerticalAlignment="Center"
+                       Foreground="#FF9AA0A8" Margin="8,0,0,0" />
+        </StackPanel>
+
+        <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
+            <TextBlock Text="Run" VerticalAlignment="Center" Foreground="#FF5A5F66" Width="86" />
+            <TextBox x:Name="RunBox" Width="70" Padding="4,3" Text="37.7"
+                     AutomationProperties.AutomationId="StairRun" TextChanged="OnChanged" />
+            <TextBlock Text="mm, along the floor" VerticalAlignment="Center"
+                       Foreground="#FF9AA0A8" Margin="8,0,0,0" />
+        </StackPanel>
+
+        <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
+            <TextBlock Text="Width" VerticalAlignment="Center" Foreground="#FF5A5F66" Width="86" />
+            <TextBox x:Name="WidthBox" Width="70" Padding="4,3" Text="14"
+                     AutomationProperties.AutomationId="StairWidth" TextChanged="OnChanged" />
+            <TextBlock Text="mm" VerticalAlignment="Center" Foreground="#FF9AA0A8" Margin="8,0,0,0" />
+        </StackPanel>
+
+        <StackPanel Orientation="Horizontal" Margin="0,0,0,12">
+            <TextBlock Text="Steps" VerticalAlignment="Center" Foreground="#FF5A5F66" Width="86" />
+            <TextBox x:Name="StepsBox" Width="70" Padding="4,3" Text="13"
+                     AutomationProperties.AutomationId="StairSteps" TextChanged="OnChanged" />
+            <TextBlock Text="risers, the last onto the floor" VerticalAlignment="Center"
+                       Foreground="#FF9AA0A8" Margin="8,0,0,0" />
+        </StackPanel>
+
+        <Border Padding="10,8" CornerRadius="3"
+                Background="#FFEFF1F4" BorderBrush="#FFDDE0E4" BorderThickness="1">
+            <TextBlock x:Name="SummaryText" TextWrapping="Wrap" Foreground="#FF3A3F45" />
+        </Border>
+
+        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,18,0,0">
+            <Button Content="Insert" IsDefault="True" Click="OnAccept"
+                    AutomationProperties.Name="StairAccept"
+                    MinWidth="88" Padding="10,6" Margin="0,0,8,0" />
+            <Button Content="Cancel" IsCancel="True" MinWidth="80" Padding="10,6" />
+        </StackPanel>
+    </StackPanel>
+</Window>

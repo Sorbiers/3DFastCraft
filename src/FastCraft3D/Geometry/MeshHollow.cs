@@ -1,4 +1,4 @@
-using System.Numerics;
+﻿using System.Numerics;
 
 namespace FastCraft3D.Geometry;
 
@@ -23,6 +23,18 @@ public readonly record struct HollowResult(Mesh Mesh, float WallMm, double Volum
 /// The cavity is sealed. A resin print needs a drain hole cut in it afterwards, which a cylinder
 /// and Subtract will do.
 /// </summary>
+/// <summary>Which side of the part to leave open, if any.</summary>
+public enum OpenSide
+{
+    None,
+    Bottom,
+    Top,
+    Front,
+    Back,
+    Left,
+    Right
+}
+
 public static class MeshHollow
 {
     /// <summary>
@@ -35,13 +47,27 @@ public static class MeshHollow
     /// Hollows to the given wall thickness. Blocks; a caller on the UI thread should wrap it in
     /// Task.Run.
     /// </summary>
+    /// <param name="open">
+    /// A side to leave open, so the cavity reaches daylight instead of being sealed in.
+    ///
+    /// A roof is the case that asked for it: it wants a shell with its underside open, and
+    /// without this the only way to get one was to build the shape twice - once full size and
+    /// once shrunk - and subtract the second from the first, with the offset worked out by hand
+    /// as the skin thickness divided by the cosine of the pitch.
+    /// </param>
     public static HollowResult Hollow(
-        Mesh mesh, float wallMm, int resolution = VoxelRebuild.DefaultResolution)
+        Mesh mesh, float wallMm, int resolution = VoxelRebuild.DefaultResolution,
+        OpenSide open = OpenSide.None)
     {
         wallMm = Math.Max(wallMm, MinimumWallMm);
 
         var grid = VoxelRebuild.Sample(mesh, resolution);
         if (grid.Inside.Length == 0) return new HollowResult(mesh, wallMm, 0);
+
+        // Where the open side's plane is, and which way is out of it.
+        var bounds = mesh.ComputeBounds();
+        var outward = Outward(open);
+        float openAt = outward == Vector3.Zero ? 0 : Vector3.Dot(outward, Corner(bounds, outward));
 
         var depth = DepthInside(grid);
 
@@ -49,21 +75,40 @@ public static class MeshHollow
         // cavity, and the extraction finds both faces of the wall in one pass.
         float wallInVoxels = wallMm / grid.Voxel;
         var shell = new bool[grid.Inside.Length];
-        int hollowed = 0;
+        int hollowed = 0, opened = 0;
 
         for (int i = 0; i < shell.Length; i++)
         {
             if (!grid.Inside[i]) continue;
 
-            if (depth[i] <= wallInVoxels) shell[i] = true;
-            else hollowed++;
+            if (depth[i] > wallInVoxels)
+            {
+                hollowed++;
+                continue;
+            }
+
+            // The skin over the open side is not part of the shell. Everything within a wall's
+            // thickness of that plane comes away with the cavity, which opens it to the outside
+            // and leaves the walls round it standing.
+            //
+            // Counted apart from the cavity, because a part too thin to hollow at all should be
+            // handed back untouched whether or not a side was asked for - taking the skin off
+            // something that has no inside leaves a sheet with a hole in it.
+            if (outward != Vector3.Zero &&
+                Vector3.Dot(outward, At(grid, i)) > openAt - wallMm)
+            {
+                opened++;
+                continue;
+            }
+
+            shell[i] = true;
         }
 
         // Nothing deep enough to remove: the part is thinner than the wall it was asked for.
         if (hollowed == 0) return new HollowResult(mesh, wallMm, 0);
 
         var surface = VoxelRebuild.SurfaceNets(shell, grid.Origin, grid.Voxel, grid.Nx, grid.Ny, grid.Nz);
-        double removed = hollowed * Math.Pow(grid.Voxel, 3) / 1000.0;
+        double removed = (hollowed + opened) * Math.Pow(grid.Voxel, 3) / 1000.0;
 
         return new HollowResult(MeshSmoothing.Smooth(surface, passes: 2), wallMm, removed);
     }
@@ -77,6 +122,33 @@ public static class MeshHollow
     /// per cent, which is far closer than counting steps along the axes - that would leave the
     /// wall half again as thick across a diagonal as along one.
     /// </summary>
+    /// <summary>The world position of one voxel. The grid runs x fastest, then y, then z.</summary>
+    private static Vector3 At(VoxelRebuild.Grid grid, int index)
+    {
+        int i = index % grid.Nx;
+        int j = index / grid.Nx % grid.Ny;
+        int k = index / (grid.Nx * grid.Ny);
+
+        return grid.Origin + new Vector3(i, j, k) * grid.Voxel;
+    }
+
+    private static Vector3 Outward(OpenSide side) => side switch
+    {
+        OpenSide.Bottom => -Vector3.UnitZ,
+        OpenSide.Top => Vector3.UnitZ,
+        OpenSide.Front => -Vector3.UnitY,
+        OpenSide.Back => Vector3.UnitY,
+        OpenSide.Left => -Vector3.UnitX,
+        OpenSide.Right => Vector3.UnitX,
+        _ => Vector3.Zero
+    };
+
+    /// <summary>How far the part reaches in that direction.</summary>
+    private static Vector3 Corner(Bounds bounds, Vector3 outward) => new(
+        outward.X >= 0 ? bounds.Max.X : bounds.Min.X,
+        outward.Y >= 0 ? bounds.Max.Y : bounds.Min.Y,
+        outward.Z >= 0 ? bounds.Max.Z : bounds.Min.Z);
+
     private static float[] DepthInside(VoxelRebuild.Grid grid)
     {
         int nx = grid.Nx, ny = grid.Ny, nz = grid.Nz;

@@ -1,0 +1,63 @@
+﻿<Window x:Class="FastCraft3D.View.RepeatDialog"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Repeat" SizeToContent="Height" Width="420"
+        WindowStartupLocation="CenterOwner" ResizeMode="NoResize"
+        ShowInTaskbar="False" Background="#FFF7F7F8">
+
+    <StackPanel Margin="18,14,18,14">
+        <TextBlock x:Name="SubjectText" TextWrapping="Wrap" Foreground="#FF33383F" Margin="0,0,0,14" />
+
+        <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
+            <TextBlock Text="Copies" VerticalAlignment="Center" Foreground="#FF5A5F66" Width="72" />
+            <TextBox x:Name="CountBox" Width="64" Padding="4,3" Text="5"
+                     AutomationProperties.AutomationId="RepeatCount" TextChanged="OnChanged" />
+            <TextBlock Text="in addition to the original" VerticalAlignment="Center"
+                       Foreground="#FF9AA0A8" Margin="8,0,0,0" />
+        </StackPanel>
+
+        <TextBlock Text="Step between copies (mm)" Foreground="#FF5A5F66" Margin="0,4,0,4" />
+        <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
+            <TextBlock Text="X" VerticalAlignment="Center" Foreground="#FF5A5F66" Width="16" />
+            <TextBox x:Name="StepXBox" Width="70" Padding="4,3" Text="0"
+                     AutomationProperties.AutomationId="RepeatStepX" TextChanged="OnChanged" />
+            <TextBlock Text="Y" VerticalAlignment="Center" Foreground="#FF5A5F66" Width="16" Margin="10,0,0,0" />
+            <TextBox x:Name="StepYBox" Width="70" Padding="4,3" Text="0"
+                     AutomationProperties.AutomationId="RepeatStepY" TextChanged="OnChanged" />
+            <TextBlock Text="Z" VerticalAlignment="Center" Foreground="#FF5A5F66" Width="16" Margin="10,0,0,0" />
+            <TextBox x:Name="StepZBox" Width="70" Padding="4,3" Text="0"
+                     AutomationProperties.AutomationId="RepeatStepZ" TextChanged="OnChanged" />
+        </StackPanel>
+
+        <TextBlock Text="Grow each copy by (mm)" Foreground="#FF5A5F66" Margin="0,4,0,4"
+                   ToolTip="Each copy is this much larger than the one before it. A staircase is a step and a rise." />
+        <StackPanel Orientation="Horizontal" Margin="0,0,0,12">
+            <TextBlock Text="X" VerticalAlignment="Center" Foreground="#FF5A5F66" Width="16" />
+            <TextBox x:Name="GrowXBox" Width="70" Padding="4,3" Text="0"
+                     AutomationProperties.AutomationId="RepeatGrowX" TextChanged="OnChanged" />
+            <TextBlock Text="Y" VerticalAlignment="Center" Foreground="#FF5A5F66" Width="16" Margin="10,0,0,0" />
+            <TextBox x:Name="GrowYBox" Width="70" Padding="4,3" Text="0"
+                     AutomationProperties.AutomationId="RepeatGrowY" TextChanged="OnChanged" />
+            <TextBlock Text="Z" VerticalAlignment="Center" Foreground="#FF5A5F66" Width="16" Margin="10,0,0,0" />
+            <TextBox x:Name="GrowZBox" Width="70" Padding="4,3" Text="0"
+                     AutomationProperties.AutomationId="RepeatGrowZ" TextChanged="OnChanged" />
+        </StackPanel>
+
+        <CheckBox x:Name="AnchorBox" Content="Keep each copy standing where the last one ended"
+                  AutomationProperties.AutomationId="RepeatAnchor"
+                  Margin="0,0,0,12" Click="OnChanged"
+                  ToolTip="Growing a box moves both its faces outward. Ticked, the step is measured from the face rather than the middle, which is what stacks a flight of steps." />
+
+        <Border Padding="10,8" CornerRadius="3"
+                Background="#FFEFF1F4" BorderBrush="#FFDDE0E4" BorderThickness="1">
+            <TextBlock x:Name="SummaryText" TextWrapping="Wrap" Foreground="#FF3A3F45" />
+        </Border>
+
+        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,18,0,0">
+            <Button Content="Repeat" IsDefault="True" Click="OnAccept"
+                    AutomationProperties.Name="RepeatAccept"
+                    MinWidth="88" Padding="10,6" Margin="0,0,8,0" />
+            <Button Content="Cancel" IsCancel="True" MinWidth="80" Padding="10,6" />
+        </StackPanel>
+    </StackPanel>
+</Window>

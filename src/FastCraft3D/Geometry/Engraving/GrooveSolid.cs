@@ -152,8 +152,14 @@ public static class GrooveSolid
     }
 
     /// <summary>Every distinct edge coordinate, which is where the cell grid can change state.</summary>
+    /// <param name="extra">
+    /// Coordinates that are not a rectangle's edge but still have to be grid lines - where a
+    /// window's own boundary vertices stand, so the cells meet the reveal exactly rather than
+    /// leaving a vertex partway along an edge with nothing on the other side of it.
+    /// </param>
     internal static float[] Coordinates(
-        List<Rect2> rectangles, Func<Rect2, float> low, Func<Rect2, float> high)
+        List<Rect2> rectangles, Func<Rect2, float> low, Func<Rect2, float> high,
+        IEnumerable<float>? extra = null)
     {
         var values = new List<float>(rectangles.Count * 2);
         foreach (var r in rectangles)
@@ -161,6 +167,8 @@ public static class GrooveSolid
             values.Add(low(r));
             values.Add(high(r));
         }
+
+        if (extra is not null) values.AddRange(extra);
 
         values.Sort();
 

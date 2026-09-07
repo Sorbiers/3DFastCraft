@@ -150,8 +150,33 @@ public sealed class Mesh
         return new Mesh(newPositions, newIndices);
     }
 
-    /// <summary>Inspects manifoldness so exports can warn before writing an unprintable file.</summary>
-    public MeshHealth CheckHealth()
+    /// <summary>
+    /// Inspects manifoldness so exports can warn before writing an unprintable file.
+    ///
+    /// Welded first when it has to be. Two shells that meet on a face - a group of parts that
+    /// touch - have two copies of that face, one from each shell, and while the vertices are
+    /// separate the two copies never meet: every edge still belongs to exactly two triangles and
+    /// the mesh reports itself watertight when it is not a solid at all. Everything built on it
+    /// afterwards inherits the damage.
+    ///
+    /// A welded mesh has no two vertices in the same place, so the test below costs one pass and
+    /// nothing else. Only the meshes that are actually suspect pay for the weld.
+    /// </summary>
+    public MeshHealth CheckHealth() => HasCoincidentVertices() ? Welded().Measure() : Measure();
+
+    /// <summary>Whether two vertices sit on top of each other, which makes the count untrustworthy.</summary>
+    private bool HasCoincidentVertices()
+    {
+        var seen = new HashSet<(int, int, int)>(Positions.Count);
+
+        foreach (var p in Positions)
+            if (!seen.Add(((int)MathF.Round(p.X * 1e4f), (int)MathF.Round(p.Y * 1e4f), (int)MathF.Round(p.Z * 1e4f))))
+                return true;
+
+        return false;
+    }
+
+    private MeshHealth Measure()
     {
         var directed = new Dictionary<(int, int), int>(Indices.Count);
         for (int i = 0; i + 2 < Indices.Count; i += 3)

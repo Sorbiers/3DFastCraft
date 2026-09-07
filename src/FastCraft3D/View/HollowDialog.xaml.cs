@@ -8,7 +8,8 @@ namespace FastCraft3D.View;
 
 /// <param name="WallMm">How thick to leave the wall.</param>
 /// <param name="Resolution">Voxels along the model's longest side.</param>
-public readonly record struct HollowSettings(float WallMm, int Resolution);
+/// <param name="Open">A side to leave open, so the cavity reaches daylight.</param>
+public readonly record struct HollowSettings(float WallMm, int Resolution, OpenSide Open);
 
 /// <summary>
 /// Asks how thick a wall to leave.
@@ -104,7 +105,7 @@ public partial class HollowDialog : Window
 
     private void OnAccept(object sender, RoutedEventArgs e)
     {
-        Result = new HollowSettings(Wall, Resolution);
+        Result = new HollowSettings(Wall, Resolution, (OpenSide)Math.Max(OpenBox.SelectedIndex, 0));
         DialogResult = true;
     }
 }

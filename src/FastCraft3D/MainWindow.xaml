@@ -372,6 +372,10 @@
                     <Button Style="{StaticResource ToolButton}" Content="Tetrahedron" Tag="{StaticResource IconTetrahedron}"
                             Command="{Binding InsertCommand}" CommandParameter="Tetrahedron" />
                     <Separator Margin="8,0" />
+                    <Button Style="{StaticResource ToolButton}" Content="Stair..." Tag="{StaticResource IconSplit}"
+                            Command="{Binding InsertStairCommand}" MinWidth="70"
+                            ToolTip="A straight flight, built as one solid, with the riser and going reported in real units" />
+                    <Separator Margin="8,0" />
                     <Button Style="{StaticResource ToolButton}" Content="Import..." Tag="{StaticResource IconImport}"
                             Command="{Binding ImportCommand}" ToolTip="Import an STL or OBJ file (Ctrl+I)" />
                 </WrapPanel>
@@ -407,6 +411,9 @@
                     <Button Style="{StaticResource ToolButton}" Content="Duplicate" Tag="{StaticResource IconDuplicate}"
                             Command="{Binding DuplicateCommand}"
                             ToolTip="Copy the selection and set it beside the original" />
+                    <Button Style="{StaticResource ToolButton}" Content="Repeat..." Tag="{StaticResource IconDuplicate}"
+                            Command="{Binding RepeatCommand}" MinWidth="76"
+                            ToolTip="Repeat the selection along a line, growing as it goes - a flight of steps, a row of dowels, a run of courses" />
                     <Button Style="{StaticResource ToolButton}" Content="In place" Tag="{StaticResource IconDuplicate}"
                             Command="{Binding DuplicateCommand}" CommandParameter="InPlace" MinWidth="64"
                             ToolTip="Copy the selection without moving it - what you want before a boolean or a mirror" />
@@ -414,6 +421,12 @@
                             Command="{Binding DeleteCommand}" />
                     <Button Style="{StaticResource ToolButton}" Content="Drop to plate" Tag="{StaticResource IconDropToPlate}"
                             Command="{Binding AlignToPlateCommand}" MinWidth="90" />
+                    <Button Style="{StaticResource ToolButton}" Content="Align to" Tag="{StaticResource IconAlignCentre}"
+                            Command="{Binding AlignToSelectionCommand}" MinWidth="72"
+                            ToolTip="Move the first object you picked so its middle sits on the second's" />
+                    <Button Style="{StaticResource ToolButton}" Content="Fit check" Tag="{StaticResource IconMeasure}"
+                            Command="{Binding FitCheckCommand}" MinWidth="72"
+                            ToolTip="Do these two actually meet, and by how much? A pin with no hole and a frame too big for its opening both look right on screen." />
                     <Button Style="{StaticResource ToolButton}" Content="Lay on face" Tag="{StaticResource IconLayOnFace}"
                             Command="{Binding BeginLayCommand}" MinWidth="86"
                             ToolTip="Pick a face and the object is tipped over to stand on it" />
@@ -539,6 +552,9 @@
                     <Button Style="{StaticResource ToolButton}" Content="Top" Tag="{StaticResource IconViewTop}" Click="OnViewTop" />
                     <Button Style="{StaticResource ToolButton}" Content="Front" Tag="{StaticResource IconViewFront}" Click="OnViewFront" />
                     <Button Style="{StaticResource ToolButton}" Content="Right" Tag="{StaticResource IconViewRight}" Click="OnViewRight" />
+                    <Button Style="{StaticResource ToolButton}" Content="Back" Tag="{StaticResource IconViewFront}" Click="OnViewBack" />
+                    <Button Style="{StaticResource ToolButton}" Content="Left" Tag="{StaticResource IconViewRight}" Click="OnViewLeft" />
+                    <Button Style="{StaticResource ToolButton}" Content="Bottom" Tag="{StaticResource IconViewTop}" Click="OnViewBottom" />
                     <Button Style="{StaticResource ToolButton}" Content="Isometric" Tag="{StaticResource IconViewIso}" Click="OnViewIso" />
                     <Separator Margin="8,0" />
                     <Button Style="{StaticResource ToolButton}" Content="Measure" Tag="{StaticResource IconMeasure}"
@@ -560,6 +576,12 @@
                                   Text="{Binding PlateSize, UpdateSourceTrigger=LostFocus}"
                                   ToolTip="The printer's bed size in millimetres. A guide, not a limit." />
                         <TextBlock Text="mm" Foreground="#FF9AA0A8" VerticalAlignment="Center" Margin="5,0,0,0" />
+                        <TextBlock Text="Scale 1:" Style="{StaticResource FieldLabel}" Margin="14,0,0,0"
+                                   ToolTip="What the model is drawn to. Sizes stay in millimetres; this is what they mean." />
+                        <ComboBox Width="72" IsEditable="True" ItemsSource="{Binding ModelScales}"
+                                  AutomationProperties.AutomationId="ModelScale"
+                                  Text="{Binding ModelScale, UpdateSourceTrigger=LostFocus}"
+                                  ToolTip="1:87 is HO, 1:160 is N, 1:1 is life size." />
                     </StackPanel>
                 </WrapPanel>
             </TabItem>
@@ -640,6 +662,7 @@
                 <StackPanel Visibility="{Binding IsSelectionMenuOpen,
                                          Converter={StaticResource BoolToVisibility}}">
                     <Button Style="{StaticResource SelectionMenuItem}" Command="{Binding GroupCommand}"
+                            AutomationProperties.Name="Group"
                             ToolTip="Combine the selected objects into one">
                         <StackPanel Orientation="Horizontal">
                             <Path Style="{StaticResource MenuIcon}"
@@ -649,6 +672,7 @@
                     </Button>
 
                     <Button Style="{StaticResource SelectionMenuItem}" Command="{Binding UngroupCommand}"
+                            AutomationProperties.Name="Ungroup"
                             ToolTip="Split the selection into its separate pieces">
                         <StackPanel Orientation="Horizontal">
                             <Path Style="{StaticResource MenuIcon}"
@@ -660,6 +684,7 @@
                     <Rectangle Height="1" Margin="8,4" Fill="#FFDDE0E4" />
 
                     <Button Style="{StaticResource SelectionMenuItem}" Command="{Binding SelectAllCommand}"
+                            AutomationProperties.Name="Select all"
                             ToolTip="Select every object (Ctrl+A)">
                         <StackPanel Orientation="Horizontal">
                             <Path Style="{StaticResource MenuIcon}"
@@ -669,6 +694,7 @@
                     </Button>
 
                     <Button Style="{StaticResource SelectionMenuItem}" Command="{Binding DeselectAllCommand}"
+                            AutomationProperties.Name="Deselect all"
                             ToolTip="Clear the selection">
                         <StackPanel Orientation="Horizontal">
                             <Path Style="{StaticResource MenuIcon}"
@@ -678,6 +704,7 @@
                     </Button>
 
                     <Button Style="{StaticResource SelectionMenuItem}" Command="{Binding InvertSelectionCommand}"
+                            AutomationProperties.Name="Invert selection"
                             ToolTip="Select everything that is not selected, and vice versa">
                         <StackPanel Orientation="Horizontal">
                             <Path Style="{StaticResource MenuIcon}"
@@ -689,6 +716,7 @@
                     <Rectangle Height="1" Margin="8,4" Fill="#FFDDE0E4" />
 
                     <ToggleButton Style="{StaticResource SelectionMenuToggle}"
+                                  AutomationProperties.Name="Sticky selection"
                                   IsChecked="{Binding StickySelection, Mode=TwoWay}"
                                   ToolTip="On: clicking an object adds or removes just that object, leaving the rest selected">
                         <StackPanel Orientation="Horizontal">
@@ -794,21 +822,21 @@
                         <StackPanel Orientation="Horizontal" Margin="0,0,0,2">
                             <TextBlock Text="Size" Style="{StaticResource FieldLabel}" Width="76"
                                        ToolTip="Brick length, board width, or the gap between stripes" />
-                            <TextBox Width="64" Style="{StaticResource NumberBox}" Tag="number"
+                            <TextBox AutomationProperties.AutomationId="EngraveSize" Width="64" Style="{StaticResource NumberBox}" Tag="number"
                                      Text="{Binding EngraveSize, StringFormat=N1, UpdateSourceTrigger=LostFocus}" />
                             <TextBlock Text="mm" Foreground="#FF9AA0A8" VerticalAlignment="Center" />
                         </StackPanel>
 
                         <StackPanel Orientation="Horizontal" Margin="0,0,0,2">
                             <TextBlock Text="Line width" Style="{StaticResource FieldLabel}" Width="76" />
-                            <TextBox Width="64" Style="{StaticResource NumberBox}" Tag="number"
+                            <TextBox AutomationProperties.AutomationId="EngraveWidth" Width="64" Style="{StaticResource NumberBox}" Tag="number"
                                      Text="{Binding EngraveGrooveWidth, StringFormat=N2, UpdateSourceTrigger=LostFocus}" />
                             <TextBlock Text="mm" Foreground="#FF9AA0A8" VerticalAlignment="Center" />
                         </StackPanel>
 
                         <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
                             <TextBlock Text="Depth" Style="{StaticResource FieldLabel}" Width="76" />
-                            <TextBox Width="64" Style="{StaticResource NumberBox}" Tag="number"
+                            <TextBox AutomationProperties.AutomationId="EngraveDepth" Width="64" Style="{StaticResource NumberBox}" Tag="number"
                                      Text="{Binding EngraveDepth, StringFormat=N2, UpdateSourceTrigger=LostFocus}" />
                             <TextBlock Text="mm" Foreground="#FF9AA0A8" VerticalAlignment="Center" />
                         </StackPanel>
@@ -817,7 +845,7 @@
                         <StackPanel Orientation="Horizontal" Margin="0,0,0,2">
                             <TextBlock Text="Shift across" Style="{StaticResource FieldLabel}" Width="76"
                                        ToolTip="Slides the pattern sideways. Use it to line the joints up with the next wall - arrow keys and the wheel nudge it." />
-                            <TextBox Width="64" Style="{StaticResource NumberBox}" Tag="number"
+                            <TextBox AutomationProperties.AutomationId="EngraveShiftAcross" Width="64" Style="{StaticResource NumberBox}" Tag="number"
                                      Text="{Binding EngraveOffsetU, StringFormat=N2, UpdateSourceTrigger=LostFocus}" />
                             <TextBlock Text="mm" Foreground="#FF9AA0A8" VerticalAlignment="Center" />
                         </StackPanel>
@@ -825,12 +853,23 @@
                         <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
                             <TextBlock Text="Shift along" Style="{StaticResource FieldLabel}" Width="76"
                                        ToolTip="Slides the pattern the other way, for lining courses up with a neighbouring face." />
-                            <TextBox Width="64" Style="{StaticResource NumberBox}" Tag="number"
+                            <TextBox AutomationProperties.AutomationId="EngraveShiftAlong" Width="64" Style="{StaticResource NumberBox}" Tag="number"
                                      Text="{Binding EngraveOffsetV, StringFormat=N2, UpdateSourceTrigger=LostFocus}" />
                             <TextBlock Text="mm" Foreground="#FF9AA0A8" VerticalAlignment="Center" />
                         </StackPanel>
 
-                        <CheckBox Content="Raised instead of cut" Margin="0,6,0,0"
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,2"
+                                    Visibility="{Binding EngraveAspectApplies, Converter={StaticResource BoolToVisibility}}">
+                            <TextBlock Text="Shape" Style="{StaticResource FieldLabel}" Width="76"
+                                       ToolTip="How many times longer each course is than it is tall. Brick is about 3, a roof tile about 1.5." />
+                            <TextBox Width="64" Style="{StaticResource NumberBox}" Tag="number"
+                                     AutomationProperties.AutomationId="EngraveAspect"
+                                     Text="{Binding EngraveAspect, StringFormat=N2, UpdateSourceTrigger=LostFocus}" />
+                            <TextBlock Text=": 1" Foreground="#FF9AA0A8" VerticalAlignment="Center" />
+                        </StackPanel>
+
+                        <CheckBox Content="Raised pattern" Margin="0,6,0,0"
+                                  AutomationProperties.AutomationId="EngraveRaised"
                                   IsChecked="{Binding EngraveRaised, Mode=TwoWay}"
                                   ToolTip="Stand the bricks off the face rather than cutting the joints in. Separate pieces rather than one web of joints, which the boolean finds easier - and a raised line prints where a groove the same size is missed." />
 
@@ -859,7 +898,7 @@
                         <TextBlock Text="{Binding EmbossSummary}" TextWrapping="Wrap"
                                    Foreground="#FF3A4550" Margin="0,0,0,8" />
 
-                        <TextBox Text="{Binding EmbossText, UpdateSourceTrigger=PropertyChanged}"
+                        <TextBox AutomationProperties.AutomationId="EmbossText" Text="{Binding EmbossText, UpdateSourceTrigger=PropertyChanged}"
                                  Padding="4,3" Margin="0,0,0,6" FontSize="14"
                                  Visibility="{Binding UsesText, Converter={StaticResource BoolToVisibility}}" />
 
@@ -898,7 +937,7 @@
 
                         <StackPanel Orientation="Horizontal" Margin="0,0,0,2">
                             <TextBlock Text="Height" Style="{StaticResource FieldLabel}" Width="62" />
-                            <TextBox Width="64" Style="{StaticResource NumberBox}" Tag="number"
+                            <TextBox AutomationProperties.AutomationId="EmbossHeight" Width="64" Style="{StaticResource NumberBox}" Tag="number"
                                      Text="{Binding EmbossHeight, StringFormat=N1, UpdateSourceTrigger=LostFocus}" />
                             <TextBlock Text="mm" Foreground="#FF9AA0A8" VerticalAlignment="Center" />
                         </StackPanel>
@@ -906,7 +945,7 @@
                         <StackPanel Orientation="Horizontal" Margin="0,0,0,2">
                             <TextBlock Text="Depth" Style="{StaticResource FieldLabel}" Width="62"
                                        ToolTip="How deep it is cut, or how far it stands proud" />
-                            <TextBox Width="64" Style="{StaticResource NumberBox}" Tag="number"
+                            <TextBox AutomationProperties.AutomationId="EmbossDepth" Width="64" Style="{StaticResource NumberBox}" Tag="number"
                                      Text="{Binding EmbossDepth, StringFormat=N2, UpdateSourceTrigger=LostFocus}" />
                             <TextBlock Text="mm" Foreground="#FF9AA0A8" VerticalAlignment="Center" />
                         </StackPanel>
@@ -914,7 +953,7 @@
                         <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
                             <TextBlock Text="Bevel" Style="{StaticResource FieldLabel}" Width="62"
                                        ToolTip="Slopes the walls, so raised lettering has no step to bridge and cut lettering is not a slot one line wide. Zero leaves them upright." />
-                            <TextBox Width="64" Style="{StaticResource NumberBox}" Tag="number"
+                            <TextBox AutomationProperties.AutomationId="EmbossBevel" Width="64" Style="{StaticResource NumberBox}" Tag="number"
                                      Text="{Binding EmbossBevel, StringFormat=N2, UpdateSourceTrigger=LostFocus}" />
                             <TextBlock Text="mm" Foreground="#FF9AA0A8" VerticalAlignment="Center" />
                         </StackPanel>
@@ -931,7 +970,7 @@
                         <StackPanel Orientation="Horizontal" Margin="0,0,0,2">
                             <TextBlock Text="Across" Style="{StaticResource FieldLabel}" Width="62"
                                        ToolTip="How far from the middle, along the lettering" />
-                            <TextBox Width="64" Style="{StaticResource NumberBox}" Tag="number"
+                            <TextBox AutomationProperties.AutomationId="EmbossAcross" Width="64" Style="{StaticResource NumberBox}" Tag="number"
                                      Text="{Binding EmbossAcross, StringFormat=N2, UpdateSourceTrigger=LostFocus}" />
                             <TextBlock Text="mm" Foreground="#FF9AA0A8" VerticalAlignment="Center" />
                         </StackPanel>
@@ -939,7 +978,7 @@
                         <StackPanel Orientation="Horizontal" Margin="0,0,0,2">
                             <TextBlock Text="Up" Style="{StaticResource FieldLabel}" Width="62"
                                        ToolTip="How far from the middle, across the lettering" />
-                            <TextBox Width="64" Style="{StaticResource NumberBox}" Tag="number"
+                            <TextBox AutomationProperties.AutomationId="EmbossUp" Width="64" Style="{StaticResource NumberBox}" Tag="number"
                                      Text="{Binding EmbossUp, StringFormat=N2, UpdateSourceTrigger=LostFocus}" />
                             <TextBlock Text="mm" Foreground="#FF9AA0A8" VerticalAlignment="Center" />
                         </StackPanel>
@@ -947,7 +986,7 @@
                         <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
                             <TextBlock Text="Turn" Style="{StaticResource FieldLabel}" Width="62"
                                        ToolTip="Which way up the lettering runs" />
-                            <TextBox Width="64" Style="{StaticResource NumberBox}" Tag="number"
+                            <TextBox AutomationProperties.AutomationId="EmbossAngle" Width="64" Style="{StaticResource NumberBox}" Tag="number"
                                      Text="{Binding EmbossAngle, StringFormat=N1, UpdateSourceTrigger=LostFocus}" />
                             <TextBlock Text="deg" Foreground="#FF9AA0A8" VerticalAlignment="Center" />
                         </StackPanel>
@@ -955,6 +994,7 @@
                         <CheckBox Content="Bold" IsChecked="{Binding EmbossBold, Mode=TwoWay}" Margin="0,0,0,4"
                                   Visibility="{Binding UsesText, Converter={StaticResource BoolToVisibility}}" />
                         <CheckBox Content="Raised instead of cut" IsChecked="{Binding EmbossRaised, Mode=TwoWay}"
+                                  AutomationProperties.AutomationId="EmbossRaised"
                                   Margin="0,0,0,8"
                                   ToolTip="Stand the lettering off the face rather than sinking it in" />
 
@@ -1011,7 +1051,7 @@
                         </StackPanel.Style>
 
                         <TextBlock Text="Name" Style="{StaticResource SectionHeader}" />
-                        <TextBox Text="{Binding Name, UpdateSourceTrigger=LostFocus}" Padding="4,3" />
+                        <TextBox AutomationProperties.AutomationId="ObjectName" Text="{Binding Name, UpdateSourceTrigger=LostFocus}" Padding="4,3" />
 
                         <TextBlock Text="Position (mm)" Style="{StaticResource SectionHeader}" />
                         <Grid>
@@ -1024,17 +1064,19 @@
                                 <ColumnDefinition Width="*" />
                             </Grid.ColumnDefinitions>
                             <TextBlock Text="X" Style="{StaticResource FieldLabel}" />
-                            <TextBox Grid.Column="1" Style="{StaticResource NumberBox}" Tag="transform"
+                            <TextBox AutomationProperties.AutomationId="PositionX" Grid.Column="1" Style="{StaticResource NumberBox}" Tag="transform"
                                      Text="{Binding PositionX, StringFormat=N2, UpdateSourceTrigger=LostFocus}" />
                             <TextBlock Grid.Column="2" Text="Y" Style="{StaticResource FieldLabel}" />
-                            <TextBox Grid.Column="3" Style="{StaticResource NumberBox}" Tag="transform"
+                            <TextBox AutomationProperties.AutomationId="PositionY" Grid.Column="3" Style="{StaticResource NumberBox}" Tag="transform"
                                      Text="{Binding PositionY, StringFormat=N2, UpdateSourceTrigger=LostFocus}" />
                             <TextBlock Grid.Column="4" Text="Z" Style="{StaticResource FieldLabel}" />
-                            <TextBox Grid.Column="5" Style="{StaticResource NumberBox}" Tag="transform"
+                            <TextBox AutomationProperties.AutomationId="PositionZ" Grid.Column="5" Style="{StaticResource NumberBox}" Tag="transform"
                                      Text="{Binding PositionZ, StringFormat=N2, UpdateSourceTrigger=LostFocus}" />
                         </Grid>
 
                         <TextBlock Text="Size (mm)" Style="{StaticResource SectionHeader}" />
+                        <TextBlock Text="{Binding RealSize}" Foreground="#FF6B7480" FontSize="11"
+                                   Margin="0,0,0,2" />
                         <Grid>
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="Auto" />
@@ -1045,13 +1087,13 @@
                                 <ColumnDefinition Width="*" />
                             </Grid.ColumnDefinitions>
                             <TextBlock Text="X" Style="{StaticResource FieldLabel}" />
-                            <TextBox Grid.Column="1" Style="{StaticResource NumberBox}" Tag="transform"
+                            <TextBox AutomationProperties.AutomationId="SizeX" Grid.Column="1" Style="{StaticResource NumberBox}" Tag="transform"
                                      Text="{Binding SizeX, StringFormat=N2, UpdateSourceTrigger=LostFocus}" />
                             <TextBlock Grid.Column="2" Text="Y" Style="{StaticResource FieldLabel}" />
-                            <TextBox Grid.Column="3" Style="{StaticResource NumberBox}" Tag="transform"
+                            <TextBox AutomationProperties.AutomationId="SizeY" Grid.Column="3" Style="{StaticResource NumberBox}" Tag="transform"
                                      Text="{Binding SizeY, StringFormat=N2, UpdateSourceTrigger=LostFocus}" />
                             <TextBlock Grid.Column="4" Text="Z" Style="{StaticResource FieldLabel}" />
-                            <TextBox Grid.Column="5" Style="{StaticResource NumberBox}" Tag="transform"
+                            <TextBox AutomationProperties.AutomationId="SizeZ" Grid.Column="5" Style="{StaticResource NumberBox}" Tag="transform"
                                      Text="{Binding SizeZ, StringFormat=N2, UpdateSourceTrigger=LostFocus}" />
                         </Grid>
 
@@ -1066,13 +1108,13 @@
                                 <ColumnDefinition Width="*" />
                             </Grid.ColumnDefinitions>
                             <TextBlock Text="X" Style="{StaticResource FieldLabel}" />
-                            <TextBox Grid.Column="1" Style="{StaticResource NumberBox}" Tag="transform"
+                            <TextBox AutomationProperties.AutomationId="RotationX" Grid.Column="1" Style="{StaticResource NumberBox}" Tag="transform"
                                      Text="{Binding RotationX, StringFormat=N1, UpdateSourceTrigger=LostFocus}" />
                             <TextBlock Grid.Column="2" Text="Y" Style="{StaticResource FieldLabel}" />
-                            <TextBox Grid.Column="3" Style="{StaticResource NumberBox}" Tag="transform"
+                            <TextBox AutomationProperties.AutomationId="RotationY" Grid.Column="3" Style="{StaticResource NumberBox}" Tag="transform"
                                      Text="{Binding RotationY, StringFormat=N1, UpdateSourceTrigger=LostFocus}" />
                             <TextBlock Grid.Column="4" Text="Z" Style="{StaticResource FieldLabel}" />
-                            <TextBox Grid.Column="5" Style="{StaticResource NumberBox}" Tag="transform"
+                            <TextBox AutomationProperties.AutomationId="RotationZ" Grid.Column="5" Style="{StaticResource NumberBox}" Tag="transform"
                                      Text="{Binding RotationZ, StringFormat=N1, UpdateSourceTrigger=LostFocus}" />
                         </Grid>
                     </StackPanel>
