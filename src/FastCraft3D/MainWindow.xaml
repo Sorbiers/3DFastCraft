@@ -337,8 +337,11 @@
         <KeyBinding Key="Delete" Command="{Binding DeleteCommand}" />
         <KeyBinding Key="C" Modifiers="Control" Command="{Binding CopyCommand}" />
         <KeyBinding Key="V" Modifiers="Control" Command="{Binding PasteCommand}" />
-        <KeyBinding Key="D" Modifiers="Control" Command="{Binding DeselectAllCommand}" />
+        <KeyBinding Key="D" Modifiers="Control" Command="{Binding DuplicateCommand}" />
+        <KeyBinding Key="D" Modifiers="Control+Shift" Command="{Binding DuplicateCommand}"
+                    CommandParameter="InPlace" />
         <KeyBinding Key="A" Modifiers="Control" Command="{Binding SelectAllCommand}" />
+        <KeyBinding Key="A" Modifiers="Control+Shift" Command="{Binding DeselectAllCommand}" />
         <KeyBinding Key="N" Modifiers="Control" Command="{Binding NewCommand}" />
         <KeyBinding Key="O" Modifiers="Control" Command="{Binding OpenCommand}" />
         <KeyBinding Key="S" Modifiers="Control" Command="{Binding SaveCommand}" />
@@ -372,15 +375,18 @@
                     <Button Style="{StaticResource ToolButton}" Content="Tetrahedron" Tag="{StaticResource IconTetrahedron}"
                             Command="{Binding InsertCommand}" CommandParameter="Tetrahedron" />
                     <Separator Margin="8,0" />
-                    <Button Style="{StaticResource ToolButton}" Content="Stair..." Tag="{StaticResource IconSplit}"
+                    <Button Style="{StaticResource ToolButton}" Content="Stair..." Tag="{StaticResource IconStair}"
                             Command="{Binding InsertStairCommand}" MinWidth="70"
                             ToolTip="A straight flight, built as one solid, with the riser and going reported in real units" />
                     <Separator Margin="8,0" />
                     <Button Style="{StaticResource ToolButton}" Content="Import..." Tag="{StaticResource IconImport}"
-                            Command="{Binding ImportCommand}" ToolTip="Import an STL or OBJ file (Ctrl+I)" />
+                            Command="{Binding ImportCommand}" ToolTip="Bring in an STL, an OBJ, or another 3DFastCraft project - its objects join what is already on the plate (Ctrl+I)" />
                 </WrapPanel>
             </TabItem>
 
+            <!-- Object: what a thing is made of. Edit changes its surface, Align says where it
+                 sits - the three used to be mixed, with Drop to plate and Mirror filed under
+                 Object and Smooth under it too. -->
             <TabItem Header="Object">
                 <WrapPanel Margin="4">
                     <Button Style="{StaticResource ToolButton}" Content="Subtract" Tag="{StaticResource IconSubtract}"
@@ -392,44 +398,43 @@
                     <Button Style="{StaticResource ToolButton}" Content="Merge" Tag="{StaticResource IconMerge}"
                             Command="{Binding BooleanCommand}" CommandParameter="Union"
                             ToolTip="Fuse the selection into one solid" />
-                    <Separator Margin="8,0" />
-                    <Button Style="{StaticResource ToolButton}" Content="Smooth..." Tag="{StaticResource IconSmooth}"
-                            Command="{Binding SmoothCommand}"
-                            ToolTip="Round the facets off, with the result shown as you set it" />
-                    <Button Style="{StaticResource ToolButton}" Content="Round..." Tag="{StaticResource IconRound}"
-                            Command="{Binding RoundCommand}" MinWidth="82"
-                            ToolTip="Round the edges of a cube or cylinder. Only shapes still described by their parameters can be rounded." />
-                    <Separator Margin="8,0" />
                     <Button Style="{StaticResource ToolButton}" Content="Split..." Tag="{StaticResource IconSplit}"
                             Command="{Binding BeginSplitCommand}"
-                            ToolTip="Split the selected object with a plane" />
+                            ToolTip="Cut the selected object in two with a plane, or with a face you pick" />
+                    <Separator Margin="8,0" />
+                    <Button Style="{StaticResource ToolButton}" Content="Duplicate" Tag="{StaticResource IconDuplicate}"
+                            Command="{Binding DuplicateCommand}"
+                            ToolTip="Copy the selection and set it beside the original (Ctrl+D)" />
+                    <Button Style="{StaticResource ToolButton}" Content="In place" Tag="{StaticResource IconDuplicate}"
+                            Command="{Binding DuplicateCommand}" CommandParameter="InPlace" MinWidth="64"
+                            ToolTip="Copy the selection without moving it - what you want before a boolean or a mirror (Ctrl+Shift+D)" />
+                    <Button Style="{StaticResource ToolButton}" Content="Repeat..." Tag="{StaticResource IconRepeat}"
+                            Command="{Binding RepeatCommand}" MinWidth="76"
+                            ToolTip="Repeat the selection along a line, growing as it goes - a flight of steps, a row of dowels, a run of courses" />
+                    <Button Style="{StaticResource ToolButton}" Content="Delete" Tag="{StaticResource IconDelete}"
+                            Command="{Binding DeleteCommand}"
+                            ToolTip="Remove the selection (Del)" />
                     <Separator Margin="8,0" />
                     <Button Style="{StaticResource ToolButton}" Content="Colour..." Tag="{StaticResource IconColour}"
                             Command="{Binding PickColourCommand}" MinWidth="78"
                             ToolTip="Paint the selection. The palette in the right-hand panel is one click." />
-                    <Separator Margin="8,0" />
-                    <Button Style="{StaticResource ToolButton}" Content="Duplicate" Tag="{StaticResource IconDuplicate}"
-                            Command="{Binding DuplicateCommand}"
-                            ToolTip="Copy the selection and set it beside the original" />
-                    <Button Style="{StaticResource ToolButton}" Content="Repeat..." Tag="{StaticResource IconDuplicate}"
-                            Command="{Binding RepeatCommand}" MinWidth="76"
-                            ToolTip="Repeat the selection along a line, growing as it goes - a flight of steps, a row of dowels, a run of courses" />
-                    <Button Style="{StaticResource ToolButton}" Content="In place" Tag="{StaticResource IconDuplicate}"
-                            Command="{Binding DuplicateCommand}" CommandParameter="InPlace" MinWidth="64"
-                            ToolTip="Copy the selection without moving it - what you want before a boolean or a mirror" />
-                    <Button Style="{StaticResource ToolButton}" Content="Delete" Tag="{StaticResource IconDelete}"
-                            Command="{Binding DeleteCommand}" />
+                </WrapPanel>
+            </TabItem>
+
+            <TabItem Header="Align">
+                <WrapPanel Margin="4">
                     <Button Style="{StaticResource ToolButton}" Content="Drop to plate" Tag="{StaticResource IconDropToPlate}"
-                            Command="{Binding AlignToPlateCommand}" MinWidth="90" />
-                    <Button Style="{StaticResource ToolButton}" Content="Align to" Tag="{StaticResource IconAlignCentre}"
-                            Command="{Binding AlignToSelectionCommand}" MinWidth="72"
-                            ToolTip="Move the first object you picked so its middle sits on the second's" />
-                    <Button Style="{StaticResource ToolButton}" Content="Fit check" Tag="{StaticResource IconMeasure}"
-                            Command="{Binding FitCheckCommand}" MinWidth="72"
-                            ToolTip="Do these two actually meet, and by how much? A pin with no hole and a frame too big for its opening both look right on screen." />
+                            Command="{Binding AlignToPlateCommand}" MinWidth="90"
+                            ToolTip="Set the selection down on z = 0, so it is standing on the bed rather than floating over it" />
                     <Button Style="{StaticResource ToolButton}" Content="Lay on face" Tag="{StaticResource IconLayOnFace}"
                             Command="{Binding BeginLayCommand}" MinWidth="86"
-                            ToolTip="Pick a face and the object is tipped over to stand on it" />
+                            ToolTip="Pick a face and the object is tipped over to stand on it - the flat side down, for printing" />
+                    <Button Style="{StaticResource ToolButton}" Content="Align to" Tag="{StaticResource IconAlignCentre}"
+                            Command="{Binding AlignToSelectionCommand}" MinWidth="72"
+                            ToolTip="Move the first object you picked so its bounding box is centred on the second's. Two objects: the first moves, the second stays. Nothing is rotated or resized." />
+                    <Button Style="{StaticResource ToolButton}" Content="Fit check" Tag="{StaticResource IconMeasure}"
+                            Command="{Binding FitCheckCommand}" MinWidth="72"
+                            ToolTip="Measures two parts against each other without changing either: how far they overlap, or how big the gap is. A pin with no hole and a frame too big for its opening both look right on screen." />
                     <Separator Margin="8,0" />
                     <Button Style="{StaticResource ToolButton}" Content="Mirror X" Tag="{StaticResource IconMirror}"
                             Command="{Binding MirrorCommand}" CommandParameter="X" />
@@ -437,11 +442,7 @@
                             Command="{Binding MirrorCommand}" CommandParameter="Y" />
                     <Button Style="{StaticResource ToolButton}" Content="Mirror Z" Tag="{StaticResource IconMirror}"
                             Command="{Binding MirrorCommand}" CommandParameter="Z" />
-                </WrapPanel>
-            </TabItem>
-
-            <TabItem Header="Align">
-                <WrapPanel Margin="4">
+                    <Separator Margin="8,0" />
                     <TextBlock Text="X" VerticalAlignment="Center" FontWeight="SemiBold"
                                Foreground="#FF5A5F66" Margin="10,0,4,0" />
                     <Button Style="{StaticResource ToolButton}" Content="Left" Tag="{StaticResource IconAlignMin}"
@@ -488,7 +489,14 @@
                             ToolTip="Raise lettering or a drawing off a face, or cut it in" />
                     <Button Style="{StaticResource ToolButton}" Content="Engrave..." Tag="{StaticResource IconEngrave}"
                             Command="{Binding BeginEngraveCommand}" MinWidth="82"
-                            ToolTip="Put a brick, board or grain pattern on one flat face" />
+                            ToolTip="Put brick, roof tiles, planks or grain on one flat face - cut in, or standing proud" />
+                    <Separator Margin="8,0" />
+                    <Button Style="{StaticResource ToolButton}" Content="Smooth..." Tag="{StaticResource IconSmooth}"
+                            Command="{Binding SmoothCommand}"
+                            ToolTip="Round the facets off, with the result shown as you set it" />
+                    <Button Style="{StaticResource ToolButton}" Content="Round..." Tag="{StaticResource IconRound}"
+                            Command="{Binding RoundCommand}" MinWidth="82"
+                            ToolTip="Round the edges of a cube or cylinder. Only shapes still described by their parameters can be rounded." />
                     <Separator Margin="8,0" />
                     <Button Style="{StaticResource ToolButton}" Content="Repair" Tag="{StaticResource IconRepair}"
                             Command="{Binding RepairCommand}"
@@ -504,16 +512,19 @@
                             ToolTip="Turn a solid into a shell of a chosen wall thickness, to save material" />
                     <Separator Margin="8,0" />
                     <Button Style="{StaticResource ToolButton}" Content="{Binding UndoLabel}" Tag="{StaticResource IconUndo}"
-                            Command="{Binding UndoCommand}" MinWidth="120" />
+                            Command="{Binding UndoCommand}" MinWidth="120"
+                            ToolTip="Undo the last change (Ctrl+Z)" />
                     <Button Style="{StaticResource ToolButton}" Content="Redo" Tag="{StaticResource IconRedo}"
-                            Command="{Binding RedoCommand}" />
+                            Command="{Binding RedoCommand}" ToolTip="Redo what was undone (Ctrl+Y)" />
                 </WrapPanel>
             </TabItem>
 
             <TabItem Header="File">
                 <WrapPanel Margin="4">
-                    <Button Style="{StaticResource ToolButton}" Content="New" Tag="{StaticResource IconNew}" Command="{Binding NewCommand}" />
-                    <Button Style="{StaticResource ToolButton}" Content="Open..." Tag="{StaticResource IconOpen}" Command="{Binding OpenCommand}" />
+                    <Button Style="{StaticResource ToolButton}" Content="New" Tag="{StaticResource IconNew}"
+                            Command="{Binding NewCommand}" ToolTip="Start an empty plate (Ctrl+N)" />
+                    <Button Style="{StaticResource ToolButton}" Content="Open..." Tag="{StaticResource IconOpen}"
+                            Command="{Binding OpenCommand}" ToolTip="Open a 3DFastCraft project, replacing what is on the plate (Ctrl+O)" />
                     <Button Style="{StaticResource ToolButton}" Content="Recent" Tag="{StaticResource IconVersions}"
                             Click="OnShowRecent" ToolTip="Projects opened recently">
                         <Button.ContextMenu>
@@ -531,7 +542,8 @@
                             </ContextMenu>
                         </Button.ContextMenu>
                     </Button>
-                    <Button Style="{StaticResource ToolButton}" Content="Save" Tag="{StaticResource IconSave}" Command="{Binding SaveCommand}" />
+                    <Button Style="{StaticResource ToolButton}" Content="Save" Tag="{StaticResource IconSave}"
+                            Command="{Binding SaveCommand}" ToolTip="Save the project (Ctrl+S)" />
                     <Button Style="{StaticResource ToolButton}" Content="Save as..." Tag="{StaticResource IconSaveAs}" Command="{Binding SaveAsCommand}" MinWidth="86" />
                     <Button Style="{StaticResource ToolButton}" Content="Save a version" Tag="{StaticResource IconVersions}"
                             Command="{Binding SaveVersionCommand}" MinWidth="88"
@@ -543,6 +555,9 @@
                     <Button Style="{StaticResource ToolButton}" Content="Export STL / OBJ..." Tag="{StaticResource IconExport}"
                             Command="{Binding ExportCommand}" MinWidth="140"
                             ToolTip="Export the selection, or everything when nothing is selected (Ctrl+E)" />
+                    <Separator Margin="8,0" />
+                    <Button Style="{StaticResource ToolButton}" Content="About" Tag="{StaticResource IconAbout}"
+                            Click="OnAbout" ToolTip="Version, licence and where the source lives" />
                 </WrapPanel>
             </TabItem>
 
@@ -559,7 +574,7 @@
                     <Separator Margin="8,0" />
                     <Button Style="{StaticResource ToolButton}" Content="Measure" Tag="{StaticResource IconMeasure}"
                             Command="{Binding BeginMeasureCommand}"
-                            ToolTip="Click two points to measure between them" />
+                            ToolTip="Click two points to measure between them, then drag either end to move it" />
                     <Separator Margin="8,0" />
                     <ToggleButton Style="{StaticResource ToolToggle}" Content="Wireframe" Tag="{StaticResource IconWireframe}"
                                   IsChecked="{Binding ShowWireframe}" MinWidth="80"
@@ -695,7 +710,7 @@
 
                     <Button Style="{StaticResource SelectionMenuItem}" Command="{Binding DeselectAllCommand}"
                             AutomationProperties.Name="Deselect all"
-                            ToolTip="Clear the selection">
+                            ToolTip="Clear the selection (Ctrl+Shift+A)">
                         <StackPanel Orientation="Horizontal">
                             <Path Style="{StaticResource MenuIcon}"
                                   Data="M 9,1 A 8,8 0 1 1 8.9,1 Z" />
@@ -732,14 +747,14 @@
 
                 <!-- Selection is mirrored by SelectionListSync, not by an IsSelected binding:
                      a container generated later would push its initial false into the model. -->
-                <ListBox x:Name="ObjectList" Grid.Row="1" ItemsSource="{Binding Scene.Objects}"
-                         SelectionMode="Extended">
+                <view:ObjectListBox x:Name="ObjectList" Grid.Row="1" ItemsSource="{Binding Scene.Objects}"
+                                    SelectionMode="Extended">
                     <ListBox.ItemTemplate>
                         <DataTemplate>
                             <TextBlock Text="{Binding Name}" Padding="2" />
                         </DataTemplate>
                     </ListBox.ItemTemplate>
-                </ListBox>
+                </view:ObjectListBox>
 
                 <!-- Split panel, shown only while a split is being set up -->
                 <Border Grid.Row="2" Margin="0,10,0,0" Padding="8" Background="#FFFFF6E8"
@@ -809,7 +824,9 @@
                         <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
                             <TextBlock Text="Pattern" Style="{StaticResource FieldLabel}" Width="76" />
                             <ComboBox Width="120" ItemsSource="{Binding EngravePatterns}"
-                                      SelectedItem="{Binding EngravePattern}" />
+                                      DisplayMemberPath="Label" SelectedValuePath="Kind"
+                                      SelectedValue="{Binding EngravePattern}"
+                                      AutomationProperties.AutomationId="EngravePattern" />
                         </StackPanel>
 
                         <StackPanel Orientation="Horizontal" Margin="0,0,0,6"
@@ -861,7 +878,7 @@
                         <StackPanel Orientation="Horizontal" Margin="0,0,0,2"
                                     Visibility="{Binding EngraveAspectApplies, Converter={StaticResource BoolToVisibility}}">
                             <TextBlock Text="Shape" Style="{StaticResource FieldLabel}" Width="76"
-                                       ToolTip="How many times longer each course is than it is tall. Brick is about 3, a roof tile about 1.5." />
+                                       ToolTip="How many times longer each piece is than it is tall. Each pattern starts at its own: brick 3, roof tile 1.5, wall tile 1, plank 8." />
                             <TextBox Width="64" Style="{StaticResource NumberBox}" Tag="number"
                                      AutomationProperties.AutomationId="EngraveAspect"
                                      Text="{Binding EngraveAspect, StringFormat=N2, UpdateSourceTrigger=LostFocus}" />
@@ -1151,7 +1168,10 @@
             <Canvas x:Name="PlacementGizmoLayer" ClipToBounds="True" Background="{x:Null}" />
 
             <!-- The measuring tape, drawn over everything so it is never hidden by the model. -->
-            <Canvas x:Name="MeasureLayer" ClipToBounds="True" Background="{x:Null}" IsHitTestVisible="False" />
+            <!-- Hit-testable so the two ends can be taken hold of. The canvas has no background,
+                 so only the markers themselves catch the mouse; everywhere else the click falls
+                 through to the viewport as before. -->
+            <Canvas x:Name="MeasureLayer" ClipToBounds="True" Background="{x:Null}" />
 
             <!-- Repair banner, as in 3D Builder: the model says it is broken and offers to mend it -->
             <Border VerticalAlignment="Bottom" HorizontalAlignment="Right" Margin="0,0,18,18"

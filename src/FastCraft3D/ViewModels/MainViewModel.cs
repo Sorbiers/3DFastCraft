@@ -16,6 +16,21 @@ using Microsoft.Win32;
 
 namespace FastCraft3D.ViewModels;
 
+/// <summary>
+/// A pattern and the name shown for it. The enum member cannot carry the name: "RoofTiles" is
+/// not a phrase, and the picker showed the identifier as written.
+/// </summary>
+public readonly record struct PatternChoice(PatternKind Kind, string Label)
+{
+    /// <summary>
+    /// What automation and a screen reader read out. DisplayMemberPath governs what is drawn,
+    /// not what the item is called: without this the picker's rows were named
+    /// "PatternChoice { Kind = RoofTiles, Label = Roof tiles }", because WPF takes an item's
+    /// name from the bound object itself.
+    /// </summary>
+    public override string ToString() => Label;
+}
+
 public sealed class MainViewModel : INotifyPropertyChanged
 {
     private int colourCursor;
@@ -1397,6 +1412,22 @@ public sealed class MainViewModel : INotifyPropertyChanged
         Status = MeasureSummary;
     }
 
+    /// <summary>
+    /// Moves one end of the tape that is already down. Dragging is how a measurement gets taken
+    /// twice - the first click is rarely on the exact corner meant, and re-clicking used to
+    /// start a whole new measurement rather than adjust the one on screen.
+    /// </summary>
+    public void MoveMeasurePoint(bool second, Vector3 world)
+    {
+        if (!isMeasureMode) return;
+
+        if (second) measureTo = world;
+        else measureFrom = world;
+
+        RaiseMeasure();
+        Status = MeasureSummary;
+    }
+
     private void RaiseMeasure()
     {
         Raise(nameof(MeasureFrom));
@@ -1510,13 +1541,25 @@ public sealed class MainViewModel : INotifyPropertyChanged
     /// <summary>What the pattern would cut, drawn on the face while the settings are chosen.</summary>
     public GrooveSet EngravePreview => engrave.Preview();
 
-    public IReadOnlyList<PatternKind> EngravePatterns { get; } = Enum.GetValues<PatternKind>();
+    public IReadOnlyList<PatternChoice> EngravePatterns { get; } =
+    [
+        new(PatternKind.Brick, "Brick"),
+        new(PatternKind.RoofTiles, "Roof tiles"),
+        new(PatternKind.Tiles, "Tiles"),
+        new(PatternKind.Planks, "Planks"),
+        new(PatternKind.Wood, "Wood grain"),
+        new(PatternKind.Stripes, "Stripes")
+    ];
     public IReadOnlyList<PatternDirection> EngraveDirections { get; } = Enum.GetValues<PatternDirection>();
 
     public PatternKind EngravePattern
     {
         get => engrave.Options.Kind;
-        set => SetEngrave(engrave.Options with { Kind = value });
+
+        // Aspect is cleared with the pattern. Each bond has its own proportions - a tile is not
+        // three times as long as it is tall - and carrying the last one across meant picking
+        // Roof tiles and getting bricks in a different colour.
+        set => SetEngrave(engrave.Options with { Kind = value, Aspect = 0f });
     }
 
     public float EngraveSize
@@ -1597,10 +1640,10 @@ public sealed class MainViewModel : INotifyPropertyChanged
     }
 
     /// <summary>Stripes and grain have no courses, so their proportions mean nothing.</summary>
-    public bool EngraveAspectApplies => engrave.Options.Kind == PatternKind.Brick;
+    public bool EngraveAspectApplies => GroovePattern.IsMasonry(engrave.Options.Kind);
 
-    /// <summary>Only Stripes and Wood have a direction; brick courses are always level.</summary>
-    public bool EngraveDirectionApplies => engrave.Options.Kind != PatternKind.Brick;
+    /// <summary>Boarding and grain can run either way; courses of brick and tile are level.</summary>
+    public bool EngraveDirectionApplies => GroovePattern.Turns(engrave.Options.Kind);
 
     /// <summary>
     /// Stand the pattern off the face rather than cutting it in.
@@ -3050,7 +3093,9 @@ public sealed class MainViewModel : INotifyPropertyChanged
     {
         var dialog = new OpenFileDialog
         {
-            Filter = "3D models (*.stl;*.obj)|*.stl;*.obj|STL (*.stl)|*.stl|Wavefront OBJ (*.obj)|*.obj",
+            Filter = "3D models (*.stl;*.obj;*.3dfc)|*.stl;*.obj;*.3dfc"
+                   + "|STL (*.stl)|*.stl|Wavefront OBJ (*.obj)|*.obj"
+                   + $"|3DFastCraft project (*{SceneSerializer.Extension})|*{SceneSerializer.Extension}",
             Title = "Import model"
         };
         if (dialog.ShowDialog() != true) return;
@@ -3058,7 +3103,20 @@ public sealed class MainViewModel : INotifyPropertyChanged
         try
         {
             var imported = new List<SceneObject>();
-            if (Path.GetExtension(dialog.FileName).Equals(".obj", StringComparison.OrdinalIgnoreCase))
+            string extension = Path.GetExtension(dialog.FileName);
+
+            // A project imported rather than opened joins what is already on the plate: its
+            // objects keep their own names, colours and positions, and nothing here is
+            // replaced. Opening it would have thrown the current work away.
+            if (extension.Equals(SceneSerializer.Extension, StringComparison.OrdinalIgnoreCase))
+            {
+                foreach (var loaded in SceneSerializer.Load(dialog.FileName))
+                    imported.Add(new SceneObject(Scene.UniqueName(loaded.Name), loaded.Mesh)
+                    {
+                        Colour = loaded.Colour
+                    });
+            }
+            else if (extension.Equals(".obj", StringComparison.OrdinalIgnoreCase))
             {
                 foreach (var (name, mesh) in ObjReader.Read(dialog.FileName))
                     imported.Add(new SceneObject(Scene.UniqueName(name), mesh)
@@ -3082,14 +3140,16 @@ public sealed class MainViewModel : INotifyPropertyChanged
                 return;
             }
 
+            string what = imported.Count == 1 ? "object" : "objects";
+
             Undo.Execute(new AddObjectsCommand("Import", imported));
             RefreshSelection();
             ZoomExtentsRequested?.Invoke();
 
             int triangles = imported.Sum(o => o.Mesh.TriangleCount);
             Status = triangles > 200_000
-                ? $"Imported {triangles:N0} triangles - boolean operations on a mesh this dense will be slow"
-                : $"Imported {triangles:N0} triangles";
+                ? $"Imported {imported.Count} {what}, {triangles:N0} triangles - boolean operations on a mesh this dense will be slow"
+                : $"Imported {imported.Count} {what}, {triangles:N0} triangles";
         }
         catch (Exception ex)
         {

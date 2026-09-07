@@ -27,6 +27,9 @@ public partial class MainWindow : Window
     private readonly MainViewModel viewModel = new();
     private SceneRenderer? renderer;
     private MeasureOverlay? measure;
+
+    /// <summary>Which end of the tape is being dragged: 0, 1, or -1 for none.</summary>
+    private int heldMeasureEnd = -1;
     private float plateShown;
     private GizmoController? gizmo;
     private SplitPlaneGizmo? splitGizmo;
@@ -136,6 +139,10 @@ public partial class MainWindow : Window
         AddHandler(PreviewMouseWheelEvent, new MouseWheelEventHandler(OnFieldWheel), true);
 
         PreviewKeyDown += OnWindowKeyDown;
+
+        MeasureLayer.PreviewMouseLeftButtonDown += OnMeasureDown;
+        MeasureLayer.PreviewMouseMove += OnMeasureMove;
+        MeasureLayer.PreviewMouseLeftButtonUp += OnMeasureUp;
 
         View.PreviewMouseLeftButtonDown += OnViewportLeftDown;
         View.PreviewMouseMove += OnViewportMove;
@@ -394,6 +401,48 @@ public partial class MainWindow : Window
         FarPlaneDistance = 20000,
         FieldOfView = 45
     };
+
+    // --- Dragging the ends of the tape -------------------------------------------------
+    //
+    // The first click of a measurement is rarely on the exact corner meant, and correcting it
+    // used to mean starting the measurement again - the third click begins a fresh one. The
+    // markers are hit-testable now, so an end can simply be taken hold of and moved.
+
+    private void OnMeasureDown(object sender, MouseButtonEventArgs e)
+    {
+        if (measure is null || !viewModel.IsMeasureMode) return;
+
+        heldMeasureEnd = measure.EndAt(e.GetPosition(View));
+        if (heldMeasureEnd < 0) return;
+
+        MeasureLayer.CaptureMouse();
+        e.Handled = true;
+    }
+
+    private void OnMeasureMove(object sender, MouseEventArgs e)
+    {
+        if (heldMeasureEnd < 0 || e.LeftButton != MouseButtonState.Pressed) return;
+
+        var screen = e.GetPosition(View);
+        var hit = FirstHit(screen);
+        var target = renderer?.Resolve(hit?.ModelHit);
+
+        // Off the model there is nothing to measure to, so the end simply stays where it was
+        // rather than flying off to wherever the ground plane happens to be.
+        if (target is null) return;
+
+        viewModel.MoveMeasurePoint(heldMeasureEnd == 1, SnappedPoint(target, ToVector3(hit!.PointHit)));
+        e.Handled = true;
+    }
+
+    private void OnMeasureUp(object sender, MouseButtonEventArgs e)
+    {
+        if (heldMeasureEnd < 0) return;
+
+        heldMeasureEnd = -1;
+        MeasureLayer.ReleaseMouseCapture();
+        e.Handled = true;
+    }
 
     // --- Selection and dragging ------------------------------------------------------
 
@@ -1016,6 +1065,9 @@ public partial class MainWindow : Window
         menu.Placement = System.Windows.Controls.Primitives.PlacementMode.Bottom;
         menu.IsOpen = true;
     }
+
+    private void OnAbout(object sender, RoutedEventArgs e) =>
+        new AboutDialog { Owner = this }.ShowDialog();
 
     private void OnZoomExtents(object sender, RoutedEventArgs e) => ZoomExtents();
 

@@ -1,4 +1,4 @@
-using System.Numerics;
+﻿using System.Numerics;
 using System.Runtime.ExceptionServices;
 using FastCraft3D.Geometry;
 using FastCraft3D.ViewModels;
@@ -224,6 +224,46 @@ public class MeasureModeTests
             model.BeginMeasureCommand.Execute(null);
             Assert.False(model.IsSplitMode);
             Assert.True(model.IsMeasureMode);
+        });
+    }
+
+    /// <summary>
+    /// Either end can be moved after it is down. Before this the only way to correct a point
+    /// was a third click, which threw the measurement away and started another.
+    /// </summary>
+    [Fact]
+    public void EitherEndCanBeMovedWithoutStartingAgain()
+    {
+        RunSta(() =>
+        {
+            var model = WithACube();
+            model.BeginMeasureCommand.Execute(null);
+            model.TakeMeasurePoint(Vector3.Zero);
+            model.TakeMeasurePoint(new Vector3(10, 0, 0));
+
+            model.MoveMeasurePoint(second: true, new Vector3(30, 40, 0));
+
+            Assert.True(model.HasMeasurement);
+            Assert.Equal(Vector3.Zero, model.MeasureFrom);
+            Assert.Contains("50", model.MeasureSummary);
+
+            model.MoveMeasurePoint(second: false, new Vector3(30, 0, 0));
+
+            Assert.Equal(new Vector3(30, 0, 0), model.MeasureFrom);
+            Assert.Contains("40", model.MeasureSummary);
+        });
+    }
+
+    [Fact]
+    public void DraggingOutsideTheModeChangesNothing()
+    {
+        RunSta(() =>
+        {
+            var model = WithACube();
+
+            model.MoveMeasurePoint(second: false, new Vector3(5, 5, 5));
+
+            Assert.Null(model.MeasureFrom);
         });
     }
 

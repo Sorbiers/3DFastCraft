@@ -1,7 +1,8 @@
-using System.Globalization;
+﻿using System.Globalization;
 using System.Numerics;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Shapes;
 
@@ -23,6 +24,27 @@ public sealed class MeasureOverlay(Canvas canvas, IScreenProjector projector)
 
     /// <summary>Where the tape is anchored, in world millimetres. Null when nothing is measured.</summary>
     public Vector3? From => from;
+
+    /// <summary>How near the cursor has to be to an end to take hold of it, in pixels.</summary>
+    private const double Reach = 11;
+
+    /// <summary>
+    /// Which end of the tape is under <paramref name="screen"/>: 0 for the first, 1 for the
+    /// second, -1 for neither. The far end wins a tie, because it is the one just put down and
+    /// so the one most likely to be wrong.
+    /// </summary>
+    public int EndAt(Point screen)
+    {
+        if (!projector.IsReady) return -1;
+
+        if (to is { } b && projector.TryProject(b, out var pb) && Near(screen, pb)) return 1;
+        if (from is { } a && projector.TryProject(a, out var pa) && Near(screen, pa)) return 0;
+
+        return -1;
+    }
+
+    private static bool Near(Point cursor, Point marker) =>
+        (cursor - marker).Length <= Reach;
 
     public void Show(Vector3? start, Vector3? end)
     {
@@ -68,15 +90,24 @@ public sealed class MeasureOverlay(Canvas canvas, IScreenProjector projector)
 
     private void AddMarker(Point at)
     {
-        const double size = 9;
+        // A transparent disc behind the visible one, so there is something to take hold of. The
+        // marker is drawn 9 pixels across because that is the right size to look at; a 9-pixel
+        // target is not the right size to hit, and the first attempt at dragging an end missed
+        // by four pixels and looked like the drag was not implemented at all.
+        Add(at, Reach * 2, Brushes.Transparent, null);
+        Add(at, 9, Brushes.White, new SolidColorBrush(Ink));
+    }
+
+    private void Add(Point at, double size, Brush fill, Brush? stroke)
+    {
         var marker = new Ellipse
         {
             Width = size,
             Height = size,
-            Fill = Brushes.White,
-            Stroke = new SolidColorBrush(Ink),
+            Fill = fill,
+            Stroke = stroke,
             StrokeThickness = 2,
-            IsHitTestVisible = false
+            Cursor = Cursors.SizeAll
         };
 
         Canvas.SetLeft(marker, at.X - size / 2);

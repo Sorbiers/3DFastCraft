@@ -7,6 +7,18 @@ public enum PatternKind
     /// <summary>Running-bond masonry: level courses with the joints staggered by half a brick.</summary>
     Brick,
 
+    /// <summary>
+    /// Roof tiles: the same stagger, wider and squarer, with a heavier line under each course
+    /// where it laps the one below. That lap is the shadow a tiled roof reads by.
+    /// </summary>
+    RoofTiles,
+
+    /// <summary>Stack bond - courses and joints both lining up. Wall tiles, floor tiles, ashlar.</summary>
+    Tiles,
+
+    /// <summary>Long boards with their end joints staggered: decking, floorboards, siding.</summary>
+    Planks,
+
     /// <summary>Flowing grain that opens around knots, cut as curves rather than lines.</summary>
     Wood,
 
@@ -59,7 +71,7 @@ public readonly record struct EngraveOptions(
 
     /// <summary>The proportions to use, with zero meaning "whatever the pattern normally is".</summary>
     public float Courses => Aspect <= 0
-        ? GroovePattern.DefaultAspect
+        ? GroovePattern.DefaultAspectFor(Kind)
         : Math.Clamp(Aspect, GroovePattern.MinimumAspect, GroovePattern.MaximumAspect);
 
     public EngraveOptions Sane() => this with
@@ -90,6 +102,51 @@ public static class GroovePattern
     /// <summary>A brick is about three times as long as it is tall, which is where this started.</summary>
     public const float DefaultAspect = 3f;
 
+    /// <summary>
+    /// What each bond is normally shaped like, when nobody has said otherwise.
+    ///
+    /// The first roof was laid as brick and came out with 39 x 13 cm tiles, because brick's
+    /// three-to-one is wrong for everything except brick. A pantile is about one and a half to
+    /// one, a wall tile square, a floorboard eight or more.
+    /// </summary>
+    public static float DefaultAspectFor(PatternKind kind) => kind switch
+    {
+        PatternKind.RoofTiles => 1.5f,
+        PatternKind.Tiles => 1f,
+        PatternKind.Planks => 8f,
+        _ => DefaultAspect
+    };
+
+    /// <summary>Patterns made of pieces with joints between them, as against lines on a surface.</summary>
+    public static bool IsMasonry(PatternKind kind) =>
+        kind is PatternKind.Brick or PatternKind.RoofTiles
+             or PatternKind.Tiles or PatternKind.Planks;
+
+    /// <summary>
+    /// Whether running the pattern the other way means anything. Vertical boarding is real, and
+    /// so is grain across a face - but courses of brick and tile are level by definition, and a
+    /// roof laid in vertical columns is not a roof.
+    /// </summary>
+    public static bool Turns(PatternKind kind) =>
+        kind is not (PatternKind.Brick or PatternKind.RoofTiles or PatternKind.Tiles);
+
+    /// <summary>
+    /// How a bond is laid out: whether alternate courses shift by half a piece, and how much
+    /// heavier the line under each course is than the joints within it.
+    /// </summary>
+    private readonly record struct Bond(bool Stagger, float Bed);
+
+    private static Bond BondOf(PatternKind kind) => kind switch
+    {
+        // Tiles line up in both directions; that is what makes them tiles rather than bricks.
+        PatternKind.Tiles => new Bond(false, 1f),
+
+        // A tile laps the course below it, and the lap throws a shadow along the whole course.
+        PatternKind.RoofTiles => new Bond(true, 1.6f),
+
+        _ => new Bond(true, 1f)
+    };
+
     /// <summary>Below this a course is taller than it is long, which is not a course.</summary>
     public const float MinimumAspect = 0.2f;
 
@@ -117,8 +174,8 @@ public static class GroovePattern
             return GrooveSet.Of(turned ? grain.Select(Transpose).ToList() : grain);
         }
 
-        var grooves = options.Kind == PatternKind.Brick
-            ? Brick(options, canvas, anchor)
+        var grooves = IsMasonry(options.Kind)
+            ? Courses(options, canvas, anchor, BondOf(options.Kind))
             : Stripes(options, canvas, anchor);
 
         return GrooveSet.Of(turned ? grooves.Select(Transpose).ToList() : grooves);
@@ -136,13 +193,16 @@ public static class GroovePattern
         bool turned = options.Direction == PatternDirection.Vertical;
         var canvas = turned ? Transpose(area) : area;
 
-        return options.Kind switch
+        if (IsMasonry(options.Kind))
         {
-            PatternKind.Brick => Lines(canvas.Height, options.Size / Aspect(options) + options.GrooveWidth)
-                * (1 + Lines(canvas.Width, options.Size + options.GrooveWidth)),
-            PatternKind.Wood => WoodGrain.Count(options, canvas),
-            _ => Lines(canvas.Height, options.Size)
-        };
+            float bed = options.GrooveWidth * BondOf(options.Kind).Bed;
+            return Lines(canvas.Height, options.Size / Aspect(options) + bed)
+                * (1 + Lines(canvas.Width, options.Size + options.GrooveWidth));
+        }
+
+        return options.Kind == PatternKind.Wood
+            ? WoodGrain.Count(options, canvas)
+            : Lines(canvas.Height, options.Size);
     }
 
     /// <summary>
@@ -195,8 +255,8 @@ public static class GroovePattern
             return GrooveSet.Of(turned ? grain.Select(Transpose).ToList() : grain);
         }
 
-        var pieces = options.Kind == PatternKind.Brick
-            ? BrickFaces(options, canvas, anchor)
+        var pieces = IsMasonry(options.Kind)
+            ? CourseFaces(options, canvas, anchor, BondOf(options.Kind))
             : BoardFaces(options, canvas, anchor);
 
         return GrooveSet.Of(turned ? pieces.Select(Transpose).ToList() : pieces);
@@ -238,12 +298,14 @@ public static class GroovePattern
         if (run.Count >= 2) yield return new Polyline2(run, line.Width, line.Closed && whole);
     }
 
-    /// <summary>The bricks: what is left of each course between one perpend and the next.</summary>
-    private static List<Rect2> BrickFaces(EngraveOptions options, Rect2 area, Vector2 anchor)
+    /// <summary>The pieces themselves: what is left of each course between one joint and the next.</summary>
+    private static List<Rect2> CourseFaces(
+        EngraveOptions options, Rect2 area, Vector2 anchor, Bond bond)
     {
         float height = options.Size / Aspect(options);
         float groove = options.GrooveWidth;
-        float pitchV = height + groove;
+        float bed = groove * bond.Bed;
+        float pitchV = height + bed;
         float pitchU = options.Size + groove;
 
         var faces = new List<Rect2>();
@@ -253,8 +315,8 @@ public static class GroovePattern
             float v = anchor.Y + course * pitchV;
             if (v > area.MaxV) break;
 
-            float low = v + groove, high = v + pitchV;
-            float offset = ((course % 2) + 2) % 2 == 0 ? 0 : pitchU * 0.5f;
+            float low = v + bed, high = v + pitchV;
+            float offset = !bond.Stagger || ((course % 2) + 2) % 2 == 0 ? 0 : pitchU * 0.5f;
 
             for (int brick = FirstIndex(anchor.X + offset, area.MinU, pitchU); ; brick++)
             {
@@ -288,11 +350,13 @@ public static class GroovePattern
         return faces;
     }
 
-    private static List<Rect2> Brick(EngraveOptions options, Rect2 area, Vector2 anchor)
+    private static List<Rect2> Courses(
+        EngraveOptions options, Rect2 area, Vector2 anchor, Bond bond)
     {
         float height = options.Size / Aspect(options);
         float groove = options.GrooveWidth;
-        float pitchV = height + groove;
+        float bed = groove * bond.Bed;
+        float pitchV = height + bed;
         float pitchU = options.Size + groove;
 
         var grooves = new List<Rect2>();
@@ -303,12 +367,12 @@ public static class GroovePattern
             if (v > area.MaxV) break;
 
             // The bed joint, running the full width of the face.
-            grooves.Add(new Rect2(area.MinU, v, area.MaxU, v + groove));
+            grooves.Add(new Rect2(area.MinU, v, area.MaxU, v + bed));
 
-            // The perpend joints for the course above it, offset by half a brick on alternate
-            // courses - that stagger is what makes it read as masonry rather than as tiles.
-            float offset = ((course % 2) + 2) % 2 == 0 ? 0 : pitchU * 0.5f;
-            float top = v + pitchV + groove; // deliberately into the bed joint above
+            // The joints within the course above it, shifted by half a piece on alternate
+            // courses where the bond staggers - which is what separates brick from tile.
+            float offset = !bond.Stagger || ((course % 2) + 2) % 2 == 0 ? 0 : pitchU * 0.5f;
+            float top = v + pitchV + bed; // deliberately into the bed joint above
 
             for (int brick = FirstIndex(anchor.X + offset, area.MinU, pitchU); ; brick++)
             {

@@ -26,54 +26,6 @@ $DoorH = 23.0         # 2.0 m
 $PinR = 1.3           # 2.6 mm dowels
 $Pins = @(@(14.0, 1.75), @(96.0, 1.75), @(14.0, 88.25), @(96.0, 88.25))
 
-# The one object on the plate that is not in the given list - the thing being built up, whatever
-# the last boolean decided to call it.
-function Body($w, [string[]] $others) {
-    $all = @(Get-ObjectNames $w)
-    $found = @($all | Where-Object { $_ -notin $others })
-    if ($found.Count -lt 1) { throw "nothing on the plate to work on" }
-    return [string]$found[0]
-}
-
-function Wait-Ready($w, $seconds = 30) {
-    for ($i = 0; $i -lt $seconds * 2; $i++) {
-        try {
-            # A dialog left open disables every ribbon button with nothing on screen to say so,
-            # which is worth failing loudly on rather than puzzling over later.
-            $cond = New-Object System.Windows.Automation.PropertyCondition(
-                $AE::ControlTypeProperty, [System.Windows.Automation.ControlType]::Window)
-            $open = @($w.FindAll($TS::Descendants, $cond))
-            if ($open.Count -eq 0) { return }
-            Write-Output "waiting on dialog: $($open[0].Current.Name)"
-        } catch { }
-        Start-Sleep -Milliseconds 500
-    }
-    throw "the app never came back to itself"
-}
-
-function Export-Part($w, $path) {
-    if (Test-Path $path) { [System.IO.File]::Delete($path) }
-
-    Add-Type -AssemblyName System.Windows.Forms
-    Select-Tab $w "File" | Out-Null
-    Start-Sleep -Milliseconds 500
-    Invoke-ByName $w "Export STL / OBJ..." | Out-Null
-    Start-Sleep -Seconds 2
-
-    & "F:\3DFastCraft\tools\ui\click.ps1" -X 791 -Y 596 | Out-Null
-    Start-Sleep -Seconds 4
-
-    [System.Windows.Forms.SendKeys]::SendWait("^a")
-    Start-Sleep -Milliseconds 300
-    [System.Windows.Forms.SendKeys]::SendWait($path)
-    Start-Sleep -Milliseconds 900
-    [System.Windows.Forms.SendKeys]::SendWait("{ENTER}")
-    Start-Sleep -Seconds 4
-
-    Wait-Ready $w
-    Write-Output "exported $path"
-}
-
 # Bricks one wall. Every face can be reached head-on now, so nothing has to be turned round and
 # turned back - which is what used to shift the model a few tenths of a millimetre each time.
 function Add-Brick($w, [string]$view, [double]$size, [double]$line, [double]$depth) {

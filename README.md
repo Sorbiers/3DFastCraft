@@ -40,12 +40,16 @@ dotnet test
 
 | Tab | What it does |
 |---|---|
-| **Insert** | Cube, cylinder, cone, sphere, pyramid, wedge, torus, hexagon, tetrahedron; import STL/OBJ |
-| **Object** | Subtract / Intersect / Merge, Smooth, Round edges, Split with a plane, Colour, duplicate (beside or in place), delete, drop to plate, lay on face, mirror |
-| **Align** | Line the selection up on X, Y or Z: flush to either edge, centred, or spread evenly |
-| **Edit** | Emboss lettering or a drawing, engrave a pattern, repair, rebuild, simplify, hollow, undo, redo |
-| **File** | New, open, recent, save, save as, save a version, versions, export STL/OBJ |
-| **View** | Zoom to fit, top / front / right / isometric, measure, wireframe, x-ray, build plate size and visibility |
+| **Insert** | Cube, cylinder, cone, sphere, pyramid, wedge, torus, hexagon, tetrahedron; a stair; import a model or another project |
+| **Object** | What a thing is made of: Subtract / Intersect / Merge, split with a plane, duplicate (beside, in place, or repeated along a line), delete, colour |
+| **Align** | Where it sits: drop to plate, lay on face, align to another object, fit check, mirror, and lining the selection up on X, Y or Z - flush to either edge, centred, or spread evenly |
+| **Edit** | What its surface is: emboss lettering or a drawing, engrave a pattern, smooth, round edges, repair, rebuild, simplify, hollow, undo, redo |
+| **File** | New, open, recent, save, save as, save a version, versions, export STL/OBJ, about |
+| **View** | Zoom to fit, the six axis views and isometric, measure, wireframe, x-ray, build plate size and visibility, model scale |
+
+The three middle tabs are split by *what a tool changes*, which is worth knowing when hunting
+for one: **Object** changes what a thing is made of, **Edit** changes its surface, **Align**
+changes where it sits without changing the thing at all.
 
 **Camera:** left-drag orbits, right-drag pans, the wheel zooms. Dragging horizontally turns the
 scene around the vertical **Z** axis, like a turntable - the plate never rolls onto its side.
@@ -98,8 +102,10 @@ moves. Something too dense to flatten - an import in the hundreds of thousands o
 falls back to its bounding box rather than stalling the drag.
 
 Shortcuts: `Ctrl+Z` / `Ctrl+Y` undo & redo, `Delete`, `Ctrl+C` / `Ctrl+V` copy & paste,
-`Ctrl+A` select all, `Ctrl+D` deselect all, `Ctrl+N/O/S` new/open/save, `Ctrl+I` import,
-`Ctrl+E` export, and `M` / `R` / `S` to switch manipulator mode.
+`Ctrl+D` duplicate and `Ctrl+Shift+D` duplicate in place, `Ctrl+A` select all and
+`Ctrl+Shift+A` deselect all, `Ctrl+N/O/S` new/open/save, `Ctrl+I` import, `Ctrl+E` export, and
+`M` / `R` / `S` to switch manipulator mode. Every one of them is named in the tooltip of the
+button it belongs to, so none of them has to be memorised from here.
 
 ### Colour
 
@@ -137,6 +143,9 @@ mesh straight back and says so, rather than tearing it further.
 **Measure** on the View tab reads the distance between two points. Click one, click another, and
 the tape is drawn over the model with the distance on it - along with the gap broken down by
 axis, since a single number hides which way it runs. A third click starts a fresh measurement.
+
+**Either end can be dragged** once it is down. The first click is rarely on the exact corner
+meant, and correcting it used to mean measuring the whole thing again.
 
 **Snap to corners and edges** pulls each click onto the nearest corner or edge midpoint, which is
 what makes the reading exact rather than approximately wherever the pointer landed. It is on by
@@ -194,8 +203,18 @@ work: offsetting a mesh folds itself inside out at any concave corner. This meas
 deep inside the material each point sits and keeps only what lies within one wall of the surface.
 The outer face and the cavity come out of the same pass, correctly facing.
 
-The cavity is sealed. A resin print needs a drain hole, which a cylinder and **Subtract** will
-cut. A part with no room for the wall you asked for is left solid and says so.
+**Leave open** takes one side away with the cavity - the underside of a roof, the back of a
+facade - so the shell reaches daylight and the walls round it stand. Everything within one wall
+thickness of that plane comes away; it is counted apart from the cavity, so a part too thin to
+hollow is still handed back untouched rather than turned into a sheet with a hole in it.
+
+With **Nothing** open the cavity is sealed. A resin print needs a drain hole, which a cylinder
+and **Subtract** will cut. A part with no room for the wall you asked for is left solid and says
+so.
+
+Hollow rebuilds the surface on a voxel grid, so it rounds anything sharp. For a crisp prism -
+a roof that has to keep its ridge, a box that has to mate with a lid - subtracting an inner solid
+is still the better tool. This one is for organic and imported shapes.
 
 ### Rebuilding a broken model
 
@@ -252,6 +271,50 @@ is watertight.
 its handles stand down, and the tool's own handles have the object to themselves. Starting one
 puts the others away, since each means something different by a click on the model. Cancel or
 apply, and the manipulator comes back.
+
+### Repeating along a line
+
+**Repeat...** on the Object tab takes the selection, copies it *n* times with a step in X, Y and
+Z, and optionally grows each copy by a fixed amount as it goes. One operation, one undo entry -
+a flight of steps, a row of dowels, a run of courses.
+
+The subtlety is which face stays put. Resizing works about the centre, so a run of growing copies
+stepped by their centres leaves half of each increment as a gap. Where the run is travelling, the
+anchored face is the one it travels away from; where it is not travelling - a flight of steps
+grows upward while it moves along - the lower face is the one standing on something, so that is
+the one held still. A twelve-step flight lands exactly on `z = 0`.
+
+### A stair
+
+**Stair...** on the Insert tab takes a rise, a run, a width and a number of risers, and builds
+the flight as **one closed profile swept sideways** rather than a stack of boxes. That matters
+for what comes next: a stack of boxes has a coplanar seam at every tread, and coplanar seams are
+what the boolean struggles with.
+
+The dialog reports the riser and going in real millimetres for the scene's scale, and says
+plainly when the result is not something anyone could climb - a riser of 150 to 190 mm on a going
+of 240 mm or more is the range it checks against.
+
+### Model scale
+
+**Scale 1:** on the View tab says what the model is drawn to - 1:87 for HO, 1:160 for N, 1:1 for
+life size, or anything typed in. **No geometry changes**: millimetres stay millimetres and the
+export is identical. What it buys is being told what a dimension *means*: the properties panel
+reads `9.57 x 7.83 x 2.61 m` under the size boxes, and the stair tool reports its risers in real
+units rather than model ones.
+
+### Does it fit?
+
+**Align to** and **Fit check** sit together on the Align tab and are easy to confuse:
+
+- **Align to** *moves* things. Pick two objects and the first is moved so its bounding box is
+  centred on the second's. Nothing is rotated or resized.
+- **Fit check** *measures* and changes nothing. It answers the question a render cannot: do these
+  two actually meet? It reports either `overlap by 6 x 3 x 16 mm, 0.047 cm3 of shared material`
+  or how far apart they are.
+
+Watertight says a part will print. It says nothing about whether two parts go together, and a pin
+with no hole under it and a lid resting on its own hinge both look perfectly right on screen.
 
 ### Laying a part on its face
 
@@ -370,19 +433,37 @@ blue, and the panel on the right fills in with the face's size and how many groo
 settings would cut. Click a different face at any time to move the pattern; **Cancel** leaves
 the mode.
 
-| Pattern | What you get | Size means |
-|---|---|---|
-| **Brick** | Running-bond masonry: level courses with the perpend joints staggered half a brick | Brick length; the height follows at a third of it |
-| **Wood** | Flowing grain that parts around knots, with a ring or two marking each one | The spacing between grain lines |
-| **Stripes** | Evenly spaced parallel grooves - lap siding, panelling, ribs | The gap from one groove to the next |
+| Pattern | What you get | Size means | Starts at |
+|---|---|---|---|
+| **Brick** | Running-bond masonry: level courses, joints staggered half a brick | Brick length | 3 : 1 |
+| **Roof tiles** | The same stagger, squarer, with a heavier line under each course where it laps the one below | Tile width | 1.5 : 1 |
+| **Tiles** | Stack bond - courses and joints both lining up. Wall tiles, floor tiles, ashlar | Tile width | 1 : 1 |
+| **Planks** | Long boards with their end joints staggered: decking, floorboards, siding | Board length | 8 : 1 |
+| **Wood grain** | Flowing grain that parts around knots, with a ring or two marking each one | The spacing between grain lines | - |
+| **Stripes** | Evenly spaced parallel grooves - lap siding, panelling, ribs | The gap from one groove to the next | - |
 
-**Line width** is how wide the cut lines are and **Depth** how far they go in. Stripes and wood
-can run either way across the face; brick courses are always level, so it has no direction of
-its own.
+**Shape n : 1** is how many times longer each piece is than it is tall. Each bond starts at its
+own - a brick is not shaped like a roof tile, and the first roof built here came out with
+39 x 13 cm tiles because it was laid as brick. Changing the pattern resets it, so picking
+**Roof tiles** gives roof tiles rather than bricks in a different colour.
+
+**Line width** is how wide the cut lines are and **Depth** how far they go in. Planks, grain and
+stripes can run either way across the face; courses of brick and tile are level by definition.
 
 The pattern is drawn **on the face as you set it up**, from the same code that builds the cutter,
 so what you see is what gets taken away. Every field takes **arrow keys and the mouse wheel** as
 well as typing - Shift for 10 mm steps, Ctrl for 0.1 mm.
+
+#### A wall that already has windows in it
+
+A raised pattern goes on a face **after** its openings are cut. The face's boundary is walked as
+several loops rather than one: the widest is the outline and the rest are holes, and the grid
+takes each hole's own edges as grid lines, so the courses meet the reveal exactly and a brick
+standing at the edge of an opening gets its return while the flat face beside it does not.
+
+A hole has to be a rectangle standing clear inside the patterned area, which is what a window and
+a door are. A **round** hole - a boss or a peg merged onto the face - is not, and the face is
+refused rather than patterned badly. Pattern such a face before the round detail goes on.
 
 #### Making a corner meet
 
@@ -486,6 +567,10 @@ out of.
 | `.stl` (ASCII) | Human-readable, roughly five times larger. |
 | `.obj` | Keeps objects named and separate, and writes a `.mtl` sidecar with colours. |
 | `.3dfc` | The project format: GZip-compressed JSON that keeps objects and transforms editable. |
+
+**Import** takes all three. An STL or OBJ arrives as new objects on the plate; a `.3dfc`
+**joins** what is already there, keeping its own objects, names, colours and positions - which is
+how two projects are brought together, since **Open** would replace the plate instead.
 
 **Export** opens an options dialog before the file dialog:
 
@@ -627,6 +712,13 @@ primitives headed to a slicer.
   on the Edit tab remakes a shape the boolean has given up on.
 - Engraving and lettering are refused outright rather than applied badly whenever the result
   would not be watertight. The object is never left in a worse state than it started.
+- **A face with a round hole in it cannot take a pattern.** Holes have to be rectangles, so
+  pattern a wall before merging a boss or a peg onto it.
+- **The Front view lights the model from behind**, so a front elevation renders nearly black
+  while the left and right ones are lit. Cosmetic, but the front elevation is the drawing anyone
+  asks for first.
+- **Selecting several objects through UI Automation stops working after an export** in a session.
+  Ctrl+click in the object list is unaffected, and so is everything done with a mouse.
 - No 3MF, and no printer integration.
 
 ## Layout
@@ -639,7 +731,16 @@ src/FastCraft3D/
   Model/      scene objects, scene, Commands/ (undo-redo)
   Io/         STL, OBJ, SVG outlines, .3dfc project files, export composition
   Render/     the only Direct3D-aware layer, plus the on-screen manipulator
-  View/       selection mirroring between the object list and the scene
+  View/       dialogs, the object list and its selection mirroring into the scene
   ViewModels/ commands and application state
 tests/FastCraft3D.Tests/   geometry, CSG, IO, workflow and manipulator cover
+tools/      verify-stl.py and fit-check.py - checking an export by measurement rather than by eye
+tools/ui/   PowerShell for driving the running app, and the models built with it
 ```
+
+## Licence
+
+Proprietary - the source is readable, but it may not be used commercially or redistributed. See
+[LICENSE](LICENSE) for the terms, and [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md) for the
+MIT-licensed components it is built on. **About** on the File tab shows the same, along with the
+version and a Copy details button for bug reports.
