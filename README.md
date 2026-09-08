@@ -9,6 +9,9 @@ every slicer expects.
 
 ![3DFastCraft](docs/screenshot.png)
 
+*A spiral stair: one newel, one tread, and **Repeat** round a circle with a rise. The scene is
+set to 1:12, so the manipulator bar reads the tread in metres beside the millimetres.*
+
 > *In loving memory of Windows 3D Builder. Rest in peace.*
 
 ## Requirements
@@ -41,7 +44,7 @@ dotnet test
 | Tab | What it does |
 |---|---|
 | **Insert** | Cube, cylinder, cone, sphere, pyramid, wedge, torus, hexagon, tetrahedron; a stair; import a model or another project |
-| **Object** | What a thing is made of: Subtract / Intersect / Merge, split with a plane, duplicate (beside, in place, or repeated along a line), delete, colour |
+| **Object** | What a thing is made of: Subtract / Intersect / Merge, split with a plane, duplicate (beside, in place, or repeated along a line or round a circle), delete, colour |
 | **Align** | Where it sits: drop to plate, lay on face, align to another object, fit check, mirror, and lining the selection up on X, Y or Z - flush to either edge, centred, or spread evenly |
 | **Edit** | What its surface is: emboss lettering or a drawing, engrave a pattern, smooth, round edges, repair, rebuild, simplify, hollow, undo, redo |
 | **File** | New, open, recent, save, save as, save a version, versions, export STL/OBJ, about |
@@ -236,9 +239,9 @@ live values for whichever is active. Colours follow the axis indicator in the co
 
 | Mode | Handles | Readout |
 |---|---|---|
-| **Move** (`M`) | A double arrow on each of the six box faces. Drag one to slide along that axis only. | X / Y / Z in mm |
+| **Move** (`M`) | A double arrow on each of the six box faces. Drag one to slide along that axis only. | X / Y / Z in mm, and in metres if a scale is set |
 | **Rotate** (`R`) | A ring per **world** axis. Drag a ring to turn around it - on the second turn as much as the first. One toggle snaps to 15° steps; the other squares the object up with the world without moving it. | Roll / Pitch / Yaw in degrees |
-| **Resize** (`S`) | The object's **own** box with corner markers, turned with it, plus the six axis arrows. Resizing works about the centre, so both faces move. The toggle keeps proportions. | X / Y / Z in mm |
+| **Resize** (`S`) | The object's **own** box with corner markers, turned with it, plus the six axis arrows. Resizing works about the centre, so both faces move. The toggle keeps proportions. | W / D / H in mm, and in metres if a scale is set |
 
 Turning and resizing work in different frames on purpose. The rings are world axes, because
 turning *about Z* means the world's Z - it is what the plate is square to. The resize arrows are

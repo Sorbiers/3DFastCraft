@@ -621,6 +621,26 @@ public sealed class MainViewModel : INotifyPropertyChanged
     public string UndoLabel => Undo.NextUndoLabel is { } label ? $"Undo {label}" : "Undo";
 
     /// <summary>
+    /// Names for one operation that makes several objects at once.
+    ///
+    /// <see cref="Scene.UniqueName"/> reads the plate, and these operations ask for every name
+    /// before any of the objects joins it. Passing the method straight in gave every copy the
+    /// same answer - a spiral stair of twelve treads all called "Tread 2", a paste of three
+    /// walls all called "Wall 2". This counts what it has already given out.
+    /// </summary>
+    private Func<string, string> Namer()
+    {
+        List<string> given = [];
+
+        return baseName =>
+        {
+            string name = Scene.UniqueName(baseName, given);
+            given.Add(name);
+            return name;
+        };
+    }
+
+    /// <summary>
     /// Marks the start of a long operation: covers the window, starts the clock, and hands back
     /// the token the work has to watch.
     /// </summary>
@@ -2264,10 +2284,11 @@ public sealed class MainViewModel : INotifyPropertyChanged
     /// </summary>
     private void Duplicate(bool offset)
     {
+        var name = Namer();
         var copies = Scene.Selection.Select(o =>
         {
             var copy = o.Clone();
-            copy.Name = Scene.UniqueName(o.Name);
+            copy.Name = name(o.Name);
             if (offset) copy.Position += new Vector3(o.WorldBounds.Size.X + 5f, 0, 0);
             return copy;
         }).ToList();
@@ -2301,7 +2322,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
 
         if (dialog.Result is not { } settings) return;
 
-        var copies = RepeatArray.Make(selection, settings, Scene.UniqueName);
+        var copies = RepeatArray.Make(selection, settings, Namer());
         if (copies.Count == 0) return;
 
         Undo.Execute(new AddObjectsCommand("Repeat", copies));
@@ -2320,7 +2341,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
     {
         var before = selection.Select(TransformState.Capture).ToList();
 
-        var made = RepeatArray.MakeRing(selection, ring, Scene.UniqueName);
+        var made = RepeatArray.MakeRing(selection, ring, Namer());
         if (made.Copies.Count == 0) return;
 
         List<IUndoableCommand> steps = [];
@@ -2669,10 +2690,11 @@ public sealed class MainViewModel : INotifyPropertyChanged
 
         // Offset so a paste is visible rather than hidden exactly inside its original, and
         // cloned again so pasting twice does not hand out the same instance.
+        var name = Namer();
         var pasted = clipboard.Select(source =>
         {
             var copy = source.Clone();
-            copy.Name = Scene.UniqueName(source.Name);
+            copy.Name = name(source.Name);
             copy.Position += new Vector3(source.WorldBounds.Size.X + 5f, 0, 0);
             return copy;
         }).ToList();
@@ -3658,6 +3680,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
         {
             var imported = new List<SceneObject>();
             string extension = Path.GetExtension(dialog.FileName);
+            var naming = Namer();
 
             // A project imported rather than opened joins what is already on the plate: its
             // objects keep their own names, colours and positions, and nothing here is
@@ -3665,7 +3688,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
             if (extension.Equals(SceneSerializer.Extension, StringComparison.OrdinalIgnoreCase))
             {
                 foreach (var loaded in SceneSerializer.Load(dialog.FileName))
-                    imported.Add(new SceneObject(Scene.UniqueName(loaded.Name), loaded.Mesh)
+                    imported.Add(new SceneObject(naming(loaded.Name), loaded.Mesh)
                     {
                         Colour = loaded.Colour
                     });
@@ -3673,7 +3696,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
             else if (extension.Equals(".obj", StringComparison.OrdinalIgnoreCase))
             {
                 foreach (var (name, mesh) in ObjReader.Read(dialog.FileName))
-                    imported.Add(new SceneObject(Scene.UniqueName(name), mesh)
+                    imported.Add(new SceneObject(naming(name), mesh)
                     {
                         Colour = NextAutomaticColour()
                     }.Centred());
@@ -3682,7 +3705,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
             {
                 var mesh = StlReader.Read(dialog.FileName);
                 imported.Add(new SceneObject(
-                    Scene.UniqueName(Path.GetFileNameWithoutExtension(dialog.FileName)), mesh)
+                    naming(Path.GetFileNameWithoutExtension(dialog.FileName)), mesh)
                 {
                     Colour = NextAutomaticColour()
                 }.Centred());

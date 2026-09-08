@@ -1,4 +1,4 @@
-using System.Numerics;
+﻿using System.Numerics;
 using FastCraft3D.Geometry;
 using FastCraft3D.Model;
 using FastCraft3D.Model.Commands;
@@ -260,6 +260,46 @@ public class RepeatRingTests
         Assert.Equal(5, ring.Copies.Select(c => c.Name).Distinct().Count());
     }
 
+    /// <summary>
+    /// And the naming has to count what it has already given out, not only what is on the plate.
+    ///
+    /// Handing Scene.UniqueName straight to the ring asked it for twelve names before any of the
+    /// copies had joined the scene, so it answered "Tread 2" every time: a spiral stair whose
+    /// twelve treads all had the same name, indistinguishable in the object list.
+    /// </summary>
+    [Fact]
+    public void TheSceneDoesNotGiveOutOneNameTwiceInAnOperation()
+    {
+        var scene = new Scene();
+        scene.Objects.Add(new SceneObject("Tread", Primitives.Box(60, 20, 5)));
+
+        List<string> given = [];
+        for (int i = 0; i < 5; i++) given.Add(scene.UniqueName("Tread", given));
+
+        Assert.Equal(["Tread 2", "Tread 3", "Tread 4", "Tread 5", "Tread 6"], given);
+    }
+
+    /// <summary>The same thing end to end: a ring of treads is a dozen distinct objects.</summary>
+    [Fact]
+    public void AStairOfTwelveTreadsHasTwelveNames()
+    {
+        var scene = new Scene();
+        var tread = Box("Tread", 62, 22, 5);
+        tread.Position = new Vector3(42, 0, 8);
+        scene.Objects.Add(tread);
+
+        List<string> given = [];
+        var ring = RepeatArray.MakeRing([tread], FullTurn(11, 42f), baseName =>
+        {
+            string name = scene.UniqueName(baseName, given);
+            given.Add(name);
+            return name;
+        });
+
+        Assert.Equal(11, ring.Copies.Select(c => c.Name).Distinct().Count());
+        Assert.DoesNotContain(ring.Copies, c => c.Name == "Tread");
+    }
+
     /// <summary>This is what seeds the radius box, so opening the dialog changes nothing by itself.</summary>
     [Fact]
     public void TheDistanceReadsWhereTheSelectionStandsNow()
@@ -287,7 +327,7 @@ public class RepeatRingTests
         scene.Objects.Add(pin);
 
         var before = new[] { TransformState.Capture(pin) };
-        var ring = RepeatArray.MakeRing([pin], FullTurn(5, 45f), scene.UniqueName);
+        var ring = RepeatArray.MakeRing([pin], FullTurn(5, 45f), name => scene.UniqueName(name));
 
         var undo = new UndoStack(scene);
         undo.Execute(new CompoundCommand("Repeat round a circle",

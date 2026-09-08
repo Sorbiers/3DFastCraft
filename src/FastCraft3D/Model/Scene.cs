@@ -43,10 +43,18 @@ public sealed class Scene
             o.IsSelected = false;
     }
 
-    /// <summary>Gives a new object a name that does not collide with the existing ones.</summary>
-    public string UniqueName(string baseName)
+    /// <summary>
+    /// Gives a new object a name that collides with nothing already in the scene.
+    ///
+    /// <paramref name="alsoTaken"/> is for an operation that makes several objects at once. This
+    /// only knows what is on the plate, and Repeat asks for every name before any of the copies
+    /// joins it - so a twelve-tread spiral stair came out as twelve treads all called "Tread 2".
+    /// </summary>
+    public string UniqueName(string baseName, IEnumerable<string>? alsoTaken = null)
     {
         var taken = new HashSet<string>(Objects.Select(o => o.Name), StringComparer.OrdinalIgnoreCase);
+        if (alsoTaken is not null) taken.UnionWith(alsoTaken);
+
         if (!taken.Contains(baseName)) return baseName;
 
         for (int i = 2; ; i++)
