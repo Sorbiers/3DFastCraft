@@ -7,6 +7,7 @@ using System.Windows.Threading;
 using FastCraft3D.Geometry;
 using FastCraft3D.Geometry.Csg;
 using FastCraft3D.Geometry.Engraving;
+using FastCraft3D.Geometry.Moulding;
 using FastCraft3D.Io;
 using FastCraft3D.Model;
 using FastCraft3D.Model.Commands;
@@ -40,8 +41,13 @@ public sealed class MainViewModel : INotifyPropertyChanged
     private bool isStopping;
     private string busyTitle = "";
     private string busyElapsed = "";
+    private string busyStage = "";
+    private double busyFraction;
+    private bool busyIndeterminate = true;
+    private WorkProgress reported;
     private CancellationTokenSource? work;
     private DispatcherTimer? workClock;
+    private readonly Sink sink;
     private DateTime workStarted;
     private string? projectPath;
     private bool isDirty;
@@ -143,6 +149,8 @@ public sealed class MainViewModel : INotifyPropertyChanged
             () => { svgFile = ""; RefreshDrawing(); }, () => svgFile.Length > 0);
         RepeatCommand = RelayCommand.Simple(RepeatSelection, () => Scene.Selection.Count > 0);
         AbortCommand = RelayCommand.Simple(AbortWork, () => CanAbort);
+        sink = new Sink(value => reported = value);
+        MouldCommand = new AsyncRelayCommand(_ => MakeMould(), _ => Scene.Selection.Count == 1);
         AlignToSelectionCommand = RelayCommand.Simple(
             AlignToSelection, () => Scene.Selection.Count == 2);
         FitCheckCommand = RelayCommand.Simple(FitCheck, () => Scene.Selection.Count == 2);
@@ -207,6 +215,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
     public System.Windows.Input.ICommand HollowCommand { get; }
     public System.Windows.Input.ICommand RepeatCommand { get; }
     public System.Windows.Input.ICommand AbortCommand { get; }
+    public System.Windows.Input.ICommand MouldCommand { get; }
     public System.Windows.Input.ICommand AlignToSelectionCommand { get; }
     public System.Windows.Input.ICommand FitCheckCommand { get; }
     public System.Windows.Input.ICommand BeginEmbossCommand { get; }
@@ -593,6 +602,33 @@ public sealed class MainViewModel : INotifyPropertyChanged
         private set => Set(ref busyElapsed, value);
     }
 
+    /// <summary>
+    /// What the running operation is doing now - "Sampling the model", "Keying piece 2 of 4".
+    ///
+    /// This is the half that answers "has it stopped?" for the work that cannot count itself. A
+    /// boolean recurses over a tree whose size is not known until it has been built, so there is no
+    /// honest fraction to show for one; there is always an honest answer to what it is up to.
+    /// </summary>
+    public string BusyStage
+    {
+        get => busyStage;
+        private set => Set(ref busyStage, value);
+    }
+
+    /// <summary>How far through, from nought to one, when the work can say.</summary>
+    public double BusyFraction
+    {
+        get => busyFraction;
+        private set => Set(ref busyFraction, value);
+    }
+
+    /// <summary>Whether the bar sweeps rather than fills, because there is no fraction to show.</summary>
+    public bool BusyIndeterminate
+    {
+        get => busyIndeterminate;
+        private set => Set(ref busyIndeterminate, value);
+    }
+
     /// <summary>Abort has been pressed and the work has not reached a checkpoint yet.</summary>
     public bool IsStopping
     {
@@ -644,13 +680,31 @@ public sealed class MainViewModel : INotifyPropertyChanged
     /// Marks the start of a long operation: covers the window, starts the clock, and hands back
     /// the token the work has to watch.
     /// </summary>
+    /// <summary>
+    /// Where a running operation reports to.
+    ///
+    /// Handed to the work that can count itself and ignored by the rest. Nothing is marshalled: the
+    /// worker writes the last report into a field and the clock below publishes it, because a grid
+    /// slice is not worth a hop onto the UI thread and there are hundreds of thousands of them.
+    /// </summary>
+    private IProgress<WorkProgress> Progress => sink;
+
+    private sealed class Sink(Action<WorkProgress> keep) : IProgress<WorkProgress>
+    {
+        public void Report(WorkProgress value) => keep(value);
+    }
+
     private CancellationToken StartWork(string title)
     {
         work?.Dispose();
         work = new CancellationTokenSource();
 
         BusyTitle = title;
+        BusyStage = "";
         BusyElapsed = "";
+        BusyFraction = 0;
+        BusyIndeterminate = true;
+        reported = WorkProgress.Doing("");
         IsStopping = false;
         IsBusy = true;
         Status = $"{title}...";
@@ -665,6 +719,10 @@ public sealed class MainViewModel : INotifyPropertyChanged
     private void EndWork()
     {
         workClock?.Stop();
+
+        BusyStage = "";
+        BusyFraction = 0;
+        BusyIndeterminate = true;
 
         IsBusy = false;
         IsStopping = false;
@@ -709,6 +767,16 @@ public sealed class MainViewModel : INotifyPropertyChanged
             // Nothing at first. Most operations are over well inside a second, and a counter
             // that flashes up "0 s" and disappears is worse than no counter at all.
             BusyElapsed = elapsed.TotalSeconds < 0.7 ? "" : Elapsed(elapsed);
+
+            // Read once. The worker writes a fraction and a stage as one value without a lock, so
+            // a torn read would pair one with the other's neighbour - a quarter of a second of a
+            // slightly wrong caption, and cheaper than making every report take a lock.
+            var now = reported;
+
+            BusyStage = now.Stage ?? BusyStage;
+            BusyIndeterminate = !now.Measured;
+
+            if (now.Measured) BusyFraction = Math.Clamp(now.Done, 0d, 1d);
         };
 
         return clock;
@@ -1776,12 +1844,78 @@ public sealed class MainViewModel : INotifyPropertyChanged
         }
     }
 
+    /// <summary>
+    /// The selected object's own width, depth and height, honouring the proportions lock.
+    ///
+    /// The boxes used to bind straight to the object, whose SizeX only ever sets X - so with the
+    /// lock on, typing a width changed the width and nothing else, and the shape came out
+    /// stretched. Dragging a handle went through the view model and did obey the lock, which is
+    /// what made the fault so easy to miss: the same toggle worked one way of asking and not the
+    /// other.
+    ///
+    /// The group path already did this properly, but it cannot simply be reused. For one object
+    /// the boxes are its *own* extents, so they do not change when it is turned; the group boxes
+    /// are the bounding box of the selection in world space, which does.
+    /// </summary>
+    public float ObjectSizeX
+    {
+        get => Selected?.SizeX ?? 0f;
+        set => ResizeSelected(Axis.X, value);
+    }
+
+    public float ObjectSizeY
+    {
+        get => Selected?.SizeY ?? 0f;
+        set => ResizeSelected(Axis.Y, value);
+    }
+
+    public float ObjectSizeZ
+    {
+        get => Selected?.SizeZ ?? 0f;
+        set => ResizeSelected(Axis.Z, value);
+    }
+
+    /// <summary>
+    /// Sets one of the selected object's own dimensions, taking the other two with it when the
+    /// proportions are locked.
+    /// </summary>
+    private void ResizeSelected(Axis axis, float millimetres)
+    {
+        if (Selected is not { } o) return;
+        if (!float.IsFinite(millimetres) || millimetres < 0.01f) return;
+
+        float now = axis switch { Axis.X => o.SizeX, Axis.Y => o.SizeY, _ => o.SizeZ };
+
+        if (!UniformScale || now < 1e-4f)
+        {
+            switch (axis)
+            {
+                case Axis.X: o.SizeX = millimetres; break;
+                case Axis.Y: o.SizeY = millimetres; break;
+                default: o.SizeZ = millimetres; break;
+            }
+
+            RaiseReal();
+            return;
+        }
+
+        // Each axis read and written on its own, because they are independent: scaling one does
+        // not move the others, so the same ratio applied three times is the whole of it.
+        float ratio = millimetres / now;
+
+        o.SizeX *= ratio;
+        o.SizeY *= ratio;
+        o.SizeZ *= ratio;
+
+        RaiseReal();
+    }
+
     public float RealW
     {
         get => ToReal(HasOneSelected ? Selected!.SizeX : GroupSizeX);
         set
         {
-            if (HasOneSelected) Selected!.SizeX = FromReal(value);
+            if (HasOneSelected) ResizeSelected(Axis.X, FromReal(value));
             else GroupSizeX = FromReal(value);
             RaiseReal();
         }
@@ -1792,7 +1926,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
         get => ToReal(HasOneSelected ? Selected!.SizeY : GroupSizeY);
         set
         {
-            if (HasOneSelected) Selected!.SizeY = FromReal(value);
+            if (HasOneSelected) ResizeSelected(Axis.Y, FromReal(value));
             else GroupSizeY = FromReal(value);
             RaiseReal();
         }
@@ -1803,7 +1937,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
         get => ToReal(HasOneSelected ? Selected!.SizeZ : GroupSizeZ);
         set
         {
-            if (HasOneSelected) Selected!.SizeZ = FromReal(value);
+            if (HasOneSelected) ResizeSelected(Axis.Z, FromReal(value));
             else GroupSizeZ = FromReal(value);
             RaiseReal();
         }
@@ -1819,6 +1953,10 @@ public sealed class MainViewModel : INotifyPropertyChanged
         Raise(nameof(RealD));
         Raise(nameof(RealH));
         Raise(nameof(RealSize));
+
+        Raise(nameof(ObjectSizeX));
+        Raise(nameof(ObjectSizeY));
+        Raise(nameof(ObjectSizeZ));
     }
 
     /// <summary>
@@ -2328,6 +2466,103 @@ public sealed class MainViewModel : INotifyPropertyChanged
         Undo.Execute(new AddObjectsCommand("Repeat", copies));
         RefreshSelection();
         Status = $"Repeated - {copies.Count} new object(s)";
+    }
+
+    /// <summary>
+    /// Makes a mould of the selection: a block with the model taken out of it, cut so the cast
+    /// part can be got out, with a hole to pour through and vents where air would otherwise sit.
+    ///
+    /// Two spells of work with a dialog between them. The study has to run first, because what
+    /// the dialog is chiefly for is showing what it found - which way the part comes out, and
+    /// whether it comes out at all.
+    /// </summary>
+    private async Task MakeMould()
+    {
+        if (IsBusy) return;
+
+        var selection = Scene.Selection.ToList();
+        if (selection.Count != 1) return;
+
+        var source = selection[0];
+        var model = source.ToWorldMesh();
+
+        MouldStudy study;
+        var token = StartWork($"Studying {source.Name}");
+        try
+        {
+            study = await Task.Run(() => MouldAnalysis.Study(model, 64, token));
+        }
+        catch (Exception ex) when (WasAborted(ex))
+        {
+            Status = $"{busyTitle} aborted - nothing was changed";
+            return;
+        }
+        catch (Exception ex)
+        {
+            Status = $"Could not study {source.Name}: {ex.Message}";
+            MessageBox.Show(ex.Message, "3DFastCraft", MessageBoxButton.OK, MessageBoxImage.Error);
+            return;
+        }
+        finally
+        {
+            EndWork();
+        }
+
+        if (study.Pulls.Count == 0)
+        {
+            Status = "Nothing to make a mould of";
+            return;
+        }
+
+        var dialog = new MouldDialog(source.Name, study, model)
+        {
+            Owner = Application.Current?.MainWindow
+        };
+        if (dialog.ShowDialog() != true) return;
+
+        token = StartWork($"Moulding {source.Name}");
+        try
+        {
+            var result = await Task.Run(
+                () => MouldBuilder.Build(model, dialog.Chosen, dialog.Options, token, Progress));
+
+            if (result.Parts.Count == 0)
+            {
+                Status = "The mould came out empty";
+                return;
+            }
+
+            var name = Namer();
+            var made = result.Parts.Select(p => new SceneObject(name($"{source.Name} {p.Name}"), p.Mesh)
+            {
+                Colour = NextAutomaticColour()
+            }.Centred()).ToList();
+
+            Undo.Execute(new AddObjectsCommand("Mould", made));
+            RefreshSelection();
+
+            Status = result.Summary;
+
+            if (result.Parts.Any(p => !p.Watertight))
+                MessageBox.Show(
+                    result.Summary + "\n\nA piece that is not watertight will not slice. Select it "
+                    + "and use Rebuild on the Edit tab, which remakes a shape the boolean has "
+                    + "given up on.",
+                    "3DFastCraft", MessageBoxButton.OK, MessageBoxImage.Warning);
+        }
+        catch (Exception abort) when (WasAborted(abort))
+        {
+            Status = $"{busyTitle} aborted - nothing was changed";
+        }
+        catch (Exception ex)
+        {
+            Status = $"The mould failed: {ex.Message}";
+            MessageBox.Show(ex.Message, "3DFastCraft", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+        finally
+        {
+            EndWork();
+        }
     }
 
     /// <summary>
@@ -2919,7 +3154,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
             // millimetres, so a wall on a stretched object would otherwise come out stretched.
             var meshes = selection.Select(o => o.ToWorldMesh()).ToList();
             var shells = await Task.Run(() => meshes
-                .Select(m => MeshHollow.Hollow(m, settings.WallMm, settings.Resolution, settings.Open, token))
+                .Select(m => MeshHollow.Hollow(m, settings.WallMm, settings.Resolution, settings.Open, token, Progress))
                 .ToList());
 
             var produced = new List<SceneObject>();
@@ -2990,7 +3225,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
         {
             var meshes = selection.Select(o => o.Mesh).ToList();
             var reduced = await Task.Run(
-                () => meshes.Select(m => MeshSimplify.ByFraction(m, keep, token)).ToList());
+                () => meshes.Select(m => MeshSimplify.ByFraction(m, keep, token, Progress)).ToList());
 
             var produced = new List<SceneObject>();
             for (int i = 0; i < selection.Count; i++)
@@ -3048,7 +3283,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
             // a stretched object would otherwise be voxelised at the wrong scale.
             var meshes = targets.Select(o => o.ToWorldMesh()).ToList();
             var rebuilt = await Task.Run(
-                () => meshes.Select(m => VoxelRebuild.Rebuild(m, resolution, token)).ToList());
+                () => meshes.Select(m => VoxelRebuild.Rebuild(m, resolution, token, Progress)).ToList());
 
             var produced = new List<SceneObject>();
             for (int i = 0; i < targets.Count; i++)

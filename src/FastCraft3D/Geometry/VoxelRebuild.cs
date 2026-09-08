@@ -51,7 +51,8 @@ public static class VoxelRebuild
     /// <summary>
     /// Samples the model onto a grid, which is the half of rebuilding that hollowing also needs.
     /// </summary>
-    internal static Grid Sample(Mesh mesh, int resolution, CancellationToken token = default)
+    internal static Grid Sample(Mesh mesh, int resolution, CancellationToken token = default,
+                               IProgress<WorkProgress>? progress = null)
     {
         resolution = Math.Clamp(resolution, MinimumResolution, MaximumResolution);
 
@@ -70,7 +71,7 @@ public static class VoxelRebuild
         int ny = (int)MathF.Ceiling(span.Y / voxel) + 1;
         int nz = (int)MathF.Ceiling(span.Z / voxel) + 1;
 
-        return new Grid(Occupancy(mesh, origin, voxel, nx, ny, nz, token), origin, voxel, nx, ny, nz);
+        return new Grid(Occupancy(mesh, origin, voxel, nx, ny, nz, token, progress), origin, voxel, nx, ny, nz);
     }
 
     /// <summary>
@@ -78,7 +79,8 @@ public static class VoxelRebuild
     /// Blocks; callers on the UI thread should wrap it in Task.Run.
     /// </summary>
     public static RebuildResult Rebuild(Mesh mesh, int resolution = DefaultResolution,
-                                        CancellationToken token = default)
+                                        CancellationToken token = default,
+                                        IProgress<WorkProgress>? progress = null)
     {
         token.ThrowIfCancellationRequested();
 
@@ -106,11 +108,13 @@ public static class VoxelRebuild
         int ny = (int)MathF.Ceiling(span.Y / voxel) + 1;
         int nz = (int)MathF.Ceiling(span.Z / voxel) + 1;
 
-        bool[] inside = Occupancy(mesh, origin, voxel, nx, ny, nz, token);
+        bool[] inside = Occupancy(mesh, origin, voxel, nx, ny, nz, token, progress);
 
         // The netting and the smoothing are quick beside the sampling, so a checkpoint between
         // the phases is as fine as this needs to be.
         token.ThrowIfCancellationRequested();
+        progress?.Report(WorkProgress.Doing("Building the surface"));
+
         var surface = SurfaceNets(inside, origin, voxel, nx, ny, nz);
         token.ThrowIfCancellationRequested();
 
@@ -129,7 +133,8 @@ public static class VoxelRebuild
     /// outside, which is exactly backwards for the meshes this tool exists to mend.
     /// </summary>
     internal static bool[] Occupancy(Mesh mesh, Vector3 origin, float voxel, int nx, int ny, int nz,
-                                     CancellationToken token = default)
+                                     CancellationToken token = default,
+                                     IProgress<WorkProgress>? progress = null)
     {
         var inside = new bool[nx * ny * nz];
         var buckets = new Buckets(mesh, origin, voxel, ny, nz);
@@ -138,8 +143,10 @@ public static class VoxelRebuild
         for (int k = 0; k < nz; k++)
         {
             // Once a slice. There are a few hundred of them and each is a pass over the model,
-            // so this is the granularity Abort is felt at during a rebuild or a hollow.
+            // so this is the granularity Abort is felt at during a rebuild or a hollow - and the
+            // granularity the progress bar moves at, which is the same question asked twice.
             token.ThrowIfCancellationRequested();
+            progress?.Report(new WorkProgress((float)k / nz, "Sampling the model"));
 
             float z = origin.Z + k * voxel;
 
@@ -258,7 +265,8 @@ public static class VoxelRebuild
     /// vertex per connected piece of material in it, found by walking the cell's own edges, and
     /// a face takes the vertex belonging to the piece it actually touches.
     /// </summary>
-    internal static Mesh SurfaceNets(bool[] inside, Vector3 origin, float voxel, int nx, int ny, int nz)
+    internal static Mesh SurfaceNets(bool[] inside, Vector3 origin, float voxel, int nx, int ny, int nz,
+                                     IProgress<WorkProgress>? progress = null)
     {
         int At(int i, int j, int k) => (k * ny + j) * nx + i;
         int CellAt(int i, int j, int k) => (k * (ny - 1) + j) * (nx - 1) + i;
@@ -274,6 +282,9 @@ public static class VoxelRebuild
         Span<int> piece = stackalloc int[8];
 
         for (int k = 0; k + 1 < nz; k++)
+        {
+            if ((k & 7) == 0) progress?.Report(new WorkProgress((float)k / nz));
+
         for (int j = 0; j + 1 < ny; j++)
         for (int i = 0; i + 1 < nx; i++)
         {
@@ -345,6 +356,7 @@ public static class VoxelRebuild
             }
 
             corners[CellAt(i, j, k)] = slots;
+        }
         }
 
         var indices = new List<int>();

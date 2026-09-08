@@ -45,14 +45,16 @@ dotnet test
 |---|---|
 | **Insert** | Cube, cylinder, cone, sphere, pyramid, wedge, torus, hexagon, tetrahedron; a stair; import a model or another project |
 | **Object** | What a thing is made of: Subtract / Intersect / Merge, split with a plane, duplicate (beside, in place, or repeated along a line or round a circle), delete, colour |
-| **Align** | Where it sits: drop to plate, lay on face, align to another object, fit check, mirror, and lining the selection up on X, Y or Z - flush to either edge, centred, or spread evenly |
-| **Edit** | What its surface is: emboss lettering or a drawing, engrave a pattern, smooth, round edges, repair, rebuild, simplify, hollow, undo, redo |
+| **Align** | Where it sits: drop to plate, lay on face, align to another object, mirror, and lining the selection up on X, Y or Z - flush to either edge, centred, or spread evenly |
+| **Edit** | What its surface is: emboss lettering or a drawing, engrave a pattern, smooth, round edges, simplify, hollow, undo, redo |
+| **Tools** | What changes nothing: measure, fit check, repair, rebuild, and make a mould of it |
 | **File** | New, open, recent, save, save as, save a version, versions, export STL/OBJ, about |
-| **View** | Zoom to fit, the six axis views and isometric, measure, wireframe, x-ray, build plate size and visibility, model scale |
+| **View** | Zoom to fit, the six axis views and isometric, wireframe, x-ray, build plate size and visibility, model scale |
 
-The three middle tabs are split by *what a tool changes*, which is worth knowing when hunting
-for one: **Object** changes what a thing is made of, **Edit** changes its surface, **Align**
-changes where it sits without changing the thing at all.
+The middle tabs are split by *what a tool changes*, which is worth knowing when hunting for one:
+**Object** changes what a thing is made of, **Edit** changes its surface, **Align** changes where
+it sits, and **Tools** changes nothing at all - it measures the model, mends it, or makes
+something new from it.
 
 **Camera:** left-drag orbits, right-drag pans, the wheel zooms. Dragging horizontally turns the
 scene around the vertical **Z** axis, like a turntable - the plate never rolls onto its side.
@@ -129,7 +131,7 @@ read anyway.
 ### Repairing a model
 
 A model that would not print raises a banner over the viewport - *one or more objects are
-invalidly defined* - and **Repair** on the Edit tab mends what it can: it welds, drops what is
+invalidly defined* - and **Repair** on the Tools tab mends what it can: it welds, drops what is
 genuinely nothing, makes neighbouring faces agree which way they face, turns any shell that came
 out inside out, and caps the holes. A shell enclosed by another is left facing inward, because
 that is a cavity and turning it outward would fill in the hollow.
@@ -143,7 +145,7 @@ mesh straight back and says so, rather than tearing it further.
 
 ### Measuring
 
-**Measure** on the View tab reads the distance between two points. Click one, click another, and
+**Measure** on the Tools tab reads the distance between two points. Click one, click another, and
 the tape is drawn over the model with the distance on it - along with the gap broken down by
 axis, since a single number hides which way it runs. A third click starts a fresh measurement.
 
@@ -403,7 +405,8 @@ part. Better to say so than to under-deliver silently.
 
 ### Does it fit?
 
-**Align to** and **Fit check** sit together on the Align tab and are easy to confuse:
+**Align to** is on the Align tab and **Fit check** on Tools, and the two are easy to confuse
+until you notice that only one of them moves anything:
 
 - **Align to** *moves* things. Pick two objects and the first is moved so its bounding box is
   centred on the second's. Nothing is rotated or resized.
@@ -657,6 +660,54 @@ Select both (`Ctrl+A`) and press **Subtract**. The status bar should read
 Boolean order follows the object list: the first selected object is the one the others are cut
 out of.
 
+### Making a mould
+
+**Mould...** on the Tools tab takes one object and builds a mould to pour silicone into: a block
+with the model taken out of it, cut so the casting comes out, with registration keys, a pour hole
+and a vent wherever air would otherwise be trapped.
+
+It works out how the mould should come apart before it asks anything. Every line of sight through
+the model is followed along each axis, and a line that leaves the material and enters it again is
+an undercut - somewhere the mould would have to lift off a surface that has something over it. The
+axis with fewest of those wins, and the cut goes at the widest cross-section, which is what
+practice says and what keeps the opening as large as it can be.
+
+That test is worth stating because it gets rings right. A ring pulled *across* its hole is an
+undercut on almost every line; pulled *along* the hole there is not one, and it splits perfectly.
+The same reading tells you when nothing works - a closed shell is trapped whichever way it is
+pulled - and then a second cut is offered, and a third, giving four pieces or eight.
+
+The dialog says what it found before you commit to anything:
+
+```
+Cut on X at -19.44 mm - 0% of it is undercut, which silicone will flex out of. Two parts.
+X: 0% undercut, opening 14408.5 cm2   Y: 2% undercut   Z: 45% undercut
+```
+
+Undercuts are reported rather than refused, because the casting is silicone and silicone bends out
+of a shallow one. A rigid two-part mould would not.
+
+**Air is a drainage question, not a high-points question.** Air under the cavity ceiling slides
+along it, so a flat region joined to something taller is not a trap at all - it runs sideways and
+escapes up. What traps it is a stretch of ceiling with nothing higher anywhere along its edge, and
+that is where the vents go. The pour hole goes at the model's own highest point, and on a ring that
+means on the ring rather than over the hole in the middle of it.
+
+**Two routes, chosen by size.** Under 20,000 triangles the cavity is cut exactly, by boolean, so it
+keeps every triangle of the model. Above that it is sampled onto a grid instead, because the
+boolean is quadratic here: a thousand triangles takes half a second, sixteen thousand takes
+forty-seven, and a three hundred thousand triangle scan ran for twenty minutes and twenty gigabytes
+before it had to be killed. Sampling costs what the resolution costs and almost nothing for the
+triangle count, so the same scan comes out in half a minute. The dialog says which route this model
+will take, what the sampled detail works out to in millimetres, and that simplifying below the
+limit first is what gets an exact cavity.
+
+The pour hole and the keys are **square**, which is not laziness. A round bore meets a curved cavity
+along every one of forty-eight facet edges at whatever angle the surface makes there, and a ball
+meets a flat face tangentially all the way round its rim - both the contacts this boolean handles
+worst. Four flat faces meet a curved surface in four clean curves. Making them square took a
+two-part mould from both halves torn to neither.
+
 ### Stopping a long operation
 
 Merging, engraving, lettering, splitting, hollowing, simplifying, rebuilding and repairing all
@@ -830,7 +881,7 @@ primitives headed to a slicer.
 - **Letters with an enclosed middle - O, B, A, D - wrapped round a barrel** are past what the
   boolean will do: the cutter is sound but the result comes back torn. It is refused rather than
   shipped, so the object is left as it was. Lettering without counters wraps fine, and **Rebuild**
-  on the Edit tab remakes a shape the boolean has given up on.
+  on the Tools tab remakes a shape the boolean has given up on.
 - Engraving and lettering are refused outright rather than applied badly whenever the result
   would not be watertight. The object is never left in a worse state than it started.
 - **A face with a round hole in it cannot take a pattern.** Holes have to be rectangles, so

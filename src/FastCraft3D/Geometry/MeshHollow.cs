@@ -57,13 +57,14 @@ public static class MeshHollow
     /// </param>
     public static HollowResult Hollow(
         Mesh mesh, float wallMm, int resolution = VoxelRebuild.DefaultResolution,
-        OpenSide open = OpenSide.None, CancellationToken token = default)
+        OpenSide open = OpenSide.None, CancellationToken token = default,
+        IProgress<WorkProgress>? progress = null)
     {
         token.ThrowIfCancellationRequested();
 
         wallMm = Math.Max(wallMm, MinimumWallMm);
 
-        var grid = VoxelRebuild.Sample(mesh, resolution, token);
+        var grid = VoxelRebuild.Sample(mesh, resolution, token, progress);
         if (grid.Inside.Length == 0) return new HollowResult(mesh, wallMm, 0);
 
         // Where the open side's plane is, and which way is out of it.

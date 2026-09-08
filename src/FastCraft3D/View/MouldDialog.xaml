@@ -1,0 +1,89 @@
+﻿<Window x:Class="FastCraft3D.View.MouldDialog"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Mould" SizeToContent="Height" Width="470"
+        WindowStartupLocation="CenterOwner" ResizeMode="NoResize"
+        ShowInTaskbar="False" Background="#FFF7F7F8">
+
+    <StackPanel Margin="18,14,18,14">
+        <TextBlock x:Name="SubjectText" TextWrapping="Wrap" Foreground="#FF33383F" Margin="0,0,0,10" />
+
+        <Border Padding="10,8" CornerRadius="3" Margin="0,0,0,14"
+                Background="#FFEFF5FF" BorderBrush="#FFB8D2F0" BorderThickness="1">
+            <StackPanel>
+                <TextBlock x:Name="AdviceText" TextWrapping="Wrap" Foreground="#FF2C3037" />
+                <TextBlock x:Name="AxisText" TextWrapping="Wrap" Foreground="#FF5A5F66"
+                           FontSize="11" Margin="0,6,0,0" />
+                <TextBlock x:Name="RouteText" TextWrapping="Wrap" Foreground="#FF3A4550"
+                           Margin="0,8,0,0" />
+            </StackPanel>
+        </Border>
+
+        <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
+            <TextBlock Text="Pieces" VerticalAlignment="Center" Foreground="#FF5A5F66" Width="132" />
+            <ComboBox x:Name="PiecesBox" Width="80" SelectionChanged="OnChanged"
+                      AutomationProperties.AutomationId="MouldPieces" />
+            <TextBlock x:Name="PiecesHint" VerticalAlignment="Center"
+                       Foreground="#FF9AA0A8" Margin="8,0,0,0" />
+        </StackPanel>
+
+        <StackPanel x:Name="DetailRow" Orientation="Horizontal" Margin="0,0,0,10">
+            <TextBlock Text="Detail" VerticalAlignment="Center" Foreground="#FF5A5F66" Width="132"
+                       ToolTip="How finely the model is sampled. Only used when it is too heavy to cut exactly." />
+            <ComboBox x:Name="DetailBox" Width="110" SelectionChanged="OnChanged"
+                      AutomationProperties.AutomationId="MouldDetail" />
+            <TextBlock x:Name="DetailHint" VerticalAlignment="Center"
+                       Foreground="#FF9AA0A8" Margin="8,0,0,0" />
+        </StackPanel>
+
+        <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+            <TextBlock Text="Wall" VerticalAlignment="Center" Foreground="#FF5A5F66" Width="132"
+                       ToolTip="Material between the model and the outside of the block." />
+            <TextBox x:Name="WallBox" Width="64" Padding="4,3" Text="8"
+                     AutomationProperties.AutomationId="MouldWall" TextChanged="OnChanged" />
+            <TextBlock Text="mm" VerticalAlignment="Center" Foreground="#FF9AA0A8" Margin="8,0,0,0" />
+        </StackPanel>
+
+        <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+            <TextBlock Text="Pour hole" VerticalAlignment="Center" Foreground="#FF5A5F66" Width="132"
+                       ToolTip="Silicone is thick and slow, so a generous hole is worth the material." />
+            <TextBox x:Name="SprueBox" Width="64" Padding="4,3" Text="10"
+                     AutomationProperties.AutomationId="MouldSprue" TextChanged="OnChanged" />
+            <TextBlock Text="mm across" VerticalAlignment="Center" Foreground="#FF9AA0A8" Margin="8,0,0,0" />
+        </StackPanel>
+
+        <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+            <TextBlock Text="Air vents" VerticalAlignment="Center" Foreground="#FF5A5F66" Width="132"
+                       ToolTip="Thin holes at every pocket that would otherwise hold a bubble." />
+            <TextBox x:Name="VentBox" Width="64" Padding="4,3" Text="2"
+                     AutomationProperties.AutomationId="MouldVent" TextChanged="OnChanged" />
+            <TextBlock Text="mm across" VerticalAlignment="Center" Foreground="#FF9AA0A8" Margin="8,0,0,0" />
+            <CheckBox x:Name="VentsBox" Content="add them" IsChecked="True" Margin="12,0,0,0"
+                      VerticalAlignment="Center" Click="OnChanged"
+                      AutomationProperties.AutomationId="MouldAddVents" />
+        </StackPanel>
+
+        <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+            <TextBlock Text="Registration keys" VerticalAlignment="Center" Foreground="#FF5A5F66" Width="132"
+                       ToolTip="A dome on one face of every joint and a socket in the other, so the pieces close one way round only. Zero leaves the faces plain." />
+            <TextBox x:Name="KeyBox" Width="64" Padding="4,3" Text="8"
+                     AutomationProperties.AutomationId="MouldKey" TextChanged="OnChanged" />
+            <TextBlock Text="mm across, clearance" VerticalAlignment="Center"
+                       Foreground="#FF9AA0A8" Margin="8,0,8,0" />
+            <TextBox x:Name="ClearanceBox" Width="52" Padding="4,3" Text="0.20"
+                     AutomationProperties.AutomationId="MouldKeyClearance" TextChanged="OnChanged" />
+        </StackPanel>
+
+        <Border Padding="10,8" CornerRadius="3" Margin="0,8,0,0"
+                Background="#FFEFF1F4" BorderBrush="#FFDDE0E4" BorderThickness="1">
+            <TextBlock x:Name="SummaryText" TextWrapping="Wrap" Foreground="#FF3A3F45" />
+        </Border>
+
+        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,18,0,0">
+            <Button Content="Make mould" IsDefault="True" Click="OnAccept"
+                    AutomationProperties.Name="MouldAccept"
+                    MinWidth="98" Padding="10,6" Margin="0,0,8,0" />
+            <Button Content="Cancel" IsCancel="True" MinWidth="80" Padding="10,6" />
+        </StackPanel>
+    </StackPanel>
+</Window>

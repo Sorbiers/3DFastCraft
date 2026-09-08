@@ -25,14 +25,16 @@ public static class MeshSimplify
     private const float MaximumFlip = 0.1f;
 
     /// <summary>Reduces to a fraction of the original triangle count, 0 to 1.</summary>
-    public static Mesh ByFraction(Mesh mesh, float keep, CancellationToken token = default) =>
+    public static Mesh ByFraction(Mesh mesh, float keep, CancellationToken token = default,
+                                 IProgress<WorkProgress>? progress = null) =>
         To(mesh, (int)(mesh.TriangleCount * Math.Clamp(keep, 0.001f, 1f)));
 
     /// <summary>
     /// Reduces to about <paramref name="targetTriangles"/>. Blocks; a caller on the UI thread
     /// should wrap it in Task.Run.
     /// </summary>
-    public static Mesh To(Mesh mesh, int targetTriangles, CancellationToken token = default)
+    public static Mesh To(Mesh mesh, int targetTriangles, CancellationToken token = default,
+                          IProgress<WorkProgress>? progress = null)
     {
         token.ThrowIfCancellationRequested();
 
@@ -40,7 +42,7 @@ public static class MeshSimplify
         if (triangleCount == 0 || targetTriangles >= triangleCount) return mesh;
 
         var work = new Simplifier(mesh);
-        work.Reduce(Math.Max(targetTriangles, 4), token);
+        work.Reduce(Math.Max(targetTriangles, 4), token, progress);
 
         return work.ToMesh();
     }
@@ -82,7 +84,8 @@ public static class MeshSimplify
             onRim = RimVertices();
         }
 
-        public void Reduce(int target, CancellationToken token = default)
+        public void Reduce(int target, CancellationToken token = default,
+                           IProgress<WorkProgress>? progress = null)
         {
             var queue = new PriorityQueue<(int A, int B, int Version), double>();
             var version = new int[points.Count];
@@ -92,6 +95,7 @@ public static class MeshSimplify
                     Offer(queue, version, corners[t * 3 + k], corners[t * 3 + (k + 1) % 3]);
 
             int since = 0;
+            int started = alive;
 
             while (alive > target && queue.TryDequeue(out var edge, out _))
             {
@@ -100,6 +104,10 @@ public static class MeshSimplify
                 {
                     since = 0;
                     token.ThrowIfCancellationRequested();
+
+                    // From where it started to where it is going, which is what has been asked for.
+                    progress?.Report(new WorkProgress(
+                        (float)(started - alive) / Math.Max(started - target, 1), "Collapsing edges"));
                 }
 
                 var (a, b, stamp) = edge;

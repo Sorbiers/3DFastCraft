@@ -434,9 +434,6 @@
                     <Button Style="{StaticResource ToolButton}" Content="Align to" Tag="{StaticResource IconAlignCentre}"
                             Command="{Binding AlignToSelectionCommand}" MinWidth="72"
                             ToolTip="Move the first object you picked so its bounding box is centred on the second's. Two objects: the first moves, the second stays. Nothing is rotated or resized." />
-                    <Button Style="{StaticResource ToolButton}" Content="Fit check" Tag="{StaticResource IconMeasure}"
-                            Command="{Binding FitCheckCommand}" MinWidth="72"
-                            ToolTip="Measures two parts against each other without changing either: how far they overlap, or how big the gap is. A pin with no hole and a frame too big for its opening both look right on screen." />
                     <Separator Margin="8,0" />
                     <Button Style="{StaticResource ToolButton}" Content="Mirror X" Tag="{StaticResource IconMirror}"
                             Command="{Binding MirrorCommand}" CommandParameter="X" />
@@ -500,12 +497,6 @@
                             Command="{Binding RoundCommand}" MinWidth="82"
                             ToolTip="Round the edges of a cube or cylinder. Only shapes still described by their parameters can be rounded." />
                     <Separator Margin="8,0" />
-                    <Button Style="{StaticResource ToolButton}" Content="Repair" Tag="{StaticResource IconRepair}"
-                            Command="{Binding RepairCommand}"
-                            ToolTip="Mend objects that would not print: fill holes, drop slivers, turn faces the right way round" />
-                    <Button Style="{StaticResource ToolButton}" Content="Rebuild..." Tag="{StaticResource IconRebuild}"
-                            Command="{Binding RebuildCommand}" MinWidth="82"
-                            ToolTip="Rebuild the surface from scratch. Mends anything, including a model that passes through itself - at the cost of fine detail." />
                     <Button Style="{StaticResource ToolButton}" Content="Simplify..." Tag="{StaticResource IconSimplify}"
                             Command="{Binding SimplifyCommand}" MinWidth="82"
                             ToolTip="Cut the triangle count down while keeping the shape. The natural partner to Rebuild." />
@@ -518,6 +509,32 @@
                             ToolTip="Undo the last change (Ctrl+Z)" />
                     <Button Style="{StaticResource ToolButton}" Content="Redo" Tag="{StaticResource IconRedo}"
                             Command="{Binding RedoCommand}" ToolTip="Redo what was undone (Ctrl+Y)" />
+                </WrapPanel>
+            </TabItem>
+
+            <!-- Tools: the ones that answer a question or produce something new from the model,
+                 rather than changing the model in front of you. Repair and Rebuild sat on Edit
+                 next to Smooth and Round, which are shaping tools; Fit check sat on Align next to
+                 the things that move objects, and it moves nothing at all. -->
+            <TabItem Header="Tools">
+                <WrapPanel Margin="4">
+                    <Button Style="{StaticResource ToolButton}" Content="Mould..." Tag="{StaticResource IconHollow}"
+                            Command="{Binding MouldCommand}" MinWidth="76"
+                            ToolTip="Make a mould of the selection to pour silicone into: a block with the model taken out of it, cut so the cast part comes out, with a pour hole and air vents. Select one object." />
+                    <Separator Margin="8,0" />
+                    <Button Style="{StaticResource ToolButton}" Content="Repair" Tag="{StaticResource IconRepair}"
+                            Command="{Binding RepairCommand}"
+                            ToolTip="Mend objects that would not print: fill holes, drop slivers, turn faces the right way round" />
+                    <Button Style="{StaticResource ToolButton}" Content="Rebuild..." Tag="{StaticResource IconRebuild}"
+                            Command="{Binding RebuildCommand}" MinWidth="82"
+                            ToolTip="Rebuild the surface from scratch. Mends anything, including a model that passes through itself - at the cost of fine detail." />
+                    <Separator Margin="8,0" />
+                    <Button Style="{StaticResource ToolButton}" Content="Measure" Tag="{StaticResource IconMeasure}"
+                            Command="{Binding BeginMeasureCommand}"
+                            ToolTip="Click two points to measure between them, then drag either end to move it" />
+                    <Button Style="{StaticResource ToolButton}" Content="Fit check" Tag="{StaticResource IconMeasure}"
+                            Command="{Binding FitCheckCommand}" MinWidth="72"
+                            ToolTip="Measures two parts against each other without changing either: how far they overlap, or how big the gap is. A pin with no hole and a frame too big for its opening both look right on screen." />
                 </WrapPanel>
             </TabItem>
 
@@ -573,10 +590,6 @@
                     <Button Style="{StaticResource ToolButton}" Content="Left" Tag="{StaticResource IconViewRight}" Click="OnViewLeft" />
                     <Button Style="{StaticResource ToolButton}" Content="Bottom" Tag="{StaticResource IconViewTop}" Click="OnViewBottom" />
                     <Button Style="{StaticResource ToolButton}" Content="Isometric" Tag="{StaticResource IconViewIso}" Click="OnViewIso" />
-                    <Separator Margin="8,0" />
-                    <Button Style="{StaticResource ToolButton}" Content="Measure" Tag="{StaticResource IconMeasure}"
-                            Command="{Binding BeginMeasureCommand}"
-                            ToolTip="Click two points to measure between them, then drag either end to move it" />
                     <Separator Margin="8,0" />
                     <ToggleButton Style="{StaticResource ToolToggle}" Content="Wireframe" Tag="{StaticResource IconWireframe}"
                                   IsChecked="{Binding ShowWireframe}" MinWidth="80"
@@ -1156,15 +1169,15 @@
                             <TextBlock Text="W" Style="{StaticResource FieldLabel}"
                                        ToolTip="Width - along X" />
                             <TextBox AutomationProperties.AutomationId="SizeX" Grid.Column="1" Style="{StaticResource NumberBox}" Tag="transform"
-                                     Text="{Binding SizeX, StringFormat=N2, UpdateSourceTrigger=LostFocus}" />
+                                     Text="{Binding DataContext.ObjectSizeX, RelativeSource={RelativeSource AncestorType=Window}, StringFormat=N2, UpdateSourceTrigger=LostFocus}" />
                             <TextBlock Grid.Column="2" Text="D" Style="{StaticResource FieldLabel}"
                                        ToolTip="Depth - along Y" />
                             <TextBox AutomationProperties.AutomationId="SizeY" Grid.Column="3" Style="{StaticResource NumberBox}" Tag="transform"
-                                     Text="{Binding SizeY, StringFormat=N2, UpdateSourceTrigger=LostFocus}" />
+                                     Text="{Binding DataContext.ObjectSizeY, RelativeSource={RelativeSource AncestorType=Window}, StringFormat=N2, UpdateSourceTrigger=LostFocus}" />
                             <TextBlock Grid.Column="4" Text="H" Style="{StaticResource FieldLabel}"
                                        ToolTip="Height - along Z" />
                             <TextBox AutomationProperties.AutomationId="SizeZ" Grid.Column="5" Style="{StaticResource NumberBox}" Tag="transform"
-                                     Text="{Binding SizeZ, StringFormat=N2, UpdateSourceTrigger=LostFocus}" />
+                                     Text="{Binding DataContext.ObjectSizeZ, RelativeSource={RelativeSource AncestorType=Window}, StringFormat=N2, UpdateSourceTrigger=LostFocus}" />
                         </Grid>
 
                         <TextBlock Text="Rotation (degrees)" Style="{StaticResource SectionHeader}" />
@@ -1303,6 +1316,7 @@
                     <ToggleButton Style="{StaticResource ModeButton}" Margin="6,0,0,0"
                                   Visibility="{Binding IsMoveMode, Converter={StaticResource BoolToVisibility}}"
                                   ToolTip="Stop where the object meets another rather than passing through it (C)"
+                                  AutomationProperties.Name="Stop on contact"
                                   IsChecked="{Binding StopOnContact, Mode=TwoWay}">
                         <!-- Two blocks meeting, with the contact marked. -->
                         <Path Data="M2,5 L9,5 L9,15 L2,15 M18,5 L11,5 L11,15 L18,15 M10,3 L10,17"
@@ -1402,6 +1416,7 @@
                         <TextBlock Text="deg" Style="{StaticResource GizmoUnit}" />
                         <ToggleButton Style="{StaticResource ModeButton}" Margin="4,0,0,0"
                                       ToolTip="Snap rotation to 15 degree steps"
+                                      AutomationProperties.Name="Snap rotation"
                                       IsChecked="{Binding SnapRotation, Mode=TwoWay}">
                             <Path Data="M2,14 L7,14 L7,9 L13,9 L13,4 L18,4"
                                   Stroke="#FF33383F" StrokeThickness="1.8" Fill="{x:Null}"
@@ -1434,13 +1449,13 @@
                                                  Converter={StaticResource BoolToVisibility}}">
                             <TextBlock Text="W" Style="{StaticResource GizmoLabel}" ToolTip="Width - along X" />
                             <TextBox Style="{StaticResource GizmoBox}" Tag="transform"
-                                     Text="{Binding SizeX, StringFormat=N2, UpdateSourceTrigger=LostFocus}" />
+                                     Text="{Binding DataContext.ObjectSizeX, RelativeSource={RelativeSource AncestorType=Window}, StringFormat=N2, UpdateSourceTrigger=LostFocus}" />
                             <TextBlock Text="D" Style="{StaticResource GizmoLabel}" ToolTip="Depth - along Y" />
                             <TextBox Style="{StaticResource GizmoBox}" Tag="transform"
-                                     Text="{Binding SizeY, StringFormat=N2, UpdateSourceTrigger=LostFocus}" />
+                                     Text="{Binding DataContext.ObjectSizeY, RelativeSource={RelativeSource AncestorType=Window}, StringFormat=N2, UpdateSourceTrigger=LostFocus}" />
                             <TextBlock Text="H" Style="{StaticResource GizmoLabel}" ToolTip="Height - along Z" />
                             <TextBox Style="{StaticResource GizmoBox}" Tag="transform"
-                                     Text="{Binding SizeZ, StringFormat=N2, UpdateSourceTrigger=LostFocus}" />
+                                     Text="{Binding DataContext.ObjectSizeZ, RelativeSource={RelativeSource AncestorType=Window}, StringFormat=N2, UpdateSourceTrigger=LostFocus}" />
                         </StackPanel>
                         <!-- Several selected: how far the whole lot reaches. Typing carries the
                              parts with it, so the box comes out the size asked for. -->
@@ -1486,6 +1501,7 @@
 
                         <ToggleButton Style="{StaticResource ModeButton}" Margin="4,0,0,0"
                                       ToolTip="Keep proportions while resizing"
+                                      AutomationProperties.Name="Keep proportions"
                                       IsChecked="{Binding UniformScale, Mode=TwoWay}">
                             <Path Data="M6,9 L6,5 A4,4 0 0 1 14,5 L14,9 M4,9 L16,9 L16,18 L4,18 Z"
                                   Stroke="#FF33383F" StrokeThickness="1.8" Fill="{x:Null}"
@@ -1493,6 +1509,7 @@
                         </ToggleButton>
                         <ToggleButton Style="{StaticResource ModeButton}" Margin="2,0,0,0"
                                       ToolTip="Grow one way only, holding the opposite face still (O)"
+                                      AutomationProperties.Name="One side only"
                                       IsChecked="{Binding ScaleOneSide, Mode=TwoWay}">
                             <!-- A wall on the left, an arrow growing away from it. -->
                             <Path Data="M3,3 L3,17 M6,10 L16,10 M12.5,6.5 L16,10 L12.5,13.5"
@@ -1534,11 +1551,19 @@
                 <TextBlock Text="{Binding BusyTitle}" FontSize="15" FontWeight="SemiBold"
                            Foreground="#FF2C3037" TextWrapping="Wrap"
                            AutomationProperties.AutomationId="BusyTitle" />
-                <TextBlock Text="{Binding BusyElapsed}" Foreground="#FF8A9098" Margin="0,4,0,0"
-                           AutomationProperties.AutomationId="BusyElapsed" />
+                <TextBlock Text="{Binding BusyStage}" Foreground="#FF3A4550" Margin="0,6,0,0"
+                           TextWrapping="Wrap" AutomationProperties.AutomationId="BusyStage" />
 
-                <ProgressBar IsIndeterminate="True" Height="4" Margin="0,16,0,0"
+                <!-- Fills where the work can count itself and sweeps where it cannot. A boolean
+                     has no honest fraction to show, so it says what it is doing instead. -->
+                <ProgressBar Height="6" Margin="0,14,0,0" Minimum="0" Maximum="1"
+                             Value="{Binding BusyFraction, Mode=OneWay}"
+                             IsIndeterminate="{Binding BusyIndeterminate}"
+                             AutomationProperties.AutomationId="BusyBar"
                              Background="#FFEDEFF2" BorderThickness="0" Foreground="#FF3E7BD6" />
+
+                <TextBlock Text="{Binding BusyElapsed}" Foreground="#FF8A9098" Margin="0,6,0,0"
+                           AutomationProperties.AutomationId="BusyElapsed" />
 
                 <TextBlock Text="{Binding BusyHint}" Margin="0,16,0,0" TextWrapping="Wrap"
                            Foreground="#FF5A5F66" />
