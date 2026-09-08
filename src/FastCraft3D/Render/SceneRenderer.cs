@@ -54,6 +54,9 @@ public sealed class SceneRenderer : IDisposable
     /// <summary>The cut being previewed, kept so a moved or edited object can be redone.</summary>
     private (Vector3 Normal, float Offset, bool Ghost, bool Fill)? split;
 
+    /// <summary>What the split has in hand, while everything else stands out of the way.</summary>
+    private IReadOnlyList<SceneObject>? isolated;
+
     /// <summary>The face waiting to be engraved, drawn over the surface while it is picked.</summary>
     private bool wireframe;
     private bool xray;
@@ -220,6 +223,35 @@ public sealed class SceneRenderer : IDisposable
         foreach (var o in targets) Rebuild(o);
     }
 
+    /// <summary>
+    /// Leaves only what the split is cutting on the plate, or shows everything again when given
+    /// nothing.
+    ///
+    /// A plane is aimed by eye, and on a scene of any depth the thing being cut is behind
+    /// something else. Turning x-ray on gets you a view through the rest, but it also draws the
+    /// rest over the top of what you are aiming at, which is worse. Standing them down entirely
+    /// is what you want, and it takes the clicks with it: a face picked for the plane then lands
+    /// on the part being split rather than on whatever happened to be in front of it.
+    /// </summary>
+    public void IsolateForSplit(IReadOnlyList<SceneObject>? cutting)
+    {
+        isolated = cutting;
+
+        foreach (var (o, visual) in visuals) ShowOrHide(o, visual);
+    }
+
+    /// <summary>
+    /// Whether an object is drawn at all. Two things take it off the plate: a split standing its
+    /// halves in for it, and a split standing everything else out of the way.
+    /// </summary>
+    private void ShowOrHide(SceneObject o, MeshGeometryModel3D visual)
+    {
+        bool draw = !splitParts.ContainsKey(o)
+                    && (isolated is null || isolated.Contains(o));
+
+        visual.Visibility = draw ? Visibility.Visible : Visibility.Collapsed;
+    }
+
     /// <summary>Puts the objects back the way they are drawn when no split is being set up.</summary>
     public void ClearSplit()
     {
@@ -257,7 +289,7 @@ public sealed class SceneRenderer : IDisposable
 
             // The object itself stands down while its halves stand in for it, and its outline
             // with it: that traces the whole shape, including the half being taken off.
-            visual.Visibility = Visibility.Collapsed;
+            ShowOrHide(o, visual);
             RemoveOutline(o);
         }
 
@@ -325,7 +357,7 @@ public sealed class SceneRenderer : IDisposable
 
         Drop(o);
 
-        if (visuals.TryGetValue(o, out var visual)) visual.Visibility = Visibility.Visible;
+        if (visuals.TryGetValue(o, out var visual)) ShowOrHide(o, visual);
         UpdateOutline(o);
     }
 
@@ -431,6 +463,7 @@ public sealed class SceneRenderer : IDisposable
         ApplyLook(o, visual);
 
         visuals[o] = visual;
+        ShowOrHide(o, visual);
         root.Children.Add(visual);
         o.PropertyChanged += OnObjectChanged;
 

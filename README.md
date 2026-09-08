@@ -645,16 +645,44 @@ place, so an interrupted save cannot destroy the scene and its whole history tog
 
 ### Splitting
 
-Select one or more objects and press **Split** on the Object tab. The plane appears with its own handles:
-the blue arrows slide it along its normal, and the coloured rings tilt it — so the plane is not
-limited to the three axis-aligned orientations. Then choose which side to keep; the buttons are
-named after the direction the plane actually faces, so a horizontal plane offers **Top** and
-**Bottom** rather than an abstract front and back. Both halves come out capped and closed.
+Select one or more objects and press **Split** on the Object tab. Everything else on the plate
+stands down while you aim: a plane is aimed by eye, and on a plate of any depth the thing being
+cut is behind something else. So does the rest of the app - the ribbon, the object list and the
+property boxes grey out until you press **Split** or **Cancel** - because nothing should be able
+to delete the object out from under a cut that is halfway aimed. `Esc` puts the tool down.
+
+The plane has a bar of its own at the foot of the viewport, with the same two modes the old app
+used:
+
+- **Move** slides it along its own facing. Drag the blue arrows, or type the offset in
+  millimetres.
+- **Rotate** turns it. Three rings, one per world axis, and three boxes reading the same turn as
+  **roll**, **pitch** and **yaw**, to a tenth of a degree. **Snap to 15°** is a toggle beside
+  them, and turning it off is what a 22.5° joint needs. A plane has no third degree of freedom,
+  so turning it about its own facing is allowed and changes nothing - in the same way that
+  spinning a cylinder about its axis does not move it.
+
+Clicking a face on the model puts the plane on that face, which is usually quicker than aiming
+it. Then choose which side to keep; the buttons are named after the direction the plane actually
+faces, so a horizontal plane offers **Top** and **Bottom** rather than an abstract front and back.
+
+While you aim, the half that would be thrown away can be **shown**, **faded** or **hidden**, and
+the face the cut exposes closed over or left open to look into. That preview is the cut itself,
+not an impression of it: the same code, on a throttle set by how long the last one took, so a
+light model follows the plane about and a heavy one catches up a few times a second.
 
 The plane belongs to the scene rather than to an object, so it cuts **everything selected** in
 one stroke and one undo step - which is how an assembly gets sliced in half. Its travel and its
 handles are sized to the whole selection, and objects the plane misses are left alone rather than
-being dropped.
+being dropped. Both halves come out capped and closed.
+
+### Dropping files on the window
+
+Drag a `.3dfc`, `.stl` or `.obj` onto the window, one file or several, and it asks which of the
+two things you meant: **open as a project**, putting its plate up in place of this one, or
+**import onto this plate**, keeping both. It asks rather than guessing because guessing the first
+way throws out work that was never saved. Opening is only offered for a single project file;
+everything else can still be imported, and several files land in one undo step.
 
 ### Making a hole
 
@@ -766,9 +794,19 @@ The modelling core (`Geometry`, `Model`, `Io`) contains no renderer types at all
 `Render/` knows about Direct3D. That separation is what keeps the viewport swappable.
 
 **Boolean operations** use a hand-written BSP-tree CSG engine (`Geometry/Csg/`). No maintained
-CSG library exists on NuGet, and the same engine backs three features: the boolean menu, the
-plane split — expressed as a boolean against an oversized half-space box, so the cut faces come
-out capped automatically — and the guarantee that results stay closed.
+CSG library exists on NuGet, and it backs the boolean menu, the moulds and the guarantee that
+results stay closed.
+
+**Splitting with a plane does not use it.** It did - the cut was a boolean against an oversized
+half-space box, so the cut faces came out capped for free - and on anything dense that went badly:
+a 214,000 triangle scan cut through the middle took twenty seconds, gave back two and a half
+million triangles, and left nearly twenty thousand open edges in one half. The BSP is fragile
+against dense curved surfaces and a plane meets a scan everywhere at once. `PlaneClip` cuts the
+triangles instead, in a twenty-fifth of a second, and stitches the opening shut from the edges the
+cut left - chained into rings and filled by the same triangulator the lettering uses, holes and
+all. The boolean is kept as a fallback for the one thing it is better at: it rebuilds the surface
+rather than cutting it, so it can close a solid that arrived slightly open, which is what the
+mould needs when it splits its own output.
 
 A few decisions worth knowing about if you touch this code:
 

@@ -1,0 +1,30 @@
+<Window x:Class="FastCraft3D.View.DropDialog"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Dropped on the plate" SizeToContent="Height" Width="440"
+        WindowStartupLocation="CenterOwner" ResizeMode="NoResize"
+        ShowInTaskbar="False" Background="#FFF7F7F8">
+
+    <StackPanel Margin="18,14,18,14">
+        <TextBlock x:Name="SubjectText" TextWrapping="Wrap" Foreground="#FF33383F"
+                   Margin="0,0,0,10" />
+
+        <TextBlock TextWrapping="Wrap" Foreground="#FF5A5F66" Margin="0,0,0,4">
+            Opening a project puts its plate up in place of this one. Importing adds what is in
+            the file to what is already here, keeping both.
+        </TextBlock>
+
+        <TextBlock x:Name="WhyNotText" TextWrapping="Wrap" Foreground="#FF8A6A2E"
+                   Margin="0,6,0,0" Visibility="Collapsed" />
+
+        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,16,0,0">
+            <Button x:Name="OpenButton" Content="Open as a project" MinWidth="132" Padding="10,6"
+                    Margin="0,0,8,0" Click="OnOpen"
+                    AutomationProperties.AutomationId="DropOpen" />
+            <Button x:Name="ImportButton" Content="Import onto this plate" MinWidth="150"
+                    Padding="10,6" Margin="0,0,8,0" IsDefault="True" Click="OnImport"
+                    AutomationProperties.AutomationId="DropImport" />
+            <Button Content="Cancel" IsCancel="True" MinWidth="80" Padding="10,6" />
+        </StackPanel>
+    </StackPanel>
+</Window>

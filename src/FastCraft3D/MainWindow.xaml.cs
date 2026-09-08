@@ -1,6 +1,7 @@
 ﻿using System.ComponentModel;
 using System.Diagnostics;
 using System.Globalization;
+using System.IO;
 using System.Numerics;
 using System.Windows;
 using System.Windows.Controls;
@@ -100,6 +101,7 @@ public partial class MainWindow : Window
             UpdateSplitPlane();
             RefreshSplitPreview();
         };
+        splitGizmo.Turned += (axis, degrees) => viewModel.TurnSplitPlane(axis, degrees);
         SplitGizmoLayer.PreviewMouseLeftButtonDown += OnSplitGizmoDown;
         SplitGizmoLayer.PreviewMouseMove += OnSplitGizmoMove;
         SplitGizmoLayer.PreviewMouseLeftButtonUp += OnSplitGizmoUp;
@@ -139,6 +141,7 @@ public partial class MainWindow : Window
         // Ahead of everything else: while a long operation runs the keyboard has to be shut
         // as firmly as the panel shuts the mouse.
         AddHandler(PreviewKeyDownEvent, new KeyEventHandler(OnBusyKey), true);
+        AddHandler(PreviewKeyDownEvent, new KeyEventHandler(OnToolKey), true);
 
         // Arrow keys and the wheel nudge the numeric fields.
         AddHandler(PreviewKeyDownEvent, new KeyEventHandler(OnFieldKey), true);
@@ -201,6 +204,77 @@ public partial class MainWindow : Window
     }
 
     /// <summary>
+    /// Which of the dropped files this app has anything to say about.
+    ///
+    /// Everything else is ignored rather than refused: a folder or a photograph dragged over by
+    /// accident should do nothing, not raise a dialog about itself.
+    /// </summary>
+    private static List<string> Droppable(IDataObject data)
+    {
+        if (data.GetData(DataFormats.FileDrop) is not string[] files) return [];
+
+        return files
+            .Where(f => Path.GetExtension(f) is { } e && (
+                e.Equals(".stl", StringComparison.OrdinalIgnoreCase)
+                || e.Equals(".obj", StringComparison.OrdinalIgnoreCase)
+                || e.Equals(".3dfc", StringComparison.OrdinalIgnoreCase)))
+            .ToList();
+    }
+
+    private void OnFilesDraggedOver(object sender, DragEventArgs e)
+    {
+        e.Effects = Droppable(e.Data).Count > 0 ? DragDropEffects.Copy : DragDropEffects.None;
+        e.Handled = true;
+    }
+
+    /// <summary>
+    /// Takes files dropped on the window, having asked what they are for.
+    ///
+    /// It asks rather than guessing. A dropped project could reasonably mean either thing - put
+    /// this up in place of what I have, or add it to it - and guessing the first way throws away
+    /// work that was never saved.
+    /// </summary>
+    private void OnFilesDropped(object sender, DragEventArgs e)
+    {
+        var files = Droppable(e.Data);
+        e.Handled = true;
+
+        if (files.Count == 0 || viewModel.IsBusy || viewModel.IsToolInHand) return;
+
+        var asking = new DropDialog(files) { Owner = this };
+        if (asking.ShowDialog() != true) return;
+
+        if (asking.OpenAsProject) viewModel.OpenDropped(files[0]);
+        else viewModel.ImportFiles(files);
+    }
+
+    /// <summary>
+    /// Swallows the shortcuts while a tool has the object.
+    ///
+    /// The ribbon greys out, but a shortcut does not need a button: the InputBindings on the
+    /// window fire wherever focus is, so Delete during a split took the object out from under
+    /// it. Typing is left alone - the tool's own boxes are the one thing still live - and so is
+    /// Escape, which is how you put the tool down.
+    /// </summary>
+    private void OnToolKey(object sender, KeyEventArgs e)
+    {
+        if (!viewModel.IsToolInHand || e.Key is Key.Escape) return;
+
+        bool typing = Keyboard.FocusedElement is TextBox;
+
+        if (Keyboard.Modifiers is ModifierKeys.Control)
+        {
+            // Cut, copy, paste and select-all belong to the box being typed in.
+            if (typing && e.Key is Key.C or Key.V or Key.X or Key.A) return;
+
+            e.Handled = true;
+            return;
+        }
+
+        if (!typing && e.Key is Key.Delete or Key.Back) e.Handled = true;
+    }
+
+    /// <summary>
     /// Single-key mode shortcuts. Deliberately not Window.InputBindings: an unmodified key
     /// binding there fires no matter what has focus, so typing an "s" into the name field
     /// would silently switch tool instead of typing.
@@ -218,6 +292,7 @@ public partial class MainWindow : Window
 
         if (Keyboard.Modifiers != ModifierKeys.None) return;
         if (Keyboard.FocusedElement is TextBox) return;
+        if (viewModel.IsToolInHand) return; // the mode buttons are greyed out with the rest
 
         switch (e.Key)
         {
@@ -1123,9 +1198,13 @@ public partial class MainWindow : Window
         if (!viewModel.IsSplitMode)
         {
             splitPreviewStale = false;
+            renderer.IsolateForSplit(null);
             renderer.ClearSplit();
             return;
         }
+
+        // Immediately, not on the throttle below: this is a visibility flag, not geometry.
+        renderer.IsolateForSplit(viewModel.Scene.Selection);
 
         splitPreviewStale = true;
         if (now) splitPreviewWait = 0;

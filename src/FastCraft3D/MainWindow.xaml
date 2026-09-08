@@ -4,7 +4,8 @@
         xmlns:hx="http://helix-toolkit.org/wpf/SharpDX"
         xmlns:view="clr-namespace:FastCraft3D.View"
         Title="{Binding WindowTitle}" Height="900" Width="1500"
-        Background="#FFF3F3F3" WindowStartupLocation="CenterScreen">
+        Background="#FFF3F3F3" WindowStartupLocation="CenterScreen"
+        AllowDrop="True" DragOver="OnFilesDraggedOver" Drop="OnFilesDropped">
 
     <Window.Resources>
         <!-- Ribbon button: icon over label. The icon geometry travels in Tag, so adding one to
@@ -353,7 +354,9 @@
     <DockPanel>
 
         <!-- Ribbon -->
+        <!-- Standing down while a tool has the object: see MainViewModel.IsToolInHand. -->
         <TabControl DockPanel.Dock="Top" Background="#FFFAFAFB" BorderThickness="0,0,0,1"
+                    IsEnabled="{Binding NothingInHand}"
                     BorderBrush="#FFD8DBE0" Padding="6">
             <TabItem Header="Insert">
                 <WrapPanel Margin="4">
@@ -674,7 +677,7 @@
 
                 <!-- Selection, on the right as the old app had it. Collapsible, and it keeps
                      the state it was left in. -->
-                <StackPanel>
+                <StackPanel IsEnabled="{Binding NothingInHand}">
                     <ToggleButton Style="{StaticResource MenuChevron}" HorizontalAlignment="Left"
                                   IsChecked="{Binding IsSelectionMenuOpen, Mode=TwoWay}"
                                   ToolTip="Show or hide the selection tools">
@@ -777,6 +780,7 @@
                 <!-- Selection is mirrored by SelectionListSync, not by an IsSelected binding:
                      a container generated later would push its initial false into the model. -->
                 <view:ObjectListBox x:Name="ObjectList" Grid.Row="1" ItemsSource="{Binding Scene.Objects}"
+                                    IsEnabled="{Binding NothingInHand}"
                                     SelectionMode="Extended">
                     <ListBox.ItemTemplate>
                         <DataTemplate>
@@ -1113,7 +1117,7 @@
                     </StackPanel>
                 </Border>
 
-                <StackPanel Grid.Row="7"
+                <StackPanel Grid.Row="7" IsEnabled="{Binding NothingInHand}"
                             Visibility="{Binding HasAnySelection, Converter={StaticResource BoolToVisibility}}">
                     <TextBlock Text="Colour" Style="{StaticResource SectionHeader}" />
                     <ItemsControl ItemsSource="{Binding Swatches}">
@@ -1140,6 +1144,8 @@
 
                 <!-- Properties -->
                 <ScrollViewer Grid.Row="8" VerticalScrollBarVisibility="Auto" Margin="0,6,0,0"
+                              IsEnabled="{Binding NothingInHand,
+                                          RelativeSource={RelativeSource AncestorType=Window}}"
                               DataContext="{Binding Selected}">
                     <StackPanel>
                         <StackPanel.Style>
@@ -1363,17 +1369,14 @@
                                 Visibility="{Binding SplitTurnMode, Converter={StaticResource BoolToVisibility}}">
                         <TextBlock Text="Roll" Style="{StaticResource GizmoLabel}" />
                         <TextBox Style="{StaticResource GizmoBox}" Tag="number"
-                                 IsEnabled="{Binding SplitRollApplies}"
                                  AutomationProperties.AutomationId="SplitRoll"
                                  Text="{Binding SplitRoll, StringFormat=N1, UpdateSourceTrigger=LostFocus}" />
                         <TextBlock Text="Pitch" Style="{StaticResource GizmoLabel}" />
                         <TextBox Style="{StaticResource GizmoBox}" Tag="number"
-                                 IsEnabled="{Binding SplitPitchApplies}"
                                  AutomationProperties.AutomationId="SplitPitch"
                                  Text="{Binding SplitPitch, StringFormat=N1, UpdateSourceTrigger=LostFocus}" />
                         <TextBlock Text="Yaw" Style="{StaticResource GizmoLabel}" />
                         <TextBox Style="{StaticResource GizmoBox}" Tag="number"
-                                 IsEnabled="{Binding SplitYawApplies}"
                                  AutomationProperties.AutomationId="SplitYaw"
                                  Text="{Binding SplitYaw, StringFormat=N1, UpdateSourceTrigger=LostFocus}" />
                         <TextBlock Text="deg" Style="{StaticResource GizmoUnit}" />

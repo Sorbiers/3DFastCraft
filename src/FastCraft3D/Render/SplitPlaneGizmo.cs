@@ -52,6 +52,7 @@ public sealed class SplitPlaneGizmo
     private Point dragStart;
     private float dragStartOffset;
     private Vector3 dragStartNormal;
+    private double turnedSoFar;
 
     public SplitPlaneGizmo(Canvas layer, IScreenProjector projector)
     {
@@ -59,8 +60,19 @@ public sealed class SplitPlaneGizmo
         this.projector = projector;
     }
 
-    /// <summary>Raised while dragging, with the new plane offset and normal.</summary>
+    /// <summary>Raised while sliding, with the new plane offset and normal.</summary>
     public event Action<float, Vector3>? Changed;
+
+    /// <summary>
+    /// Raised while turning, with the world axis and how much has been swept since the last
+    /// time.
+    ///
+    /// The gizmo does not work the new facing out for itself any more. The plane keeps its own
+    /// turn in three angles, the way an object does, and composing each step onto that is what
+    /// keeps a second drag going where the ring says it will - so the ring reports what it did
+    /// and the plane decides what that means.
+    /// </summary>
+    public event Action<Axis, double>? Turned;
 
     /// <summary>Live readout for the status bar.</summary>
     public event Action<string>? Feedback;
@@ -127,24 +139,23 @@ public sealed class SplitPlaneGizmo
                 Cursor = Cursors.SizeAll,
                 RenderTransformOrigin = new Point(0.5, 0.5),
                 ToolTip = "Drag to slide the split plane"
-            }, HandleKind.Offset, sign, Vector3.Zero));
+            }, HandleKind.Offset, sign, Axis.Z));
         }
 
-        // A ring per world axis to tilt the plane. One whose axis lines up with the normal is
-        // left out: turning the plane about its own normal does not move it.
+        // A ring per world axis, all three, to match the three angles in the bar. The one
+        // lying along the plane's own facing turns it without moving the cut - the same as
+        // spinning a cylinder about its axis - and is still shown, because two rings for three
+        // boxes reads as a missing handle rather than as a plane with nothing left to turn.
         foreach (var axis in mode is GizmoMode.Rotate ? new[] { Axis.X, Axis.Y, Axis.Z } : [])
         {
-            Vector3 spin = PlaneSplit.NormalFor(axis);
-            if (MathF.Abs(Vector3.Dot(spin, normal)) > 0.98f) continue;
-
             Add(new Handle(new Path
             {
                 Stroke = new SolidColorBrush(ColourFor(axis)),
                 StrokeThickness = 2.6,
                 Fill = null,
                 Cursor = Cursors.Hand,
-                ToolTip = $"Drag to tilt the split plane around {axis}"
-            }, HandleKind.Tilt, 1, spin));
+                ToolTip = $"Drag to turn the split plane about {axis}"
+            }, HandleKind.Tilt, 1, axis));
         }
 
         Reposition();
@@ -198,7 +209,7 @@ public sealed class SplitPlaneGizmo
 
     private void PositionRing(Handle handle, float radius)
     {
-        var (u, v) = BasisFor(handle.Spin);
+        var (u, v) = BasisFor(PlaneSplit.NormalFor(handle.Spin));
         Vector3 anchor = PlanePoint();
 
         const int segments = 64;
@@ -240,6 +251,7 @@ public sealed class SplitPlaneGizmo
         dragStart = screen;
         dragStartOffset = offset;
         dragStartNormal = normal;
+        turnedSoFar = 0;
         return true;
     }
 
@@ -247,10 +259,19 @@ public sealed class SplitPlaneGizmo
     {
         if (dragging is null) return;
 
-        if (dragging.Kind == HandleKind.Offset) DragOffset(screen);
-        else DragTilt(screen);
+        // Sliding reports where the plane now is; turning reports what it swept, and the plane
+        // works out the rest. Reporting the offset and facing after a turn as well would hand
+        // back the ones from before it and undo the turn on the spot.
+        if (dragging.Kind == HandleKind.Offset)
+        {
+            DragOffset(screen);
+            Changed?.Invoke(offset, normal);
+        }
+        else
+        {
+            DragTilt(screen);
+        }
 
-        Changed?.Invoke(offset, normal);
         Reposition();
     }
 
@@ -277,17 +298,20 @@ public sealed class SplitPlaneGizmo
     {
         if (!projector.TryProject(PlanePointFor(dragStartOffset, dragStartNormal), out Point pivot)) return;
 
-        float facing = Vector3.Dot(dragging!.Spin, -projector.ViewDirection) >= 0 ? 1f : -1f;
+        Vector3 spin = PlaneSplit.NormalFor(dragging!.Spin);
+        float facing = Vector3.Dot(spin, -projector.ViewDirection) >= 0 ? 1f : -1f;
         double degrees = GizmoMath.RotationDegrees(pivot, dragStart, screen, facing, SnapRotation, RotationSnapDegrees);
 
-        var turn = Matrix4x4.CreateFromAxisAngle(dragging.Spin, (float)(degrees * Math.PI / 180.0));
-        normal = Vector3.Normalize(Vector3.Transform(dragStartNormal, turn));
+        // What has changed since the last report, not the whole sweep: the plane composes each
+        // step onto the turn it already had, so sending the total would apply the sweep again
+        // on every mouse move.
+        double step = degrees - turnedSoFar;
+        turnedSoFar = degrees;
 
-        // The offset is measured along the normal, so it has to be restated for the new one or
-        // the plane would jump away from the solid as it tilts.
-        offset = Vector3.Dot(normal, PlanePointFor(dragStartOffset, dragStartNormal));
+        if (Math.Abs(step) < 1e-9) return;
 
-        Feedback?.Invoke($"Split plane tilted {degrees:+0.#;-0.#;0} deg around {AxisNameOf(dragging.Spin)}");
+        Turned?.Invoke(dragging.Spin, step);
+        Feedback?.Invoke($"Split plane turned {degrees:+0.#;-0.#;0} deg about {dragging.Spin}");
     }
 
     // --- Helpers ----------------------------------------------------------------------
@@ -323,9 +347,6 @@ public sealed class SplitPlaneGizmo
         Vector3 u = PerpendicularTo(axis);
         return (u, Vector3.Normalize(Vector3.Cross(axis, u)));
     }
-
-    private static string AxisNameOf(Vector3 axis) =>
-        MathF.Abs(axis.X) > 0.5f ? "X" : MathF.Abs(axis.Y) > 0.5f ? "Y" : "Z";
 
     private static Color ColourFor(Axis axis) => axis switch
     {
@@ -371,13 +392,13 @@ public sealed class SplitPlaneGizmo
         Tilt
     }
 
-    private sealed class Handle(Shape visual, SplitPlaneGizmo.HandleKind kind, int sign, Vector3 spin)
+    private sealed class Handle(Shape visual, SplitPlaneGizmo.HandleKind kind, int sign, Axis spin)
     {
         public Shape Visual { get; } = visual;
         public HandleKind Kind { get; } = kind;
         public int Sign { get; } = sign;
 
         /// <summary>World axis this ring turns the plane about. Unused for the offset arrows.</summary>
-        public Vector3 Spin { get; } = spin;
+        public Axis Spin { get; } = spin;
     }
 }

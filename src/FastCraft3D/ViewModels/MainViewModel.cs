@@ -58,6 +58,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
     private SplitKeep splitKeep = SplitKeep.Both;
     private Render.SplitOffcut splitOffcut = Render.SplitOffcut.Faded;
     private GizmoMode splitGizmoMode = GizmoMode.Move;
+    private Vector3 splitTurn;
     private bool splitFillsCut = true;
     private bool isSplitMode;
     private bool isEngraveMode;
@@ -1062,6 +1063,10 @@ public sealed class MainViewModel : INotifyPropertyChanged
             Set(ref isSplitMode, value);
             Raise(nameof(SplitPlaneVisible));
             Raise(nameof(IsToolRunning));
+            RaiseToolInHand();
+            RaiseToolInHand();
+            RaiseToolInHand();
+            RaiseToolInHand();
             Raise(nameof(ShowManipulatorBar));
         }
     }
@@ -1077,6 +1082,27 @@ public sealed class MainViewModel : INotifyPropertyChanged
     /// underneath and leaving it to the pointer to decide which was meant.
     /// </summary>
     public bool IsToolRunning => isSplitMode || isEngraveMode || isEmbossMode || isLayMode;
+
+    /// <summary>
+    /// Whether a tool has the object in hand, counting the two that do not take the handles
+    /// over: a waiting subtraction and the tape.
+    ///
+    /// While one does, nothing else may run. The ribbon, the object list, the colours and the
+    /// property boxes all stand down, and only the tool's own panel stays live. Without that the
+    /// ribbon was still live behind a running tool, and Delete took the object out from under a
+    /// split that was halfway through being aimed - leaving its plane hanging over an empty
+    /// plate.
+    /// </summary>
+    public bool IsToolInHand => IsToolRunning || isSubtractMode || isMeasureMode;
+
+    /// <summary>The same thing the other way up, for everything that has to grey out.</summary>
+    public bool NothingInHand => !IsToolInHand;
+
+    private void RaiseToolInHand()
+    {
+        Raise(nameof(IsToolInHand));
+        Raise(nameof(NothingInHand));
+    }
 
     /// <summary>
     /// While this is on, clicking a face tips the object over onto it. One click does the whole
@@ -1680,6 +1706,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
             if (isMeasureMode == value) return;
 
             Set(ref isMeasureMode, value);
+            RaiseToolInHand();
             if (!value) { measureFrom = null; measureTo = null; }
 
             RaiseMeasure();
@@ -2338,6 +2365,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
 
             Set(ref isSubtractMode, value);
             Raise(nameof(SubtractSummary));
+            RaiseToolInHand();
         }
     }
 
@@ -2429,14 +2457,14 @@ public sealed class MainViewModel : INotifyPropertyChanged
         set
         {
             Set(ref splitAxis, value);
+
+            // Straight onto the new axis, with the turn it had let go of: the angles are
+            // measured from whichever axis was chosen, so keeping them would mean the plane
+            // ended up somewhere neither the buttons nor the boxes had asked for.
+            splitTurn = Vector3.Zero;
             SplitNormal = PlaneSplit.NormalFor(value);
             ResetSplitOffset();
-
-            // Turning about the axis the plane lies on moves nothing, so which of the three
-            // boxes is the dead one changes with the axis.
-            Raise(nameof(SplitRollApplies));
-            Raise(nameof(SplitPitchApplies));
-            Raise(nameof(SplitYawApplies));
+            RaiseSplitAngles();
         }
     }
 
@@ -2453,7 +2481,6 @@ public sealed class MainViewModel : INotifyPropertyChanged
             Raise(nameof(SplitNormal));
             Raise(nameof(KeepFrontLabel));
             Raise(nameof(KeepBackLabel));
-            RaiseSplitAngles();
         }
     }
 
@@ -2495,7 +2522,13 @@ public sealed class MainViewModel : INotifyPropertyChanged
         var face = FacePatch.Find(target.ToWorldMesh(), worldPoint, worldNormal);
         if (face is null) return false;
 
+        // The plane keeps its turn in three angles, so a facing picked off a face has to be
+        // written back as one - otherwise the boxes would go on describing the old plane.
+        splitTurn = MeshTransform.EulerFrom(
+            MeshTransform.RotationBetween(PlaneSplit.NormalFor(splitAxis), face.Normal));
+
         SplitNormal = face.Normal;
+        RaiseSplitAngles();
 
         // The offset the split works in is measured along the normal from the plate's origin,
         // which is exactly where the face's own plane sits.
@@ -2610,59 +2643,73 @@ public sealed class MainViewModel : INotifyPropertyChanged
     }
 
     /// <summary>
-    /// The plane's turn, typed rather than dragged, as the same roll, pitch and yaw an object
-    /// has: turns about X, Y and Z.
+    /// The plane's turn, as the same roll, pitch and yaw an object has: turns about X, Y and Z,
+    /// applied in that order, measured from whichever axis the plane started on.
     ///
-    /// The rings snap to fifteen degrees, which is right for a rough cut and no use at all for a
-    /// joint that has to be 22.5. Only two of the three ever do anything - a turn about the axis
-    /// the plane lies on leaves it exactly where it was - so that one reads nought and is dead.
-    ///
-    /// The angles are read back off the plane's facing rather than kept beside it, so there is
-    /// one answer to which way the plane faces and a dragged ring and a typed number cannot
-    /// come to disagree about it.
+    /// Kept as three angles rather than worked out from the facing. Two would describe the
+    /// facing completely - a plane has no third degree of freedom, and turning it about its own
+    /// facing leaves the cut exactly where it was - but then the third ring would have nowhere
+    /// to put what it was given, and there would be two rings for three boxes. A plane that
+    /// remembers its own turn has three of each, and the one that changes nothing changes
+    /// nothing, in the same way that spinning a cylinder about its axis does not move it.
     /// </summary>
     public double SplitRoll
     {
-        get => TurnAbout(Axis.X);
-        set => TurnAbout(Axis.X, value);
+        get => splitTurn.X;
+        set => TurnTo(new Vector3((float)value, splitTurn.Y, splitTurn.Z));
     }
 
     public double SplitPitch
     {
-        get => TurnAbout(Axis.Y);
-        set => TurnAbout(Axis.Y, value);
+        get => splitTurn.Y;
+        set => TurnTo(new Vector3(splitTurn.X, (float)value, splitTurn.Z));
     }
 
     public double SplitYaw
     {
-        get => TurnAbout(Axis.Z);
-        set => TurnAbout(Axis.Z, value);
+        get => splitTurn.Z;
+        set => TurnTo(new Vector3(splitTurn.X, splitTurn.Y, (float)value));
     }
 
-    public bool SplitRollApplies => splitAxis is not Axis.X;
-    public bool SplitPitchApplies => splitAxis is not Axis.Y;
-    public bool SplitYawApplies => splitAxis is not Axis.Z;
-
-    private double TurnAbout(Axis about)
+    /// <summary>
+    /// Turns the plane about a world axis, the way dragging one of its rings does.
+    ///
+    /// Composed onto the turn it already had rather than added to one of the three angles. The
+    /// three are applied in order, so only the last lines up with the world and the other two
+    /// turn the plane about its own axes; adding to them sends a second drag somewhere other
+    /// than where the ring said it would go. The object handles learned this first.
+    /// </summary>
+    public void TurnSplitPlane(Axis about, double degrees)
     {
-        var (first, second) = PlaneTilt.Angles(splitAxis, splitNormal);
-        var (firstAxis, secondAxis) = PlaneTilt.AxesFor(splitAxis);
-        Vector3 wanted = PlaneSplit.NormalFor(about);
+        float radians = (float)(degrees * Math.PI / 180.0);
 
-        if (firstAxis == wanted) return first;
-        if (secondAxis == wanted) return second;
+        var turn = about switch
+        {
+            Axis.X => Matrix4x4.CreateRotationX(radians),
+            Axis.Y => Matrix4x4.CreateRotationY(radians),
+            _ => Matrix4x4.CreateRotationZ(radians)
+        };
 
-        return 0;
+        TurnTo(MeshTransform.EulerFrom(MeshTransform.Rotation(splitTurn) * turn));
     }
 
-    private void TurnAbout(Axis about, double degrees)
+    /// <summary>
+    /// Puts the plane on a new turn without letting it wander off what it is cutting.
+    ///
+    /// The offset is measured along the facing, so a new facing on its own moves the plane
+    /// bodily as well as turning it. Restating the offset through the point the plane already
+    /// passes through leaves it where it is and only turns it.
+    /// </summary>
+    private void TurnTo(Vector3 angles)
     {
-        var (first, second) = PlaneTilt.Angles(splitAxis, splitNormal);
-        var (firstAxis, secondAxis) = PlaneTilt.AxesFor(splitAxis);
-        Vector3 wanted = PlaneSplit.NormalFor(about);
+        Vector3 pivot = SplitPlanePoint();
 
-        if (firstAxis == wanted) TiltTo(degrees, second);
-        else if (secondAxis == wanted) TiltTo(first, degrees);
+        splitTurn = angles;
+        SplitNormal = Vector3.Transform(PlaneSplit.NormalFor(splitAxis), MeshTransform.Rotation(angles));
+        SplitOffset = Vector3.Dot(splitNormal, pivot);
+
+        RaiseSplitAngles();
+        Status = $"Split plane turned {SplitRoll:0.##}, {SplitPitch:0.##}, {SplitYaw:0.##} deg";
     }
 
     private void RaiseSplitAngles()
@@ -2670,25 +2717,6 @@ public sealed class MainViewModel : INotifyPropertyChanged
         Raise(nameof(SplitRoll));
         Raise(nameof(SplitPitch));
         Raise(nameof(SplitYaw));
-    }
-
-    /// <summary>
-    /// Turns the plane to a pair of angles without letting it wander off what it is cutting.
-    ///
-    /// The offset is measured along the normal, so a new normal on its own moves the plane
-    /// bodily as well as turning it. Restating the offset through the point the plane already
-    /// passes through leaves it where it is - the same thing the tilt rings do while dragging.
-    /// </summary>
-    private void TiltTo(double first, double second)
-    {
-        Vector3 pivot = SplitPlanePoint();
-
-        SplitNormal = PlaneTilt.Normal(splitAxis, first, second);
-        SplitOffset = Vector3.Dot(splitNormal, pivot);
-
-        RaiseSplitAngles();
-
-        Status = $"Split plane turned {SplitRoll:0.##}, {SplitPitch:0.##}, {SplitYaw:0.##} deg";
     }
 
     /// <summary>The point of the plane nearest what it is cutting, which is what it turns about.</summary>
@@ -4235,43 +4263,62 @@ public sealed class MainViewModel : INotifyPropertyChanged
             Filter = "3D models (*.stl;*.obj;*.3dfc)|*.stl;*.obj;*.3dfc"
                    + "|STL (*.stl)|*.stl|Wavefront OBJ (*.obj)|*.obj"
                    + $"|3DFastCraft project (*{SceneSerializer.Extension})|*{SceneSerializer.Extension}",
-            Title = "Import model"
+            Title = "Import model",
+            Multiselect = true
         };
         if (dialog.ShowDialog() != true) return;
+
+        ImportFiles(dialog.FileNames);
+    }
+
+    /// <summary>
+    /// Brings files onto the plate beside whatever is already there.
+    ///
+    /// Shared by the Import button and by dropping files on the window, so the two cannot come
+    /// to disagree about what a .stl, an .obj or a project turns into. Several files land in one
+    /// undo step: importing a house in five parts and then wanting them gone is one Ctrl+Z.
+    /// </summary>
+    public void ImportFiles(IReadOnlyList<string> paths)
+    {
+        if (paths.Count == 0) return;
 
         try
         {
             var imported = new List<SceneObject>();
-            string extension = Path.GetExtension(dialog.FileName);
             var naming = Namer();
 
-            // A project imported rather than opened joins what is already on the plate: its
-            // objects keep their own names, colours and positions, and nothing here is
-            // replaced. Opening it would have thrown the current work away.
-            if (extension.Equals(SceneSerializer.Extension, StringComparison.OrdinalIgnoreCase))
+            foreach (string path in paths)
             {
-                foreach (var loaded in SceneSerializer.Load(dialog.FileName))
-                    imported.Add(new SceneObject(naming(loaded.Name), loaded.Mesh)
-                    {
-                        Colour = loaded.Colour
-                    });
-            }
-            else if (extension.Equals(".obj", StringComparison.OrdinalIgnoreCase))
-            {
-                foreach (var (name, mesh) in ObjReader.Read(dialog.FileName))
-                    imported.Add(new SceneObject(naming(name), mesh)
+                string extension = Path.GetExtension(path);
+
+                // A project imported rather than opened joins what is already on the plate: its
+                // objects keep their own names, colours and positions, and nothing here is
+                // replaced. Opening it would have thrown the current work away.
+                if (extension.Equals(SceneSerializer.Extension, StringComparison.OrdinalIgnoreCase))
+                {
+                    foreach (var loaded in SceneSerializer.Load(path))
+                        imported.Add(new SceneObject(naming(loaded.Name), loaded.Mesh)
+                        {
+                            Colour = loaded.Colour
+                        });
+                }
+                else if (extension.Equals(".obj", StringComparison.OrdinalIgnoreCase))
+                {
+                    foreach (var (name, mesh) in ObjReader.Read(path))
+                        imported.Add(new SceneObject(naming(name), mesh)
+                        {
+                            Colour = NextAutomaticColour()
+                        }.Centred());
+                }
+                else
+                {
+                    var mesh = StlReader.Read(path);
+                    imported.Add(new SceneObject(
+                        naming(Path.GetFileNameWithoutExtension(path)), mesh)
                     {
                         Colour = NextAutomaticColour()
                     }.Centred());
-            }
-            else
-            {
-                var mesh = StlReader.Read(dialog.FileName);
-                imported.Add(new SceneObject(
-                    naming(Path.GetFileNameWithoutExtension(dialog.FileName)), mesh)
-                {
-                    Colour = NextAutomaticColour()
-                }.Centred());
+                }
             }
 
             if (imported.Count == 0)
@@ -4295,6 +4342,16 @@ public sealed class MainViewModel : INotifyPropertyChanged
         {
             MessageBox.Show(ex.Message, "Could not import", MessageBoxButton.OK, MessageBoxImage.Error);
         }
+    }
+
+    /// <summary>
+    /// Opens a project that was dropped on the window, asking first if there is work to lose.
+    /// </summary>
+    public void OpenDropped(string path)
+    {
+        if (!ConfirmDiscardChanges()) return;
+
+        LoadProject(path);
     }
 
     private void Export()
