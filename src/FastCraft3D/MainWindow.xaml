@@ -606,7 +606,15 @@
                                   Text="{Binding PlateSize, UpdateSourceTrigger=LostFocus}"
                                   ToolTip="The printer's bed size in millimetres. A guide, not a limit." />
                         <TextBlock Text="mm" Foreground="#FF9AA0A8" VerticalAlignment="Center" Margin="5,0,0,0" />
-                        <TextBlock Text="Scale 1:" Style="{StaticResource FieldLabel}" Margin="14,0,0,0"
+                        <TextBlock Text="Units" Style="{StaticResource FieldLabel}" Margin="14,0,6,0"
+                                   ToolTip="What the position and size boxes are read and typed in. Display only: millimetres are what is stored and what is written to an STL, which has no unit of its own and is read as millimetres by every slicer." />
+                        <ComboBox Width="64" IsEditable="True" IsReadOnly="True"
+                                  ItemsSource="{Binding Units}"
+                                  AutomationProperties.AutomationId="MeasureUnit"
+                                  SelectedItem="{Binding Unit, Mode=TwoWay}"
+                                  ToolTip="Millimetres, centimetres, metres, inches or feet." />
+
+                        <TextBlock Text="Scale 1:" Style="{StaticResource FieldLabel}" Margin="14,0,6,0"
                                    ToolTip="What the model is drawn to. It changes no geometry and no field - the millimetres stay millimetres, because that is what a slicer reads. What it changes is the grey reading beside them, which says what those millimetres come to at this scale." />
                         <!-- SelectionChanged as well as the Text binding: the binding commits on
                              focus loss, which is right while someone is typing "160" and wrong
@@ -803,12 +811,33 @@
                         <TextBlock Margin="0,0,0,6" Foreground="#FF5A5F66">
                             <Run Text="Offset " /><Run Text="{Binding SplitOffset, StringFormat=N2}" /><Run Text=" mm" />
                         </TextBlock>
-                        <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
                             <TextBlock Text="Keep" Style="{StaticResource FieldLabel}" />
                             <RadioButton Content="Both" IsChecked="True" Margin="0,0,8,0" Checked="OnSplitKeepChanged" Tag="Both" />
                             <RadioButton Content="{Binding KeepFrontLabel}" Margin="0,0,8,0" Checked="OnSplitKeepChanged" Tag="Front" />
                             <RadioButton Content="{Binding KeepBackLabel}" Checked="OnSplitKeepChanged" Tag="Back" />
                         </StackPanel>
+
+                        <!-- What the half being thrown away looks like meanwhile. Greyed out
+                             rather than hidden when both halves are kept, so the panel does not
+                             jump about as the Keep buttons are tried. -->
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,8"
+                                    IsEnabled="{Binding SplitOffcutApplies}">
+                            <TextBlock Text="Off cut" Style="{StaticResource FieldLabel}" />
+                            <RadioButton Content="Show" GroupName="SplitOffcut" Margin="0,0,8,0"
+                                         Checked="OnSplitOffcutChanged" Tag="Shown" />
+                            <RadioButton Content="Fade" GroupName="SplitOffcut" Margin="0,0,8,0" IsChecked="True"
+                                         Checked="OnSplitOffcutChanged" Tag="Faded" />
+                            <RadioButton Content="Hide" GroupName="SplitOffcut"
+                                         Checked="OnSplitOffcutChanged" Tag="Hidden" />
+                        </StackPanel>
+
+                        <CheckBox Content="Close the cut face over" Margin="0,0,0,8"
+                                  IsEnabled="{Binding SplitCutFaceApplies}"
+                                  IsChecked="{Binding SplitFillsCut, Mode=TwoWay}"
+                                  AutomationProperties.AutomationId="SplitFillsCut"
+                                  ToolTip="Off leaves the cut open, so you can see into the piece - how thick a wall is, or whether anything is in there" />
                         <StackPanel Orientation="Horizontal">
                             <Button Content="Split" Style="{StaticResource PanelButton}" Command="{Binding ApplySplitCommand}" />
                             <Button Content="Cancel" Style="{StaticResource PanelButton}" Command="{Binding CancelSplitCommand}" />
@@ -1127,7 +1156,7 @@
                         <TextBlock Text="Name" Style="{StaticResource SectionHeader}" />
                         <TextBox AutomationProperties.AutomationId="ObjectName" Text="{Binding Name, UpdateSourceTrigger=LostFocus}" Padding="4,3" />
 
-                        <TextBlock Text="Position (mm)" Style="{StaticResource SectionHeader}" />
+                        <TextBlock Text="{Binding DataContext.UnitLabel, RelativeSource={RelativeSource AncestorType=Window}, StringFormat='Position ({0})'}" Style="{StaticResource SectionHeader}" />
                         <Grid>
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="Auto" />
@@ -1139,16 +1168,16 @@
                             </Grid.ColumnDefinitions>
                             <TextBlock Text="X" Style="{StaticResource FieldLabel}" />
                             <TextBox AutomationProperties.AutomationId="PositionX" Grid.Column="1" Style="{StaticResource NumberBox}" Tag="transform"
-                                     Text="{Binding PositionX, StringFormat=N2, UpdateSourceTrigger=LostFocus}" />
+                                     Text="{Binding DataContext.ObjectPositionX, RelativeSource={RelativeSource AncestorType=Window}, StringFormat=0.####, UpdateSourceTrigger=LostFocus}" />
                             <TextBlock Grid.Column="2" Text="Y" Style="{StaticResource FieldLabel}" />
                             <TextBox AutomationProperties.AutomationId="PositionY" Grid.Column="3" Style="{StaticResource NumberBox}" Tag="transform"
-                                     Text="{Binding PositionY, StringFormat=N2, UpdateSourceTrigger=LostFocus}" />
+                                     Text="{Binding DataContext.ObjectPositionY, RelativeSource={RelativeSource AncestorType=Window}, StringFormat=0.####, UpdateSourceTrigger=LostFocus}" />
                             <TextBlock Grid.Column="4" Text="Z" Style="{StaticResource FieldLabel}" />
                             <TextBox AutomationProperties.AutomationId="PositionZ" Grid.Column="5" Style="{StaticResource NumberBox}" Tag="transform"
-                                     Text="{Binding PositionZ, StringFormat=N2, UpdateSourceTrigger=LostFocus}" />
+                                     Text="{Binding DataContext.ObjectPositionZ, RelativeSource={RelativeSource AncestorType=Window}, StringFormat=0.####, UpdateSourceTrigger=LostFocus}" />
                         </Grid>
 
-                        <TextBlock Text="Size (mm)" Style="{StaticResource SectionHeader}" />
+                        <TextBlock Text="{Binding DataContext.UnitLabel, RelativeSource={RelativeSource AncestorType=Window}, StringFormat='Size ({0})'}" Style="{StaticResource SectionHeader}" />
                         <TextBlock Text="{Binding RealSize}" Foreground="#FF6B7480" FontSize="11"
                                    Margin="0,0,0,2" />
                         <Grid>
@@ -1169,15 +1198,15 @@
                             <TextBlock Text="W" Style="{StaticResource FieldLabel}"
                                        ToolTip="Width - along X" />
                             <TextBox AutomationProperties.AutomationId="SizeX" Grid.Column="1" Style="{StaticResource NumberBox}" Tag="transform"
-                                     Text="{Binding DataContext.ObjectSizeX, RelativeSource={RelativeSource AncestorType=Window}, StringFormat=N2, UpdateSourceTrigger=LostFocus}" />
+                                     Text="{Binding DataContext.ObjectSizeX, RelativeSource={RelativeSource AncestorType=Window}, StringFormat=0.####, UpdateSourceTrigger=LostFocus}" />
                             <TextBlock Grid.Column="2" Text="D" Style="{StaticResource FieldLabel}"
                                        ToolTip="Depth - along Y" />
                             <TextBox AutomationProperties.AutomationId="SizeY" Grid.Column="3" Style="{StaticResource NumberBox}" Tag="transform"
-                                     Text="{Binding DataContext.ObjectSizeY, RelativeSource={RelativeSource AncestorType=Window}, StringFormat=N2, UpdateSourceTrigger=LostFocus}" />
+                                     Text="{Binding DataContext.ObjectSizeY, RelativeSource={RelativeSource AncestorType=Window}, StringFormat=0.####, UpdateSourceTrigger=LostFocus}" />
                             <TextBlock Grid.Column="4" Text="H" Style="{StaticResource FieldLabel}"
                                        ToolTip="Height - along Z" />
                             <TextBox AutomationProperties.AutomationId="SizeZ" Grid.Column="5" Style="{StaticResource NumberBox}" Tag="transform"
-                                     Text="{Binding DataContext.ObjectSizeZ, RelativeSource={RelativeSource AncestorType=Window}, StringFormat=N2, UpdateSourceTrigger=LostFocus}" />
+                                     Text="{Binding DataContext.ObjectSizeZ, RelativeSource={RelativeSource AncestorType=Window}, StringFormat=0.####, UpdateSourceTrigger=LostFocus}" />
                         </Grid>
 
                         <TextBlock Text="Rotation (degrees)" Style="{StaticResource SectionHeader}" />
@@ -1262,6 +1291,104 @@
                 </Button>
             </Border>
 
+            <!-- The history has had to drop its oldest steps to stay inside its budget, so undo
+                 will no longer reach all the way back. Saving a version is the thing that still
+                 gets you there, so the notice offers to do it rather than only warning. -->
+            <Border VerticalAlignment="Bottom" HorizontalAlignment="Left" Margin="18,0,0,18"
+                    Background="#FFFFFFFF" BorderBrush="#FFC98A2E" BorderThickness="4,1,1,1"
+                    CornerRadius="2" Padding="0"
+                    Visibility="{Binding HistoryTrimmed, Converter={StaticResource BoolToVisibility}}">
+                <Border.Effect>
+                    <DropShadowEffect BlurRadius="10" ShadowDepth="1" Opacity="0.28" />
+                </Border.Effect>
+                <Button Command="{Binding SaveVersionCommand}" Padding="14,10" Background="Transparent"
+                        BorderThickness="0" Cursor="Hand"
+                        AutomationProperties.Name="Save a version"
+                        ToolTip="Keeps this state inside the project file under a name, so you can come back to it however far you carry on.">
+                    <StackPanel Orientation="Horizontal">
+                        <Path Data="{StaticResource IconVersions}" Stroke="#FF5A5F66" StrokeThickness="1.4"
+                              Fill="Transparent" Width="24" Height="24" Stretch="Uniform"
+                              VerticalAlignment="Center" Margin="0,0,12,0" />
+                        <StackPanel VerticalAlignment="Center">
+                            <TextBlock Text="Undo can no longer go all the way back." Foreground="#FF33383F" />
+                            <TextBlock Text="Click here to save a version you can return to." Foreground="#FF5A5F66" />
+                        </StackPanel>
+                    </StackPanel>
+                </Button>
+            </Border>
+
+            <!-- The split plane's own bar, in the same place and shape as the manipulator's.
+                 The two are never up together: the manipulator stands down while a tool is
+                 running, which is also why the tilt snap has to be offered again here. -->
+            <Border VerticalAlignment="Bottom" HorizontalAlignment="Center"
+                    Margin="0,0,0,18" Padding="6,4" CornerRadius="6"
+                    Background="#F2FFFFFF" BorderBrush="#FFC8CCD2" BorderThickness="1"
+                    Visibility="{Binding IsSplitMode, Converter={StaticResource BoolToVisibility}}">
+                <StackPanel Orientation="Horizontal">
+                    <ToggleButton Style="{StaticResource ModeButton}" ToolTip="Slide the plane along its own facing"
+                                  AutomationProperties.Name="Move the plane"
+                                  IsChecked="{Binding SplitMoveMode, Mode=TwoWay}">
+                        <Path Data="M10,0 L13,3 L11,3 L11,9 L17,9 L17,7 L20,10 L17,13 L17,11 L11,11 L11,17 L13,17 L10,20 L7,17 L9,17 L9,11 L3,11 L3,13 L0,10 L3,7 L3,9 L9,9 L9,3 L7,3 Z"
+                              Fill="#FF33383F" Stretch="Uniform" Width="16" Height="16" />
+                    </ToggleButton>
+                    <ToggleButton Style="{StaticResource ModeButton}" ToolTip="Turn the plane"
+                                  AutomationProperties.Name="Turn the plane"
+                                  IsChecked="{Binding SplitTurnMode, Mode=TwoWay}">
+                        <Viewbox Width="16" Height="16">
+                            <Canvas Width="20" Height="20">
+                                <Path Data="M10,3.5 A6.5,6.5 0 1 1 3.5,10"
+                                      Stroke="#FF33383F" StrokeThickness="1.9" Fill="{x:Null}"
+                                      StrokeStartLineCap="Round" StrokeEndLineCap="Round" />
+                                <Path Data="M9.4,0.4 L14.2,3.5 L9.4,6.6 Z" Fill="#FF33383F" />
+                            </Canvas>
+                        </Viewbox>
+                    </ToggleButton>
+
+                    <Rectangle Width="1" Margin="6,3" Fill="#FFD8DBE0" />
+
+                    <StackPanel Orientation="Horizontal"
+                                Visibility="{Binding SplitMoveMode, Converter={StaticResource BoolToVisibility}}">
+                        <TextBlock Text="Offset" Style="{StaticResource GizmoLabel}" />
+                        <TextBox Style="{StaticResource GizmoBox}" Tag="number"
+                                 AutomationProperties.AutomationId="SplitOffset"
+                                 ToolTip="How far along its own facing the plane sits, from the middle of the plate"
+                                 Text="{Binding SplitOffset, StringFormat=N2, UpdateSourceTrigger=LostFocus}" />
+                        <TextBlock Text="mm" Style="{StaticResource GizmoUnit}" />
+                    </StackPanel>
+
+                    <!-- Roll, pitch and yaw are turns about X, Y and Z, the same as an object's.
+                         The one about the axis the plane lies on is dead rather than missing:
+                         turning a plane about its own facing leaves it exactly where it was. -->
+                    <StackPanel Orientation="Horizontal"
+                                Visibility="{Binding SplitTurnMode, Converter={StaticResource BoolToVisibility}}">
+                        <TextBlock Text="Roll" Style="{StaticResource GizmoLabel}" />
+                        <TextBox Style="{StaticResource GizmoBox}" Tag="number"
+                                 IsEnabled="{Binding SplitRollApplies}"
+                                 AutomationProperties.AutomationId="SplitRoll"
+                                 Text="{Binding SplitRoll, StringFormat=N1, UpdateSourceTrigger=LostFocus}" />
+                        <TextBlock Text="Pitch" Style="{StaticResource GizmoLabel}" />
+                        <TextBox Style="{StaticResource GizmoBox}" Tag="number"
+                                 IsEnabled="{Binding SplitPitchApplies}"
+                                 AutomationProperties.AutomationId="SplitPitch"
+                                 Text="{Binding SplitPitch, StringFormat=N1, UpdateSourceTrigger=LostFocus}" />
+                        <TextBlock Text="Yaw" Style="{StaticResource GizmoLabel}" />
+                        <TextBox Style="{StaticResource GizmoBox}" Tag="number"
+                                 IsEnabled="{Binding SplitYawApplies}"
+                                 AutomationProperties.AutomationId="SplitYaw"
+                                 Text="{Binding SplitYaw, StringFormat=N1, UpdateSourceTrigger=LostFocus}" />
+                        <TextBlock Text="deg" Style="{StaticResource GizmoUnit}" />
+                        <ToggleButton Style="{StaticResource ModeButton}" Margin="4,0,0,0"
+                                      ToolTip="Snap the turn to 15 degree steps"
+                                      AutomationProperties.Name="Snap the tilt"
+                                      IsChecked="{Binding SnapRotation, Mode=TwoWay}">
+                            <Path Data="M2,14 L7,14 L7,9 L13,9 L13,4 L18,4"
+                                  Stroke="#FF33383F" StrokeThickness="1.8" Fill="{x:Null}"
+                                  Stretch="Uniform" Width="15" Height="15" />
+                        </ToggleButton>
+                    </StackPanel>
+                </StackPanel>
+            </Border>
+
             <!-- Floating manipulator bar: mode buttons, then the live values for that mode -->
             <Border VerticalAlignment="Bottom" HorizontalAlignment="Center"
                     Margin="0,0,0,18" Padding="6,4" CornerRadius="6"
@@ -1310,6 +1437,10 @@
                                      IsChecked="{Binding SnapOne, Mode=TwoWay}" ToolTip="Snap moves to whole millimetres" />
                         <RadioButton Content="5" GroupName="Snap" VerticalAlignment="Center" Margin="0,0,3,0"
                                      IsChecked="{Binding SnapFive, Mode=TwoWay}" ToolTip="Snap moves to 5 mm" />
+
+                        <!-- Millimetres whatever the boxes are showing, because the choices are
+                             literally 1 and 5 mm - a grid to land a part on, not a reading of it.
+                             Relabelling this with the display unit made it say "5 ft". -->
                         <TextBlock Text="mm" Style="{StaticResource GizmoUnit}" />
                     </StackPanel>
 
@@ -1334,13 +1465,13 @@
                                                  Converter={StaticResource BoolToVisibility}}">
                             <TextBlock Text="X" Style="{StaticResource GizmoLabel}" />
                             <TextBox Style="{StaticResource GizmoBox}" Tag="transform"
-                                     Text="{Binding PositionX, StringFormat=N2, UpdateSourceTrigger=LostFocus}" />
+                                     Text="{Binding DataContext.ObjectPositionX, RelativeSource={RelativeSource AncestorType=Window}, StringFormat=0.####, UpdateSourceTrigger=LostFocus}" />
                             <TextBlock Text="Y" Style="{StaticResource GizmoLabel}" />
                             <TextBox Style="{StaticResource GizmoBox}" Tag="transform"
-                                     Text="{Binding PositionY, StringFormat=N2, UpdateSourceTrigger=LostFocus}" />
+                                     Text="{Binding DataContext.ObjectPositionY, RelativeSource={RelativeSource AncestorType=Window}, StringFormat=0.####, UpdateSourceTrigger=LostFocus}" />
                             <TextBlock Text="Z" Style="{StaticResource GizmoLabel}" />
                             <TextBox Style="{StaticResource GizmoBox}" Tag="transform"
-                                     Text="{Binding PositionZ, StringFormat=N2, UpdateSourceTrigger=LostFocus}" />
+                                     Text="{Binding DataContext.ObjectPositionZ, RelativeSource={RelativeSource AncestorType=Window}, StringFormat=0.####, UpdateSourceTrigger=LostFocus}" />
                         </StackPanel>
 
                         <!-- Several selected: the middle of the lot. Typing into it carries the
@@ -1349,15 +1480,15 @@
                                     Visibility="{Binding HasManySelected, Converter={StaticResource BoolToVisibility}}">
                             <TextBlock Text="X" Style="{StaticResource GizmoLabel}" />
                             <TextBox Style="{StaticResource GizmoBox}" Tag="transform"
-                                     Text="{Binding GroupX, StringFormat=N2, UpdateSourceTrigger=LostFocus}" />
+                                     Text="{Binding GroupX, StringFormat=0.####, UpdateSourceTrigger=LostFocus}" />
                             <TextBlock Text="Y" Style="{StaticResource GizmoLabel}" />
                             <TextBox Style="{StaticResource GizmoBox}" Tag="transform"
-                                     Text="{Binding GroupY, StringFormat=N2, UpdateSourceTrigger=LostFocus}" />
+                                     Text="{Binding GroupY, StringFormat=0.####, UpdateSourceTrigger=LostFocus}" />
                             <TextBlock Text="Z" Style="{StaticResource GizmoLabel}" />
                             <TextBox Style="{StaticResource GizmoBox}" Tag="transform"
-                                     Text="{Binding GroupZ, StringFormat=N2, UpdateSourceTrigger=LostFocus}" />
+                                     Text="{Binding GroupZ, StringFormat=0.####, UpdateSourceTrigger=LostFocus}" />
                         </StackPanel>
-                        <TextBlock Text="mm" Style="{StaticResource GizmoUnit}" />
+                        <TextBlock Text="{Binding UnitLabel}" Style="{StaticResource GizmoUnit}" />
 
                         <!-- The same numbers at the scene's scale, and editable: type metres
                              here or millimetres there and each follows the other. Only the
@@ -1449,13 +1580,13 @@
                                                  Converter={StaticResource BoolToVisibility}}">
                             <TextBlock Text="W" Style="{StaticResource GizmoLabel}" ToolTip="Width - along X" />
                             <TextBox Style="{StaticResource GizmoBox}" Tag="transform"
-                                     Text="{Binding DataContext.ObjectSizeX, RelativeSource={RelativeSource AncestorType=Window}, StringFormat=N2, UpdateSourceTrigger=LostFocus}" />
+                                     Text="{Binding DataContext.ObjectSizeX, RelativeSource={RelativeSource AncestorType=Window}, StringFormat=0.####, UpdateSourceTrigger=LostFocus}" />
                             <TextBlock Text="D" Style="{StaticResource GizmoLabel}" ToolTip="Depth - along Y" />
                             <TextBox Style="{StaticResource GizmoBox}" Tag="transform"
-                                     Text="{Binding DataContext.ObjectSizeY, RelativeSource={RelativeSource AncestorType=Window}, StringFormat=N2, UpdateSourceTrigger=LostFocus}" />
+                                     Text="{Binding DataContext.ObjectSizeY, RelativeSource={RelativeSource AncestorType=Window}, StringFormat=0.####, UpdateSourceTrigger=LostFocus}" />
                             <TextBlock Text="H" Style="{StaticResource GizmoLabel}" ToolTip="Height - along Z" />
                             <TextBox Style="{StaticResource GizmoBox}" Tag="transform"
-                                     Text="{Binding DataContext.ObjectSizeZ, RelativeSource={RelativeSource AncestorType=Window}, StringFormat=N2, UpdateSourceTrigger=LostFocus}" />
+                                     Text="{Binding DataContext.ObjectSizeZ, RelativeSource={RelativeSource AncestorType=Window}, StringFormat=0.####, UpdateSourceTrigger=LostFocus}" />
                         </StackPanel>
                         <!-- Several selected: how far the whole lot reaches. Typing carries the
                              parts with it, so the box comes out the size asked for. -->
@@ -1465,15 +1596,15 @@
                                  is how wide the group sits rather than any one part's own. -->
                             <TextBlock Text="W" Style="{StaticResource GizmoLabel}" ToolTip="Width of the selection - along X" />
                             <TextBox Style="{StaticResource GizmoBox}" Tag="transform"
-                                     Text="{Binding GroupSizeX, StringFormat=N2, UpdateSourceTrigger=LostFocus}" />
+                                     Text="{Binding GroupSizeX, StringFormat=0.####, UpdateSourceTrigger=LostFocus}" />
                             <TextBlock Text="D" Style="{StaticResource GizmoLabel}" ToolTip="Depth of the selection - along Y" />
                             <TextBox Style="{StaticResource GizmoBox}" Tag="transform"
-                                     Text="{Binding GroupSizeY, StringFormat=N2, UpdateSourceTrigger=LostFocus}" />
+                                     Text="{Binding GroupSizeY, StringFormat=0.####, UpdateSourceTrigger=LostFocus}" />
                             <TextBlock Text="H" Style="{StaticResource GizmoLabel}" ToolTip="Height of the selection - along Z" />
                             <TextBox Style="{StaticResource GizmoBox}" Tag="transform"
-                                     Text="{Binding GroupSizeZ, StringFormat=N2, UpdateSourceTrigger=LostFocus}" />
+                                     Text="{Binding GroupSizeZ, StringFormat=0.####, UpdateSourceTrigger=LostFocus}" />
                         </StackPanel>
-                        <TextBlock Text="mm" Style="{StaticResource GizmoUnit}" />
+                        <TextBlock Text="{Binding UnitLabel}" Style="{StaticResource GizmoUnit}" />
 
                         <!-- The same numbers at the scene's scale, and editable: type metres
                              here or millimetres there and each follows the other. Only the

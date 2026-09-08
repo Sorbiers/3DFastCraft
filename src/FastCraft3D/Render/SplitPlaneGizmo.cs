@@ -1,4 +1,4 @@
-using System.Numerics;
+﻿using System.Numerics;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
@@ -27,6 +27,15 @@ public sealed class SplitPlaneGizmo
     private const double AxisReferenceLength = 10.0;
     private const double RotationSnapDegrees = 15.0;
 
+    /// <summary>
+    /// How wide the tilt rings are drawn.
+    ///
+    /// Generous on purpose. A drag is read as the angle it sweeps about the middle of the ring,
+    /// so a small ring turns the plane a long way for a very short drag - a ring 40 pixels
+    /// across sent the plane through a half turn on a flick of the wrist.
+    /// </summary>
+    private const double RingRadiusPixels = 115.0;
+
     private static readonly Color OffsetColour = Color.FromRgb(0x3B, 0x9C, 0xF0);
 
     private readonly Canvas layer;
@@ -38,6 +47,7 @@ public sealed class SplitPlaneGizmo
     private float offset;
     private bool active;
 
+    private GizmoMode mode = GizmoMode.Move;
     private Handle? dragging;
     private Point dragStart;
     private float dragStartOffset;
@@ -57,6 +67,21 @@ public sealed class SplitPlaneGizmo
 
     public bool IsDragging => dragging is not null;
     public bool SnapRotation { get; set; } = true;
+
+    /// <summary>
+    /// Whether the plane is being slid or turned. One set of handles at a time, because the
+    /// arrows and the rings gather on the same spot and the wrong one is easy to catch.
+    /// </summary>
+    public GizmoMode Mode
+    {
+        get => mode;
+        set
+        {
+            if (mode == value) return;
+            mode = value;
+            Rebuild();
+        }
+    }
 
     /// <summary>Shows the handles for a plane, or hides them when <paramref name="on"/> is false.</summary>
     public void Show(bool on, Vector3 planeNormal, float planeOffset, Vector3 solidCentre)
@@ -89,7 +114,7 @@ public sealed class SplitPlaneGizmo
         layer.Visibility = Visibility.Visible;
 
         // Two arrows, one each way along the normal, to slide the plane.
-        foreach (int sign in new[] { 1, -1 })
+        foreach (int sign in mode is GizmoMode.Move ? new[] { 1, -1 } : [])
         {
             Add(new Handle(new Path
             {
@@ -107,7 +132,7 @@ public sealed class SplitPlaneGizmo
 
         // A ring per world axis to tilt the plane. One whose axis lines up with the normal is
         // left out: turning the plane about its own normal does not move it.
-        foreach (var axis in new[] { Axis.X, Axis.Y, Axis.Z })
+        foreach (var axis in mode is GizmoMode.Rotate ? new[] { Axis.X, Axis.Y, Axis.Z } : [])
         {
             Vector3 spin = PlaneSplit.NormalFor(axis);
             if (MathF.Abs(Vector3.Dot(spin, normal)) > 0.98f) continue;
@@ -273,15 +298,21 @@ public sealed class SplitPlaneGizmo
     private Vector3 PlanePointFor(float planeOffset, Vector3 planeNormal) =>
         centre - planeNormal * (Vector3.Dot(planeNormal, centre) - planeOffset);
 
+    /// <summary>How many millimetres the rings should span to come out the width we want.</summary>
     private float RadiusHint()
     {
-        // Rings a little larger than the arrows so the two never sit on top of each other.
+        // Measured across the view rather than along a direction of the plane's own. A direction
+        // pointing anywhere near the camera projects to almost nothing, and dividing by that
+        // gave a ring hundreds of millimetres wide from one camera angle and a stub from the
+        // next - which is what made the rings turn the plane so unpredictably.
+        Vector3 across = PerpendicularTo(projector.ViewDirection);
+
         if (!projector.TryProject(PlanePoint(), out Point a)) return 1f;
-        if (!projector.TryProject(PlanePoint() + PerpendicularTo(normal) * (float)AxisReferenceLength, out Point b))
+        if (!projector.TryProject(PlanePoint() + across * (float)AxisReferenceLength, out Point b))
             return 1f;
 
         double pixelsPerMm = new Vector(b.X - a.X, b.Y - a.Y).Length / AxisReferenceLength;
-        return pixelsPerMm > 1e-6 ? (float)(70.0 / pixelsPerMm) : 1f;
+        return pixelsPerMm > 1e-6 ? (float)(RingRadiusPixels / pixelsPerMm) : 1f;
     }
 
     private static Vector3 PerpendicularTo(Vector3 v) =>

@@ -1,5 +1,7 @@
 ﻿using System.Collections.Specialized;
 using System.ComponentModel;
+using System.Numerics;
+using System.Windows;
 using System.Windows.Media;
 using FastCraft3D.Geometry;
 using FastCraft3D.Geometry.Engraving;
@@ -16,6 +18,21 @@ namespace FastCraft3D.Render;
 /// uploads are expensive, and this way a transform change moves an existing model instead of
 /// rebuilding and re-uploading its vertex buffer.
 /// </summary>
+/// <summary>
+/// What becomes of the half a split would throw away, while the plane is still being placed.
+/// </summary>
+public enum SplitOffcut
+{
+    /// <summary>Nothing is drawn differently. The plane alone says where the cut will fall.</summary>
+    Shown,
+
+    /// <summary>The half that goes is drawn through, so both what stays and what goes can be seen.</summary>
+    Faded,
+
+    /// <summary>Only what will be left is drawn, which is the closest thing to the finished part.</summary>
+    Hidden
+}
+
 public sealed class SceneRenderer : IDisposable
 {
     private static readonly Color OutlineColour = Colors.White;
@@ -30,6 +47,12 @@ public sealed class SceneRenderer : IDisposable
     private readonly Scene scene;
     private readonly Dictionary<SceneObject, MeshGeometryModel3D> visuals = new();
     private readonly Dictionary<SceneObject, LineGeometryModel3D> outlines = new();
+
+    /// <summary>Stand-ins for the objects a split is being set up on: what stays, then what goes.</summary>
+    private readonly Dictionary<SceneObject, List<MeshGeometryModel3D>> splitParts = new();
+
+    /// <summary>The cut being previewed, kept so a moved or edited object can be redone.</summary>
+    private (Vector3 Normal, float Offset, bool Ghost, bool Fill)? split;
 
     /// <summary>The face waiting to be engraved, drawn over the surface while it is picked.</summary>
     private bool wireframe;
@@ -161,6 +184,160 @@ public sealed class SceneRenderer : IDisposable
     }
 
     /// <summary>
+    /// Draws the selection as the split would leave it: what stays solid, and what goes either
+    /// faded or not at all.
+    ///
+    /// The triangles are cut here rather than by the boolean the split itself uses. That one
+    /// takes seconds on a dense model, which is no use to a plane being dragged; this is one
+    /// pass and leaves the cut open, which is all a preview needs.
+    ///
+    /// The card was asked to do it first, with clip planes, and it filled the cut face for free.
+    /// It also cleared the stencil buffer once per model and rebound the render target, which
+    /// took the transparent plane marker with it and left the whole thing looking broken.
+    /// </summary>
+    public void ShowSplit(IReadOnlyList<SceneObject> targets, Vector3 normal, float offset,
+                          SplitKeep keep, SplitOffcut offcut, bool fill)
+    {
+        // Keeping both halves throws nothing away, so there is nothing to fade or hide.
+        bool showing = offcut is not SplitOffcut.Shown
+                       && keep is SplitKeep.Front or SplitKeep.Back
+                       && targets.Count > 0;
+
+        if (!showing)
+        {
+            ClearSplit();
+            return;
+        }
+
+        // Held facing the half that survives, so everything below reads the same way round.
+        split = keep is SplitKeep.Front
+            ? (normal, offset, offcut is SplitOffcut.Faded, fill)
+            : (-normal, -offset, offcut is SplitOffcut.Faded, fill);
+
+        foreach (var stale in splitParts.Keys.Where(o => !targets.Contains(o)).ToList())
+            Release(stale);
+
+        foreach (var o in targets) Rebuild(o);
+    }
+
+    /// <summary>Puts the objects back the way they are drawn when no split is being set up.</summary>
+    public void ClearSplit()
+    {
+        split = null;
+        foreach (var o in splitParts.Keys.ToList()) Release(o);
+    }
+
+    /// <summary>Cuts one object again for the plane where it now is.</summary>
+    private void Rebuild(SceneObject o)
+    {
+        if (split is not { } plane || !visuals.TryGetValue(o, out var visual)) return;
+
+        var stays = PlaneClip.Keep(o.Mesh, o.Transform, plane.Normal, plane.Offset, plane.Fill);
+        // The off cut is left open where it was cut. Its cap would sit exactly on top of the
+        // kept piece's, one solid and one drawn through, and two surfaces in the same place
+        // flicker between each other as the camera moves.
+        var goes = plane.Ghost
+            ? PlaneClip.Keep(o.Mesh, o.Transform, -plane.Normal, -plane.Offset, cap: false)
+            : null;
+        int wanted = goes is null ? 1 : 2;
+
+        if (!splitParts.TryGetValue(o, out var parts) || parts.Count != wanted)
+        {
+            Drop(o);
+
+            parts = [];
+            for (int i = 0; i < wanted; i++)
+            {
+                var part = NewPart(o, ghost: i == 1);
+                parts.Add(part);
+                root.Children.Add(part);
+            }
+
+            splitParts[o] = parts;
+
+            // The object itself stands down while its halves stand in for it, and its outline
+            // with it: that traces the whole shape, including the half being taken off.
+            visual.Visibility = Visibility.Collapsed;
+            RemoveOutline(o);
+        }
+
+        Fill(parts[0], stays);
+        if (goes is not null) Fill(parts[1], goes);
+
+        static void Fill(MeshGeometryModel3D part, Mesh piece)
+        {
+            // A plane clear of the solid leaves one side with nothing in it, and an empty
+            // geometry is not something the renderer will take.
+            part.Visibility = piece.TriangleCount > 0 ? Visibility.Visible : Visibility.Collapsed;
+            if (piece.TriangleCount > 0) part.Geometry = MeshConverter.ToGeometry(piece);
+        }
+    }
+
+    private MeshGeometryModel3D NewPart(SceneObject o, bool ghost)
+    {
+        var part = new MeshGeometryModel3D
+        {
+            // The cut piece is already in world space, so it carries no transform of its own.
+            IsTransparent = ghost,
+
+            // Both faces are drawn. The cut is left open - capping it would mean triangulating
+            // the cross section, which is the boolean's job and far too slow to do while a
+            // plane is being dragged - so without this you would see straight through the
+            // opening and out the far side of the shell.
+            CullMode = SharpDX.Direct3D11.CullMode.None
+        };
+
+        Dress(o, part, ghost);
+        return part;
+    }
+
+    /// <summary>Colours one stand-in. Split out so a colour or a view setting can redo it.</summary>
+    private void Dress(SceneObject o, MeshGeometryModel3D part, bool ghost)
+    {
+        part.Material = ghost ? GhostMaterial(o) : MaterialFor(o);
+        part.RenderWireframe = wireframe;
+        part.WireframeColor = Color.FromArgb(0x99, 0x1E, 0x26, 0x30);
+    }
+
+    /// <summary>The half on its way out: the object's own colour, drawn through.</summary>
+    private static PhongMaterial GhostMaterial(SceneObject o) => new()
+    {
+        DiffuseColor = new SharpDX.Color4(o.Colour.X, o.Colour.Y, o.Colour.Z, 0.26f),
+        SpecularColor = new SharpDX.Color4(0, 0, 0, 1),
+        AmbientColor = new SharpDX.Color4(o.Colour.X * 0.35f, o.Colour.Y * 0.35f, o.Colour.Z * 0.35f, 1f)
+    };
+
+    /// <summary>Takes the stand-ins away without putting the object itself back.</summary>
+    private void Drop(SceneObject o)
+    {
+        if (!splitParts.Remove(o, out var parts)) return;
+
+        foreach (var part in parts)
+        {
+            root.Children.Remove(part);
+            part.Dispose();
+        }
+    }
+
+    private void Release(SceneObject o)
+    {
+        if (!splitParts.ContainsKey(o)) return;
+
+        Drop(o);
+
+        if (visuals.TryGetValue(o, out var visual)) visual.Visibility = Visibility.Visible;
+        UpdateOutline(o);
+    }
+
+    /// <summary>Puts a changed view setting or colour onto whatever the split is standing in with.</summary>
+    private void RefreshSplitLook()
+    {
+        foreach (var (o, parts) in splitParts)
+            for (int i = 0; i < parts.Count; i++)
+                Dress(o, parts[i], ghost: i == 1);
+    }
+
+    /// <summary>
     /// Draws every object's triangle edges over it. Useful for seeing how dense an import is,
     /// and for spotting where a boolean has left a mess.
     /// </summary>
@@ -173,6 +350,7 @@ public sealed class SceneRenderer : IDisposable
             wireframe = value;
 
             foreach (var (o, visual) in visuals) ApplyLook(o, visual);
+            RefreshSplitLook();
         }
     }
 
@@ -189,6 +367,7 @@ public sealed class SceneRenderer : IDisposable
             xray = value;
 
             foreach (var (o, visual) in visuals) ApplyLook(o, visual);
+            RefreshSplitLook();
         }
     }
 
@@ -214,6 +393,14 @@ public sealed class SceneRenderer : IDisposable
         foreach (var (sceneObject, visual) in visuals)
             if (ReferenceEquals(visual, model))
                 return sceneObject;
+
+        // While a split is being set up the object is not drawn - its two halves are - so a
+        // click on either of them has to come back as the object. Picking a face to cut on
+        // goes through here, and without this it stopped working the moment the preview was on.
+        foreach (var (sceneObject, parts) in splitParts)
+            if (parts.Any(part => ReferenceEquals(part, model)))
+                return sceneObject;
+
         return null;
     }
 
@@ -252,6 +439,7 @@ public sealed class SceneRenderer : IDisposable
 
     private void Detach(SceneObject o)
     {
+        Release(o);
         o.PropertyChanged -= OnObjectChanged;
         RemoveOutline(o);
 
@@ -284,6 +472,13 @@ public sealed class SceneRenderer : IDisposable
                 UpdateOutline(o);
                 break;
         }
+
+        if (!splitParts.ContainsKey(o)) return;
+
+        // The stand-ins are cut in world space, so anything that moves or reshapes the object
+        // means cutting it again rather than moving them with it.
+        if (e.PropertyName is nameof(SceneObject.Mesh) or nameof(SceneObject.Transform)) Rebuild(o);
+        else RefreshSplitLook();
     }
 
     /// <summary>
@@ -295,6 +490,10 @@ public sealed class SceneRenderer : IDisposable
     /// </summary>
     private void UpdateOutline(SceneObject o)
     {
+        // Nothing to trace: the split is showing two halves in the object's place, and an
+        // outline of the whole shape round them would draw the half that is being taken off.
+        if (splitParts.ContainsKey(o)) return;
+
         if (!o.IsSelected)
         {
             RemoveOutline(o);
@@ -365,6 +564,7 @@ public sealed class SceneRenderer : IDisposable
 
     public void Dispose()
     {
+        ClearSplit();
         ShowFace(null);
         scene.Objects.CollectionChanged -= OnCollectionChanged;
         foreach (var o in visuals.Keys.ToList()) Detach(o);

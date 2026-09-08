@@ -1,4 +1,4 @@
-using System.Numerics;
+﻿using System.Numerics;
 using FastCraft3D.Geometry;
 using Xunit;
 
@@ -36,6 +36,86 @@ public class PlaneSplitTests
         Assert.True(front!.CheckHealth().IsWatertight, front.CheckHealth().Describe());
         Assert.True(back!.CheckHealth().IsWatertight, back.CheckHealth().Describe());
         Assert.Equal(8000.0, front.ComputeSignedVolume() + back.ComputeSignedVolume(), 1);
+    }
+
+    /// <summary>
+    /// A dense model is cut, not rebuilt.
+    ///
+    /// The boolean this used to go through is quadratic and reconstructs the whole surface: on a
+    /// 214,000 triangle scan it took twenty seconds, handed back two and a half million
+    /// triangles and left nearly twenty thousand open edges. Cutting the triangles keeps the
+    /// count where it started, bar the two caps, and both halves close.
+    /// </summary>
+    [Fact]
+    public void ADenseModelIsCutRatherThanRebuilt()
+    {
+        var ball = Primitives.Sphere(20, 200, 100);
+
+        var (top, bottom) = PlaneSplit.Split(ball, Vector3.UnitZ, 3f, SplitKeep.Both);
+
+        Assert.True(top!.CheckHealth().IsWatertight, top.CheckHealth().Describe());
+        Assert.True(bottom!.CheckHealth().IsWatertight, bottom.CheckHealth().Describe());
+
+        Assert.InRange(top.TriangleCount + bottom.TriangleCount,
+            ball.TriangleCount, (int)(ball.TriangleCount * 1.2));
+    }
+
+    /// <summary>
+    /// A plane that runs along the model's own edges. The cut then has nothing to interpolate:
+    /// every corner of the section is a corner the model already had, and the sides of the cut
+    /// are edges it already had, which is a different path through the clip entirely.
+    /// </summary>
+    [Fact]
+    public void APlaneAlongTheModelOwnEdgesStillClosesBothHalves()
+    {
+        var cube = Primitives.Box(20, 20, 20);
+        var normal = Vector3.Normalize(new Vector3(1, 0, 1));
+
+        var (front, back) = PlaneSplit.Split(cube, normal, 0f, SplitKeep.Both);
+
+        Assert.True(front!.CheckHealth().IsWatertight, front.CheckHealth().Describe());
+        Assert.True(back!.CheckHealth().IsWatertight, back.CheckHealth().Describe());
+        Assert.Equal(4000.0, front.ComputeSignedVolume(), 1);
+        Assert.Equal(4000.0, back.ComputeSignedVolume(), 1);
+    }
+
+    /// <summary>
+    /// A cut a long way from the origin still joins up.
+    ///
+    /// The cut face is laid out flat to be filled in and then put back. Working the corners out
+    /// again from the flat ones lands a few millionths off - nothing at the origin, and more
+    /// than the mesh will weld a metre and a half up, where the face and the shell it belongs to
+    /// became two separate surfaces. A scan is often that tall.
+    /// </summary>
+    [Fact]
+    public void ACutWellAwayFromTheOriginStillJoinsUp()
+    {
+        var high = MeshTransform.Transformed(
+            Primitives.Sphere(20, 64, 32), Matrix4x4.CreateTranslation(0, 0, 1500));
+
+        var (top, bottom) = PlaneSplit.Split(high, Vector3.UnitZ, 1503f, SplitKeep.Both);
+
+        Assert.True(top!.CheckHealth().IsWatertight, top.CheckHealth().Describe());
+        Assert.True(bottom!.CheckHealth().IsWatertight, bottom.CheckHealth().Describe());
+    }
+
+    /// <summary>
+    /// A half traces its own shape when it is selected, not every triangle in it.
+    ///
+    /// The cut hands back loose triangles, which draw the same but describe nothing: the outline
+    /// works from shared corners, and without them every edge looks like a boundary and the part
+    /// comes back covered in white lines.
+    /// </summary>
+    [Fact]
+    public void AHalfComesBackWithItsCornersJoinedUp()
+    {
+        var cylinder = Primitives.Prism(10, 20, 36);
+        var slant = Vector3.Normalize(new Vector3(0.3f, 0, 1));
+
+        var (_, bottom) = PlaneSplit.Split(cylinder, slant, 0f, SplitKeep.Both);
+
+        Assert.True(FeatureEdges.Build(bottom!).Count < bottom!.TriangleCount,
+            "every edge came back as an outline, so nothing is joined to anything");
     }
 
     [Fact]

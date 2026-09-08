@@ -1,4 +1,5 @@
 ﻿using System.ComponentModel;
+using System.Diagnostics;
 using System.Globalization;
 using System.Numerics;
 using System.Windows;
@@ -97,6 +98,7 @@ public partial class MainWindow : Window
             viewModel.SplitOffset = offset;
             viewModel.SplitNormal = normal;
             UpdateSplitPlane();
+            RefreshSplitPreview();
         };
         SplitGizmoLayer.PreviewMouseLeftButtonDown += OnSplitGizmoDown;
         SplitGizmoLayer.PreviewMouseMove += OnSplitGizmoMove;
@@ -205,6 +207,15 @@ public partial class MainWindow : Window
     /// </summary>
     private void OnWindowKeyDown(object sender, KeyEventArgs e)
     {
+        // Escape first, and before the checks below: it has to work while the caret is sitting
+        // in one of the tool's own boxes, which is exactly where it usually is.
+        if (e.Key is Key.Escape && Keyboard.Modifiers is ModifierKeys.None
+            && viewModel.CancelActiveTool())
+        {
+            e.Handled = true;
+            return;
+        }
+
         if (Keyboard.Modifiers != ModifierKeys.None) return;
         if (Keyboard.FocusedElement is TextBox) return;
 
@@ -366,10 +377,18 @@ public partial class MainWindow : Window
 
         SplitGizmoLayer.ReleaseMouseCapture();
         splitGizmo.EndDrag();
+
+        // Whatever the throttle was waiting for, the drag is over and the preview should be
+        // showing where the plane actually ended up.
+        RefreshSplitPreview(now: true);
         e.Handled = true;
     }
 
     /// <summary>Keeps the split handles on the plane, and hides them outside split mode.</summary>
+    private bool splitPreviewStale;
+    private readonly Stopwatch splitPreviewClock = Stopwatch.StartNew();
+    private double splitPreviewWait;
+
     private void RefreshSplitGizmo()
     {
         if (splitGizmo is null) return;
@@ -394,6 +413,7 @@ public partial class MainWindow : Window
         if (gizmo is null) return;
         if (gizmo.NeedsReposition || gizmo.IsStale()) gizmo.Reposition();
         if (viewModel.IsSplitMode) splitGizmo?.Reposition();
+        SettleSplitPreview();
         if (viewModel.IsEmbossMode || viewModel.IsEngraveMode) placeGizmo?.Reposition();
 
         // The tape is anchored to the model rather than to the screen, so it is reprojected with
@@ -849,11 +869,20 @@ public partial class MainWindow : Window
     /// How much one nudge moves a value. Shift takes bigger steps and Ctrl finer ones, which is
     /// the convention everywhere else and saves reaching for the keyboard to type an exact figure.
     /// </summary>
-    private static double NudgeStep()
+    /// <summary>
+    /// How much one press moves a field.
+    ///
+    /// Taken from the unit rather than fixed at one, because one of whatever the box holds is the
+    /// wrong amount everywhere except millimetres: one inch is a long way and one thousandth of a
+    /// metre is nothing. Shift is ten of them and Ctrl a tenth, as before.
+    /// </summary>
+    private double NudgeStep()
     {
-        if (Keyboard.Modifiers.HasFlag(ModifierKeys.Shift)) return 10;
-        if (Keyboard.Modifiers.HasFlag(ModifierKeys.Control)) return 0.1;
-        return 1;
+        double step = viewModel.UnitStep;
+
+        if (Keyboard.Modifiers.HasFlag(ModifierKeys.Shift)) return step * 10;
+        if (Keyboard.Modifiers.HasFlag(ModifierKeys.Control)) return step / 10;
+        return step;
     }
 
     private void OnFieldKey(object sender, KeyEventArgs e)
@@ -981,7 +1010,11 @@ public partial class MainWindow : Window
             RefreshPlacementGizmo();
         }
 
+        if (e.PropertyName is nameof(MainViewModel.SplitGizmoMode) && splitGizmo is not null)
+            splitGizmo.Mode = viewModel.SplitGizmoMode;
+
         if (e.PropertyName is nameof(MainViewModel.IsSplitMode)
+            or nameof(MainViewModel.SplitGizmoMode)
             or nameof(MainViewModel.SplitNormal)
             or nameof(MainViewModel.SplitOffset)
             or nameof(MainViewModel.Selected))
@@ -990,7 +1023,19 @@ public partial class MainWindow : Window
         }
 
         if (e.PropertyName is nameof(MainViewModel.IsSplitMode)
+            or nameof(MainViewModel.SplitNormal)
+            or nameof(MainViewModel.SplitOffset)
+            or nameof(MainViewModel.SplitKeep)
+            or nameof(MainViewModel.SplitOffcut)
+            or nameof(MainViewModel.SplitFillsCut)
+            or nameof(MainViewModel.Selected))
+        {
+            RefreshSplitPreview();
+        }
+
+        if (e.PropertyName is nameof(MainViewModel.IsSplitMode)
             or nameof(MainViewModel.SplitAxis)
+            or nameof(MainViewModel.SplitNormal)
             or nameof(MainViewModel.SplitOffset)
             or nameof(MainViewModel.SplitPlaneVisible))
         {
@@ -1036,8 +1081,11 @@ public partial class MainWindow : Window
             Geometry = MeshConverter.ToGeometry(slab),
             Material = new PhongMaterial
             {
-                DiffuseColor = new SharpDX.Color4(1f, 0.55f, 0.15f, 0.45f),
-                AmbientColor = new SharpDX.Color4(0.4f, 0.2f, 0.05f, 1f)
+                // Light enough to see the model through. At nearly half opaque it painted
+                // everything behind it orange, which mattered little while the whole object was
+                // drawn and a great deal once the off cut could be taken away.
+                DiffuseColor = new SharpDX.Color4(1f, 0.6f, 0.2f, 0.22f),
+                AmbientColor = new SharpDX.Color4(0.35f, 0.18f, 0.04f, 1f)
             },
             IsTransparent = true,
             IsHitTestVisible = false
@@ -1056,6 +1104,55 @@ public partial class MainWindow : Window
     {
         if (sender is RadioButton { Tag: string tag } && Enum.TryParse(tag, out SplitKeep keep))
             viewModel.SplitKeep = keep;
+    }
+
+    private void OnSplitOffcutChanged(object sender, RoutedEventArgs e)
+    {
+        if (sender is RadioButton { Tag: string tag } && Enum.TryParse(tag, out SplitOffcut offcut))
+            viewModel.SplitOffcut = offcut;
+    }
+
+    /// <summary>
+    /// Says the split preview needs redoing. Leaving is done at once; anything else waits for
+    /// <see cref="SettleSplitPreview"/>, because a drag asks for this on every mouse move.
+    /// </summary>
+    private void RefreshSplitPreview(bool now = false)
+    {
+        if (renderer is null) return;
+
+        if (!viewModel.IsSplitMode)
+        {
+            splitPreviewStale = false;
+            renderer.ClearSplit();
+            return;
+        }
+
+        splitPreviewStale = true;
+        if (now) splitPreviewWait = 0;
+    }
+
+    /// <summary>
+    /// Redraws the selection as the split would leave it, at a rate the machine can stand.
+    ///
+    /// Cutting the triangles is one pass, but the shading normals have to be worked out again
+    /// afterwards and on a dense model that is not free. So the preview is redone at most every
+    /// so often, and the wait is set from how long the last one actually took: a light model
+    /// follows the plane about, a heavy one catches up a few times a second, and neither leaves
+    /// the pointer waiting on the geometry.
+    /// </summary>
+    private void SettleSplitPreview()
+    {
+        if (!splitPreviewStale || renderer is null || !viewModel.IsSplitMode) return;
+        if (splitPreviewClock.Elapsed.TotalMilliseconds < splitPreviewWait) return;
+
+        splitPreviewStale = false;
+
+        long started = Stopwatch.GetTimestamp();
+        renderer.ShowSplit(viewModel.Scene.Selection, viewModel.SplitNormal, viewModel.SplitOffset,
+                           viewModel.SplitKeep, viewModel.SplitOffcut, viewModel.SplitFillsCut);
+
+        splitPreviewWait = Math.Clamp(Stopwatch.GetElapsedTime(started).TotalMilliseconds * 4, 60, 600);
+        splitPreviewClock.Restart();
     }
 
     // --- View presets ----------------------------------------------------------------

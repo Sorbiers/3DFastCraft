@@ -39,6 +39,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
     private string status = "Ready";
     private bool isBusy;
     private bool isStopping;
+    private bool historyTrimmed;
     private string busyTitle = "";
     private string busyElapsed = "";
     private string busyStage = "";
@@ -55,6 +56,9 @@ public sealed class MainViewModel : INotifyPropertyChanged
     private Axis splitAxis = Axis.Z;
     private float splitOffset;
     private SplitKeep splitKeep = SplitKeep.Both;
+    private Render.SplitOffcut splitOffcut = Render.SplitOffcut.Faded;
+    private GizmoMode splitGizmoMode = GizmoMode.Move;
+    private bool splitFillsCut = true;
     private bool isSplitMode;
     private bool isEngraveMode;
     private bool isMeasureMode;
@@ -94,6 +98,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
     private readonly List<SceneObject> clipboard = new();
     private GizmoMode gizmoMode = GizmoMode.Move;
     private bool uniformScale = true;
+    private MeasureUnit unit = MeasureUnit.Default;
     private bool snapRotation = true;
     private double snapStep;
     private readonly RecentFiles recent = new();
@@ -149,6 +154,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
             () => { svgFile = ""; RefreshDrawing(); }, () => svgFile.Length > 0);
         RepeatCommand = RelayCommand.Simple(RepeatSelection, () => Scene.Selection.Count > 0);
         AbortCommand = RelayCommand.Simple(AbortWork, () => CanAbort);
+        Undo.Trimmed += () => HistoryTrimmed = true;
         sink = new Sink(value => reported = value);
         MouldCommand = new AsyncRelayCommand(_ => MakeMould(), _ => Scene.Selection.Count == 1);
         AlignToSelectionCommand = RelayCommand.Simple(
@@ -287,7 +293,18 @@ public sealed class MainViewModel : INotifyPropertyChanged
         }
     }
 
-    private void OnSelectedTransformed(object? sender, PropertyChangedEventArgs e) => RaiseReal();
+    /// <summary>
+    /// Mirrors the selected object's own notifications onto the boxes.
+    ///
+    /// Only on the transform itself. The object announces a dozen derived properties for one
+    /// change - every position, size and rotation component - and answering each of them meant
+    /// the whole bar, the status line and the readings at scale were rebuilt twelve times over.
+    /// </summary>
+    private void OnSelectedTransformed(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName is nameof(SceneObject.Transform) or nameof(SceneObject.Mesh))
+            RaiseTransformFields();
+    }
 
     /// <summary>One object selected - the numeric fields in the manipulator bar need exactly one.</summary>
     public bool HasSelection => selected is not null;
@@ -313,20 +330,20 @@ public sealed class MainViewModel : INotifyPropertyChanged
     /// </summary>
     public float GroupX
     {
-        get => GroupCentre().X;
-        set => MoveGroupTo(Axis.X, value);
+        get => unit.From(GroupCentre().X);
+        set => MoveGroupTo(Axis.X, unit.To(value));
     }
 
     public float GroupY
     {
-        get => GroupCentre().Y;
-        set => MoveGroupTo(Axis.Y, value);
+        get => unit.From(GroupCentre().Y);
+        set => MoveGroupTo(Axis.Y, unit.To(value));
     }
 
     public float GroupZ
     {
-        get => GroupCentre().Z;
-        set => MoveGroupTo(Axis.Z, value);
+        get => unit.From(GroupCentre().Z);
+        set => MoveGroupTo(Axis.Z, unit.To(value));
     }
 
     /// <summary>
@@ -364,20 +381,20 @@ public sealed class MainViewModel : INotifyPropertyChanged
     /// </summary>
     public float GroupSizeX
     {
-        get => GroupExtent().X;
-        set => ResizeGroup(Axis.X, value);
+        get => unit.From(GroupExtent().X);
+        set => ResizeGroup(Axis.X, unit.To(value));
     }
 
     public float GroupSizeY
     {
-        get => GroupExtent().Y;
-        set => ResizeGroup(Axis.Y, value);
+        get => unit.From(GroupExtent().Y);
+        set => ResizeGroup(Axis.Y, unit.To(value));
     }
 
     public float GroupSizeZ
     {
-        get => GroupExtent().Z;
-        set => ResizeGroup(Axis.Z, value);
+        get => unit.From(GroupExtent().Z);
+        set => ResizeGroup(Axis.Z, unit.To(value));
     }
 
     private float Shared(Func<SceneObject, float> of)
@@ -629,6 +646,19 @@ public sealed class MainViewModel : INotifyPropertyChanged
         private set => Set(ref busyIndeterminate, value);
     }
 
+    /// <summary>
+    /// The history has had to let go of its oldest steps, so undo can no longer get all the way
+    /// back - and the only thing that still can is a saved version.
+    ///
+    /// Shown until one is saved rather than flashed in the status bar, because it is not news
+    /// about the last operation; it is a standing fact about what can still be recovered.
+    /// </summary>
+    public bool HistoryTrimmed
+    {
+        get => historyTrimmed;
+        private set => Set(ref historyTrimmed, value);
+    }
+
     /// <summary>Abort has been pressed and the work has not reached a checkpoint yet.</summary>
     public bool IsStopping
     {
@@ -845,10 +875,22 @@ public sealed class MainViewModel : INotifyPropertyChanged
             if (selection.Count > 1) return $"{selection.Count} objects selected";
 
             var o = selection[0];
-            var health = o.ToWorldMesh().CheckHealth();
-            var bounds = o.WorldBounds;
-            return $"{o.Name} - {bounds} - {health.TriangleCount:N0} triangles - " +
-                   $"{health.VolumeCm3:0.##} cm3 - {health.Describe()}";
+
+            // The object's own kept answer. Building the world mesh and checking it here cost a
+            // second at eight hundred thousand triangles and four at three million, every time
+            // this was raised - and one nudge raises it a dozen times.
+            var health = o.Health;
+
+            // Measured here rather than by Bounds, which reports in millimetres and should: the
+            // unit is the view's business and the geometry has no idea one has been chosen.
+            var size = o.WorldBounds.Size;
+            string measured = o.WorldBounds.IsEmpty
+                ? "empty"
+                : $"{unit.From(size.X):0.####} x {unit.From(size.Y):0.####} x "
+                  + $"{unit.From(size.Z):0.####} {unit.Label}";
+
+            return $"{o.Name} - {measured} - {health.TriangleCount:N0} triangles - " +
+                   $"{o.VolumeCm3:0.##} cm3 - {health.Describe()}";
         }
     }
 
@@ -921,6 +963,34 @@ public sealed class MainViewModel : INotifyPropertyChanged
         get => gizmoMode == GizmoMode.Scale;
         set { if (value) GizmoMode = GizmoMode.Scale; }
     }
+
+    /// <summary>
+    /// The unit the position and size boxes are read and typed in.
+    ///
+    /// Display only. Millimetres are what is stored and what is written to an STL, which carries
+    /// no unit of its own and is read as millimetres by every slicer - so working in inches
+    /// changes the boxes and not one number in the exported file.
+    /// </summary>
+    public MeasureUnit Unit
+    {
+        get => unit;
+        set
+        {
+            if (unit.Label == value.Label) return;
+
+            Set(ref unit, value);
+            Raise(nameof(UnitLabel));
+            RaiseTransformFields();
+        }
+    }
+
+    public IReadOnlyList<MeasureUnit> Units => MeasureUnit.All;
+
+    /// <summary>What the boxes are labelled with - "mm", "in", and so on.</summary>
+    public string UnitLabel => unit.Label;
+
+    /// <summary>What one press of an arrow key changes a box by, in the current unit.</summary>
+    public float UnitStep => unit.Step;
 
     /// <summary>Resize all three axes together, keeping the shape proportional.</summary>
     public bool UniformScale
@@ -1501,7 +1571,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
     private string WayRound() => embossProjection == TextProjection.Planar
         ? "A flatter face, a larger size or a shallower depth will usually get through."
         : "Wrapping is hardest on letters with an enclosed middle - O, B, A, D. Lettering "
-          + "without them usually goes on; so does Rebuild on the Object tab afterwards, which "
+          + "without them usually goes on; so does Rebuild on the Tools tab afterwards, which "
           + "remakes the whole shape from scratch.";
 
     private void RefreshEmboss()
@@ -1807,41 +1877,81 @@ public sealed class MainViewModel : INotifyPropertyChanged
     /// </summary>
     public bool ScaleApplies => modelScale > 1.001f && Scene.Selection.Count > 0;
 
-    private float ToReal(float millimetres) => millimetres * modelScale / 1000f;
+    /// <summary>
+    /// Millimetres on the plate to what they stand for at this scale, in metres or in feet
+    /// depending on which system the boxes are in.
+    /// </summary>
+    private float ToReal(float millimetres) => millimetres * modelScale / unit.Real.Millimetres;
 
-    private float FromReal(float metres) => metres * 1000f / modelScale;
+    private float FromReal(float real) => real * unit.Real.Millimetres / modelScale;
+
+    /// <summary>
+    /// Where the selection sits and how big it is, in millimetres.
+    ///
+    /// The Group boxes read in the display unit now, so the readings at scale have to come off
+    /// these instead - taking the display value would have converted it twice and put a part in
+    /// the wrong place the moment anyone left millimetres.
+    /// </summary>
+    private float GroupAt(Axis axis) => Along(GroupCentre(), axis);
+
+    private float GroupSpan(Axis axis) => Along(GroupExtent(), axis);
 
     public float RealX
     {
-        get => ToReal(HasOneSelected ? Selected!.PositionX : GroupX);
+        get => ToReal(HasOneSelected ? Selected!.PositionX : GroupAt(Axis.X));
         set
         {
             if (HasOneSelected) Selected!.PositionX = FromReal(value);
-            else GroupX = FromReal(value);
+            else MoveGroupTo(Axis.X, FromReal(value));
             RaiseReal();
         }
     }
 
     public float RealY
     {
-        get => ToReal(HasOneSelected ? Selected!.PositionY : GroupY);
+        get => ToReal(HasOneSelected ? Selected!.PositionY : GroupAt(Axis.Y));
         set
         {
             if (HasOneSelected) Selected!.PositionY = FromReal(value);
-            else GroupY = FromReal(value);
+            else MoveGroupTo(Axis.Y, FromReal(value));
             RaiseReal();
         }
     }
 
     public float RealZ
     {
-        get => ToReal(HasOneSelected ? Selected!.PositionZ : GroupZ);
+        get => ToReal(HasOneSelected ? Selected!.PositionZ : GroupAt(Axis.Z));
         set
         {
             if (HasOneSelected) Selected!.PositionZ = FromReal(value);
-            else GroupZ = FromReal(value);
+            else MoveGroupTo(Axis.Z, FromReal(value));
             RaiseReal();
         }
+    }
+
+    /// <summary>
+    /// Where the selected object sits, in whatever unit is chosen.
+    ///
+    /// These were bound straight to the object, which knows only millimetres. They come through
+    /// here now for the same reason the sizes do: the unit is the view's business, not the
+    /// model's, and the model never learns about it.
+    /// </summary>
+    public float ObjectPositionX
+    {
+        get => unit.From(Selected?.PositionX ?? 0f);
+        set { if (Selected is { } o) { o.PositionX = unit.To(value); RaiseTransformFields(); } }
+    }
+
+    public float ObjectPositionY
+    {
+        get => unit.From(Selected?.PositionY ?? 0f);
+        set { if (Selected is { } o) { o.PositionY = unit.To(value); RaiseTransformFields(); } }
+    }
+
+    public float ObjectPositionZ
+    {
+        get => unit.From(Selected?.PositionZ ?? 0f);
+        set { if (Selected is { } o) { o.PositionZ = unit.To(value); RaiseTransformFields(); } }
     }
 
     /// <summary>
@@ -1859,20 +1969,20 @@ public sealed class MainViewModel : INotifyPropertyChanged
     /// </summary>
     public float ObjectSizeX
     {
-        get => Selected?.SizeX ?? 0f;
-        set => ResizeSelected(Axis.X, value);
+        get => unit.From(Selected?.SizeX ?? 0f);
+        set => ResizeSelected(Axis.X, unit.To(value));
     }
 
     public float ObjectSizeY
     {
-        get => Selected?.SizeY ?? 0f;
-        set => ResizeSelected(Axis.Y, value);
+        get => unit.From(Selected?.SizeY ?? 0f);
+        set => ResizeSelected(Axis.Y, unit.To(value));
     }
 
     public float ObjectSizeZ
     {
-        get => Selected?.SizeZ ?? 0f;
-        set => ResizeSelected(Axis.Z, value);
+        get => unit.From(Selected?.SizeZ ?? 0f);
+        set => ResizeSelected(Axis.Z, unit.To(value));
     }
 
     /// <summary>
@@ -1912,35 +2022,58 @@ public sealed class MainViewModel : INotifyPropertyChanged
 
     public float RealW
     {
-        get => ToReal(HasOneSelected ? Selected!.SizeX : GroupSizeX);
+        get => ToReal(HasOneSelected ? Selected!.SizeX : GroupSpan(Axis.X));
         set
         {
             if (HasOneSelected) ResizeSelected(Axis.X, FromReal(value));
-            else GroupSizeX = FromReal(value);
+            else ResizeGroup(Axis.X, FromReal(value));
             RaiseReal();
         }
     }
 
     public float RealD
     {
-        get => ToReal(HasOneSelected ? Selected!.SizeY : GroupSizeY);
+        get => ToReal(HasOneSelected ? Selected!.SizeY : GroupSpan(Axis.Y));
         set
         {
             if (HasOneSelected) ResizeSelected(Axis.Y, FromReal(value));
-            else GroupSizeY = FromReal(value);
+            else ResizeGroup(Axis.Y, FromReal(value));
             RaiseReal();
         }
     }
 
     public float RealH
     {
-        get => ToReal(HasOneSelected ? Selected!.SizeZ : GroupSizeZ);
+        get => ToReal(HasOneSelected ? Selected!.SizeZ : GroupSpan(Axis.Z));
         set
         {
             if (HasOneSelected) ResizeSelected(Axis.Z, FromReal(value));
-            else GroupSizeZ = FromReal(value);
+            else ResizeGroup(Axis.Z, FromReal(value));
             RaiseReal();
         }
+    }
+
+    /// <summary>
+    /// Every box that shows a length. Changing the unit changes all of them at once, and so does
+    /// moving anything, so they are raised together rather than each caller remembering the list.
+    /// </summary>
+    private void RaiseTransformFields()
+    {
+        Raise(nameof(ObjectPositionX));
+        Raise(nameof(ObjectPositionY));
+        Raise(nameof(ObjectPositionZ));
+
+        Raise(nameof(GroupX));
+        Raise(nameof(GroupY));
+        Raise(nameof(GroupZ));
+
+        Raise(nameof(GroupSizeX));
+        Raise(nameof(GroupSizeY));
+        Raise(nameof(GroupSizeZ));
+
+        Raise(nameof(SelectionSummary));
+        Raise(nameof(RealUnit));
+        RaiseReal();
     }
 
     private void RaiseReal()
@@ -2045,7 +2178,9 @@ public sealed class MainViewModel : INotifyPropertyChanged
     /// The unit on the real-size boxes, with the scale it is at. "m" alone leaves the reader
     /// working out whose metres these are.
     /// </summary>
-    public string RealUnit => modelScale <= 1.001f ? "m" : $"m at 1:{modelScale:0.##}";
+    public string RealUnit => modelScale <= 1.001f
+        ? unit.Real.Label
+        : $"{unit.Real.Label} at 1:{modelScale:0.##}";
 
     /// <summary>
     /// What the selection measures at the scene's scale, shown beside the millimetres. Metres
@@ -2296,6 +2431,12 @@ public sealed class MainViewModel : INotifyPropertyChanged
             Set(ref splitAxis, value);
             SplitNormal = PlaneSplit.NormalFor(value);
             ResetSplitOffset();
+
+            // Turning about the axis the plane lies on moves nothing, so which of the three
+            // boxes is the dead one changes with the axis.
+            Raise(nameof(SplitRollApplies));
+            Raise(nameof(SplitPitchApplies));
+            Raise(nameof(SplitYawApplies));
         }
     }
 
@@ -2312,6 +2453,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
             Raise(nameof(SplitNormal));
             Raise(nameof(KeepFrontLabel));
             Raise(nameof(KeepBackLabel));
+            RaiseSplitAngles();
         }
     }
 
@@ -2374,7 +2516,189 @@ public sealed class MainViewModel : INotifyPropertyChanged
     public SplitKeep SplitKeep
     {
         get => splitKeep;
-        set => Set(ref splitKeep, value);
+        set
+        {
+            Set(ref splitKeep, value);
+            Raise(nameof(SplitOffcutApplies));
+            Raise(nameof(SplitCutFaceApplies));
+        }
+    }
+
+    /// <summary>
+    /// What becomes of the half the split would throw away while the plane is being placed.
+    ///
+    /// Faded to begin with. The plane on its own says where the cut falls but not which side of
+    /// it survives, and on anything but a simple shape that is genuinely hard to picture.
+    /// </summary>
+    public Render.SplitOffcut SplitOffcut
+    {
+        get => splitOffcut;
+        set
+        {
+            Set(ref splitOffcut, value);
+            Raise(nameof(SplitCutFaceApplies));
+        }
+    }
+
+    /// <summary>Keeping both halves throws nothing away, so there is nothing to fade or hide.</summary>
+    public bool SplitOffcutApplies => splitKeep is not SplitKeep.Both;
+
+    /// <summary>And nothing is cut open to look into unless a half is being taken off.</summary>
+    public bool SplitCutFaceApplies =>
+        splitKeep is not SplitKeep.Both && splitOffcut is not Render.SplitOffcut.Shown;
+
+    /// <summary>
+    /// Whether the face the cut exposes is closed over.
+    ///
+    /// On by default: an open cut shows the inside of the shell, which reads as a hollow model
+    /// rather than as a solid one that has been cut. Off is worth having anyway - looking into
+    /// the piece is the quickest way to see how thick a wall is, or whether there is anything
+    /// in there at all - and it costs a couple of milliseconds on a scan either way.
+    /// </summary>
+    public bool SplitFillsCut
+    {
+        get => splitFillsCut;
+        set => Set(ref splitFillsCut, value);
+    }
+
+    /// <summary>
+    /// Puts down whichever tool has the object, and says whether there was one.
+    ///
+    /// Escape is the key everybody reaches for, and every tool has its own Cancel button in its
+    /// own panel - so it goes through one place here rather than being wired up six times and
+    /// forgotten on the seventh.
+    /// </summary>
+    public bool CancelActiveTool()
+    {
+        if (IsSplitMode) IsSplitMode = false;
+        else if (IsMeasureMode) IsMeasureMode = false;
+        else if (IsEngraveMode) IsEngraveMode = false;
+        else if (IsEmbossMode) IsEmbossMode = false;
+        else if (IsLayMode) IsLayMode = false;
+        else if (IsSubtractMode) IsSubtractMode = false;
+        else return false;
+
+        Status = "Cancelled - nothing was changed";
+        return true;
+    }
+
+    /// <summary>Whether the split handles slide the plane or turn it.</summary>
+    public GizmoMode SplitGizmoMode
+    {
+        get => splitGizmoMode;
+        set
+        {
+            if (splitGizmoMode == value) return;
+            splitGizmoMode = value;
+
+            Raise(nameof(SplitGizmoMode));
+            Raise(nameof(SplitMoveMode));
+            Raise(nameof(SplitTurnMode));
+        }
+    }
+
+    public bool SplitMoveMode
+    {
+        get => splitGizmoMode is GizmoMode.Move;
+        set { if (value) SplitGizmoMode = GizmoMode.Move; }
+    }
+
+    public bool SplitTurnMode
+    {
+        get => splitGizmoMode is GizmoMode.Rotate;
+        set { if (value) SplitGizmoMode = GizmoMode.Rotate; }
+    }
+
+    /// <summary>
+    /// The plane's turn, typed rather than dragged, as the same roll, pitch and yaw an object
+    /// has: turns about X, Y and Z.
+    ///
+    /// The rings snap to fifteen degrees, which is right for a rough cut and no use at all for a
+    /// joint that has to be 22.5. Only two of the three ever do anything - a turn about the axis
+    /// the plane lies on leaves it exactly where it was - so that one reads nought and is dead.
+    ///
+    /// The angles are read back off the plane's facing rather than kept beside it, so there is
+    /// one answer to which way the plane faces and a dragged ring and a typed number cannot
+    /// come to disagree about it.
+    /// </summary>
+    public double SplitRoll
+    {
+        get => TurnAbout(Axis.X);
+        set => TurnAbout(Axis.X, value);
+    }
+
+    public double SplitPitch
+    {
+        get => TurnAbout(Axis.Y);
+        set => TurnAbout(Axis.Y, value);
+    }
+
+    public double SplitYaw
+    {
+        get => TurnAbout(Axis.Z);
+        set => TurnAbout(Axis.Z, value);
+    }
+
+    public bool SplitRollApplies => splitAxis is not Axis.X;
+    public bool SplitPitchApplies => splitAxis is not Axis.Y;
+    public bool SplitYawApplies => splitAxis is not Axis.Z;
+
+    private double TurnAbout(Axis about)
+    {
+        var (first, second) = PlaneTilt.Angles(splitAxis, splitNormal);
+        var (firstAxis, secondAxis) = PlaneTilt.AxesFor(splitAxis);
+        Vector3 wanted = PlaneSplit.NormalFor(about);
+
+        if (firstAxis == wanted) return first;
+        if (secondAxis == wanted) return second;
+
+        return 0;
+    }
+
+    private void TurnAbout(Axis about, double degrees)
+    {
+        var (first, second) = PlaneTilt.Angles(splitAxis, splitNormal);
+        var (firstAxis, secondAxis) = PlaneTilt.AxesFor(splitAxis);
+        Vector3 wanted = PlaneSplit.NormalFor(about);
+
+        if (firstAxis == wanted) TiltTo(degrees, second);
+        else if (secondAxis == wanted) TiltTo(first, degrees);
+    }
+
+    private void RaiseSplitAngles()
+    {
+        Raise(nameof(SplitRoll));
+        Raise(nameof(SplitPitch));
+        Raise(nameof(SplitYaw));
+    }
+
+    /// <summary>
+    /// Turns the plane to a pair of angles without letting it wander off what it is cutting.
+    ///
+    /// The offset is measured along the normal, so a new normal on its own moves the plane
+    /// bodily as well as turning it. Restating the offset through the point the plane already
+    /// passes through leaves it where it is - the same thing the tilt rings do while dragging.
+    /// </summary>
+    private void TiltTo(double first, double second)
+    {
+        Vector3 pivot = SplitPlanePoint();
+
+        SplitNormal = PlaneTilt.Normal(splitAxis, first, second);
+        SplitOffset = Vector3.Dot(splitNormal, pivot);
+
+        RaiseSplitAngles();
+
+        Status = $"Split plane turned {SplitRoll:0.##}, {SplitPitch:0.##}, {SplitYaw:0.##} deg";
+    }
+
+    /// <summary>The point of the plane nearest what it is cutting, which is what it turns about.</summary>
+    private Vector3 SplitPlanePoint()
+    {
+        var bounds = Bounds.Empty;
+        foreach (var o in Scene.Selection) bounds = bounds.Union(o.WorldBounds);
+
+        Vector3 centre = bounds.IsEmpty ? Vector3.Zero : bounds.Center;
+        return centre - splitNormal * (Vector3.Dot(splitNormal, centre) - splitOffset);
     }
 
     // --- Operations ------------------------------------------------------------------
@@ -2546,7 +2870,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
             if (result.Parts.Any(p => !p.Watertight))
                 MessageBox.Show(
                     result.Summary + "\n\nA piece that is not watertight will not slice. Select it "
-                    + "and use Rebuild on the Edit tab, which remakes a shape the boolean has "
+                    + "and use Rebuild on the Tools tab, which remakes a shape the boolean has "
                     + "given up on.",
                     "3DFastCraft", MessageBoxButton.OK, MessageBoxImage.Warning);
         }
@@ -3559,7 +3883,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
                     + "a face that is one facet of something round, where a flat pattern was never "
                     + "going to sit properly anyway." + Environment.NewLine + Environment.NewLine
                     + "A coarser pattern, a shallower depth, or nudging Shift across by a fraction "
-                    + "will usually get through. Rebuild, on the Edit tab, remakes the surface from "
+                    + "will usually get through. Rebuild, on the Tools tab, remakes the surface from "
                     + "scratch and always does.",
                     "3DFastCraft", MessageBoxButton.OK, MessageBoxImage.Warning);
                 return;
@@ -3851,6 +4175,10 @@ public sealed class MainViewModel : INotifyPropertyChanged
         {
             SceneSerializer.SaveVersion(projectPath, Scene, prompt.VersionLabel);
             IsDirty = false;
+
+            // There is a way back again, so the notice has done its job.
+            HistoryTrimmed = false;
+
             Status = $"Kept version \"{prompt.VersionLabel}\" in {Path.GetFileName(projectPath)}";
         }
         catch (Exception ex)

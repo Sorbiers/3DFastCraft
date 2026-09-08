@@ -17,7 +17,12 @@ set to 1:12, so the manipulator bar reads the tread in metres beside the millime
 ## Requirements
 
 - Windows 10/11, 64-bit
-- A GPU supporting Direct3D 11 (feature level 11_0)
+- **Graphics that support Direct3D 11** (feature level 11_0). Not a separate card - the integrated
+  graphics in any processor since about 2010 will do. The whole viewport is Direct3D, so this is a
+  requirement rather than a preference: without it the app says so and stops. The cases where it is
+  genuinely missing are a virtual machine with no display driver, some remote desktop connections,
+  and a fresh Windows install still running on the Basic Display Adapter - installing the machine's
+  graphics driver fixes that last one.
 - .NET 8 Desktop Runtime — *unless* you use the self-contained build below
 
 ## Building and running
@@ -118,7 +123,7 @@ New shapes are handed a colour in turn from a six-colour cycle, so a scene stays
 anyone having to paint anything.
 
 To change one, select the objects and click a swatch in the **Colour** grid on the right - the
-whole selection is painted in a single undo step. **Custom...** on the Object tab (or the button
+whole selection is painted in a single undo step. **Colour...** on the Object tab (or **Custom...**
 under the grid) opens a picker with a saturation/value square, a hue strip, and hex and RGB
 boxes; it opens on the colour the selection already has, so a small adjustment starts from
 where you are.
@@ -172,7 +177,7 @@ hidden altogether. It is rebuilt rather than stretched when the size changes: it
 
 ### Smoothing
 
-**Smooth...** on the Object tab rounds a shape off, with the result shown on the plate as you set
+**Smooth...** on the Edit tab rounds a shape off, with the result shown on the plate as you set
 it. Two settings, because smoothing has two halves that are easy to confuse:
 
 - **Smoothness** is how hard the surface is pulled toward its own average.
@@ -419,7 +424,7 @@ with no hole under it and a lid resting on its own hinge both look perfectly rig
 
 ### Laying a part on its face
 
-**Lay on face** on the Object tab answers the printing question of which way up to put a part.
+**Lay on face** on the Align tab answers the printing question of which way up to put a part.
 Press it, click the face you want on the bed, and the object tips over onto it and settles.
 
 It takes the shortest turn that gets there, so the object looks tipped rather than spun, and it
@@ -428,7 +433,7 @@ whole job; there is no panel and no second step.
 
 ### Rounding edges
 
-**Round...** on the Object tab rebuilds a **cube** or **cylinder** with rounded edges at a radius
+**Round...** on the Edit tab rebuilds a **cube** or **cylinder** with rounded edges at a radius
 you choose, shown on the plate as you set it, on whichever edge groups you tick:
 
 | | Cube | Cylinder |
@@ -891,6 +896,11 @@ primitives headed to a slicer.
   asks for first.
 - **Selecting several objects through UI Automation stops working after an export** in a session.
   Ctrl+click in the object list is unaffected, and so is everything done with a mouse.
+- **Undo keeps about a gigabyte of history and lets the oldest steps go beyond that.** A move or a
+  colour remembers only numbers, so that is thousands of them; a mould of a scan is two parts of
+  about twenty-six megabytes, so it is around twenty of those. Whatever was just done is always
+  undoable however big it is. When older steps are let go, a notice offers to save a version -
+  which is what still gets you back afterwards.
 - No 3MF, and no printer integration.
 
 ## Layout

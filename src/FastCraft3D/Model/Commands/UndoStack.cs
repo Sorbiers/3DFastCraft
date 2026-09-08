@@ -7,6 +7,25 @@ public interface IUndoableCommand
     string Label { get; }
     void Apply(Scene scene);
     void Revert(Scene scene);
+
+    /// <summary>
+    /// Roughly how much memory this step is holding on to, for the history's budget.
+    ///
+    /// Nought for the ones that only remember numbers - a move, a colour. The ones that hold
+    /// geometry say so: a mould of a three hundred thousand triangle scan comes out as two parts
+    /// of about twenty-six megabytes, measured, and nothing was ever letting them go.
+    ///
+    /// Deliberately rough, and deliberately over rather than under: a mesh held by both the scene
+    /// and a step is counted twice, which errs towards keeping less history rather than more.
+    /// </summary>
+    long Bytes => 0;
+}
+
+/// <summary>What a set of objects costs to keep, near enough for a budget.</summary>
+internal static class Weight
+{
+    public static long Of(IEnumerable<SceneObject> objects) => objects.Sum(o =>
+        (long)o.Mesh.Positions.Count * 12 + (long)o.Mesh.Indices.Count * 4);
 }
 
 /// <summary>
@@ -18,31 +37,60 @@ public interface IUndoableCommand
 /// </summary>
 public sealed class UndoStack
 {
-    private readonly Stack<IUndoableCommand> done = new();
+    /// <summary>
+    /// How much geometry the history may hold before the oldest steps are let go.
+    ///
+    /// A budget rather than a count, because the steps are not the same size: a move remembers
+    /// nothing but numbers and a mould remembers fifty megabytes. This is thousands of ordinary
+    /// edits or about twenty moulds, and it works out which without being told. What it replaces
+    /// is no limit at all, which on a long session of heavy work only ever went one way.
+    /// </summary>
+    public const long Budget = 1L << 30;
+
+    private readonly List<IUndoableCommand> done = new();
     private readonly Stack<IUndoableCommand> undone = new();
     private readonly Scene scene;
+    private long held;
 
     public UndoStack(Scene scene) => this.scene = scene;
 
     public event Action? Changed;
 
+    /// <summary>
+    /// Raised when a step has been let go to stay inside the budget - which is the moment undo
+    /// stops being able to get you all the way back, and so the moment to say so.
+    /// </summary>
+    public event Action? Trimmed;
+
     public bool CanUndo => done.Count > 0;
     public bool CanRedo => undone.Count > 0;
-    public string? NextUndoLabel => done.Count > 0 ? done.Peek().Label : null;
+    public string? NextUndoLabel => done.Count > 0 ? done[^1].Label : null;
     public string? NextRedoLabel => undone.Count > 0 ? undone.Peek().Label : null;
+
+    /// <summary>How much the history is holding, for anything that wants to show it.</summary>
+    public long Held => held;
 
     public void Execute(IUndoableCommand command)
     {
         command.Apply(scene);
-        done.Push(command);
+
+        done.Add(command);
+        held += command.Bytes;
+
+        foreach (var dropped in undone) held -= dropped.Bytes;
         undone.Clear();
+
+        Fit();
         Changed?.Invoke();
     }
 
     public void Undo()
     {
         if (done.Count == 0) return;
-        var command = done.Pop();
+
+        var command = done[^1];
+        done.RemoveAt(done.Count - 1);
+
         command.Revert(scene);
         undone.Push(command);
         Changed?.Invoke();
@@ -51,9 +99,10 @@ public sealed class UndoStack
     public void Redo()
     {
         if (undone.Count == 0) return;
+
         var command = undone.Pop();
         command.Apply(scene);
-        done.Push(command);
+        done.Add(command);
         Changed?.Invoke();
     }
 
@@ -61,13 +110,36 @@ public sealed class UndoStack
     {
         done.Clear();
         undone.Clear();
+        held = 0;
         Changed?.Invoke();
+    }
+
+    /// <summary>
+    /// Lets the oldest steps go until the history is back inside its budget.
+    ///
+    /// Never the last one. Whatever was just done has to be undoable however big it is - being
+    /// unable to take back the operation you are looking at is worse than any amount of memory.
+    /// </summary>
+    private void Fit()
+    {
+        bool lost = false;
+
+        while (done.Count > 1 && held > Budget)
+        {
+            held -= done[0].Bytes;
+            done.RemoveAt(0);
+            lost = true;
+        }
+
+        if (lost) Trimmed?.Invoke();
     }
 }
 
 public sealed class AddObjectsCommand(string label, IReadOnlyList<SceneObject> objects) : IUndoableCommand
 {
     public string Label { get; } = label;
+
+    public long Bytes => Weight.Of(objects);
 
     public void Apply(Scene scene)
     {
@@ -91,6 +163,8 @@ public sealed class DeleteObjectsCommand(IReadOnlyList<SceneObject> objects) : I
     private readonly List<(SceneObject Object, int Index)> removed = new();
 
     public string Label => objects.Count == 1 ? "Delete object" : $"Delete {objects.Count} objects";
+
+    public long Bytes => Weight.Of(objects);
 
     public void Apply(Scene scene)
     {
@@ -128,6 +202,8 @@ public sealed class ReplaceObjectsCommand(
     private readonly List<int> removedIndices = new();
 
     public string Label { get; } = label;
+
+    public long Bytes => Weight.Of(removed) + Weight.Of(added);
 
     public void Apply(Scene scene)
     {
@@ -179,6 +255,8 @@ public sealed class ReplaceObjectsCommand(
 public sealed class CompoundCommand(string label, IReadOnlyList<IUndoableCommand> steps) : IUndoableCommand
 {
     public string Label { get; } = label;
+
+    public long Bytes => steps.Sum(step => step.Bytes);
 
     public void Apply(Scene scene)
     {

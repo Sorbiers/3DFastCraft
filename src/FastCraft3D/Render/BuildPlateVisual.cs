@@ -1,4 +1,4 @@
-using System.Windows.Media;
+﻿using System.Windows.Media;
 using FastCraft3D.Geometry;
 using HelixToolkit.SharpDX.Core;
 using HelixToolkit.Wpf.SharpDX;
@@ -52,19 +52,45 @@ public static class BuildPlateVisual
         yield return Outline(plateSize);
     }
 
-    private static MeshGeometryModel3D Tile(Mesh mesh, Color colour) => new()
+    /// <summary>
+    /// How solid the board is. Enough to read as a surface from above, little enough to see a
+    /// part through it from below - which is where you look to check what a cut left behind, and
+    /// an opaque board simply hid it.
+    /// </summary>
+    private const float Solidity = 0.55f;
+
+    private static MeshGeometryModel3D Tile(Mesh mesh, Color colour)
     {
-        Geometry = MeshConverter.ToGeometry(mesh),
-        Material = new PhongMaterial
+        var shade = colour.ToColor4();
+        shade.Alpha = Solidity;
+
+        return new MeshGeometryModel3D
         {
-            DiffuseColor = colour.ToColor4(),
-            SpecularColor = new SharpDX.Color4(0, 0, 0, 1),
-            AmbientColor = new SharpDX.Color4(0.55f, 0.55f, 0.58f, 1f)
-        },
-        // The plate is one-sided geometry viewed from both above and below.
-        CullMode = SharpDX.Direct3D11.CullMode.None,
-        IsHitTestVisible = false
-    };
+            Geometry = MeshConverter.ToGeometry(mesh),
+            Material = new PhongMaterial
+            {
+                DiffuseColor = shade,
+                SpecularColor = new SharpDX.Color4(0, 0, 0, 1),
+                AmbientColor = new SharpDX.Color4(0.55f, 0.55f, 0.58f, 1f)
+            },
+            // The flag as well as the alpha: it is what puts the board through the ordered
+            // transparency pass instead of straight into the depth buffer.
+            IsTransparent = true,
+
+            // Held a hair further from the camera than everything else, so a part standing on
+            // the board does not fight it for pixels. Their surfaces are in the same place by
+            // definition - that is what standing on the plate means - and seen from underneath
+            // the two tore into stripes. Moving the board down instead would have to be by more
+            // than the depth buffer can tell apart, which is a hundredth of a millimetre up
+            // close and most of a millimetre across a metre-high model; a bias is measured in
+            // what the buffer can tell apart, so one number covers every distance.
+            DepthBias = 8,
+
+            // The plate is one-sided geometry viewed from both above and below.
+            CullMode = SharpDX.Direct3D11.CullMode.None,
+            IsHitTestVisible = false
+        };
+    }
 
     /// <summary>A border so the printable area is unmistakable even when the plate is empty.</summary>
     private static LineGeometryModel3D Outline(float plateSize)

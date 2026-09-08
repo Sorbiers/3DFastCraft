@@ -27,6 +27,7 @@ public sealed class SceneObject : INotifyPropertyChanged
     private string name = "Object";
     private bool isSelected;
     private Bounds? worldBounds;
+    private MeshHealth? health;
 
     public SceneObject(string name, Mesh mesh)
     {
@@ -43,6 +44,8 @@ public sealed class SceneObject : INotifyPropertyChanged
         set
         {
             mesh = value;
+            health = null;
+
             var size = value.ComputeBounds().Size;
             // Guard against flat meshes so dividing by the local size stays safe.
             localSize = new Vector3(
@@ -231,7 +234,55 @@ public sealed class SceneObject : INotifyPropertyChanged
     /// place. On a dense imported mesh, recomputing it sixty times a second would be crippling.
     /// The cache is dropped whenever the transform or the mesh changes.
     /// </summary>
-    public Bounds WorldBounds => worldBounds ??= ToWorldMesh().ComputeBounds();
+    public Bounds WorldBounds => worldBounds ??= MeasureWorldBounds();
+
+    /// <summary>
+    /// The box round the transformed geometry, walked rather than built.
+    ///
+    /// This used to transform the whole mesh and take the bounds of the result, which meant a new
+    /// copy of every vertex and every index each time the cache was dropped - and it is dropped on
+    /// every transform, while the renderer asks for it each frame. On a three million triangle
+    /// mould that is a hundred and fifty megabytes allocated per frame of a drag. The corners of
+    /// the local box will not do instead: turned, its transformed corners bound a larger box than
+    /// the geometry does, and Drop to plate and Align would both land in the wrong place.
+    /// </summary>
+    private Bounds MeasureWorldBounds()
+    {
+        if (mesh.Positions.Count == 0) return Bounds.Empty;
+
+        var transform = Transform;
+        var min = new Vector3(float.PositiveInfinity);
+        var max = new Vector3(float.NegativeInfinity);
+
+        foreach (var p in mesh.Positions)
+        {
+            var at = Vector3.Transform(p, transform);
+            min = Vector3.Min(min, at);
+            max = Vector3.Max(max, at);
+        }
+
+        return new Bounds(min, max);
+    }
+
+    /// <summary>
+    /// What is wrong with the geometry, if anything, kept until the mesh is replaced.
+    ///
+    /// Measured on the local mesh and not the transformed one, because a transform cannot change
+    /// the topology: the same edges meet the same edges wherever the object is put. That is what
+    /// makes it worth keeping - the status bar asks for this every time anything is raised, and on
+    /// a three million triangle mould the check runs for four seconds. It was being run a dozen
+    /// times per nudge, on the UI thread, which is what "Not Responding" was.
+    /// </summary>
+    public MeshHealth Health => health ??= mesh.CheckHealth();
+
+    /// <summary>
+    /// How much material this is on the plate, in cm3.
+    ///
+    /// Volume is the one part of the health that a transform does change, and it changes by the
+    /// determinant of the scale - so it is scaled here rather than measured again.
+    /// </summary>
+    public double VolumeCm3 =>
+        Math.Abs(Health.SignedVolume * scale.X * scale.Y * scale.Z) / 1000.0;
 
     /// <summary>
     /// Moves the geometry onto the object's own origin and takes the position with it, so the

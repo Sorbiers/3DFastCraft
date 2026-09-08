@@ -352,7 +352,7 @@ public static class MouldBuilder
 
         string health = torn == 0
             ? "all watertight"
-            : $"{torn} of them not watertight - select and use Rebuild on the Edit tab";
+            : $"{torn} of them not watertight - select and use Rebuild on the Tools tab";
 
         return $"{parts.Count} part(s), {options.Wall:0.##} mm wall, "
              + $"pour hole {options.SprueRadius * 2:0.##} mm{vents}, cut exactly: {health}.";
