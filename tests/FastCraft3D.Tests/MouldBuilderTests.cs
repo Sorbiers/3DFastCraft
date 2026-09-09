@@ -29,6 +29,36 @@ public class MouldBuilderTests
     [Fact]
     public void OneCutGivesTwoParts() => Assert.Equal(2, Mould(Ball()).Parts.Count);
 
+    /// <summary>
+    /// A key too big for the wall is cut down rather than left hanging off the block.
+    ///
+    /// Keys sit in the corners of the parting face, centred across the wall. A 12 mm key on an
+    /// 8 mm wall put half of a 6 mm cube 4 mm from the outside face, so 2 mm of it stood out in
+    /// mid-air on the corner of the block - accepted by the dialog, visibly wrong on the plate.
+    /// </summary>
+    [Fact]
+    public void AKeyWiderThanTheWallIsBroughtInsideTheBlock()
+    {
+        var model = Ball();
+        var bounds = model.ComputeBounds();
+        var options = MouldOptions.Default with { Wall = 8f, KeyRadius = 6f };
+
+        var mould = MouldBuilder.Build(model, MouldAnalysis.Study(model, 48), options);
+
+        // What the block is: the model's box, grown by the wall. Nothing may stick out of it.
+        var min = bounds.Min - new System.Numerics.Vector3(options.Wall);
+        var max = bounds.Max + new System.Numerics.Vector3(options.Wall);
+
+        foreach (var part in mould.Parts)
+        {
+            var box = part.Mesh.ComputeBounds();
+            Assert.True(box.Min.X >= min.X - 1e-3f && box.Min.Y >= min.Y - 1e-3f
+                && box.Min.Z >= min.Z - 1e-3f && box.Max.X <= max.X + 1e-3f
+                && box.Max.Y <= max.Y + 1e-3f && box.Max.Z <= max.Z + 1e-3f,
+                $"{part.Name} reaches outside the block: {box.Min} to {box.Max}, block {min} to {max}");
+        }
+    }
+
     [Fact]
     public void ALightModelIsCutExactly() => Assert.Contains("cut exactly", Mould(Ball()).Summary);
 

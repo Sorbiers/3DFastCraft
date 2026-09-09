@@ -33,6 +33,25 @@ public readonly record struct MouldOptions(
     /// which here meant no wall, no pour hole and no keys, and a mould that looked plausible until
     /// its volume was measured.
     /// </summary>
+    /// <summary>
+    /// Half a key, cut down to what the wall can hold.
+    ///
+    /// A key sits in the corner of the parting face, centred across the wall, so one wider than
+    /// the wall hangs off the outside of the block: the dialog's default 8 mm key fits an 8 mm
+    /// wall exactly, and a 12 mm key on the same wall overhung the corner by 2 mm. It looked like
+    /// a mistake because it was one. The dialog still takes any number; this is where the number
+    /// is made to fit.
+    ///
+    /// Cut to exactly half the wall, not to a hair inside it. A key face a fraction of a
+    /// millimetre from the block's own face is the near-coplanar contact this boolean engine is
+    /// worst at, and pulling the default key in by 0.2 mm to make room for the socket's clearance
+    /// tore a half that had come back watertight for as long as the tool has existed. Flush is
+    /// what the default 8 mm key on an 8 mm wall has always been, and it works; the socket is
+    /// wider than that by its clearance and breaks the outside face, which is a clean through-cut
+    /// and does no harm.
+    /// </summary>
+    public float KeyHalfIn(float wall) => MathF.Max(0f, MathF.Min(KeyRadius, wall * 0.5f));
+
     public static MouldOptions Default => new(
         Wall: 8f,
         SprueRadius: 5f,
@@ -256,6 +275,8 @@ public static class MouldBuilder
 
         var parts = new List<MouldPart>();
 
+        float keyHalf = options.KeyHalfIn(wall);
+
         for (int i = 0; i < pieces.Count; i++)
         {
             token.ThrowIfCancellationRequested();
@@ -266,14 +287,14 @@ public static class MouldBuilder
             for (int c = 0; c < cuts.Count; c++)
             {
                 var mine = Keys(cuts[c], bounds, wall, options)
-                    .Where(k => Reaches(k, c, pieces[i].Side, cuts, options.KeyRadius))
+                    .Where(k => Reaches(k, c, pieces[i].Side, cuts, keyHalf))
                     .ToList();
 
                 if (mine.Count == 0) continue;
 
                 mesh = (pieces[i].Side & (1 << c)) != 0
-                    ? Dome(mesh, mine, options, token)
-                    : Socket(mesh, mine, options, token);
+                    ? Dome(mesh, mine, keyHalf, token)
+                    : Socket(mesh, mine, keyHalf + options.KeyClearance, token);
             }
 
             var healed = MeshHealer.Heal(mesh, token: token).Mesh;
@@ -301,7 +322,7 @@ public static class MouldBuilder
         // Off the plane by a hair, and both faces use the same centre so they still match. A key
         // centred exactly on the cut has a face coplanar with it, and coplanar faces are the other
         // thing this engine mishandles.
-        float nudge = options.KeyRadius * 0.05f;
+        float nudge = options.KeyHalfIn(wall) * 0.05f;
 
         var (u, v) = cut.Axis switch
         {
@@ -339,20 +360,20 @@ public static class MouldBuilder
     /// already thousands of triangles, and letting the small damage from each ball be the ground
     /// the next one is built on is the difference between four sound pieces and one.
     /// </summary>
-    private static Mesh Dome(Mesh piece, IReadOnlyList<Vector3> keys, MouldOptions options, CancellationToken token)
+    private static Mesh Dome(Mesh piece, IReadOnlyList<Vector3> keys, float half, CancellationToken token)
     {
         // Locally: a key sits out in the corner of a wall, where the model is nowhere near it.
         foreach (var key in keys)
-            piece = LocalCsg.Union(piece, Brick(key, options.KeyRadius), token);
+            piece = LocalCsg.Union(piece, Brick(key, half), token);
 
         return piece;
     }
 
-    private static Mesh Socket(Mesh piece, IReadOnlyList<Vector3> keys, MouldOptions options, CancellationToken token)
+    private static Mesh Socket(Mesh piece, IReadOnlyList<Vector3> keys, float half, CancellationToken token)
     {
-        // Grown by the clearance, which on a box is exactly the gap asked for.
+        // Already grown by the clearance, which on a box is exactly the gap asked for.
         foreach (var key in keys)
-            piece = LocalCsg.Subtract(piece, Brick(key, options.KeyRadius + options.KeyClearance), token);
+            piece = LocalCsg.Subtract(piece, Brick(key, half), token);
 
         return piece;
     }

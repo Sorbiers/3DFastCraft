@@ -1,5 +1,6 @@
 ﻿using System.Windows;
 using System.Windows.Threading;
+using FastCraft3D.Io;
 
 namespace FastCraft3D;
 
@@ -7,9 +8,22 @@ public partial class App : Application
 {
     private int reported;
 
+    /// <summary>
+    /// What the app was asked to open, from the command line.
+    ///
+    /// This is how Windows opens a file with a program: it runs the exe with the path as an
+    /// argument. So this is all that "Open with" and a file association need on this side -
+    /// there is no other message, and a program that ignores its arguments comes up empty and
+    /// looks broken.
+    ///
+    /// Read before the window is made, because the window reads it back on the way up.
+    /// </summary>
+    public static IReadOnlyList<string> Opening { get; private set; } = [];
+
     protected override void OnStartup(StartupEventArgs e)
     {
         DispatcherUnhandledException += OnUnhandled;
+        Opening = IncomingFiles.Wanted(e.Args);
         base.OnStartup(e);
     }
 

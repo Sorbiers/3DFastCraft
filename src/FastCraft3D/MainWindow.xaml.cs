@@ -9,6 +9,7 @@ using System.Windows.Input;
 using System.Windows.Media;
 using FastCraft3D.Geometry;
 using FastCraft3D.Geometry.Engraving;
+using FastCraft3D.Io;
 using FastCraft3D.Model;
 using FastCraft3D.Model.Commands;
 using FastCraft3D.Render;
@@ -175,6 +176,29 @@ public partial class MainWindow : Window
             renderer?.Dispose();
             (EffectsManager as IDisposable)?.Dispose();
         };
+
+        // Whatever the app was double-clicked with. Queued rather than done here: loading raises
+        // the busy panel and can put a message box up, and neither has a window to belong to
+        // until this constructor has finished.
+        if (App.Opening.Count > 0)
+        {
+            var opening = App.Opening;
+            Dispatcher.BeginInvoke(new Action(() => OpenOnStartup(opening)));
+        }
+    }
+
+    /// <summary>
+    /// Opens what the command line asked for.
+    ///
+    /// No dialog, unlike a drop. A file the window is dropped on could reasonably mean either
+    /// thing - put this up in place of what I have, or add it to what is here - but a file handed
+    /// over by Windows was double-clicked, and the plate behind it is the empty one the app just
+    /// started with. There is nothing to ask about and nothing to lose.
+    /// </summary>
+    private void OpenOnStartup(IReadOnlyList<string> files)
+    {
+        if (IncomingFiles.IsProject(files[0])) viewModel.OpenDropped(files[0]);
+        else viewModel.ImportFiles(files);
     }
 
     /// <summary>
@@ -213,12 +237,7 @@ public partial class MainWindow : Window
     {
         if (data.GetData(DataFormats.FileDrop) is not string[] files) return [];
 
-        return files
-            .Where(f => Path.GetExtension(f) is { } e && (
-                e.Equals(".stl", StringComparison.OrdinalIgnoreCase)
-                || e.Equals(".obj", StringComparison.OrdinalIgnoreCase)
-                || e.Equals(".3dfc", StringComparison.OrdinalIgnoreCase)))
-            .ToList();
+        return files.Where(IncomingFiles.Understood).ToList();
     }
 
     private void OnFilesDraggedOver(object sender, DragEventArgs e)

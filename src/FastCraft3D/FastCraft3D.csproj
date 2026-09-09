@@ -12,7 +12,7 @@
     <RuntimeIdentifier>win-x64</RuntimeIdentifier>
     <SelfContained>false</SelfContained>
     <ApplicationIcon>Assets/app.ico</ApplicationIcon>
-    <Version>1.7.0</Version>
+    <Version>1.7.1</Version>
     <Product>3DFastCraft</Product>
   </PropertyGroup>
 

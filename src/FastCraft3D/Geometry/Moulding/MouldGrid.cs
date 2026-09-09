@@ -262,7 +262,8 @@ public static class MouldGrid
         for (int c = 0; c < cuts.Count; c++)
         {
             bool dome = (piece & (1 << c)) != 0;
-            float half = dome ? options.KeyRadius : options.KeyRadius + options.KeyClearance;
+            float fits = options.KeyHalfIn(wall);
+            float half = dome ? fits : fits + options.KeyClearance;
 
             var (u, v) = cuts[c].Axis switch
             {
@@ -275,7 +276,7 @@ public static class MouldGrid
                 foreach (float sv in new[] { At(blockMin, v) + inset, At(blockMax, v) - inset })
                 {
                     var p = With(With(With(Vector3.Zero, cuts[c].Axis, cuts[c].At), u, su), v, sv);
-                    if (Clear(p, c, piece, cuts, options.KeyRadius)) keys.Add(new Key(p, half, dome));
+                    if (Clear(p, c, piece, cuts, fits)) keys.Add(new Key(p, half, dome));
                 }
         }
 

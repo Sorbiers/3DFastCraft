@@ -718,7 +718,7 @@ out of.
 
 **Mould...** on the Tools tab takes one object and builds a mould to pour silicone into: a block
 with the model taken out of it, cut so the casting comes out, with registration keys, a pour hole
-and a vent wherever air would otherwise be trapped.
+and a vent at each pocket it can see would trap air.
 
 It works out how the mould should come apart before it asks anything. Every line of sight through
 the model is followed along each axis, and a line that leaves the material and enters it again is
@@ -747,14 +747,25 @@ escapes up. What traps it is a stretch of ceiling with nothing higher anywhere a
 that is where the vents go. The pour hole goes at the model's own highest point, and on a ring that
 means on the ring rather than over the hole in the middle of it.
 
-**Two routes, chosen by size.** Under 20,000 triangles the cavity is cut exactly, by boolean, so it
-keeps every triangle of the model. Above that it is sampled onto a grid instead, because the
-boolean is quadratic here: a thousand triangles takes half a second, sixteen thousand takes
-forty-seven, and a three hundred thousand triangle scan ran for twenty minutes and twenty gigabytes
-before it had to be killed. Sampling costs what the resolution costs and almost nothing for the
-triangle count, so the same scan comes out in half a minute. The dialog says which route this model
-will take, what the sampled detail works out to in millimetres, and that simplifying below the
-limit first is what gets an exact cavity.
+That test finds flat traps and misses curved ones. A nose, or the underside of a collar, is a high
+point of the ceiling without being a level stretch of it, so the scan walks past it and reports no
+trap at all - which is why a bust can come back with no vents in it. Look over the overhangs on the
+cut face before pouring; the rule wants replacing with a local-maximum test, and has not been.
+
+**Two routes, chosen by whether the model closes.** A watertight model is cut exactly at any
+size, and the cavity keeps every triangle it had: the block with the model inside it turned inside
+out is two shells, one within the other, and there is no arithmetic in it to be slow or to tear.
+
+It used to be chosen by size, and the boolean set the limit - a thousand triangles took half a
+second, sixteen thousand took forty-seven, and a three hundred thousand triangle scan ran for
+twenty minutes and twenty gigabytes before it had to be killed. That boolean is gone from the
+cavity, and with it the limit.
+
+What still goes to the grid is a model that will not close, because a surface with a hole in it has
+no inside for the void to be. The grid does not care: it asks whether points are in the material
+and rebuilds a surface from the answers, at the cost of the detail the sampling drops. The dialog
+says which route this model will take and what the sampled detail works out to in millimetres, so
+repairing it first is what gets an exact cavity.
 
 The pour hole and the keys are **square**, which is not laziness. A round bore meets a curved cavity
 along every one of forty-eight facet edges at whatever angle the surface makes there, and a ball
