@@ -4,15 +4,11 @@ A small Windows desktop app for building simple printable geometry — a replace
 retired Microsoft 3D Builder. Drop in primitive shapes, size them exactly, cut and combine
 them, and export a clean `.stl` or `.obj` for slicing.
 
-Everything is in **millimetres**, **Z-up**, on a 200 × 200 mm build plate — the conventions
-every slicer expects.
+> *In loving memory of Windows 3D Builder. Rest in peace.*
+
 
 ![3DFastCraft](docs/screenshot.png)
 
-*A spiral stair: one newel, one tread, and **Repeat** round a circle with a rise. The scene is
-set to 1:12, so the manipulator bar reads the tread in metres beside the millimetres.*
-
-> *In loving memory of Windows 3D Builder. Rest in peace.*
 
 ## Requirements
 
