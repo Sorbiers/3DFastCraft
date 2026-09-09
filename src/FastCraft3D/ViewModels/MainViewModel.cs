@@ -3424,7 +3424,10 @@ public sealed class MainViewModel : INotifyPropertyChanged
             {
                 var accumulator = meshes[0];
                 for (int i = 1; i < meshes.Count; i++)
-                    accumulator = CsgSolid.Apply(accumulator, meshes[i], op, token: token);
+                    // Locally where the cutter is small: drilling a 10 mm hole in a 300,000
+                    // triangle mould half took a minute and a half through the whole engine,
+                    // nearly all of it building a tree over material the cutter cannot reach.
+                    accumulator = LocalCsg.Apply(accumulator, meshes[i], op, token);
 
                 // Mended before it is handed over. A boolean splits one polygon without always
                 // splitting the one beside it, which leaves the two sides of an edge disagreeing

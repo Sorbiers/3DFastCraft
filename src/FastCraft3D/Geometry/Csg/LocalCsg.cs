@@ -29,6 +29,61 @@ public static class LocalCsg
     /// <summary>How near a wall a triangle must lie to count as one of the lids.</summary>
     private const float OnWall = 1e-3f;
 
+    /// <summary>
+    /// How much of the solid's box the tool may fill and still be worth working locally.
+    ///
+    /// The saving comes from the boolean seeing a small piece instead of the whole model, and it
+    /// is paid for with twelve plane clips. A tool that fills most of the solid saves nothing and
+    /// pays anyway.
+    /// </summary>
+    private const float SmallEnough = 0.3f;
+
+    /// <summary>Below this the whole boolean is quick regardless, and simpler.</summary>
+    private const int WorthIt = 5_000;
+
+    /// <summary>
+    /// A boolean, worked locally when that will help and wholly when it will not.
+    ///
+    /// Only subtract and union: both leave everything outside the tool exactly as it was, which is
+    /// the whole premise. An intersection does the opposite - outside the tool nothing survives -
+    /// so there is no untouched rest to put back, and it goes to the full engine.
+    /// </summary>
+    public static Mesh Apply(Mesh solid, Mesh tool, BooleanOp op, CancellationToken token = default)
+    {
+        if (op == BooleanOp.Intersect || !Worthwhile(solid, tool))
+            return CsgSolid.Apply(solid, tool, op, token: token);
+
+        return op == BooleanOp.Subtract ? Subtract(solid, tool, token) : Union(solid, tool, token);
+    }
+
+    /// <summary>
+    /// Whether the tool is small enough, against a solid big enough, for the local route to pay.
+    ///
+    /// Measured on the boxes rather than the triangle counts: what the boolean costs here is set
+    /// by how much of the solid has to go into the tree, and that is a question about where the
+    /// tool reaches, not how finely the solid is tessellated. Drilling a 10 mm hole in a 300,000
+    /// triangle mould half is the case this exists for - a minute and a half of tree-building for
+    /// a thousandth of the model.
+    ///
+    /// One axis is enough. A pour hole runs the full height of the block and is small in the other
+    /// two, and cutting the solid on those two alone leaves the boolean a fraction of what it had.
+    /// </summary>
+    public static bool Worthwhile(Mesh solid, Mesh tool)
+    {
+        if (solid.TriangleCount < WorthIt) return false;
+
+        var big = solid.ComputeBounds();
+        var small = tool.ComputeBounds();
+        if (big.IsEmpty || small.IsEmpty) return false;
+
+        Vector3 whole = big.Max - big.Min;
+        Vector3 part = small.Max - small.Min + new Vector3(2f * Margin);
+
+        return part.X <= whole.X * SmallEnough
+            || part.Y <= whole.Y * SmallEnough
+            || part.Z <= whole.Z * SmallEnough;
+    }
+
     public static Mesh Subtract(Mesh solid, Mesh tool, CancellationToken token = default) =>
         Apply(solid, tool, subtract: true, token);
 

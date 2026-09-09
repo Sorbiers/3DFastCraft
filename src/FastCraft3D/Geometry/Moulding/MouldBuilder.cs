@@ -146,24 +146,30 @@ public static class MouldBuilder
 
         progress?.Report(WorkProgress.Doing("Adding the pour hole"));
 
-        body = Open(body, Bore(study.Sprue, bounds, wall, options.SprueRadius), token);
+        var cavity = body;
+        body = Drill(cavity, study, bounds, wall, options, 1f, token);
 
-        if (options.AddVents)
-            foreach (var vent in study.Vents)
-                body = Open(body, Bore(vent, bounds, wall, options.VentRadius), token);
-
-        // The cavity costs nothing and cannot go wrong, but the channels are still cut by the
-        // boolean, and that is the fragile part of this program: a pour hole meeting a surface at
-        // its finest leaves a nick or two behind. Mended first - on a four hundred thousand
-        // triangle scan the sprue left five open edges, which is one triangle's worth and exactly
-        // what the healer is for.
+        // A wider hole, if the first one nicked the surface.
+        //
+        // The cavity costs nothing and cannot go wrong; the channels are still cut by the boolean,
+        // and that is the fragile part of this program. At the crown of a head the surface is
+        // nearly level and the bore is vertical, so the two meet almost tangentially across
+        // hundreds of triangles a few hundredths of a millimetre wide - the contact this engine is
+        // worst at - and it comes back with a handful of open edges the healer cannot close.
+        // Widening moves the meeting onto steeper ground, and usually that is the whole of it.
         if (!body.CheckHealth().IsWatertight)
-            body = MeshHealer.Heal(body, token: token).Mesh;
+        {
+            var wider = Drill(cavity, study, bounds, wall, options, WiderBore, token);
+            if (wider.CheckHealth().IsWatertight) body = wider;
+        }
 
-        // And if that was not enough, the job goes to the grid rather than a mould with a hole in
-        // the wrong place. The grid cannot tear, because it does not cut anything.
-        if (!body.CheckHealth().IsWatertight)
-            return MouldGrid.Build(model, study, options, token, progress);
+        // And if neither came back closed, this is still the mould. The cavity carries every
+        // triangle the model had, and what is wrong with it is a nick or two around one hole.
+        //
+        // It used to go to the grid at this point, and that was the wrong trade by a long way: it
+        // threw away a perfect cavity to gain one channel, and a portrait bust came back looking
+        // as though it had been rebuilt from bricks. The pieces report whether they are watertight,
+        // and a few open edges are what Repair is for.
 
         var parts = Cut(body, study.Cuts, bounds, wall, options, token, progress);
 
@@ -188,6 +194,25 @@ public static class MouldBuilder
         hollow.FlipWinding();
 
         return Mesh.Combine([Block(bounds, wall), hollow]);
+    }
+
+    /// <summary>How much wider the second attempt at a bore is.</summary>
+    private const float WiderBore = 1.4f;
+
+    /// <summary>Every channel out of the cavity: the pour hole, and the vents if asked for.</summary>
+    private static Mesh Drill(
+        Mesh cavity, MouldStudy study, Bounds bounds, float wall, MouldOptions options,
+        float scale, CancellationToken token)
+    {
+        var body = Open(cavity, Bore(study.Sprue, bounds, wall, options.SprueRadius * scale), token);
+
+        if (options.AddVents)
+            foreach (var vent in study.Vents)
+                body = Open(body, Bore(vent, bounds, wall, options.VentRadius * scale), token);
+
+        return body.CheckHealth().IsWatertight
+            ? body
+            : MeshHealer.Heal(body, token: token).Mesh;
     }
 
     /// <summary>The block the cavity is taken out of: the model's box, grown by the wall.</summary>
