@@ -22,7 +22,7 @@
             <StackPanel>
                 <TextBlock x:Name="CopyrightLine" Foreground="#FF33383F" TextWrapping="Wrap" />
                 <TextBlock TextWrapping="Wrap" Foreground="#FF5A5F66" FontSize="12" Margin="0,6,0,0"
-                           Text="Proprietary licence - the source is readable, but it may not be used commercially or redistributed. See LICENSE in the repository for the terms that govern it." />
+                           Text="BSD 3-Clause with the Commons Clause - free to use, change and pass on, including in a business; selling the software itself needs a commercial licence. Models you make are your own. See LICENSE in the repository." />
                 <TextBlock TextWrapping="Wrap" Foreground="#FF5A5F66" FontSize="12" Margin="0,6,0,0"
                            Text="Built on HelixToolkit and SharpDX, each under its own MIT licence - listed in THIRD-PARTY-NOTICES.md." />
             </StackPanel>

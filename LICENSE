@@ -1,72 +1,81 @@
-3DFastCraft — Proprietary Licence (No Commercial Use)
+3DFastCraft — BSD 3-Clause Licence with Commons Clause
 
 Copyright (c) 2026 Andrey Ryabinin. All rights reserved.
 
-This software and its source code are made publicly readable, but they are NOT
-open source and NOT free software. All rights not expressly granted below are
-reserved by the copyright holder.
+Software: 3DFastCraft
+Licence: BSD 3-Clause "New" or "Revised" Licence, with the Commons Clause condition below
+Licensor: Andrey Ryabinin
 
-1. PERMITTED USE
+In short: use it, change it, pass it on — freely, for anything, including inside a
+business. What you may not do is sell the software itself, or sell a service whose
+value is the software. For that, ask; a commercial licence can be granted.
 
-   Subject to the restrictions below, you are granted a non-exclusive,
-   non-transferable, revocable licence to:
+Contributions are welcome. See CONTRIBUTING.md.
 
-   a) view and study the source code;
-   b) download, build and run the software for personal, private,
-      non-commercial purposes;
-   c) modify the source code for your own personal, non-commercial use;
-   d) use models you create with the software for any purpose, including
-      commercial ones. Your models are yours. This licence covers the software,
-      not its output.
 
-2. RESTRICTIONS
+"COMMONS CLAUSE" LICENCE CONDITION v1.0
 
-   You may NOT:
+The Software is provided to you by the Licensor under the Licence, as defined below,
+subject to the following condition.
 
-   a) use the software, or any part of it, for any commercial purpose. This
-      includes use within a business or by a sole trader in the course of
-      trade, use in providing a paid service, and use in producing goods for
-      sale — except as permitted by clause 1(d) regarding models you create;
-   b) sell, licence, rent, lease or otherwise distribute the software or any
-      derivative of it, whether modified or not, and whether for a fee or free
-      of charge;
-   c) incorporate the software or any part of its source code into another
-      product or project;
-   d) remove or alter this licence, the copyright notice, or any attribution.
+Without limiting other conditions in the Licence, the grant of rights under the Licence
+will not include, and the Licence does not grant to you, the right to Sell the Software.
 
-3. CONTRIBUTIONS
+For purposes of the foregoing, "Sell" means practising any or all of the rights granted
+to you under the Licence to provide to third parties, for a fee or other consideration
+(including without limitation fees for hosting or consulting/support services related to
+the Software), a product or service whose value derives, entirely or substantially, from
+the functionality of the Software. Any licence notice or attribution required by the
+Licence must also include this Commons Clause Licence Condition notice.
 
-   By submitting a contribution, you grant the copyright holder a perpetual,
-   irrevocable, worldwide, royalty-free licence to use, modify and distribute
-   it as part of the software under these terms.
 
-4. COMMERCIAL LICENSING
+BSD 3-CLAUSE LICENCE
 
-   A commercial licence may be granted separately. Contact the copyright holder
-   to arrange one.
+Redistribution and use in source and binary forms, with or without modification, are
+permitted provided that the following conditions are met:
 
-5. NO WARRANTY
+1. Redistributions of source code must retain the above copyright notice, this list of
+   conditions and the following disclaimer.
 
-   THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-   IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-   FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-   COPYRIGHT HOLDER BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY,
-   WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR
-   IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-   SOFTWARE.
+2. Redistributions in binary form must reproduce the above copyright notice, this list of
+   conditions and the following disclaimer in the documentation and/or other materials
+   provided with the distribution.
 
-   The software generates geometry for 3D printing. It is your responsibility
-   to verify that any model is fit for its intended purpose before printing or
-   relying on it.
+3. Neither the name of the copyright holder nor the names of its contributors may be used
+   to endorse or promote products derived from this software without specific prior
+   written permission.
 
-6. TERMINATION
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND ANY
+EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF
+MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE
+COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
+EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
+HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR
+TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
+SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-   This licence terminates automatically if you breach any of its terms. On
-   termination you must stop using the software and destroy all copies in your
-   possession.
 
-7. THIRD-PARTY COMPONENTS
+NOTES, WHICH GRANT AND RESTRICT NOTHING BEYOND THE TERMS ABOVE
 
-   This software depends on third-party packages that carry their own licences,
-   listed in THIRD-PARTY-NOTICES.md. Those licences govern those components;
-   nothing in this licence restricts rights you hold under them.
+Your models are your own. This licence covers the software, not what you make with it.
+Anything you model, export or print is yours, for any purpose, commercial ones included.
+
+Selling the software is the only thing the Commons Clause withholds. Using it in the
+course of a business — designing parts you sell, in a workshop, in a classroom, in a
+laboratory — is not selling the software, and is permitted.
+
+A commercial licence lifting the Commons Clause can be granted separately. Contact the
+copyright holder to arrange one.
+
+The software generates geometry for 3D printing. It is your responsibility to verify that
+any model is fit for its intended purpose before printing or relying on it.
+
+This software depends on third-party packages that carry their own licences, listed in
+THIRD-PARTY-NOTICES.md. Those licences govern those components; nothing here restricts
+rights you hold under them.
+
+By submitting a contribution you grant the copyright holder a perpetual, irrevocable,
+worldwide, royalty-free licence to use, modify, relicense and distribute it as part of
+the software, including under the commercial licence above. You keep your own copyright
+in what you wrote.

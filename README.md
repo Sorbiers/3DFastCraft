@@ -10,6 +10,31 @@ them, and export a clean `.stl` or `.obj` for slicing.
 ![3DFastCraft](docs/screenshot.png)
 
 
+## Intro
+
+Windows 3D Builder was a beautiful thing: fast modelling for professionals and for people who had
+never modelled anything, with almost nothing to learn before the first part was on the plate.
+Microsoft retired it. This app exists to take its place, and works the same way — the same short
+path from a shape on the plate to a printable part. These are the eleven tools it adds on top.
+
+| | Tool | What it does |
+|---|---|---|
+| 01 | **Stair** | Treads, risers, width and a rise per turn as one object you type the numbers for. |
+| 02 | **Subtract with tolerance** | Takes the cutter out a fraction wider than it is, so the two printed parts actually fit. |
+| 03 | **Duplicate in place** | A copy exactly where the original stands, ready to be cut about — or beside it, clear of it. |
+| 04 | **Repeat** | Along a line or round a circle, with a rise per step for a spiral stair. |
+| 05 | **Align** | Lay a part on a face you pick, or line a selection up flush, centred or evenly spread. |
+| 06 | **Pattern engraving** | Brick, roof tile, wall tile, plank, wood grain and stripes — cut in or standing proud, and laid *around* openings already cut. |
+| 07 | **Round edges** | A cube or cylinder rebuilt with its edges rounded to the radius you ask for. |
+| 08 | **Rebuild** | Remakes the surface from scratch when Repair cannot mend it. |
+| 09 | **Mould** | A block to cast silicone in: works out which way the mould comes apart, cuts at the widest section, keys the halves together and drills the pour hole. |
+| 10 | **In-file versioning** | Named snapshots kept *inside* the `.3dfc` project itself, and a way back to any of them. |
+| 11 | **Scale auto conversion** | Set 1:87 and every box reads in real metres beside the millimetres. Type into either one. |
+
+**Almost all of it is vibecoded.** The geometry, the renderer, the interface and the tests were
+written by [Claude Code](https://claude.com/claude-code) from prompts, with only tiny manual
+interventions.
+
 ## Requirements
 
 - Windows 10/11, 64-bit
@@ -956,7 +981,19 @@ tools/ui/   PowerShell for driving the running app, and the models built with it
 
 ## Licence
 
-Proprietary - the source is readable, but it may not be used commercially or redistributed. See
-[LICENSE](LICENSE) for the terms, and [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md) for the
+**BSD 3-Clause with the Commons Clause.** Use it, change it, pass it on — freely, for anything,
+including inside a business. The one thing withheld is *selling the software itself*, or selling a
+service whose value is the software; a commercial licence lifting that can be granted separately,
+so ask.
+
+Your models are your own either way. The licence covers the software, not what you make with it.
+
+See [LICENSE](LICENSE) for the terms and [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md) for the
 MIT-licensed components it is built on. **About** on the File tab shows the same, along with the
 version and a Copy details button for bug reports.
+
+## Contributing
+
+Contributions are welcome — bug reports, models that break something, and patches alike.
+[CONTRIBUTING.md](CONTRIBUTING.md) says what the codebase asks of a change, and what submitting
+one grants.
