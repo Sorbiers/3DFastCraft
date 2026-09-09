@@ -1,4 +1,4 @@
-using FastCraft3D.Geometry;
+﻿using FastCraft3D.Geometry;
 using FastCraft3D.Geometry.Moulding;
 using Xunit;
 
@@ -33,24 +33,50 @@ public class MouldBuilderTests
     public void ALightModelIsCutExactly() => Assert.Contains("cut exactly", Mould(Ball()).Summary);
 
     /// <summary>
-    /// A model too heavy to cut is sampled instead of being run at for twenty minutes.
+    /// Weight no longer decides the route.
     ///
-    /// This is the case that took the tool from useless to usable: a three hundred thousand
-    /// triangle scan of a bust ran for twenty minutes and twenty gigabytes on the exact route
-    /// before it had to be killed, and comes out in seconds on this one. Which route was taken is
-    /// in the summary, because the two do not give the same thing.
+    /// It used to: the cavity was the block with the model subtracted from it, the boolean is
+    /// quadratic, and a scan ran for twenty minutes and twenty gigabytes before it had to be
+    /// killed. The cavity is now a block with the model inside it turned inside out - two shells,
+    /// no arithmetic - so nothing about it grows with the model. A ring of sixteen thousand
+    /// triangles is well past the twenty thousand the old limit would have allowed once the
+    /// block is counted, and it is cut exactly, and quickly.
     /// </summary>
     [Fact]
-    public void AHeavyModelIsSampledRatherThanCut()
+    public void AModelPastTheOldLimitIsCutExactly()
     {
-        var model = Primitives.Sphere(20, 200, 100);
-        Assert.True(model.TriangleCount > MouldBuilder.ExactLimit, "the model is not heavy enough");
+        var ring = Primitives.Torus(20, 7, 128, 64);
+        var mould = MouldBuilder.Build(ring, MouldAnalysis.Study(ring, 48), MouldOptions.Default);
+
+        Assert.Contains("cut exactly", mould.Summary);
+        Assert.All(mould.Parts, p => Assert.True(p.Watertight, $"{p.Name} is torn"));
+    }
+
+    /// <summary>
+    /// What is sampled instead is a model that will not close.
+    ///
+    /// The cavity is the model turned inside out within the block, and a surface with a hole in it
+    /// has no inside for the void to be. The grid does not care - it asks whether points are in
+    /// the material and builds a surface from the answers - so a torn scan still gets a mould, at
+    /// the cost of the detail the sampling drops. Which route was taken is in the summary, because
+    /// the two do not give the same thing.
+    /// </summary>
+    [Fact]
+    public void AModelThatWillNotCloseIsSampledInstead()
+    {
+        var whole = Primitives.Sphere(20, 32, 16);
+
+        // The same ball with one triangle missing.
+        var torn = new Mesh();
+        for (int t = 3; t + 2 < whole.Indices.Count; t += 3)
+            torn.AddTriangle(whole.Positions[whole.Indices[t]],
+                whole.Positions[whole.Indices[t + 1]], whole.Positions[whole.Indices[t + 2]]);
+
+        Assert.False(torn.CheckHealth().IsWatertight, "the model should not be closed");
 
         var mould = MouldBuilder.Build(
-            model, MouldAnalysis.Study(model, 48), MouldOptions.Default with { Resolution = 128 });
+            torn, MouldAnalysis.Study(torn, 48), MouldOptions.Default with { Resolution = 128 });
 
-        Assert.Equal(2, mould.Parts.Count);
-        Assert.All(mould.Parts, p => Assert.True(p.Watertight, $"{p.Name} is torn"));
         Assert.Contains("sampled to", mould.Summary);
     }
 

@@ -12,8 +12,17 @@ namespace FastCraft3D.Geometry;
 /// </summary>
 public static class PlaneClip
 {
-    /// <summary>How near two ends must be to count as the same corner of the cut, in millimetres.</summary>
-    private const float Weld = 1e-3f;
+    /// <summary>
+    /// How near two ends must be to count as the same corner of the cut, in millimetres.
+    ///
+    /// Only wide enough to catch corners a file gave twice. It used to be ten times this, to cover
+    /// the two triangles either side of an edge working the crossing out to slightly different
+    /// answers - and once they were made to work it out the same way round, that width was doing
+    /// nothing but harm: on a sphere of forty thousand triangles the corners round a pole are two
+    /// hundredths of a millimetre apart, and merging two of them pinched the ring they belonged to
+    /// so that it never closed.
+    /// </summary>
+    private const float Weld = 1e-4f;
 
     /// <summary>
     /// How near the plane a corner has to be to count as lying on it.
@@ -62,6 +71,14 @@ public static class PlaneClip
 
             if (da >= 0 && db >= 0 && dc >= 0)
             {
+                // A triangle lying in the plane itself belongs to one side, not to both. Kept
+                // where it faces, so that cutting a solid in two and putting the halves back
+                // together gives what it started with: without this both halves take a copy,
+                // and every edge round it is used twice over.
+                if (da == 0 && db == 0 && dc == 0
+                    && Vector3.Dot(Vector3.Cross(b - a, c - a), normal) <= 0)
+                    continue;
+
                 kept.AddTriangle(a, b, c);
                 continue;
             }
@@ -194,14 +211,14 @@ public static class PlaneClip
     /// </summary>
     private static void Cap(Mesh kept, List<(Vector3 From, Vector3 To)> cuts, Vector3 normal, float offset)
     {
-        var rings = Rings(cuts);
-        if (rings.Count == 0) return;
-
         // A frame on the plane, turned so that anticlockwise in it faces out of the piece: the
         // face a cut exposes looks away from the side being kept.
         Vector3 u = Across(normal);
         Vector3 v = Vector3.Cross(-normal, u);
         Vector3 origin = normal * offset;
+
+        var rings = Rings(cuts, u, v, origin);
+        if (rings.Count == 0) return;
 
         // Flattened to lay them out, but put back exactly as they were rather than worked out
         // again from the flat ones. Coming back through the frame lands a few millionths off,
@@ -257,7 +274,8 @@ public static class PlaneClip
     /// filled. A chain that runs out is dropped rather than closed by force: an opening the cut
     /// did not go all the way round is a hole in the model, not a face waiting to be filled.
     /// </summary>
-    private static List<List<Vector3>> Rings(List<(Vector3 From, Vector3 To)> cuts)
+    private static List<List<Vector3>> Rings(
+        List<(Vector3 From, Vector3 To)> cuts, Vector3 u, Vector3 v, Vector3 origin)
     {
         var points = new List<Vector3>();
         var buckets = new Dictionary<(int X, int Y, int Z), List<int>>();
@@ -276,16 +294,17 @@ public static class PlaneClip
 
         foreach (int begin in leaving.Keys.ToList())
         {
-            while (Take(begin) is int onward)
+            while (Take(begin, -1) is int onward)
             {
                 var ring = new List<Vector3> { points[begin] };
-                int at = onward;
+                int from = begin, at = onward;
 
                 while (at != begin && ring.Count <= cuts.Count)
                 {
                     ring.Add(points[at]);
 
-                    if (Take(at) is not int step) break;
+                    if (Take(at, from) is not int step) break;
+                    from = at;
                     at = step;
                 }
 
@@ -295,13 +314,51 @@ public static class PlaneClip
 
         return rings;
 
-        int? Take(int from)
+        /// <summary>
+        /// The next edge round the cut, taking the sharpest turn back the way we came.
+        ///
+        /// Where several edges meet at one corner - which a plane passing within a whisker of a
+        /// corner of a dense mesh produces routinely - any of them continues a chain, but only
+        /// one of them continues *this* chain. Taking whichever came last closed some rings and
+        /// left others as chains that ran out, and a chain that runs out is dropped: a hole the
+        /// size of one triangle in the middle of a face that was supposed to be closed over.
+        ///
+        /// Turning as sharply as possible is the rule that traces one region's boundary and
+        /// stays on it, the same rule a planar graph is walked face by face with.
+        /// </summary>
+        int? Take(int from, int cameFrom)
         {
             if (!leaving.TryGetValue(from, out var ways) || ways.Count == 0) return null;
 
-            int to = ways[^1];
-            ways.RemoveAt(ways.Count - 1);
+            int pick = ways.Count - 1;
+
+            if (ways.Count > 1 && cameFrom >= 0)
+            {
+                double back = Bearing(from, cameFrom);
+                double best = double.MaxValue;
+
+                for (int i = 0; i < ways.Count; i++)
+                {
+                    // Anticlockwise from the way we came in: the smallest such turn is the
+                    // sharpest one back, and it is the edge that keeps to this boundary.
+                    double turn = Bearing(from, ways[i]) - back;
+                    while (turn <= 0) turn += Math.Tau;
+                    while (turn > Math.Tau) turn -= Math.Tau;
+
+                    if (turn < best) { best = turn; pick = i; }
+                }
+            }
+
+            int to = ways[pick];
+            ways.RemoveAt(pick);
             return to;
+        }
+
+        /// <summary>Which way one corner lies from another, in the plane's own frame.</summary>
+        double Bearing(int at, int towards)
+        {
+            Vector3 along = points[towards] - points[at];
+            return Math.Atan2(Vector3.Dot(along, v), Vector3.Dot(along, u));
         }
 
         int Index(Vector3 p)

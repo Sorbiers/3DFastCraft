@@ -85,11 +85,18 @@ public static class MouldBuilder
     /// <summary>
     /// The most triangles worth cutting exactly.
     ///
-    /// Measured rather than guessed, on spheres: 1k takes 0.6 s, 4k takes 3.8 s, 9k takes 8.7 s and
-    /// 16k takes 47 s. The curve is steep enough that a limit anywhere in this region is arbitrary;
-    /// this one keeps the worst case to about a minute, which the Abort panel can sit through.
+    /// It used to be twenty thousand, and it was the boolean that set it: the cavity was the block
+    /// with the model subtracted from it, and that is quadratic - 1k took 0.6 s, 16k took 47, and a
+    /// scan ran for twenty minutes before it was killed. It tore as well, from about four thousand
+    /// triangles up: two halves out of two came back open.
+    ///
+    /// The cavity is not a boolean any more, and nothing else the exact route does grows with the
+    /// model, so there is no size at which it has to give up. What it does need is a model that is
+    /// closed to begin with, since it makes the cavity by putting the model inside the block
+    /// inside out - an open model has no inside for the void to be, and that is what the grid is
+    /// still here for.
     /// </summary>
-    public const int ExactLimit = 20_000;
+    public const int ExactLimit = int.MaxValue;
 
 
     public static MouldResult Build(
@@ -102,38 +109,66 @@ public static class MouldBuilder
         if (bounds.IsEmpty || model.TriangleCount == 0)
             return new MouldResult([], "Nothing to make a mould of.");
 
-        // Cut exactly while that is affordable, and sample when it is not.
+        // Cut exactly whenever the model will allow it, and sample when it will not.
         //
-        // The boolean is quadratic in the triangle count on this engine: a thousand triangles is
-        // half a second, sixteen thousand is forty-seven, and a three hundred thousand triangle
-        // scan ran for twenty minutes and twenty gigabytes before it was killed. Past the limit the
-        // exact route is not slow, it is unusable, so the grid takes over.
-        if (model.TriangleCount > ExactLimit)
+        // A closed model can be cut exactly at any size, and the result keeps every triangle it
+        // had. An open one cannot: the cavity is the model turned inside out within the block, and
+        // a surface with a hole in it does not divide anything into an inside and an outside. The
+        // grid does not care - it asks whether points are in the material and rebuilds a surface
+        // from the answers - so that is where a torn scan goes.
+        if (model.TriangleCount > ExactLimit || !model.CheckHealth().IsWatertight)
             return MouldGrid.Build(model, study, options, token, progress);
 
         float wall = MathF.Max(options.Wall, 1f);
-        var block = Block(bounds, wall);
-
-        // A boolean cannot say how far through it is - it recurses over a tree whose size is
-        // not known until it has been built - so what it reports is which step it is on. That
-        // answers the question anyone actually has, which is whether it has stopped.
-        progress?.Report(WorkProgress.Doing("Adding the pour hole"));
-
-        var tool = model;
-        tool = Add(tool, Bore(study.Sprue, bounds, wall, options.SprueRadius), token);
-
-        if (options.AddVents)
-            foreach (var vent in study.Vents)
-                tool = Add(tool, Bore(vent, bounds, wall, options.VentRadius), token);
 
         progress?.Report(WorkProgress.Doing("Cutting the cavity"));
 
-        var body = MeshHealer.Heal(
-            CsgSolid.Subtract(block, tool, token: token), token: token).Mesh;
+        var body = Cavity(model, bounds, wall);
+
+        progress?.Report(WorkProgress.Doing("Adding the pour hole"));
+
+        body = Open(body, Bore(study.Sprue, bounds, wall, options.SprueRadius), token);
+
+        if (options.AddVents)
+            foreach (var vent in study.Vents)
+                body = Open(body, Bore(vent, bounds, wall, options.VentRadius), token);
+
+        // The cavity costs nothing and cannot go wrong, but the channels are still cut by the
+        // boolean, and that is the fragile part of this program: a pour hole meeting a surface at
+        // its finest leaves a nick or two behind. Mended first - on a four hundred thousand
+        // triangle scan the sprue left five open edges, which is one triangle's worth and exactly
+        // what the healer is for.
+        if (!body.CheckHealth().IsWatertight)
+            body = MeshHealer.Heal(body, token: token).Mesh;
+
+        // And if that was not enough, the job goes to the grid rather than a mould with a hole in
+        // the wrong place. The grid cannot tear, because it does not cut anything.
+        if (!body.CheckHealth().IsWatertight)
+            return MouldGrid.Build(model, study, options, token, progress);
 
         var parts = Cut(body, study.Cuts, bounds, wall, options, token, progress);
 
         return new MouldResult(parts, Describe(parts, study, options));
+    }
+
+    /// <summary>
+    /// The block with the model taken out of it, and not a boolean in sight.
+    ///
+    /// A mould is a box with the model as a hole in the middle of it, and that is exactly what a
+    /// closed block and a closed model turned inside out are: two shells, one inside the other,
+    /// every triangle of the model kept exactly as it came. The boolean this replaces was the only
+    /// reason the exact route had a size limit, and it tore above a few thousand triangles anyway.
+    ///
+    /// It asks one thing of the model: that it is closed, and that it fits inside the block with
+    /// the wall to spare. Both are true by construction here - the block is the model's own box
+    /// grown by the wall, and the route this belongs to is only taken for a watertight model.
+    /// </summary>
+    private static Mesh Cavity(Mesh model, Bounds bounds, float wall)
+    {
+        var hollow = model.Clone();
+        hollow.FlipWinding();
+
+        return Mesh.Combine([Block(bounds, wall), hollow]);
     }
 
     /// <summary>The block the cavity is taken out of: the model's box, grown by the wall.</summary>
@@ -145,11 +180,16 @@ public static class MouldBuilder
             Matrix4x4.CreateTranslation(bounds.Center));
     }
 
-    /// <summary>Unions one bore onto the tool, mending as it goes. No radius means no hole.</summary>
-    private static Mesh Add(Mesh tool, Mesh? bore, CancellationToken token) =>
-        bore is null
-            ? tool
-            : MeshHealer.Heal(CsgSolid.Union(tool, bore, token: token), token: token).Mesh;
+    /// <summary>
+    /// Opens one channel through the mould, from the cavity out through the top. No radius means
+    /// no hole.
+    ///
+    /// Taken out of the finished block rather than added to the model first, and taken out only
+    /// where the channel actually runs: a pour hole cannot touch nine tenths of a scan, and the
+    /// boolean should not have to look at the nine tenths to find that out.
+    /// </summary>
+    private static Mesh Open(Mesh body, Mesh? bore, CancellationToken token) =>
+        bore is null ? body : LocalCsg.Subtract(body, bore, token);
 
     /// <summary>
     /// The channel for one hole: from inside the model, up past the top of the block.
@@ -301,20 +341,18 @@ public static class MouldBuilder
     /// </summary>
     private static Mesh Dome(Mesh piece, IReadOnlyList<Vector3> keys, MouldOptions options, CancellationToken token)
     {
+        // Locally: a key sits out in the corner of a wall, where the model is nowhere near it.
         foreach (var key in keys)
-            piece = MeshHealer.Heal(
-                CsgSolid.Union(piece, Brick(key, options.KeyRadius), token: token), token: token).Mesh;
+            piece = LocalCsg.Union(piece, Brick(key, options.KeyRadius), token);
 
         return piece;
     }
 
     private static Mesh Socket(Mesh piece, IReadOnlyList<Vector3> keys, MouldOptions options, CancellationToken token)
     {
-        // Grown by the clearance, which on a sphere is exactly the gap asked for.
+        // Grown by the clearance, which on a box is exactly the gap asked for.
         foreach (var key in keys)
-            piece = MeshHealer.Heal(
-                CsgSolid.Subtract(piece, Brick(key, options.KeyRadius + options.KeyClearance), token: token),
-                token: token).Mesh;
+            piece = LocalCsg.Subtract(piece, Brick(key, options.KeyRadius + options.KeyClearance), token);
 
         return piece;
     }
