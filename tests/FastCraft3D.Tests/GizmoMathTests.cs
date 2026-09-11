@@ -10,6 +10,18 @@ namespace FastCraft3D.Tests;
 /// </summary>
 public class GizmoMathTests
 {
+    [Fact]
+    public void AShiftSnappedResizeLandsOnTheNearestWholeMillimetre()
+    {
+        Assert.Equal(25f / 20f, GizmoMath.WholeMillimetres(20f, 1.2625f), 5); // 25.25 mm
+        Assert.Equal(26f / 20f, GizmoMath.WholeMillimetres(20f, 1.275f), 5);  // 25.5 rounds up
+    }
+
+    /// <summary>A snapped drag cannot squeeze a side to nothing.</summary>
+    [Fact]
+    public void AShiftSnappedResizeNeverGoesBelowAMillimetre() =>
+        Assert.Equal(1f / 20f, GizmoMath.WholeMillimetres(20f, 0.001f), 5);
+
     private static readonly Vector Right = new(1, 0);
     private static readonly Vector Up = new(0, -1); // screen Y grows downward
 

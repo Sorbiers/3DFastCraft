@@ -269,7 +269,21 @@ live values for whichever is active. Colours follow the axis indicator in the co
 |---|---|---|
 | **Move** (`M`) | A double arrow on each of the six box faces. Drag one to slide along that axis only. | X / Y / Z in mm, and in metres if a scale is set |
 | **Rotate** (`R`) | A ring per **world** axis. Drag a ring to turn around it - on the second turn as much as the first. One toggle snaps to 15° steps; the other squares the object up with the world without moving it. | Roll / Pitch / Yaw in degrees |
-| **Resize** (`S`) | The object's **own** box with corner markers, turned with it, plus the six axis arrows. Resizing works about the centre, so both faces move. The toggle keeps proportions. | W / D / H in mm, and in metres if a scale is set |
+| **Resize** (`S`) | The object's **own** box with corner markers, turned with it, plus the six axis arrows. Resizing works about the centre, so both faces move, unless **One way only** (`O`) holds the far face still. The lock keeps proportions. | W / D / H in mm, and in metres if a scale is set |
+
+**Keys while resizing.** Hold one while dragging a resize arrow and it overrides a setting for
+as long as it is down:
+
+| Key | While held |
+|---|---|
+| **Ctrl** | Flips **Keep proportions** - uniform if the lock is off, one axis if it is on |
+| **Alt** | Flips **One way only** - holds the far face still if that is off, grows both ways if it is on |
+| **Shift** | Snaps the size to the nearest whole millimetre, never below one |
+
+They combine - **Alt + Shift** grows one way to a round number - and pressing or letting go of one
+mid-drag shows at once, without the mouse having to move. The buttons are left as they were, so
+the next drag does what they say. Shift snaps the *size*, not the distance dragged: snapping the
+travel would take a 20.4 mm part to 21.4 and 22.4 and never land on a whole number.
 
 Turning and resizing work in different frames on purpose. The rings are world axes, because
 turning *about Z* means the world's Z - it is what the plate is square to. The resize arrows are

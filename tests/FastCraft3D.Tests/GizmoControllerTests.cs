@@ -2,6 +2,7 @@
 using System.Runtime.ExceptionServices;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Input;
 using FastCraft3D.Geometry;
 using FastCraft3D.Model;
 using FastCraft3D.Model.Commands;
@@ -341,6 +342,103 @@ public class GizmoControllerTests
             Assert.Equal(30f, cube.SizeX, 2);
             Assert.Equal(30f, cube.SizeY, 2);
             Assert.Equal(30f, cube.SizeZ, 2);
+        });
+    }
+
+    /// <summary>Ctrl turns Keep proportions the other way for as long as it is held.</summary>
+    [Fact]
+    public void HoldingCtrlKeepsProportionsWhenTheLockIsOff()
+    {
+        RunSta(() =>
+        {
+            var scene = new Scene();
+            var cube = new SceneObject("Cube", Primitives.Box(20, 20, 20)) { IsSelected = true };
+            scene.Objects.Add(cube);
+            var canvas = new Canvas();
+            var gizmo = Build(canvas, scene, new UndoStack(scene), GizmoMode.Scale);
+            gizmo.UniformScale = false;
+            gizmo.Modifiers = ModifierKeys.Control;
+
+            gizmo.TryBeginDrag(new Point(0, 0), HandleFor(canvas, 9));
+            gizmo.ContinueDrag(new Point(20, 0));
+
+            Assert.Equal(30f, cube.SizeX, 2);
+            Assert.Equal(30f, cube.SizeY, 2);
+            Assert.Equal(30f, cube.SizeZ, 2);
+        });
+    }
+
+    /// <summary>Alt holds the far face still when One way only is off, and the part moves to suit.</summary>
+    [Fact]
+    public void HoldingAltGrowsOneWayWhenThatIsOff()
+    {
+        RunSta(() =>
+        {
+            var scene = new Scene();
+            var cube = new SceneObject("Cube", Primitives.Box(20, 20, 20)) { IsSelected = true };
+            scene.Objects.Add(cube);
+            var canvas = new Canvas();
+            var gizmo = Build(canvas, scene, new UndoStack(scene), GizmoMode.Scale);
+            gizmo.UniformScale = false;
+            gizmo.ScaleOneSide = false;
+            gizmo.Modifiers = ModifierKeys.Alt;
+
+            gizmo.TryBeginDrag(new Point(0, 0), HandleFor(canvas, 9));
+            gizmo.ContinueDrag(new Point(20, 0)); // 5 mm outward, on one face only
+
+            Assert.Equal(25f, cube.SizeX, 2);
+            Assert.Equal(2.5f, cube.Position.X, 2); // the -X face stays at -10
+        });
+    }
+
+    /// <summary>Shift lands the dragged side on a whole millimetre, whatever the pointer did.</summary>
+    [Fact]
+    public void HoldingShiftSnapsTheSizeToWholeMillimetres()
+    {
+        RunSta(() =>
+        {
+            var scene = new Scene();
+            var cube = new SceneObject("Cube", Primitives.Box(20, 20, 20)) { IsSelected = true };
+            scene.Objects.Add(cube);
+            var canvas = new Canvas();
+            var gizmo = Build(canvas, scene, new UndoStack(scene), GizmoMode.Scale);
+            gizmo.UniformScale = false;
+            gizmo.ScaleOneSide = true;
+            gizmo.Modifiers = ModifierKeys.Shift;
+
+            gizmo.TryBeginDrag(new Point(0, 0), HandleFor(canvas, 9));
+            gizmo.ContinueDrag(new Point(21, 0)); // 5.25 mm: 25.25 unsnapped
+
+            Assert.Equal(25f, cube.SizeX, 3);
+        });
+    }
+
+    /// <summary>
+    /// A key pressed or let go mid-drag shows at once, without waiting for the mouse to move.
+    /// </summary>
+    [Fact]
+    public void AModifierChangesTheDragWithoutTheMouseMoving()
+    {
+        RunSta(() =>
+        {
+            var scene = new Scene();
+            var cube = new SceneObject("Cube", Primitives.Box(20, 20, 20)) { IsSelected = true };
+            scene.Objects.Add(cube);
+            var canvas = new Canvas();
+            var gizmo = Build(canvas, scene, new UndoStack(scene), GizmoMode.Scale);
+            gizmo.UniformScale = false;
+
+            gizmo.TryBeginDrag(new Point(0, 0), HandleFor(canvas, 9));
+            gizmo.ContinueDrag(new Point(20, 0));
+            Assert.Equal(20f, cube.SizeY, 2);
+
+            gizmo.Modifiers = ModifierKeys.Control;
+            gizmo.Refresh();
+            Assert.Equal(30f, cube.SizeY, 2);
+
+            gizmo.Modifiers = ModifierKeys.None;
+            gizmo.Refresh();
+            Assert.Equal(20f, cube.SizeY, 2);
         });
     }
 

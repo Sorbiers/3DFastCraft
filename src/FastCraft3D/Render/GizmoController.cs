@@ -61,6 +61,9 @@ public sealed class GizmoController
     private Bounds lastLayoutBounds;
     private Handle? active;
     private Point dragStart;
+
+    /// <summary>Where the pointer last was during a drag, so a key alone can re-run it.</summary>
+    private Point lastScreen;
     private Vector3 dragCentre;
     /// <summary>The box the drag started against, so a long drag cannot chase its own tail.</summary>
     private Frame dragFrame;
@@ -115,6 +118,16 @@ public sealed class GizmoController
     /// Off by default, which matches how the old app behaved.
     /// </summary>
     public bool ScaleOneSide { get; set; }
+
+    /// <summary>
+    /// The keys held during a resize, each overriding one setting for as long as it is down.
+    ///
+    /// Ctrl turns Keep proportions the other way, Alt does the same to One way only, and Shift
+    /// snaps the size to whole millimetres. They override rather than toggle, and the buttons are
+    /// left as they were: reaching for a key mid-drag is a one-off, and a setting that stayed
+    /// flipped after the key came up would surprise the next drag instead.
+    /// </summary>
+    public ModifierKeys Modifiers { get; set; }
 
     /// <summary>
     /// Stop a move where the object meets another rather than letting it pass through.
@@ -545,6 +558,7 @@ public sealed class GizmoController
 
         active = handle;
         dragStart = screen;
+        lastScreen = screen;
         dragCentre = SelectionBounds().Center;
         dragFrame = CurrentFrame(SelectionBounds());
         dragObjects = selection.ToList();
@@ -559,11 +573,24 @@ public sealed class GizmoController
     {
         if (active is null) return;
 
+        lastScreen = screen;
+
         if (active.Kind == HandleKind.Ring) DragRotate(screen);
         else if (mode == GizmoMode.Scale) DragScale(screen);
         else DragMove(screen);
 
         Reposition();
+    }
+
+    /// <summary>
+    /// Runs the drag again where the pointer already is.
+    ///
+    /// A modifier pressed or let go mid-drag changes the answer without the mouse moving, and
+    /// waiting for the next mouse move to show it makes the key feel as though it did nothing.
+    /// </summary>
+    public void Refresh()
+    {
+        if (active is not null) ContinueDrag(lastScreen);
     }
 
     public void EndDrag()
@@ -675,7 +702,12 @@ public sealed class GizmoController
         float startExtent = dragFrame.Reach(active.Axis);
         if (startExtent < 1e-4f) return;
 
-        float ratio = GizmoMath.ScaleRatio(startExtent, millimetres, aboutCentre: !ScaleOneSide);
+        bool uniform = UniformScale ^ Modifiers.HasFlag(ModifierKeys.Control);
+        bool oneSide = ScaleOneSide ^ Modifiers.HasFlag(ModifierKeys.Alt);
+        bool whole = Modifiers.HasFlag(ModifierKeys.Shift);
+
+        float ratio = GizmoMath.ScaleRatio(startExtent, millimetres, aboutCentre: !oneSide);
+        if (whole) ratio = GizmoMath.WholeMillimetres(startExtent, ratio);
 
         // A point on the face that stays put: whichever one the handle is not on.
         Vector3 held = dragFrame.Centre - direction * (active.Sign * startExtent / 2f);
@@ -683,7 +715,7 @@ public sealed class GizmoController
         for (int i = 0; i < dragObjects.Count; i++)
         {
             Vector3 before = dragBefore[i].Scale;
-            dragObjects[i].Scale = UniformScale
+            dragObjects[i].Scale = uniform
                 ? before * ratio
                 : active.Axis switch
                 {
@@ -695,7 +727,7 @@ public sealed class GizmoController
             // Holding a face still means the object has to travel as it grows. Positions are
             // taken from where the drag started rather than from where they are now, so a long
             // drag cannot accumulate rounding.
-            if (!ScaleOneSide) continue;
+            if (!oneSide) continue;
 
             Vector3 was = dragBefore[i].Position;
             dragObjects[i].Position =
@@ -703,10 +735,11 @@ public sealed class GizmoController
         }
 
         dragChanged = true;
-        string stillThere = ScaleOneSide ? ", far side held" : "";
-        Feedback?.Invoke(UniformScale
-            ? $"Resize {ratio * 100:0.#}% (uniform{stillThere})"
-            : $"Resize {active.Axis} {ratio * 100:0.#}%{stillThere}");
+        string stillThere = oneSide ? ", far side held" : "";
+        string size = whole ? $", {startExtent * ratio:0} mm" : "";
+        Feedback?.Invoke(uniform
+            ? $"Resize {ratio * 100:0.#}% (uniform{stillThere}{size})"
+            : $"Resize {active.Axis} {ratio * 100:0.#}%{stillThere}{size}");
     }
 
     private void DragRotate(Point screen)

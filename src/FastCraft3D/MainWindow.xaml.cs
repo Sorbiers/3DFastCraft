@@ -56,6 +56,9 @@ public partial class MainWindow : Window
     private SceneObject? selectionAnchor;
     private Point pressScreen;
 
+    /// <summary>Alt went down during a drag, so its release belongs to the drag too.</summary>
+    private bool swallowAltUp;
+
     /// <summary>How far the pointer may wander and still count as a click rather than a drag.</summary>
     private const double ClickSlopPixels = 3.0;
 
@@ -143,6 +146,11 @@ public partial class MainWindow : Window
         // as firmly as the panel shuts the mouse.
         AddHandler(PreviewKeyDownEvent, new KeyEventHandler(OnBusyKey), true);
         AddHandler(PreviewKeyDownEvent, new KeyEventHandler(OnToolKey), true);
+
+        // Ctrl, Alt and Shift change a resize while it is under way, so they are read going down
+        // and coming up - a key let go without the mouse moving still has to show.
+        AddHandler(PreviewKeyDownEvent, new KeyEventHandler(OnDragModifier), true);
+        AddHandler(PreviewKeyUpEvent, new KeyEventHandler(OnDragModifier), true);
 
         // Arrow keys and the wheel nudge the numeric fields.
         AddHandler(PreviewKeyDownEvent, new KeyEventHandler(OnFieldKey), true);
@@ -330,6 +338,8 @@ public partial class MainWindow : Window
     private void OnGizmoDown(object sender, MouseButtonEventArgs e)
     {
         if (gizmo is null) return;
+
+        gizmo.Modifiers = Keyboard.Modifiers;
         if (!gizmo.TryBeginDrag(e.GetPosition(GizmoLayer), e.OriginalSource)) return;
 
         GizmoLayer.CaptureMouse();
@@ -341,8 +351,45 @@ public partial class MainWindow : Window
         if (gizmo is not { IsDragging: true }) return;
         if (e.LeftButton != MouseButtonState.Pressed) return;
 
+        gizmo.Modifiers = Keyboard.Modifiers;
         gizmo.ContinueDrag(e.GetPosition(GizmoLayer));
         e.Handled = true;
+    }
+
+    /// <summary>
+    /// Re-reads Ctrl, Alt and Shift while a handle is being dragged.
+    ///
+    /// Alt is swallowed for the whole of it, going down and coming up. Let through, Alt on its own
+    /// is Windows' key for the menu: letting it go would put the ribbon into keyboard mode halfway
+    /// through a resize, with the pointer still captured by the handle. And it is swallowed even
+    /// when it comes up after the mouse, because the drag it belonged to has only just ended.
+    /// </summary>
+    private void OnDragModifier(object sender, KeyEventArgs e)
+    {
+        Key key = e.Key == Key.System ? e.SystemKey : e.Key;
+        bool alt = key is Key.LeftAlt or Key.RightAlt;
+
+        if (!alt && key is not (Key.LeftCtrl or Key.RightCtrl or Key.LeftShift or Key.RightShift))
+            return;
+
+        if (gizmo is { IsDragging: true })
+        {
+            gizmo.Modifiers = Keyboard.Modifiers;
+            gizmo.Refresh();
+
+            if (alt)
+            {
+                swallowAltUp = e.IsDown;
+                e.Handled = true;
+            }
+            return;
+        }
+
+        if (alt && e.IsUp && swallowAltUp)
+        {
+            swallowAltUp = false;
+            e.Handled = true;
+        }
     }
 
     private void OnGizmoUp(object sender, MouseButtonEventArgs e)

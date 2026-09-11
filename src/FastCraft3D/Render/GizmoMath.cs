@@ -42,6 +42,22 @@ public static class GizmoMath
     }
 
     /// <summary>
+    /// A resize ratio moved so the dragged side lands on the nearest whole millimetre.
+    ///
+    /// The snap is on the size the drag produces, not on the distance the pointer travelled: a
+    /// 20.4 mm part snapped by travel would step 21.4, 22.4 and never land on a round number, and
+    /// a round number is the reason anyone holds Shift. Never below a millimetre, so a snapped
+    /// drag cannot collapse a side to nothing.
+    /// </summary>
+    public static float WholeMillimetres(float startExtent, float ratio)
+    {
+        if (startExtent < 1e-4f) return ratio;
+
+        float size = MathF.Max(1f, MathF.Round(startExtent * ratio, MidpointRounding.AwayFromZero));
+        return size / startExtent;
+    }
+
+    /// <summary>
     /// Where a point ends up when everything is scaled about a fixed plane.
     ///
     /// Holding one face still is not just a matter of scaling less: the object has to move as
