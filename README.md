@@ -413,6 +413,12 @@ panel prints the selection's real size under the size boxes.
 
 ### Subtracting with a tolerance
 
+**The last object you pick is the cutter.** Everything picked before it is cut, each on its own
+and each kept as itself - same name, same colour, still a separate part. So two halves of an
+assembly and one pin is a single operation that leaves two halves, not one fused lump. To do what
+3D Builder does - take a shape out of whatever it touches - select all, then click the cutter
+again so it is last.
+
 **Subtract...** opens its options on the right rather than cutting straight away, because a
 boolean can only be taken back by undo and two of its settings change what comes out.
 
@@ -442,6 +448,11 @@ tolerance is the true offset for a cube, a cylinder and a sphere and for nothing
 or a pyramid the sloped surface ends up nearer than asked, by a factor of the cosine of the
 slope, and a gap quietly smaller than the number typed is the one direction that jams a printed
 part. Better to say so than to under-deliver silently.
+
+A **group** may take one if every member could on its own - a row of dowel pins being the usual
+case. Each piece is grown about its own centre rather than the group being scaled as one lump,
+which would push the pins apart as well as fatten them and put the holes in the wrong places.
+Groups made before this was added do not carry the fact; ungroup and group them again.
 
 ### Does it fit?
 

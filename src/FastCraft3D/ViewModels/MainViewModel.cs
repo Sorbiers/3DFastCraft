@@ -2399,10 +2399,11 @@ public sealed class MainViewModel : INotifyPropertyChanged
         {
             var picked = Scene.SelectionInPickOrder;
             if (picked.Count < 2)
-                return "Click the part to keep first, then what to take away from it.";
+                return "Click the parts to cut first, then the cutter last.";
 
-            var cutters = string.Join(", ", picked.Skip(1).Select(o => o.Name));
-            return $"Take {cutters} away from {picked[0].Name}.";
+            var targets = string.Join(", ", picked.Take(picked.Count - 1).Select(o => o.Name));
+            return $"Take {picked[^1].Name} away from {targets}. "
+                 + $"{picked.Count - 1} object(s) cut, each kept separate.";
         }
     }
 
@@ -3315,7 +3316,12 @@ public sealed class MainViewModel : INotifyPropertyChanged
         var combined = Mesh.Combine(selection.Select(o => o.ToWorldMesh()));
         var grouped = new SceneObject(Scene.UniqueName("Group"), combined)
         {
-            Colour = selection[0].Colour
+            Colour = selection[0].Colour,
+
+            // Remembered now, because in a moment there will be nothing left to ask. A group of
+            // cylinders is the usual cutter for a row of dowel holes, and it was refused a
+            // clearance for want of this one fact.
+            PiecesTakeClearance = selection.All(o => o.CanTakeClearance)
         }.Centred();
 
         Undo.Execute(new ReplaceObjectsCommand("Group", selection, [grouped]));
@@ -3398,7 +3404,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
 
             if (clearance > 0f)
             {
-                var awkward = selection.Skip(1).FirstOrDefault(o => !o.CanTakeClearance);
+                var awkward = selection[^1].CanTakeClearance ? null : selection[^1];
                 if (awkward is not null)
                 {
                     Status = $"{awkward.Name} cannot take a clearance";
@@ -3416,9 +3422,13 @@ public sealed class MainViewModel : INotifyPropertyChanged
                 }
             }
 
-            var meshes = selection
-                .Select((o, i) => i == 0 ? o.ToWorldMesh() : o.ToWorldMeshGrown(clearance))
-                .ToList();
+            if (op == BooleanOp.Subtract)
+            {
+                await SubtractFromEach(selection, clearance, token);
+                return;
+            }
+
+            var meshes = selection.Select(o => o.ToWorldMesh()).ToList();
 
             var result = await Task.Run(() =>
             {
@@ -3440,11 +3450,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
             {
                 Status = $"{op} removed everything - nothing left to keep";
                 MessageBox.Show(
-                    op == BooleanOp.Subtract
-                        ? $"Subtracting left nothing behind: all of \"{selection[0].Name}\" was "
-                          + "inside what was taken away.\n\nThe first object you click is the one "
-                          + "kept, so click the part you want to keep first."
-                        : "That operation left no geometry behind.",
+                    "That operation left no geometry behind.",
                     "3DFastCraft", MessageBoxButton.OK, MessageBoxImage.Information);
                 return;
             }
@@ -3456,23 +3462,11 @@ public sealed class MainViewModel : INotifyPropertyChanged
 
             // Kept cutters are removed and put back, so they end up after the result in the
             // list. Their geometry is untouched: what was grown was a copy made for the cut.
-            var keptCutters = op == BooleanOp.Subtract && subtractKeepsCutter
-                ? selection.Skip(1).ToList()
-                : [];
-
-            List<SceneObject> added = [combined, .. keptCutters];
-            Undo.Execute(new ReplaceObjectsCommand(op.ToString(), selection, added));
+            Undo.Execute(new ReplaceObjectsCommand(op.ToString(), selection, [combined]));
             RefreshSelection();
 
-            // One line, not three. Two of these used to be set in a row and the last one won,
-            // so the tolerance was applied and never mentioned.
             var health = result.CheckHealth();
-            string from = op == BooleanOp.Subtract ? $" from {selection[0].Name}" : "";
-            string tolerance = clearance > 0f ? $", {clearance:0.##} mm tolerance" : "";
-            string keeping = keptCutters.Count > 0 ? ", cutter kept" : "";
-
-            Status = $"{op}{from}{tolerance}{keeping}: "
-                   + $"{health.TriangleCount:N0} triangles, {health.Describe()}";
+            Status = $"{op}: {health.TriangleCount:N0} triangles, {health.Describe()}";
         }
         catch (Exception abort) when (WasAborted(abort))
         {
@@ -3487,6 +3481,102 @@ public sealed class MainViewModel : INotifyPropertyChanged
         {
             EndWork();
         }
+    }
+
+    /// <summary>
+    /// Takes the cutter out of every target, each one on its own.
+    ///
+    /// The last object picked is the cutter and everything picked before it is cut. That is the
+    /// rule 3D Builder taught everyone, and it is the one that covers every case: select all and
+    /// then re-pick the cutter, and you have 3D Builder's "take it out of whatever it touches"
+    /// without the part that makes that rule dangerous - it reaching objects nobody selected.
+    ///
+    /// Each target comes back as itself. It used to be one boolean folded over the whole
+    /// selection, which turned two cubes and a pin into a single object called "Subtract": two
+    /// halves of an assembly fused into one thing, and the second cube gone as a part.
+    /// </summary>
+    private async Task SubtractFromEach(
+        IReadOnlyList<SceneObject> selection, float clearance, CancellationToken token)
+    {
+        var cutter = selection[^1];
+        var targets = selection.Take(selection.Count - 1).ToList();
+
+        // Grown once. Every target is cut by the same tool, and growing it per target would be
+        // the same arithmetic on the same mesh as many times as there are parts.
+        var tool = cutter.ToWorldMeshGrown(clearance);
+        var subjects = targets.Select(o => o.ToWorldMesh()).ToList();
+
+        var results = await Task.Run(() =>
+        {
+            var cut = new List<Mesh>(subjects.Count);
+            foreach (var subject in subjects)
+            {
+                token.ThrowIfCancellationRequested();
+
+                // Locally where the cutter is small: a pin against a scan is a thousandth of it,
+                // and the whole engine would build a tree over the other nine hundred and ninety.
+                var worked = LocalCsg.Apply(subject, tool, BooleanOp.Subtract, token);
+
+                // Mended before it is handed over. A boolean splits one polygon without always
+                // splitting the one beside it, which leaves the two sides of an edge disagreeing
+                // about where their corners are - closed to look at, torn as a list of triangles.
+                cut.Add(MeshHealer.Heal(worked, token: token).Mesh);
+            }
+
+            return cut;
+        });
+
+        var kept = new List<SceneObject>();
+        var swallowed = new List<string>();
+
+        for (int i = 0; i < targets.Count; i++)
+        {
+            if (results[i].TriangleCount == 0)
+            {
+                // All of it was inside the cutter. Dropped rather than left as an empty object,
+                // and named in the status line so it is not a part that quietly went missing.
+                swallowed.Add(targets[i].Name);
+                continue;
+            }
+
+            kept.Add(new SceneObject(targets[i].Name, results[i])
+            {
+                Colour = targets[i].Colour,
+                Origin = targets[i].Origin,
+                PiecesTakeClearance = targets[i].PiecesTakeClearance
+            }.Centred());
+        }
+
+        if (kept.Count == 0)
+        {
+            Status = "Subtract removed everything - nothing left to keep";
+            MessageBox.Show(
+                "Subtracting left nothing behind: every part was inside the cutter.\n\n"
+                + "The last object you click is the cutter; everything picked before it is what "
+                + "gets cut.",
+                "3DFastCraft", MessageBoxButton.OK, MessageBoxImage.Information);
+            return;
+        }
+
+        // The cutter is put back after the results, so it ends up below them in the list.
+        List<SceneObject> added = subtractKeepsCutter ? [.. kept, cutter] : [.. kept];
+        var removed = subtractKeepsCutter ? targets : [.. targets, cutter];
+
+        Undo.Execute(new ReplaceObjectsCommand("Subtract", removed, added));
+        RefreshSelection();
+
+        int torn = kept.Count(o => !o.Mesh.CheckHealth().IsWatertight);
+        string tolerance = clearance > 0f ? $", {clearance:0.##} mm tolerance" : "";
+        string keeping = subtractKeepsCutter ? ", cutter kept" : "";
+        string gone = swallowed.Count > 0
+            ? $", {string.Join(", ", swallowed)} entirely inside it and dropped"
+            : "";
+        string health = torn == 0
+            ? "all watertight"
+            : $"{torn} of {kept.Count} not watertight - Repair may mend them";
+
+        Status = $"Subtract {cutter.Name} from {kept.Count} object(s)"
+               + $"{tolerance}{keeping}{gone}: {health}";
     }
 
     /// <summary>
@@ -4428,6 +4518,15 @@ public sealed class MainViewModel : INotifyPropertyChanged
 
         var selection = Scene.Selection;
         Selected = selection.Count == 1 ? selection[0] : null;
+
+        // Every box that reads off the selection, because the selection has just changed.
+        //
+        // Setting Selected announced the sizes but not the positions, and nothing else here
+        // announced them either - so picking a second object left the X, Y and Z boxes showing
+        // the first one's position. Two objects a plate apart both read the same, and typing a
+        // value into a stale box then moved the new object by the old one's numbers.
+        RaiseTransformFields();
+
         SelectionChanged?.Invoke();
         Raise(nameof(HasAnySelection));
         Raise(nameof(RealSize));

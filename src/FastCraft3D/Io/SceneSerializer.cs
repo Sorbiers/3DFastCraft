@@ -1,4 +1,4 @@
-using System.IO;
+﻿using System.IO;
 using System.IO.Compression;
 using System.Numerics;
 using System.Text.Json;
@@ -145,6 +145,7 @@ public static class SceneSerializer
         Scale = ToArray(o.Scale),
         Colour = ToArray(o.Colour),
         Origin = o.Origin?.ToString(),
+        PiecesTakeClearance = o.PiecesTakeClearance,
         Vertices = Flatten(o.Mesh.Positions),
         Triangles = o.Mesh.Indices.ToArray()
     };
@@ -156,7 +157,8 @@ public static class SceneSerializer
             Rotation = ToVector(o.Rotation),
             Scale = o.Scale is { Length: 3 } ? ToVector(o.Scale) : Vector3.One,
             Colour = o.Colour is { Length: 3 } ? ToVector(o.Colour) : new Vector3(0.3f, 0.55f, 0.85f),
-            Origin = Enum.TryParse<PrimitiveKind>(o.Origin, out var kind) ? kind : null
+            Origin = Enum.TryParse<PrimitiveKind>(o.Origin, out var kind) ? kind : null,
+            PiecesTakeClearance = o.PiecesTakeClearance
         };
 
     private static float[] ToArray(Vector3 v) => [v.X, v.Y, v.Z];
@@ -207,6 +209,10 @@ public static class SceneSerializer
         public float[]? Scale { get; set; }
         public float[]? Colour { get; set; }
         public string? Origin { get; set; }
+
+        /// <summary>A group every piece of which can be grown by a clearance.</summary>
+        public bool PiecesTakeClearance { get; set; }
+
         public float[]? Vertices { get; set; }
         public int[]? Triangles { get; set; }
     }

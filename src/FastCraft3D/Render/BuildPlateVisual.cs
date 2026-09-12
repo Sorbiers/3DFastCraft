@@ -50,6 +50,8 @@ public static class BuildPlateVisual
         yield return Tile(light, Color.FromRgb(0xF2, 0xF3, 0xF5));
         yield return Tile(dark, Color.FromRgb(0xDD, 0xDF, 0xE3));
         yield return Outline(plateSize);
+        yield return AxisLine(plateSize, Geometry.Axis.X);
+        yield return AxisLine(plateSize, Geometry.Axis.Y);
     }
 
     /// <summary>
@@ -88,6 +90,40 @@ public static class BuildPlateVisual
 
             // The plate is one-sided geometry viewed from both above and below.
             CullMode = SharpDX.Direct3D11.CullMode.None,
+            IsHitTestVisible = false
+        };
+    }
+
+    /// <summary>
+    /// The two axes drawn across the board, crossing at the origin.
+    ///
+    /// The checkerboard says how far, but not from where: every square looks like every other, so
+    /// the one point every typed coordinate is measured from was the one point on the plate you
+    /// could not see. The lines cross at 0, 0 and give the four quadrants a sign as well.
+    ///
+    /// Coloured as the axis indicator in the corner and the manipulator arrows are, since the
+    /// whole point is that red is X and green is Y wherever you meet them.
+    /// </summary>
+    private static LineGeometryModel3D AxisLine(float plateSize, Geometry.Axis axis)
+    {
+        float half = plateSize / 2f;
+        var builder = new LineBuilder();
+
+        builder.AddLine(
+            axis == Geometry.Axis.X ? new SharpDX.Vector3(-half, 0, 0) : new SharpDX.Vector3(0, -half, 0),
+            axis == Geometry.Axis.X ? new SharpDX.Vector3(half, 0, 0) : new SharpDX.Vector3(0, half, 0));
+
+        return new LineGeometryModel3D
+        {
+            Geometry = builder.ToLineGeometry3D(),
+            Color = axis == Geometry.Axis.X
+                ? Color.FromRgb(0xE8, 0x54, 0x62)
+                : Color.FromRgb(0x35, 0xC7, 0x5A),
+            Thickness = 1.6,
+
+            // No bias of its own, while the board carries eight: the line and the board are in
+            // the same plane by definition, and without that difference they would fight for
+            // every pixel along their whole length.
             IsHitTestVisible = false
         };
     }

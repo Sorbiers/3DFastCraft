@@ -395,7 +395,7 @@
                 <WrapPanel Margin="4">
                     <Button Style="{StaticResource ToolButton}" Content="Subtract..." Tag="{StaticResource IconSubtract}"
                             Command="{Binding BeginSubtractCommand}" MinWidth="80"
-                            ToolTip="Take the later selection away from the first. Opens the options on the right: a tolerance, and whether to keep what was taken away." />
+                            ToolTip="Take the last object picked away from everything picked before it. Each of those is cut on its own and stays a separate object. Opens the options on the right: a tolerance, and whether to keep the cutter." />
                     <Button Style="{StaticResource ToolButton}" Content="Intersect" Tag="{StaticResource IconIntersect}"
                             Command="{Binding BooleanCommand}" CommandParameter="Intersect"
                             ToolTip="Keep only the overlapping volume" />

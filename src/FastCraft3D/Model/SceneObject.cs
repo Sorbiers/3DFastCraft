@@ -197,7 +197,22 @@ public sealed class SceneObject : INotifyPropertyChanged
     /// smaller than the number typed is the one direction that jams a printed part.
     /// </summary>
     public bool CanTakeClearance =>
-        Origin is PrimitiveKind.Cube or PrimitiveKind.Cylinder or PrimitiveKind.Sphere;
+        Origin is PrimitiveKind.Cube or PrimitiveKind.Cylinder or PrimitiveKind.Sphere
+        || PiecesTakeClearance;
+
+    /// <summary>
+    /// Set on a group whose every member could take a clearance on its own.
+    ///
+    /// Grouping throws the members away - the meshes are concatenated and the objects replaced -
+    /// so by the time anyone subtracts the group, nothing is left to say it was six cylinders.
+    /// This is that record, and it is all this needs to be: the pieces are found again
+    /// geometrically, and each is grown about its own centre.
+    ///
+    /// A group is not grown as one lump. Scaling the whole thing up by the clearance would push
+    /// the pins apart as well as fatten them, and the holes would come out in the wrong places -
+    /// which is the failure this exists to avoid, not a hypothetical one.
+    /// </summary>
+    public bool PiecesTakeClearance { get; set; }
 
     /// <summary>
     /// The same geometry in build-plate coordinates, grown by <paramref name="clearance"/> on
@@ -211,12 +226,42 @@ public sealed class SceneObject : INotifyPropertyChanged
     {
         if (clearance <= 0f) return ToWorldMesh();
 
+        // A group: each piece on its own, about its own centre, so they fatten without drifting.
+        if (PiecesTakeClearance && Origin is null)
+            return Mesh.Combine(MeshComponents.Split(ToWorldMesh()).Select(p => Grown(p, clearance)));
+
         var grown = new Vector3(
             Grow(scale.X, SizeX, clearance),
             Grow(scale.Y, SizeY, clearance),
             Grow(scale.Z, SizeZ, clearance));
 
         return MeshTransform.Transformed(mesh, MeshTransform.Compose(position, rotation, grown));
+    }
+
+    /// <summary>
+    /// One piece of a group, grown about its own centre by the clearance on every side.
+    ///
+    /// The same arithmetic the whole object gets, applied to a piece that has no transform of
+    /// its own: its box is all there is to go on. Exact on a box or a cylinder standing on any
+    /// of its axes, which is what a group is allowed to hold.
+    /// </summary>
+    private static Mesh Grown(Mesh piece, float clearance)
+    {
+        var box = piece.ComputeBounds();
+        if (box.IsEmpty) return piece;
+
+        Vector3 size = box.Size;
+        var factor = new Vector3(
+            size.X <= 1e-4f ? 1f : (size.X + 2f * clearance) / size.X,
+            size.Y <= 1e-4f ? 1f : (size.Y + 2f * clearance) / size.Y,
+            size.Z <= 1e-4f ? 1f : (size.Z + 2f * clearance) / size.Z);
+
+        Vector3 centre = box.Center;
+
+        return MeshTransform.Transformed(piece,
+            Matrix4x4.CreateTranslation(-centre)
+            * Matrix4x4.CreateScale(factor)
+            * Matrix4x4.CreateTranslation(centre));
     }
 
     /// <summary>
