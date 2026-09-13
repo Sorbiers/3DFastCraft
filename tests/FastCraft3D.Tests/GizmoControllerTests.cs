@@ -442,6 +442,90 @@ public class GizmoControllerTests
         });
     }
 
+    private static (Scene Scene, SceneObject A, SceneObject B) TwoApart()
+    {
+        var scene = new Scene();
+        var a = new SceneObject("A", Primitives.Box(10, 10, 10)) { Position = new Vector3(-20, 0, 0), IsSelected = true };
+        var b = new SceneObject("B", Primitives.Box(10, 10, 10)) { Position = new Vector3(20, 0, 0), IsSelected = true };
+        scene.Objects.Add(a);
+        scene.Objects.Add(b);
+        return (scene, a, b);
+    }
+
+    [Fact]
+    public void TurnedAsOneThePartsSwingRoundTheMiddle()
+    {
+        RunSta(() =>
+        {
+            var (scene, a, b) = TwoApart();
+            var canvas = new Canvas();
+            var gizmo = Build(canvas, scene, new UndoStack(scene), GizmoMode.Rotate);
+
+            gizmo.TryBeginDrag(new Point(600, 400), HandleFor(canvas, 1)); // the Y ring
+            gizmo.ContinueDrag(new Point(500, 300));                      // a quarter turn
+
+            Assert.Equal(0f, b.Position.X, 2);
+            Assert.Equal(20f, MathF.Abs(b.Position.Z), 2);
+            Assert.Equal(-a.Position.Z, b.Position.Z, 2);
+        });
+    }
+
+    [Fact]
+    public void TurnedEachOnItsOwnThePartsStayWhereTheyAre()
+    {
+        RunSta(() =>
+        {
+            var (scene, a, b) = TwoApart();
+            var canvas = new Canvas();
+            var gizmo = Build(canvas, scene, new UndoStack(scene), GizmoMode.Rotate);
+            gizmo.AroundSelectionCentre = false;
+
+            gizmo.TryBeginDrag(new Point(600, 400), HandleFor(canvas, 1));
+            gizmo.ContinueDrag(new Point(500, 300));
+
+            Assert.Equal(-20f, a.Position.X, 3);
+            Assert.Equal(20f, b.Position.X, 3);
+            Assert.NotEqual(0f, b.Rotation.Y);
+        });
+    }
+
+    [Fact]
+    public void ResizedAsOneTheGapsGrowWithTheParts()
+    {
+        RunSta(() =>
+        {
+            var (scene, a, b) = TwoApart();
+            var canvas = new Canvas();
+            var gizmo = Build(canvas, scene, new UndoStack(scene), GizmoMode.Scale);
+            gizmo.UniformScale = false;
+
+            gizmo.TryBeginDrag(new Point(0, 0), HandleFor(canvas, 9)); // +X arrow of the lot
+            gizmo.ContinueDrag(new Point(20, 0));                     // 5 mm: 50 across becomes 60
+
+            Assert.Equal(12f, b.SizeX, 2);
+            Assert.Equal(24f, b.Position.X, 2);
+        });
+    }
+
+    [Fact]
+    public void ResizedEachOnItsOwnThePartsGrowWhereTheyStand()
+    {
+        RunSta(() =>
+        {
+            var (scene, a, b) = TwoApart();
+            var canvas = new Canvas();
+            var gizmo = Build(canvas, scene, new UndoStack(scene), GizmoMode.Scale);
+            gizmo.UniformScale = false;
+            gizmo.AroundSelectionCentre = false;
+
+            gizmo.TryBeginDrag(new Point(0, 0), HandleFor(canvas, 9));
+            gizmo.ContinueDrag(new Point(20, 0));
+
+            Assert.Equal(12f, b.SizeX, 2);
+            Assert.Equal(20f, b.Position.X, 3);
+        });
+    }
+
     [Fact]
     public void DraggingARingRotatesAndSnaps()
     {

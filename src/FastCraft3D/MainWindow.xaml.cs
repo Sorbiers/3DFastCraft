@@ -100,6 +100,14 @@ public partial class MainWindow : Window
         splitGizmo.Feedback += text => viewModel.Status = text;
         splitGizmo.Changed += (offset, normal) =>
         {
+            // The same arrows slide Extrude down's plane, which only ever lies flat: the height is
+            // all there is to change, and the plane follows through the height's own notification.
+            if (viewModel.IsExtrudeMode)
+            {
+                viewModel.ExtrudeHeightMillimetres = offset;
+                return;
+            }
+
             viewModel.SplitOffset = offset;
             viewModel.SplitNormal = normal;
             UpdateSplitPlane();
@@ -137,6 +145,10 @@ public partial class MainWindow : Window
         // One undo entry per field edit rather than one per keystroke.
         AddHandler(GotFocusEvent, new RoutedEventHandler(OnFieldGotFocus), true);
         AddHandler(LostFocusEvent, new RoutedEventHandler(OnFieldLostFocus), true);
+
+        // "+=5" is read before the box loses focus, because losing focus is when the binding
+        // writes the text back - and "+=5" is not a number it can write.
+        AddHandler(PreviewLostKeyboardFocusEvent, new KeyboardFocusChangedEventHandler(OnFieldLeaving), true);
 
         // Reaching a numeric field selects what is in it, so a new value can just be typed.
         AddHandler(GotKeyboardFocusEvent, new KeyboardFocusChangedEventHandler(OnFieldFocused), true);
@@ -535,14 +547,19 @@ public partial class MainWindow : Window
         if (splitGizmo is null) return;
 
         var selection = viewModel.Scene.Selection;
-        bool on = viewModel.IsSplitMode && selection.Count > 0;
+        bool extrude = viewModel.IsExtrudeMode;
+        bool on = (viewModel.IsSplitMode || extrude) && selection.Count > 0;
 
         // Centred on everything the plane will cut, not on whichever object came first.
         var bounds = Bounds.Empty;
         if (on) foreach (var o in selection) bounds = bounds.Union(o.WorldBounds);
         Vector3 centre = bounds.IsEmpty ? Vector3.Zero : bounds.Center;
 
-        splitGizmo.Show(on, viewModel.SplitNormal, viewModel.SplitOffset, centre);
+        // Extrude down's plane only slides: arrows, never rings, and always flat.
+        splitGizmo.Mode = extrude ? GizmoMode.Move : viewModel.SplitGizmoMode;
+
+        if (extrude) splitGizmo.Show(on, Vector3.UnitZ, viewModel.ExtrudeHeightMillimetres, centre);
+        else splitGizmo.Show(on, viewModel.SplitNormal, viewModel.SplitOffset, centre);
     }
 
     private void OnFrame(object? sender, EventArgs e)
@@ -553,7 +570,7 @@ public partial class MainWindow : Window
         // which is what left the handles stranded in a corner.
         if (gizmo is null) return;
         if (gizmo.NeedsReposition || gizmo.IsStale()) gizmo.Reposition();
-        if (viewModel.IsSplitMode) splitGizmo?.Reposition();
+        if (viewModel.IsSplitMode || viewModel.IsExtrudeMode) splitGizmo?.Reposition();
         SettleSplitPreview();
         if (viewModel.IsEmbossMode || viewModel.IsEngraveMode) placeGizmo?.Reposition();
 
@@ -1004,6 +1021,47 @@ public partial class MainWindow : Window
         viewModel.RefreshSelection();
     }
 
+    private void OnFieldLeaving(object sender, KeyboardFocusChangedEventArgs e)
+    {
+        if (e.OriginalSource is TextBox box) ChangeFieldBy(box);
+    }
+
+    /// <summary>
+    /// Applies "+=5", "-=5" or "+5" typed into a transform box as a change by that much.
+    ///
+    /// A plain number, negative ones included, still sets the value: positions below zero are
+    /// normal on a plate centred on the origin, so "-5" has to go on meaning minus five.
+    ///
+    /// Several objects each on their own are changed one by one, since the box shows nothing when
+    /// they differ. Everything else - one object, or several as one - has a single value behind
+    /// the box, and that value is read, added to and written back through the same property the
+    /// box is bound to, so the unit, the lock and the pivot all apply exactly as for a typed number.
+    /// </summary>
+    private bool ChangeFieldBy(TextBox box)
+    {
+        if (box.Tag is not "transform") return false;
+        if (!FieldInput.TryParseRelative(box.Text, out float delta)) return false;
+
+        var binding = box.GetBindingExpression(TextBox.TextProperty);
+        if (binding?.ResolvedSource is not { } source || binding.ResolvedSourcePropertyName is not { } name)
+            return false;
+
+        if (!(ReferenceEquals(source, viewModel) && viewModel.ChangeEachBy(name, delta)))
+        {
+            var property = source.GetType().GetProperty(name);
+            if (property is null || property.PropertyType != typeof(float) || !property.CanWrite) return false;
+
+            float now = (float)property.GetValue(source)!;
+            if (!float.IsFinite(now)) return false;
+
+            property.SetValue(source, now + delta);
+        }
+
+        // Shows the new value, which also means the binding has nothing left to write on the way out.
+        binding.UpdateTarget();
+        return true;
+    }
+
     // --- Nudging the numeric fields ---------------------------------------------------
 
     /// <summary>
@@ -1034,7 +1092,8 @@ public partial class MainWindow : Window
         // do not tab out of.
         if (e.Key == Key.Enter && e.OriginalSource is TextBox typed)
         {
-            typed.GetBindingExpression(TextBox.TextProperty)?.UpdateSource();
+            if (ChangeFieldBy(typed)) typed.SelectAll();
+            else typed.GetBindingExpression(TextBox.TextProperty)?.UpdateSource();
             return;
         }
 
@@ -1128,6 +1187,9 @@ public partial class MainWindow : Window
         if (e.PropertyName is nameof(MainViewModel.ScaleOneSide) && gizmo is not null)
             gizmo.ScaleOneSide = viewModel.ScaleOneSide;
 
+        if (e.PropertyName is nameof(MainViewModel.AroundSelectionCentre) && gizmo is not null)
+            gizmo.AroundSelectionCentre = viewModel.AroundSelectionCentre;
+
         if (e.PropertyName is nameof(MainViewModel.StopOnContact) && gizmo is not null)
             gizmo.StopOnContact = viewModel.StopOnContact;
 
@@ -1158,6 +1220,8 @@ public partial class MainWindow : Window
             or nameof(MainViewModel.SplitGizmoMode)
             or nameof(MainViewModel.SplitNormal)
             or nameof(MainViewModel.SplitOffset)
+            or nameof(MainViewModel.IsExtrudeMode)
+            or nameof(MainViewModel.ExtrudeHeightMillimetres)
             or nameof(MainViewModel.Selected))
         {
             RefreshSplitGizmo();
@@ -1178,7 +1242,9 @@ public partial class MainWindow : Window
             or nameof(MainViewModel.SplitAxis)
             or nameof(MainViewModel.SplitNormal)
             or nameof(MainViewModel.SplitOffset)
-            or nameof(MainViewModel.SplitPlaneVisible))
+            or nameof(MainViewModel.SplitPlaneVisible)
+            or nameof(MainViewModel.IsExtrudeMode)
+            or nameof(MainViewModel.ExtrudeHeightMillimetres))
         {
             UpdateSplitPlane();
         }
@@ -1193,7 +1259,7 @@ public partial class MainWindow : Window
             splitPlaneVisual = null;
         }
 
-        if (!viewModel.IsSplitMode) return;
+        if (!viewModel.IsSplitMode && !viewModel.IsExtrudeMode) return;
 
         var selection = viewModel.Scene.Selection;
         if (selection.Count == 0) return;
@@ -1201,8 +1267,9 @@ public partial class MainWindow : Window
         // One plane cuts everything selected, so the slab has to span the whole group.
         var bounds = Bounds.Empty;
         foreach (var o in selection) bounds = bounds.Union(o.WorldBounds);
-        Vector3 normal = viewModel.SplitNormal;
-        float offset = viewModel.SplitOffset;
+        // Extrude down shows the same plane, lying flat at the height it will cut.
+        Vector3 normal = viewModel.IsExtrudeMode ? Vector3.UnitZ : viewModel.SplitNormal;
+        float offset = viewModel.IsExtrudeMode ? viewModel.ExtrudeHeightMillimetres : viewModel.SplitOffset;
 
         // Wide enough to overhang the solid whichever way the plane is tilted.
         float width = bounds.Diagonal + 12f;

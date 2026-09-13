@@ -71,6 +71,9 @@ public sealed class GizmoController
     private List<SceneObject> dragObjects = [];
     private List<TransformState> dragBefore = [];
 
+    /// <summary>Each dragged object's box when the drag began, for growing each from its own far face.</summary>
+    private List<Bounds> dragBounds = [];
+
     /// <summary>
     /// How far this drag may go each way before contact, worked out once and then only clamped
     /// to. Nothing about the answer changes as the pointer moves: it is measured from where the
@@ -128,6 +131,17 @@ public sealed class GizmoController
     /// flipped after the key came up would surprise the next drag instead.
     /// </summary>
     public ModifierKeys Modifiers { get; set; }
+
+    /// <summary>
+    /// With several objects selected, turn and resize them as one object about the middle of the
+    /// lot, rather than each about its own centre.
+    ///
+    /// On by default, because that is what a selection means to anyone who has used another
+    /// modeller: three parts turned together that each spin on the spot have come apart. Each on
+    /// its own is kept as the other setting, since thickening every pin in a row where it stands
+    /// is a real job too. One object behaves the same either way.
+    /// </summary>
+    public bool AroundSelectionCentre { get; set; } = true;
 
     /// <summary>
     /// Stop a move where the object meets another rather than letting it pass through.
@@ -563,6 +577,7 @@ public sealed class GizmoController
         dragFrame = CurrentFrame(SelectionBounds());
         dragObjects = selection.ToList();
         dragBefore = dragObjects.Select(TransformState.Capture).ToList();
+        dragBounds = dragObjects.Select(o => o.WorldBounds).ToList();
         dragChanged = false;
         contactAhead = null;
         contactBehind = null;
@@ -712,6 +727,13 @@ public sealed class GizmoController
         // A point on the face that stays put: whichever one the handle is not on.
         Vector3 held = dragFrame.Centre - direction * (active.Sign * startExtent / 2f);
 
+        bool several = dragObjects.Count > 1;
+        bool asOne = AroundSelectionCentre && several;
+
+        // What stays put when the lot grows as one: the far face if that is held, the middle if
+        // not. Off the dragged axis it is the middle either way, which is where held sits too.
+        Vector3 anchor = oneSide ? held : dragFrame.Centre;
+
         for (int i = 0; i < dragObjects.Count; i++)
         {
             Vector3 before = dragBefore[i].Scale;
@@ -724,22 +746,39 @@ public sealed class GizmoController
                     _ => before with { Z = before.Z * ratio }
                 };
 
-            // Holding a face still means the object has to travel as it grows. Positions are
-            // taken from where the drag started rather than from where they are now, so a long
-            // drag cannot accumulate rounding.
-            if (!oneSide) continue;
-
+            // Positions are taken from where the drag started rather than from where they are
+            // now, so a long drag cannot accumulate rounding.
             Vector3 was = dragBefore[i].Position;
-            dragObjects[i].Position =
-                was + direction * (Vector3.Dot(was - held, direction) * (ratio - 1f));
+
+            if (asOne)
+            {
+                // The gaps grow with the parts, or the lot would not come out the size dragged.
+                dragObjects[i].Position = uniform
+                    ? anchor + (was - anchor) * ratio
+                    : was + direction * (Vector3.Dot(was - anchor, direction) * (ratio - 1f));
+            }
+            else if (oneSide && !several)
+            {
+                // Holding a face still means the object has to travel as it grows.
+                dragObjects[i].Position =
+                    was + direction * (Vector3.Dot(was - held, direction) * (ratio - 1f));
+            }
+            else if (oneSide)
+            {
+                // Each on its own, each holding its own far face: it travels half of what it grew.
+                float reach = MathF.Abs(Vector3.Dot(dragBounds[i].Size, Vector3.Abs(direction)));
+                dragObjects[i].Position =
+                    was + direction * (active.Sign * reach / 2f * (ratio - 1f));
+            }
         }
 
         dragChanged = true;
         string stillThere = oneSide ? ", far side held" : "";
         string size = whole ? $", {startExtent * ratio:0} mm" : "";
+        string pivotNote = several ? (asOne ? ", as one" : ", each on its own") : "";
         Feedback?.Invoke(uniform
-            ? $"Resize {ratio * 100:0.#}% (uniform{stillThere}{size})"
-            : $"Resize {active.Axis} {ratio * 100:0.#}%{stillThere}{size}");
+            ? $"Resize {ratio * 100:0.#}% (uniform{stillThere}{size}{pivotNote})"
+            : $"Resize {active.Axis} {ratio * 100:0.#}%{stillThere}{size}{pivotNote}");
     }
 
     private void DragRotate(Point screen)
@@ -762,14 +801,24 @@ public sealed class GizmoController
             _ => Matrix4x4.CreateRotationZ(radians)
         };
 
+        // As one, the positions swing round the middle of the lot as well: that is what keeps the
+        // parts in the same arrangement. Each on its own, they turn where they stand.
+        bool asOne = AroundSelectionCentre && dragObjects.Count > 1;
+
         for (int i = 0; i < dragObjects.Count; i++)
         {
             dragObjects[i].Rotation =
                 MeshTransform.EulerFrom(MeshTransform.Rotation(dragBefore[i].Rotation) * turn);
+
+            if (asOne)
+                dragObjects[i].Position =
+                    dragCentre + Vector3.Transform(dragBefore[i].Position - dragCentre, turn);
         }
 
         dragChanged = true;
-        Feedback?.Invoke($"Rotate {active.Axis} {degrees:+0.#;-0.#;0} deg{(SnapRotation ? " (snapped)" : "")}");
+        string pivot = dragObjects.Count > 1 ? (asOne ? ", as one" : ", each on its own") : "";
+        Feedback?.Invoke(
+            $"Rotate {active.Axis} {degrees:+0.#;-0.#;0} deg{(SnapRotation ? " (snapped)" : "")}{pivot}");
     }
 
     /// <summary>+1 when the axis points towards the camera, -1 when away.</summary>

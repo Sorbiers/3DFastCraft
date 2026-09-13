@@ -1,10 +1,11 @@
-namespace FastCraft3D.Io;
+﻿namespace FastCraft3D.Io;
 
 public enum ExportFormat
 {
     BinaryStl,
     AsciiStl,
-    Obj
+    Obj,
+    ThreeMf
 }
 
 /// <param name="SelectedOnly">
@@ -19,11 +20,17 @@ public readonly record struct ExportOptions(ExportFormat Format, bool SelectedOn
 {
     public bool IsObj => Format == ExportFormat.Obj;
 
-    public string Extension => IsObj ? ".obj" : ".stl";
+    public string Extension => Format switch
+    {
+        ExportFormat.Obj => ".obj",
+        ExportFormat.ThreeMf => ".3mf",
+        _ => ".stl"
+    };
 
     public string Filter => Format switch
     {
         ExportFormat.Obj => "Wavefront OBJ (*.obj)|*.obj",
+        ExportFormat.ThreeMf => "3D Manufacturing Format (*.3mf)|*.3mf",
         ExportFormat.AsciiStl => "ASCII STL (*.stl)|*.stl",
         _ => "Binary STL (*.stl)|*.stl"
     };

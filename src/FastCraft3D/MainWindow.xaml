@@ -330,6 +330,29 @@
             <Setter Property="HorizontalContentAlignment" Value="Right" />
             <Setter Property="BorderBrush" Value="#FFD5D9DE" />
         </Style>
+
+        <!-- A box that reads off several objects: blank with a quiet "mixed" when they differ.
+             Not a 0, which is a value and invites typing over it as though it were true. -->
+        <view:MixedNumberConverter x:Key="Mixed" />
+        <Style x:Key="GizmoMixedBox" TargetType="TextBox" BasedOn="{StaticResource GizmoBox}">
+            <Style.Triggers>
+                <MultiTrigger>
+                    <MultiTrigger.Conditions>
+                        <Condition Property="Text" Value="" />
+                        <Condition Property="IsKeyboardFocused" Value="False" />
+                    </MultiTrigger.Conditions>
+                    <Setter Property="Background">
+                        <Setter.Value>
+                            <VisualBrush Stretch="None" AlignmentX="Right">
+                                <VisualBrush.Visual>
+                                    <TextBlock Text="mixed " Foreground="#FFA0A6AE" FontStyle="Italic" />
+                                </VisualBrush.Visual>
+                            </VisualBrush>
+                        </Setter.Value>
+                    </Setter>
+                </MultiTrigger>
+            </Style.Triggers>
+        </Style>
     </Window.Resources>
 
     <Window.InputBindings>
@@ -531,6 +554,13 @@
                     <Button Style="{StaticResource ToolButton}" Content="Rebuild..." Tag="{StaticResource IconRebuild}"
                             Command="{Binding RebuildCommand}" MinWidth="82"
                             ToolTip="Rebuild the surface from scratch. Mends anything, including a model that passes through itself - at the cost of fine detail." />
+                    <Separator Margin="8,0" />
+                    <Button Style="{StaticResource ToolButton}" Content="Extrude down" Tag="{StaticResource IconExtrudeDown}"
+                            Command="{Binding BeginExtrudeCommand}" MinWidth="90"
+                            ToolTip="Cut the model at a height and carry its outline straight down to a flat base on the plate. For a scan with a ragged bottom, a relief that is only a skin, or a part tilted off its feet." />
+                    <Button Style="{StaticResource ToolButton}" Content="Split with connectors" Tag="{StaticResource IconSplitConnectors}"
+                            Command="{Binding BeginSplitWithConnectorsCommand}" MinWidth="120"
+                            ToolTip="Cut a model too big for the plate into two halves that go back together one way only: round pins in holes on both halves, or pegs on one half and sockets in the other." />
                     <Separator Margin="8,0" />
                     <Button Style="{StaticResource ToolButton}" Content="Measure" Tag="{StaticResource IconMeasure}"
                             Command="{Binding BeginMeasureCommand}"
@@ -816,7 +846,8 @@
                             <Run Text="Offset " /><Run Text="{Binding SplitOffset, StringFormat=N2}" /><Run Text=" mm" />
                         </TextBlock>
 
-                        <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,6"
+                                    Visibility="{Binding SplitKeepChoosable, Converter={StaticResource BoolToVisibility}}">
                             <TextBlock Text="Keep" Style="{StaticResource FieldLabel}" />
                             <RadioButton Content="Both" IsChecked="True" Margin="0,0,8,0" Checked="OnSplitKeepChanged" Tag="Both" />
                             <RadioButton Content="{Binding KeepFrontLabel}" Margin="0,0,8,0" Checked="OnSplitKeepChanged" Tag="Front" />
@@ -827,7 +858,8 @@
                              rather than hidden when both halves are kept, so the panel does not
                              jump about as the Keep buttons are tried. -->
                         <StackPanel Orientation="Horizontal" Margin="0,0,0,8"
-                                    IsEnabled="{Binding SplitOffcutApplies}">
+                                    IsEnabled="{Binding SplitOffcutApplies}"
+                                    Visibility="{Binding SplitKeepChoosable, Converter={StaticResource BoolToVisibility}}">
                             <TextBlock Text="Off cut" Style="{StaticResource FieldLabel}" />
                             <RadioButton Content="Show" GroupName="SplitOffcut" Margin="0,0,8,0"
                                          Checked="OnSplitOffcutChanged" Tag="Shown" />
@@ -835,6 +867,70 @@
                                          Checked="OnSplitOffcutChanged" Tag="Faded" />
                             <RadioButton Content="Hide" GroupName="SplitOffcut"
                                          Checked="OnSplitOffcutChanged" Tag="Hidden" />
+                        </StackPanel>
+
+                        <!-- Connectors: shown for Split with connectors from the Tools tab. -->
+                        <StackPanel Margin="0,2,0,8"
+                                    Visibility="{Binding SplitWithConnectors, Converter={StaticResource BoolToVisibility}}">
+                            <TextBlock Text="Connectors" FontWeight="SemiBold" Margin="0,0,0,4" />
+                            <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
+                                <RadioButton Content="Separate pins" GroupName="ConnectorStyle" Margin="0,0,10,0"
+                                             IsChecked="{Binding ConnectorsArePins, Mode=TwoWay}"
+                                             ToolTip="Holes in both halves, and the pins made as parts of their own - printed lying down, so they are strong along their length. A broken pin is a reprint, not a lost half." />
+                                <RadioButton Content="Pegs on one half" GroupName="ConnectorStyle"
+                                             IsChecked="{Binding ConnectorsArePegs, Mode=TwoWay}"
+                                             ToolTip="Pegs standing out of one half, sockets in the other. Nothing loose to lose, but pegs printed standing up are weak across their layers." />
+                            </StackPanel>
+                            <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
+                                <RadioButton Content="Square to cut" GroupName="ConnectorDirection" Margin="0,0,8,0"
+                                             IsChecked="{Binding ConnectorsPerpendicular, Mode=TwoWay}"
+                                             ToolTip="Square to the cut face, whichever way the plane is turned." />
+                                <RadioButton Content="Vertical" GroupName="ConnectorDirection" Margin="0,0,8,0"
+                                             IsChecked="{Binding ConnectorsVertical, Mode=TwoWay}"
+                                             ToolTip="Straight up and down, so the top half of a tilted cut still lifts straight off. Not on a vertical cut, which they would run along." />
+                                <RadioButton Content="Horizontal" GroupName="ConnectorDirection"
+                                             IsChecked="{Binding ConnectorsHorizontal, Mode=TwoWay}"
+                                             ToolTip="Level, towards the cut, so a half on a leaning cut slides off sideways. Not on a level cut, which they would run along." />
+                            </StackPanel>
+                            <StackPanel Orientation="Horizontal" Margin="0,0,0,2">
+                                <TextBlock Text="How many" Style="{StaticResource FieldLabel}" Width="76"
+                                           ToolTip="At most this many. They go only where there is solid round them, as far apart as they will fit." />
+                                <TextBox Width="64" Style="{StaticResource NumberBox}" Tag="number"
+                                         AutomationProperties.AutomationId="ConnectorCount"
+                                         Text="{Binding ConnectorCount, UpdateSourceTrigger=LostFocus}" />
+                            </StackPanel>
+                            <StackPanel Orientation="Horizontal" Margin="0,0,0,2">
+                                <TextBlock Text="Diameter" Style="{StaticResource FieldLabel}" Width="76" />
+                                <TextBox Width="64" Style="{StaticResource NumberBox}" Tag="number"
+                                         AutomationProperties.AutomationId="ConnectorDiameter"
+                                         Text="{Binding ConnectorDiameter, StringFormat=N1, UpdateSourceTrigger=LostFocus}" />
+                                <TextBlock Text="mm" Foreground="#FF9AA0A8" VerticalAlignment="Center" Margin="5,0,0,0" />
+                            </StackPanel>
+                            <StackPanel Orientation="Horizontal" Margin="0,0,0,2">
+                                <TextBlock Text="Depth" Style="{StaticResource FieldLabel}" Width="76"
+                                           ToolTip="How far a connector goes into each half." />
+                                <TextBox Width="64" Style="{StaticResource NumberBox}" Tag="number"
+                                         AutomationProperties.AutomationId="ConnectorDepth"
+                                         Text="{Binding ConnectorDepth, StringFormat=N1, UpdateSourceTrigger=LostFocus}" />
+                                <TextBlock Text="mm" Foreground="#FF9AA0A8" VerticalAlignment="Center" Margin="5,0,0,0" />
+                            </StackPanel>
+                            <StackPanel Orientation="Horizontal" Margin="0,0,0,2">
+                                <TextBlock Text="Clearance" Style="{StaticResource FieldLabel}" Width="76"
+                                           ToolTip="Per side, as for Subtract: a 5 mm pin with 0.2 goes into a 5.4 mm hole." />
+                                <TextBox Width="64" Style="{StaticResource NumberBox}" Tag="number"
+                                         AutomationProperties.AutomationId="ConnectorClearance"
+                                         Text="{Binding ConnectorClearance, StringFormat=N2, UpdateSourceTrigger=LostFocus}" />
+                                <TextBlock Text="mm" Foreground="#FF9AA0A8" VerticalAlignment="Center" Margin="5,0,0,0" />
+                            </StackPanel>
+                            <StackPanel Orientation="Horizontal" Margin="0,0,0,2">
+                                <TextBlock Text="From edge" Style="{StaticResource FieldLabel}" Width="76"
+                                           ToolTip="Material left between a hole and the outside of the part. Pins go out towards the edges until this much is left - further apart registers better, but a thin wall beside a hole can split." />
+                                <TextBox Width="64" Style="{StaticResource NumberBox}" Tag="number"
+                                         AutomationProperties.AutomationId="ConnectorEdgeDistance"
+                                         Text="{Binding ConnectorEdgeDistance, StringFormat=N1, UpdateSourceTrigger=LostFocus}" />
+                                <TextBlock Text="mm" Foreground="#FF9AA0A8" VerticalAlignment="Center" Margin="5,0,0,0" />
+                            </StackPanel>
+                            <TextBlock Text="Both halves are kept." Foreground="#FF7A8088" Margin="0,4,0,0" />
                         </StackPanel>
 
                         <CheckBox Content="Close the cut face over" Margin="0,0,0,8"
@@ -1081,6 +1177,34 @@
                 <!-- Colour. Bound to the view model rather than to Selected, because painting
                      applies to the whole selection and Selected is null once more than one
                      object is picked. -->
+                <!-- Extrude down panel. The plane on the model shows where the cut goes. -->
+                <Border Grid.Row="6" Margin="0,10,0,0" Padding="8" Background="#FFEFF5FF"
+                        BorderBrush="#FFB8D2F0" BorderThickness="1" CornerRadius="3"
+                        Visibility="{Binding IsExtrudeMode, Converter={StaticResource BoolToVisibility}}">
+                    <StackPanel>
+                        <TextBlock Text="Extrude down" FontWeight="SemiBold" Margin="0,0,0,6" />
+                        <TextBlock TextWrapping="Wrap" Foreground="#FF3A4550" Margin="0,0,0,8"
+                                   Text="Everything below the plane is replaced by straight walls down to a flat base on the plate, following the model's outline at that height. Drag the arrows to move the plane, or type the height." />
+
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
+                            <TextBlock Text="Height" Style="{StaticResource FieldLabel}" Width="76"
+                                       ToolTip="Where the model is cut. Set it above any ragged part of the bottom, so the walls start from a clean section." />
+                            <TextBox Width="64" Style="{StaticResource NumberBox}" Tag="number"
+                                     AutomationProperties.AutomationId="ExtrudeHeight"
+                                     Text="{Binding ExtrudeHeight, StringFormat=0.##, UpdateSourceTrigger=PropertyChanged, Delay=300}" />
+                            <TextBlock Text="{Binding UnitLabel}" Foreground="#FF9AA0A8" VerticalAlignment="Center" Margin="5,0,0,0" />
+                        </StackPanel>
+
+                        <StackPanel Orientation="Horizontal">
+                            <Button Content="Apply" Style="{StaticResource PanelButton}"
+                                    AutomationProperties.AutomationId="ExtrudeApply"
+                                    Command="{Binding ApplyExtrudeCommand}" />
+                            <Button Content="Cancel" Style="{StaticResource PanelButton}"
+                                    Command="{Binding CancelExtrudeCommand}" />
+                        </StackPanel>
+                    </StackPanel>
+                </Border>
+
                 <!-- Subtract panel. A boolean cannot be taken back except by undo, and the two
                      settings here change what it produces, so it asks before it cuts. -->
                 <Border Grid.Row="6" Margin="0,10,0,0" Padding="8" Background="#FFEFF5FF"
@@ -1482,14 +1606,17 @@
                         <StackPanel Orientation="Horizontal"
                                     Visibility="{Binding HasManySelected, Converter={StaticResource BoolToVisibility}}">
                             <TextBlock Text="X" Style="{StaticResource GizmoLabel}" />
-                            <TextBox Style="{StaticResource GizmoBox}" Tag="transform"
-                                     Text="{Binding GroupX, StringFormat=0.####, UpdateSourceTrigger=LostFocus}" />
+                            <TextBox Style="{StaticResource GizmoMixedBox}" Tag="transform"
+                                     ToolTip="Type a value to set it, or +=5 / -=5 to change by that much. With the As one button off, every selected object gets it."
+                                     Text="{Binding GroupX, Converter={StaticResource Mixed}, ConverterParameter=0.####, UpdateSourceTrigger=LostFocus}" />
                             <TextBlock Text="Y" Style="{StaticResource GizmoLabel}" />
-                            <TextBox Style="{StaticResource GizmoBox}" Tag="transform"
-                                     Text="{Binding GroupY, StringFormat=0.####, UpdateSourceTrigger=LostFocus}" />
+                            <TextBox Style="{StaticResource GizmoMixedBox}" Tag="transform"
+                                     ToolTip="Type a value to set it, or +=5 / -=5 to change by that much. With the As one button off, every selected object gets it."
+                                     Text="{Binding GroupY, Converter={StaticResource Mixed}, ConverterParameter=0.####, UpdateSourceTrigger=LostFocus}" />
                             <TextBlock Text="Z" Style="{StaticResource GizmoLabel}" />
-                            <TextBox Style="{StaticResource GizmoBox}" Tag="transform"
-                                     Text="{Binding GroupZ, StringFormat=0.####, UpdateSourceTrigger=LostFocus}" />
+                            <TextBox Style="{StaticResource GizmoMixedBox}" Tag="transform"
+                                     ToolTip="Type a value to set it, or +=5 / -=5 to change by that much. With the As one button off, every selected object gets it."
+                                     Text="{Binding GroupZ, Converter={StaticResource Mixed}, ConverterParameter=0.####, UpdateSourceTrigger=LostFocus}" />
                         </StackPanel>
                         <TextBlock Text="{Binding UnitLabel}" Style="{StaticResource GizmoUnit}" />
 
@@ -1538,14 +1665,17 @@
                         <StackPanel Orientation="Horizontal"
                                     Visibility="{Binding HasManySelected, Converter={StaticResource BoolToVisibility}}">
                             <TextBlock Text="Roll" Style="{StaticResource GizmoLabel}" />
-                            <TextBox Style="{StaticResource GizmoBox}" Tag="transform"
-                                     Text="{Binding GroupRoll, StringFormat=N1, UpdateSourceTrigger=LostFocus}" />
+                            <TextBox Style="{StaticResource GizmoMixedBox}" Tag="transform"
+                                     ToolTip="Type a value to set it, or +=5 / -=5 to change by that much. With the As one button off, every selected object gets it."
+                                     Text="{Binding GroupRoll, Converter={StaticResource Mixed}, ConverterParameter=N1, UpdateSourceTrigger=LostFocus}" />
                             <TextBlock Text="Pitch" Style="{StaticResource GizmoLabel}" />
-                            <TextBox Style="{StaticResource GizmoBox}" Tag="transform"
-                                     Text="{Binding GroupPitch, StringFormat=N1, UpdateSourceTrigger=LostFocus}" />
+                            <TextBox Style="{StaticResource GizmoMixedBox}" Tag="transform"
+                                     ToolTip="Type a value to set it, or +=5 / -=5 to change by that much. With the As one button off, every selected object gets it."
+                                     Text="{Binding GroupPitch, Converter={StaticResource Mixed}, ConverterParameter=N1, UpdateSourceTrigger=LostFocus}" />
                             <TextBlock Text="Yaw" Style="{StaticResource GizmoLabel}" />
-                            <TextBox Style="{StaticResource GizmoBox}" Tag="transform"
-                                     Text="{Binding GroupYaw, StringFormat=N1, UpdateSourceTrigger=LostFocus}" />
+                            <TextBox Style="{StaticResource GizmoMixedBox}" Tag="transform"
+                                     ToolTip="Type a value to set it, or +=5 / -=5 to change by that much. With the As one button off, every selected object gets it."
+                                     Text="{Binding GroupYaw, Converter={StaticResource Mixed}, ConverterParameter=N1, UpdateSourceTrigger=LostFocus}" />
                         </StackPanel>
                         <TextBlock Text="deg" Style="{StaticResource GizmoUnit}" />
                         <ToggleButton Style="{StaticResource ModeButton}" Margin="4,0,0,0"
@@ -1598,14 +1728,17 @@
                             <!-- Several selected: the bounding box of the lot, so "width" here
                                  is how wide the group sits rather than any one part's own. -->
                             <TextBlock Text="W" Style="{StaticResource GizmoLabel}" ToolTip="Width of the selection - along X" />
-                            <TextBox Style="{StaticResource GizmoBox}" Tag="transform"
-                                     Text="{Binding GroupSizeX, StringFormat=0.####, UpdateSourceTrigger=LostFocus}" />
+                            <TextBox Style="{StaticResource GizmoMixedBox}" Tag="transform"
+                                     ToolTip="Type a value to set it, or +=5 / -=5 to change by that much. With the As one button off, every selected object gets it."
+                                     Text="{Binding GroupSizeX, Converter={StaticResource Mixed}, ConverterParameter=0.####, UpdateSourceTrigger=LostFocus}" />
                             <TextBlock Text="D" Style="{StaticResource GizmoLabel}" ToolTip="Depth of the selection - along Y" />
-                            <TextBox Style="{StaticResource GizmoBox}" Tag="transform"
-                                     Text="{Binding GroupSizeY, StringFormat=0.####, UpdateSourceTrigger=LostFocus}" />
+                            <TextBox Style="{StaticResource GizmoMixedBox}" Tag="transform"
+                                     ToolTip="Type a value to set it, or +=5 / -=5 to change by that much. With the As one button off, every selected object gets it."
+                                     Text="{Binding GroupSizeY, Converter={StaticResource Mixed}, ConverterParameter=0.####, UpdateSourceTrigger=LostFocus}" />
                             <TextBlock Text="H" Style="{StaticResource GizmoLabel}" ToolTip="Height of the selection - along Z" />
-                            <TextBox Style="{StaticResource GizmoBox}" Tag="transform"
-                                     Text="{Binding GroupSizeZ, StringFormat=0.####, UpdateSourceTrigger=LostFocus}" />
+                            <TextBox Style="{StaticResource GizmoMixedBox}" Tag="transform"
+                                     ToolTip="Type a value to set it, or +=5 / -=5 to change by that much. With the As one button off, every selected object gets it."
+                                     Text="{Binding GroupSizeZ, Converter={StaticResource Mixed}, ConverterParameter=0.####, UpdateSourceTrigger=LostFocus}" />
                         </StackPanel>
                         <TextBlock Text="{Binding UnitLabel}" Style="{StaticResource GizmoUnit}" />
 
@@ -1651,6 +1784,20 @@
                                   Stretch="Uniform" Width="15" Height="15" />
                         </ToggleButton>
                     </StackPanel>
+
+                    <!-- Several selected: as one about the middle of the lot, or each on its own.
+                         Last in the bar, with the other switches, rather than beside the mode
+                         buttons: it is a setting of whichever mode is up, not a mode of its own. -->
+                    <ToggleButton Style="{StaticResource ModeButton}" Margin="2,0,0,0"
+                                  AutomationProperties.Name="As one"
+                                  ToolTip="On: move, turn and resize the selection as one object, around its centre. Off: each object on its own, around its own centre."
+                                  IsChecked="{Binding AroundSelectionCentre, Mode=TwoWay}"
+                                  Visibility="{Binding HasManySelected, Converter={StaticResource BoolToVisibility}}">
+                        <!-- A frame round three parts: the lot taken together. -->
+                        <Path Data="M1,1 L19,1 L19,19 L1,19 Z M4,4 L9,4 L9,9 L4,9 Z M11,4 L16,4 L16,9 L11,9 Z M7.5,11 L12.5,11 L12.5,16 L7.5,16 Z"
+                              Stroke="#FF33383F" StrokeThickness="1.5" Fill="{x:Null}"
+                              Stretch="Uniform" Width="16" Height="16" />
+                    </ToggleButton>
                 </StackPanel>
             </Border>
 

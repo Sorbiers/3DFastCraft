@@ -56,6 +56,10 @@ public sealed class MainViewModel : INotifyPropertyChanged
     private Axis splitAxis = Axis.Z;
     private float splitOffset;
     private SplitKeep splitKeep = SplitKeep.Both;
+    private bool isExtrudeMode;
+    private bool splitWithConnectors;
+    private ConnectorOptions connectors = ConnectorOptions.Default;
+    private float extrudeHeight = 1f;
     private Render.SplitOffcut splitOffcut = Render.SplitOffcut.Faded;
     private GizmoMode splitGizmoMode = GizmoMode.Move;
     private Vector3 splitTurn;
@@ -88,6 +92,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
     private Vector3? measureTo;
     private bool? damaged;
     private bool scaleOneSide;
+    private bool aroundSelectionCentre = true;
     private bool stopOnContact;
     private bool showWireframe;
     private bool showXray;
@@ -134,9 +139,15 @@ public sealed class MainViewModel : INotifyPropertyChanged
 
         BooleanCommand = new AsyncRelayCommand(p => RunBoolean(p), _ => Scene.Selection.Count >= 2);
         BeginSubtractCommand = RelayCommand.Simple(BeginSubtract, () => Scene.Selection.Count >= 2);
+        BeginExtrudeCommand = RelayCommand.Simple(BeginExtrude, () => Scene.Selection.Count > 0);
+        ApplyExtrudeCommand = AsyncRelayCommand.Simple(ApplyExtrude, () => IsExtrudeMode);
+        CancelExtrudeCommand = RelayCommand.Simple(() => IsExtrudeMode = false);
         ApplySubtractCommand = new AsyncRelayCommand(_ => ApplySubtract(), _ => Scene.Selection.Count >= 2);
         CancelSubtractCommand = RelayCommand.Simple(() => IsSubtractMode = false);
-        BeginSplitCommand = RelayCommand.Simple(BeginSplit, () => Scene.Selection.Count > 0);
+        BeginSplitCommand = RelayCommand.Simple(
+            () => { SplitWithConnectors = false; BeginSplit(); }, () => Scene.Selection.Count > 0);
+        BeginSplitWithConnectorsCommand = RelayCommand.Simple(
+            () => { SplitWithConnectors = true; BeginSplit(); }, () => Scene.Selection.Count > 0);
         AlignToAxesCommand = RelayCommand.Simple(AlignToAxes, AnythingTurned);
         ApplySplitCommand = AsyncRelayCommand.Simple(ApplySplit, () => IsSplitMode);
         CancelSplitCommand = RelayCommand.Simple(() => IsSplitMode = false);
@@ -212,6 +223,10 @@ public sealed class MainViewModel : INotifyPropertyChanged
     public System.Windows.Input.ICommand ApplySubtractCommand { get; }
     public System.Windows.Input.ICommand CancelSubtractCommand { get; }
     public System.Windows.Input.ICommand BeginSplitCommand { get; }
+    public System.Windows.Input.ICommand BeginSplitWithConnectorsCommand { get; }
+    public System.Windows.Input.ICommand BeginExtrudeCommand { get; }
+    public System.Windows.Input.ICommand ApplyExtrudeCommand { get; }
+    public System.Windows.Input.ICommand CancelExtrudeCommand { get; }
     public System.Windows.Input.ICommand AlignToAxesCommand { get; }
     public System.Windows.Input.ICommand ApplySplitCommand { get; }
     public System.Windows.Input.ICommand CancelSplitCommand { get; }
@@ -331,20 +346,20 @@ public sealed class MainViewModel : INotifyPropertyChanged
     /// </summary>
     public float GroupX
     {
-        get => unit.From(GroupCentre().X);
-        set => MoveGroupTo(Axis.X, unit.To(value));
+        get => unit.From(aroundSelectionCentre ? GroupCentre().X : Shared(o => o.PositionX));
+        set { if (aroundSelectionCentre) MoveGroupTo(Axis.X, unit.To(value)); else PlaceEach(Axis.X, unit.To(value)); }
     }
 
     public float GroupY
     {
-        get => unit.From(GroupCentre().Y);
-        set => MoveGroupTo(Axis.Y, unit.To(value));
+        get => unit.From(aroundSelectionCentre ? GroupCentre().Y : Shared(o => o.PositionY));
+        set { if (aroundSelectionCentre) MoveGroupTo(Axis.Y, unit.To(value)); else PlaceEach(Axis.Y, unit.To(value)); }
     }
 
     public float GroupZ
     {
-        get => unit.From(GroupCentre().Z);
-        set => MoveGroupTo(Axis.Z, unit.To(value));
+        get => unit.From(aroundSelectionCentre ? GroupCentre().Z : Shared(o => o.PositionZ));
+        set { if (aroundSelectionCentre) MoveGroupTo(Axis.Z, unit.To(value)); else PlaceEach(Axis.Z, unit.To(value)); }
     }
 
     /// <summary>
@@ -354,22 +369,25 @@ public sealed class MainViewModel : INotifyPropertyChanged
     /// is the same idea: a group has no rotation of its own, so the honest thing to show is what
     /// they have in common.
     /// </summary>
+    // As one there is no angle to show - parts turned different ways share none - so the box
+    // reads 0 and means "turn the lot by this much about its middle". Each on its own it shows
+    // what they share and sets all of them to it.
     public float GroupRoll
     {
-        get => Shared(o => o.RotationX);
-        set => TurnGroup(Axis.X, value);
+        get => aroundSelectionCentre ? 0f : Shared(o => o.RotationX);
+        set { if (aroundSelectionCentre) TurnSelectionAbout(Axis.X, value); else TurnGroup(Axis.X, value); }
     }
 
     public float GroupPitch
     {
-        get => Shared(o => o.RotationY);
-        set => TurnGroup(Axis.Y, value);
+        get => aroundSelectionCentre ? 0f : Shared(o => o.RotationY);
+        set { if (aroundSelectionCentre) TurnSelectionAbout(Axis.Y, value); else TurnGroup(Axis.Y, value); }
     }
 
     public float GroupYaw
     {
-        get => Shared(o => o.RotationZ);
-        set => TurnGroup(Axis.Z, value);
+        get => aroundSelectionCentre ? 0f : Shared(o => o.RotationZ);
+        set { if (aroundSelectionCentre) TurnSelectionAbout(Axis.Z, value); else TurnGroup(Axis.Z, value); }
     }
 
     /// <summary>
@@ -382,22 +400,29 @@ public sealed class MainViewModel : INotifyPropertyChanged
     /// </summary>
     public float GroupSizeX
     {
-        get => unit.From(GroupExtent().X);
-        set => ResizeGroup(Axis.X, unit.To(value));
+        get => unit.From(aroundSelectionCentre ? GroupExtent().X : Shared(o => o.SizeX));
+        set { if (aroundSelectionCentre) ResizeGroup(Axis.X, unit.To(value)); else ResizeEach(Axis.X, unit.To(value)); }
     }
 
     public float GroupSizeY
     {
-        get => unit.From(GroupExtent().Y);
-        set => ResizeGroup(Axis.Y, unit.To(value));
+        get => unit.From(aroundSelectionCentre ? GroupExtent().Y : Shared(o => o.SizeY));
+        set { if (aroundSelectionCentre) ResizeGroup(Axis.Y, unit.To(value)); else ResizeEach(Axis.Y, unit.To(value)); }
     }
 
     public float GroupSizeZ
     {
-        get => unit.From(GroupExtent().Z);
-        set => ResizeGroup(Axis.Z, unit.To(value));
+        get => unit.From(aroundSelectionCentre ? GroupExtent().Z : Shared(o => o.SizeZ));
+        set { if (aroundSelectionCentre) ResizeGroup(Axis.Z, unit.To(value)); else ResizeEach(Axis.Z, unit.To(value)); }
     }
 
+    /// <summary>
+    /// The value every selected object has, or NaN when they differ.
+    ///
+    /// NaN rather than 0, because 0 is a value: a box reading 0 for parts that are all somewhere
+    /// else invites typing over it as though it were true. The box shows nothing instead, marked
+    /// as mixed.
+    /// </summary>
     private float Shared(Func<SceneObject, float> of)
     {
         var selection = Scene.Selection;
@@ -405,7 +430,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
 
         float first = of(selection[0]);
         foreach (var o in selection)
-            if (MathF.Abs(of(o) - first) > 0.05f) return 0f;
+            if (MathF.Abs(of(o) - first) > 0.05f) return float.NaN;
 
         return first;
     }
@@ -576,6 +601,97 @@ public sealed class MainViewModel : INotifyPropertyChanged
         foreach (var o in Scene.Selection) o.Position += offset;
 
         RaiseGroup();
+    }
+
+    /// <summary>Every selected object's own position on one axis set to the same value: they line up.</summary>
+    private void PlaceEach(Axis axis, float where)
+    {
+        if (!float.IsFinite(where) || Scene.Selection.Count == 0) return;
+
+        foreach (var o in Scene.Selection)
+        {
+            switch (axis)
+            {
+                case Axis.X: o.PositionX = where; break;
+                case Axis.Y: o.PositionY = where; break;
+                default: o.PositionZ = where; break;
+            }
+        }
+
+        RaiseGroup();
+    }
+
+    /// <summary>Every selected object resized to the same size, each about its own centre.</summary>
+    private void ResizeEach(Axis axis, float millimetres)
+    {
+        if (!float.IsFinite(millimetres) || millimetres < 0.01f) return;
+
+        foreach (var o in Scene.Selection) ResizeObject(o, axis, millimetres);
+
+        RaiseGroup();
+    }
+
+    /// <summary>
+    /// The whole selection turned about the middle of the lot, as one object.
+    ///
+    /// Composed onto each part's own turn rather than added to one of its angles, for the reason
+    /// the rings give: the three angles are applied in order, so only the last lines up with the
+    /// world, and adding to the others turns a part about its own axes instead. The positions
+    /// swing round the middle as well, which is what keeps the arrangement.
+    /// </summary>
+    private void TurnSelectionAbout(Axis axis, float degrees)
+    {
+        if (!float.IsFinite(degrees) || MathF.Abs(degrees) < 1e-4f || Scene.Selection.Count == 0) return;
+
+        var centre = GroupCentre();
+        float radians = degrees * MathF.PI / 180f;
+        var turn = axis switch
+        {
+            Axis.X => Matrix4x4.CreateRotationX(radians),
+            Axis.Y => Matrix4x4.CreateRotationY(radians),
+            _ => Matrix4x4.CreateRotationZ(radians)
+        };
+
+        foreach (var o in Scene.Selection)
+        {
+            o.Rotation = MeshTransform.EulerFrom(MeshTransform.Rotation(o.Rotation) * turn);
+            o.Position = centre + Vector3.Transform(o.Position - centre, turn);
+        }
+
+        RaiseGroup();
+    }
+
+    /// <summary>
+    /// "+=5" typed into a box with several objects each on their own: every object changed by that
+    /// much. False when this is not that case, and the box's own value is changed instead.
+    ///
+    /// It has to be done here, one object at a time. Each on its own, a box shows what the parts
+    /// share or nothing at all, and nothing plus five is not a number - so adding to the box would
+    /// do nothing exactly when the parts differ, which is when anyone would type it.
+    /// </summary>
+    public bool ChangeEachBy(string property, float delta)
+    {
+        if (aroundSelectionCentre || Scene.Selection.Count < 2 || !float.IsFinite(delta)) return false;
+
+        float d = unit.To(delta);
+        var selection = Scene.Selection;
+
+        switch (property)
+        {
+            case nameof(GroupX): foreach (var o in selection) o.PositionX += d; break;
+            case nameof(GroupY): foreach (var o in selection) o.PositionY += d; break;
+            case nameof(GroupZ): foreach (var o in selection) o.PositionZ += d; break;
+            case nameof(GroupSizeX): foreach (var o in selection) ResizeObject(o, Axis.X, MathF.Max(0.01f, o.SizeX + d)); break;
+            case nameof(GroupSizeY): foreach (var o in selection) ResizeObject(o, Axis.Y, MathF.Max(0.01f, o.SizeY + d)); break;
+            case nameof(GroupSizeZ): foreach (var o in selection) ResizeObject(o, Axis.Z, MathF.Max(0.01f, o.SizeZ + d)); break;
+            case nameof(GroupRoll): foreach (var o in selection) o.RotationX = GizmoMath.NormaliseDegrees(o.RotationX + delta); break;
+            case nameof(GroupPitch): foreach (var o in selection) o.RotationY = GizmoMath.NormaliseDegrees(o.RotationY + delta); break;
+            case nameof(GroupYaw): foreach (var o in selection) o.RotationZ = GizmoMath.NormaliseDegrees(o.RotationZ + delta); break;
+            default: return false;
+        }
+
+        RaiseGroup();
+        return true;
     }
 
     /// <summary>
@@ -1014,6 +1130,34 @@ public sealed class MainViewModel : INotifyPropertyChanged
     }
 
     /// <summary>
+    /// Whether several selected objects are moved, turned and resized as one, about the middle of
+    /// the lot, or each on its own about its own centre.
+    ///
+    /// It decides what the numbers in the bar refer to as well as what the handles do - the
+    /// selection's extent or each part's own size - so switching it re-reads every box. It does
+    /// not mark the project changed: nothing in the model has moved.
+    /// </summary>
+    public bool AroundSelectionCentre
+    {
+        get => aroundSelectionCentre;
+        set
+        {
+            if (aroundSelectionCentre == value) return;
+
+            aroundSelectionCentre = value;
+            Raise(nameof(AroundSelectionCentre));
+            foreach (var name in GroupBoxes) Raise(name);
+        }
+    }
+
+    private static readonly string[] GroupBoxes =
+    [
+        nameof(GroupX), nameof(GroupY), nameof(GroupZ),
+        nameof(GroupRoll), nameof(GroupPitch), nameof(GroupYaw),
+        nameof(GroupSizeX), nameof(GroupSizeY), nameof(GroupSizeZ)
+    ];
+
+    /// <summary>
     /// Stop a dragged object where it meets another rather than letting it pass through.
     ///
     /// Sliding a part up against its neighbour until it stops is how things get assembled. Off by
@@ -1081,7 +1225,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
     /// strip that goes with them, stand down while one of them is running rather than sitting
     /// underneath and leaving it to the pointer to decide which was meant.
     /// </summary>
-    public bool IsToolRunning => isSplitMode || isEngraveMode || isEmbossMode || isLayMode;
+    public bool IsToolRunning => isSplitMode || isEngraveMode || isEmbossMode || isLayMode || isExtrudeMode;
 
     /// <summary>
     /// Whether a tool has the object in hand, counting the two that do not take the handles
@@ -1739,6 +1883,135 @@ public sealed class MainViewModel : INotifyPropertyChanged
         }
     }
 
+    /// <summary>
+    /// While this is on, the Extrude down panel is open and the plane shows where the cut will go.
+    /// </summary>
+    public bool IsExtrudeMode
+    {
+        get => isExtrudeMode;
+        set
+        {
+            if (isExtrudeMode == value) return;
+
+            Set(ref isExtrudeMode, value);
+            Raise(nameof(IsToolRunning));
+            Raise(nameof(ShowManipulatorBar));
+            RaiseToolInHand();
+        }
+    }
+
+    /// <summary>
+    /// Where the model is cut before it is built down to the plate, in whatever unit is chosen.
+    ///
+    /// Everything below it is replaced, so it is the one number that decides what survives: set it
+    /// above the ragged part of a scan and the plinth is clean, set it through the ragged part and
+    /// the plinth follows the rag.
+    /// </summary>
+    public float ExtrudeHeight
+    {
+        get => unit.From(extrudeHeight);
+        set
+        {
+            float mm = unit.To(value);
+            if (!float.IsFinite(mm)) return;
+
+            extrudeHeight = MathF.Max(ExtrudeDown.MinimumHeight, mm);
+            Raise(nameof(ExtrudeHeight));
+            Raise(nameof(ExtrudeHeightMillimetres));
+        }
+    }
+
+    /// <summary>The same height in millimetres, for the plane on the model and the arrows that drag it.</summary>
+    public float ExtrudeHeightMillimetres
+    {
+        get => extrudeHeight;
+        set
+        {
+            if (!float.IsFinite(value)) return;
+
+            extrudeHeight = MathF.Max(ExtrudeDown.MinimumHeight, value);
+            Raise(nameof(ExtrudeHeight));
+            Raise(nameof(ExtrudeHeightMillimetres));
+        }
+    }
+
+    private void BeginExtrude()
+    {
+        var selection = Scene.Selection;
+        if (selection.Count == 0) return;
+
+        var bounds = Bounds.Empty;
+        foreach (var o in selection) bounds = bounds.Union(o.WorldBounds);
+
+        // A millimetre into the model from its lowest point: enough to cut clear of a ragged edge
+        // on most scans, and a starting point that always crosses the model rather than missing it.
+        extrudeHeight = MathF.Max(ExtrudeDown.MinimumHeight, MathF.Min(bounds.Min.Z + 1f, bounds.Center.Z));
+        Raise(nameof(ExtrudeHeight));
+        Raise(nameof(ExtrudeHeightMillimetres));
+
+        IsExtrudeMode = true;
+        Status = "Extrude down: set the height, everything below it goes straight down to the plate";
+    }
+
+    private async Task ApplyExtrude()
+    {
+        var selection = Scene.Selection.ToList();
+        if (selection.Count == 0 || IsBusy) return;
+
+        float height = extrudeHeight;
+        var meshes = selection.Select(o => o.ToWorldMesh()).ToList();
+
+        var token = StartWork("Extruding down");
+        try
+        {
+            var results = await Task.Run(() => meshes.Select(m => ExtrudeDown.Apply(m, height)).ToList(), token);
+
+            var removed = new List<SceneObject>();
+            var added = new List<SceneObject>();
+            var refused = new List<string>();
+
+            for (int i = 0; i < selection.Count; i++)
+            {
+                if (results[i] is not { } mesh)
+                {
+                    refused.Add(selection[i].Name);
+                    continue;
+                }
+
+                removed.Add(selection[i]);
+                added.Add(new SceneObject(selection[i].Name, mesh) { Colour = selection[i].Colour }.Centred());
+            }
+
+            if (added.Count == 0)
+            {
+                Status = "Extrude down changed nothing";
+                MessageBox.Show(
+                    "Nothing could be extruded down at that height.\n\n"
+                    + "The height has to cross the model - above its lowest point and below its top - "
+                    + "and the model has to be closed where it is cut, or the walls would have nothing "
+                    + "to join. Repair the model first if it has holes of its own.",
+                    "3DFastCraft", MessageBoxButton.OK, MessageBoxImage.Information);
+                return;
+            }
+
+            Undo.Execute(new ReplaceObjectsCommand("Extrude down", removed, added));
+            IsExtrudeMode = false;
+            RefreshSelection();
+
+            Status = refused.Count == 0
+                ? $"Extruded {added.Count} object(s) down to the plate from {ExtrudeHeight:0.##} {UnitLabel}"
+                : $"Extruded {added.Count} object(s); {string.Join(", ", refused)} not closed at that height, left as it was";
+        }
+        catch (Exception abort) when (WasAborted(abort))
+        {
+            Status = $"{busyTitle} aborted - nothing was changed";
+        }
+        finally
+        {
+            EndWork();
+        }
+    }
+
     private void BeginSubtract()
     {
         IsEngraveMode = false;
@@ -2021,6 +2294,13 @@ public sealed class MainViewModel : INotifyPropertyChanged
         if (Selected is not { } o) return;
         if (!float.IsFinite(millimetres) || millimetres < 0.01f) return;
 
+        ResizeObject(o, axis, millimetres);
+        RaiseReal();
+    }
+
+    /// <summary>One object to a size on one axis, about its own centre, honouring the proportions lock.</summary>
+    private void ResizeObject(SceneObject o, Axis axis, float millimetres)
+    {
         float now = axis switch { Axis.X => o.SizeX, Axis.Y => o.SizeY, _ => o.SizeZ };
 
         if (!UniformScale || now < 1e-4f)
@@ -2032,7 +2312,6 @@ public sealed class MainViewModel : INotifyPropertyChanged
                 default: o.SizeZ = millimetres; break;
             }
 
-            RaiseReal();
             return;
         }
 
@@ -2043,8 +2322,6 @@ public sealed class MainViewModel : INotifyPropertyChanged
         o.SizeX *= ratio;
         o.SizeY *= ratio;
         o.SizeZ *= ratio;
-
-        RaiseReal();
     }
 
     public float RealW
@@ -2549,7 +2826,9 @@ public sealed class MainViewModel : INotifyPropertyChanged
 
     public SplitKeep SplitKeep
     {
-        get => splitKeep;
+        // Both, whatever was last chosen, while connectors are on: a connector joins two halves,
+        // and throwing one away would leave pins with nothing to go into.
+        get => splitWithConnectors ? SplitKeep.Both : splitKeep;
         set
         {
             Set(ref splitKeep, value);
@@ -2575,7 +2854,107 @@ public sealed class MainViewModel : INotifyPropertyChanged
     }
 
     /// <summary>Keeping both halves throws nothing away, so there is nothing to fade or hide.</summary>
-    public bool SplitOffcutApplies => splitKeep is not SplitKeep.Both;
+    public bool SplitOffcutApplies => SplitKeep is not SplitKeep.Both;
+
+    /// <summary>
+    /// Whether this split joins its halves with pins or pegs - the Split with connectors tool on
+    /// the Tools tab, which is the same split with one more section in its panel.
+    /// </summary>
+    public bool SplitWithConnectors
+    {
+        get => splitWithConnectors;
+        set
+        {
+            if (splitWithConnectors == value) return;
+
+            Set(ref splitWithConnectors, value);
+            Raise(nameof(SplitKeep));
+            Raise(nameof(SplitKeepChoosable));
+            Raise(nameof(SplitOffcutApplies));
+            Raise(nameof(SplitCutFaceApplies));
+        }
+    }
+
+    /// <summary>Keeping one half only makes sense without connectors, so the choice is hidden with them.</summary>
+    public bool SplitKeepChoosable => !splitWithConnectors;
+
+    public bool ConnectorsArePins
+    {
+        get => connectors.Style == ConnectorStyle.Pins;
+        set { if (value) SetConnectorStyle(ConnectorStyle.Pins); }
+    }
+
+    public bool ConnectorsArePegs
+    {
+        get => connectors.Style == ConnectorStyle.Pegs;
+        set { if (value) SetConnectorStyle(ConnectorStyle.Pegs); }
+    }
+
+    private void SetConnectorStyle(ConnectorStyle style)
+    {
+        connectors = connectors with { Style = style };
+        Raise(nameof(ConnectorsArePins));
+        Raise(nameof(ConnectorsArePegs));
+    }
+
+    /// <summary>How many to place, at most. A face with room for fewer gets fewer, and the status line says so.</summary>
+    public int ConnectorCount
+    {
+        get => connectors.Count;
+        set { connectors = connectors with { Count = Math.Clamp(value, 1, 6) }; Raise(nameof(ConnectorCount)); }
+    }
+
+    /// <summary>The pin or peg, in millimetres - a size to print, not a reading at the scene's scale.</summary>
+    public float ConnectorDiameter
+    {
+        get => connectors.Diameter;
+        set { if (float.IsFinite(value)) connectors = connectors with { Diameter = Math.Clamp(value, 1f, 50f) }; Raise(nameof(ConnectorDiameter)); }
+    }
+
+    public float ConnectorDepth
+    {
+        get => connectors.Depth;
+        set { if (float.IsFinite(value)) connectors = connectors with { Depth = Math.Clamp(value, 1f, 100f) }; Raise(nameof(ConnectorDepth)); }
+    }
+
+    public float ConnectorClearance
+    {
+        get => connectors.Clearance;
+        set { if (float.IsFinite(value)) connectors = connectors with { Clearance = Math.Clamp(value, 0f, 2f) }; Raise(nameof(ConnectorClearance)); }
+    }
+
+    public bool ConnectorsPerpendicular
+    {
+        get => connectors.Direction == ConnectorDirection.Perpendicular;
+        set { if (value) SetConnectorDirection(ConnectorDirection.Perpendicular); }
+    }
+
+    public bool ConnectorsVertical
+    {
+        get => connectors.Direction == ConnectorDirection.Vertical;
+        set { if (value) SetConnectorDirection(ConnectorDirection.Vertical); }
+    }
+
+    public bool ConnectorsHorizontal
+    {
+        get => connectors.Direction == ConnectorDirection.Horizontal;
+        set { if (value) SetConnectorDirection(ConnectorDirection.Horizontal); }
+    }
+
+    private void SetConnectorDirection(ConnectorDirection direction)
+    {
+        connectors = connectors with { Direction = direction };
+        Raise(nameof(ConnectorsPerpendicular));
+        Raise(nameof(ConnectorsVertical));
+        Raise(nameof(ConnectorsHorizontal));
+    }
+
+    /// <summary>Material left between a hole and the outside of the face, in millimetres.</summary>
+    public float ConnectorEdgeDistance
+    {
+        get => connectors.EdgeDistance;
+        set { if (float.IsFinite(value)) connectors = connectors with { EdgeDistance = Math.Clamp(value, 0f, 100f) }; Raise(nameof(ConnectorEdgeDistance)); }
+    }
 
     /// <summary>And nothing is cut open to look into unless a half is being taken off.</summary>
     public bool SplitCutFaceApplies =>
@@ -2604,7 +2983,8 @@ public sealed class MainViewModel : INotifyPropertyChanged
     /// </summary>
     public bool CancelActiveTool()
     {
-        if (IsSplitMode) IsSplitMode = false;
+        if (IsExtrudeMode) IsExtrudeMode = false;
+        else if (IsSplitMode) IsSplitMode = false;
         else if (IsMeasureMode) IsMeasureMode = false;
         else if (IsEngraveMode) IsEngraveMode = false;
         else if (IsEmbossMode) IsEmbossMode = false;
@@ -4100,24 +4480,104 @@ public sealed class MainViewModel : INotifyPropertyChanged
         var meshes = selection.Select(o => o.ToWorldMesh()).ToList();
         var normal = splitNormal;
         float offset = splitOffset;
-        var keep = splitKeep;
+        var keep = SplitKeep;
+        bool joining = splitWithConnectors;
+        var options = connectors;
+
+        // Asked before anything is cut, since no amount of room fixes a pin that runs along the cut.
+        if (joining && Connectors.Axis(normal, options.Direction) is null)
+        {
+            string which = options.Direction == ConnectorDirection.Vertical ? "Vertical" : "Horizontal";
+            string runs = options.Direction == ConnectorDirection.Vertical ? "upright" : "level";
+            Status = $"{which} connectors cannot cross this cut";
+            MessageBox.Show(
+                $"{which} connectors cannot cross this cut.\n\n"
+                + $"The cut is too near {runs} itself, so they would lie along it rather than go through it. "
+                + "Choose Square to cut, or turn the plane.",
+                "3DFastCraft", MessageBoxButton.OK, MessageBoxImage.Information);
+            return;
+        }
 
         if (IsBusy) return;
 
         var token = StartWork(selection.Count == 1 ? "Splitting" : $"Splitting {selection.Count} objects");
         try
         {
-            var halves = await Task.Run(
-                () => meshes.Select(mesh => PlaneSplit.Split(mesh, normal, offset, keep, token)).ToList());
+            var halves = await Task.Run(() => meshes.Select(mesh =>
+            {
+                var (front, back) = PlaneSplit.Split(mesh, normal, offset, keep, token);
+                if (!joining || front is null || back is null) return new SplitOutcome(front, back, [], 0, false, 0f, 0f);
+
+                // Placed on the whole object's section, then cut into the halves: the place a pin
+                // can go is a question about the cut face, which both halves share.
+                var layout = Connectors.Survey(mesh, normal, offset, options);
+                if (layout.Points.Count == 0)
+                    return new SplitOutcome(front, back, [], 0, false, layout.ThickestWall, layout.WallNeeded);
+
+                return Connectors.Join(front, back, layout.Points, normal, options, token) is { } joined
+                    ? new SplitOutcome(joined.Front, joined.Back, joined.Pins, layout.Points.Count, false, layout.ThickestWall, layout.WallNeeded)
+                    : new SplitOutcome(front, back, [], 0, true, layout.ThickestWall, layout.WallNeeded);
+            }).ToList());
+
+            // Connectors asked for, and not one fits anywhere: nothing is split, and the two numbers
+            // say why. It used to split plain with a note in the status line, which is how a hollow
+            // box came back with no pins and nobody the wiser as to what was wrong with it.
+            if (joining && halves.Any(h => h.Front is not null && h.Back is not null)
+                && halves.All(h => h.Placed == 0 && !h.Refused))
+            {
+                float thickest = halves.Max(h => h.Thickest);
+                float needed = halves.Max(h => h.WallNeeded);
+                float wall = MathF.Max(options.EdgeDistance, Connectors.MinimumWall);
+
+                Status = "No room for connectors on the cut face - nothing was split";
+                MessageBox.Show(
+                    "No connector fits on this cut face, so nothing was split.\n\n"
+                    + $"A {options.Diameter:0.##} mm connector with {options.Clearance:0.##} mm clearance and "
+                    + $"{wall:0.##} mm of wall either side needs solid at least {needed:0.#} mm thick. "
+                    + $"The thickest this cut face gets is about {thickest:0.#} mm.\n\n"
+                    + "Make the diameter or From edge smaller, move the plane to a thicker part, "
+                    + "or use the plain Split tool.",
+                    "3DFastCraft", MessageBoxButton.OK, MessageBoxImage.Information);
+                return;
+            }
 
             var consumed = new List<SceneObject>();
             var produced = new List<SceneObject>();
             int missed = 0;
+            int placed = 0;
+            var tooSmall = new List<string>();
+            var torn = new List<string>();
+            bool fewer = false;
 
             for (int i = 0; i < selection.Count; i++)
             {
                 var source = selection[i];
-                var (front, back) = halves[i];
+                var (front, back, pins, count, refused, _, _) = halves[i];
+
+                if (joining && front is not null && back is not null)
+                {
+                    placed += count;
+                    if (refused) torn.Add(source.Name);
+                    else if (count == 0) tooSmall.Add(source.Name);
+                    else if (count < options.Count) fewer = true;
+                }
+
+                // Pins lie flat beside the part they belong to, in a row, printed on their side so
+                // the layers run along them and not across.
+                var box = source.WorldBounds;
+                for (int p = 0; p < pins.Count; p++)
+                {
+                    produced.Add(new SceneObject($"{source.Name} pin {p + 1}", pins[p])
+                    {
+                        Colour = source.Colour,
+                        Origin = PrimitiveKind.Cylinder,
+                        Rotation = new Vector3(0f, 90f, 0f),
+                        Position = new Vector3(
+                            box.Max.X + 10f + options.Depth,
+                            box.Min.Y + options.Radius + p * (options.Diameter + 4f),
+                            options.Radius)
+                    });
+                }
 
                 if (front is null && back is null)
                 {
@@ -4145,9 +4605,15 @@ public sealed class MainViewModel : INotifyPropertyChanged
         IsSubtractMode = false;
             RefreshSelection();
 
-            Status = missed == 0
+            string joined = !joining ? ""
+                : torn.Count > 0 ? $"; connectors would have torn {string.Join(", ", torn)}, so it was split plain"
+                : tooSmall.Count > 0 && placed == 0 ? "; the cut face has no room for a connector"
+                : $"; {placed} {(options.Style == ConnectorStyle.Pins ? "pin(s), made beside the parts" : "peg(s)")}"
+                  + (fewer || tooSmall.Count > 0 ? " - fewer than asked, the face has no room for more" : "");
+
+            Status = (missed == 0
                 ? $"Split {consumed.Count} object(s) into {produced.Count} piece(s)"
-                : $"Split {consumed.Count} object(s) into {produced.Count} piece(s); the plane missed {missed}";
+                : $"Split {consumed.Count} object(s) into {produced.Count} piece(s); the plane missed {missed}") + joined;
         }
         catch (Exception abort) when (WasAborted(abort))
         {
@@ -4162,6 +4628,10 @@ public sealed class MainViewModel : INotifyPropertyChanged
             EndWork();
         }
     }
+
+    /// <summary>What one object's split came to: its halves, any pins, and how the connectors went.</summary>
+    private sealed record SplitOutcome(
+        Mesh? Front, Mesh? Back, List<Mesh> Pins, int Placed, bool Refused, float Thickest, float WallNeeded);
 
     // --- Files -----------------------------------------------------------------------
 
@@ -4353,7 +4823,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
     {
         var dialog = new OpenFileDialog
         {
-            Filter = "3D models (*.stl;*.obj;*.3dfc)|*.stl;*.obj;*.3dfc"
+            Filter = "3D models (*.stl;*.obj;*.3mf;*.3dfc)|*.stl;*.obj;*.3mf;*.3dfc"
                    + "|STL (*.stl)|*.stl|Wavefront OBJ (*.obj)|*.obj"
                    + $"|3DFastCraft project (*{SceneSerializer.Extension})|*{SceneSerializer.Extension}",
             Title = "Import model",
@@ -4394,6 +4864,16 @@ public sealed class MainViewModel : INotifyPropertyChanged
                         {
                             Colour = loaded.Colour
                         });
+                }
+                else if (extension.Equals(".3mf", StringComparison.OrdinalIgnoreCase))
+                {
+                    // Colours are kept when the file has them: a part painted in 3D Builder or a
+                    // slicer comes in the colour it was, and only an uncoloured one takes the next.
+                    foreach (var (name, mesh, colour) in ThreeMf.Read(path))
+                        imported.Add(new SceneObject(naming(name), mesh)
+                        {
+                            Colour = colour ?? NextAutomaticColour()
+                        }.Centred());
                 }
                 else if (extension.Equals(".obj", StringComparison.OrdinalIgnoreCase))
                 {
@@ -4473,7 +4953,13 @@ public sealed class MainViewModel : INotifyPropertyChanged
 
         try
         {
-            if (chosen.IsObj)
+            if (chosen.Format == ExportFormat.ThreeMf)
+            {
+                // Composed exactly as OBJ is - separate, named and coloured - since 3MF keeps all three.
+                ThreeMf.Write(dialog.FileName, ExportComposer.ComposeForObj(subjects, chosen.DropToPlate));
+                Status = $"Exported {subjects.Count} object(s) to {Path.GetFileName(dialog.FileName)}";
+            }
+            else if (chosen.IsObj)
             {
                 ObjWriter.Write(dialog.FileName, ExportComposer.ComposeForObj(subjects, chosen.DropToPlate));
                 Status = $"Exported {subjects.Count} object(s) to {Path.GetFileName(dialog.FileName)}";

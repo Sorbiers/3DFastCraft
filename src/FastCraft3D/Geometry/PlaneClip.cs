@@ -53,6 +53,28 @@ public static class PlaneClip
         return kept;
     }
 
+    /// <summary>
+    /// The part on the side the normal points to, left open, with the closed rings round the opening.
+    ///
+    /// For building something onto the cut rather than capping it - walls down to the plate, pins
+    /// through the face. Each ring runs the way the kept piece's own edges run along it, so a
+    /// surface continued from it the other way round meets the piece edge for edge, and the same
+    /// chaining the cap uses decides what counts as a ring.
+    /// </summary>
+    public static (Mesh Kept, List<List<Vector3>> Rings) KeepOpen(
+        Mesh mesh, Matrix4x4 transform, Vector3 normal, float offset)
+    {
+        normal = Vector3.Normalize(normal);
+
+        var cuts = new List<(Vector3 From, Vector3 To)>();
+        var kept = Cut(mesh, transform, normal, offset, cuts);
+        if (cuts.Count < 3) return (kept, []);
+
+        Vector3 u = Across(normal);
+        Vector3 v = Vector3.Cross(-normal, u);
+        return (kept, Rings(cuts, u, v, normal * offset));
+    }
+
     /// <summary>The triangles alone, with the edges the cut left collected on the way past.</summary>
     private static Mesh Cut(Mesh mesh, Matrix4x4 transform, Vector3 normal, float offset,
                             List<(Vector3 From, Vector3 To)>? cuts)

@@ -1,4 +1,4 @@
-using System.IO;
+﻿using System.IO;
 
 namespace FastCraft3D.Io;
 
@@ -12,7 +12,7 @@ namespace FastCraft3D.Io;
 /// </summary>
 public static class IncomingFiles
 {
-    private static readonly string[] Known = [".stl", ".obj", SceneSerializer.Extension];
+    private static readonly string[] Known = [".stl", ".obj", ".3mf", SceneSerializer.Extension];
 
     /// <summary>Whether this app has anything to say about a file with this name.</summary>
     public static bool Understood(string path) =>

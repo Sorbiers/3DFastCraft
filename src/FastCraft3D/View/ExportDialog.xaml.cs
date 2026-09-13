@@ -1,4 +1,4 @@
-using System.Windows;
+﻿using System.Windows;
 using FastCraft3D.Geometry;
 using FastCraft3D.Io;
 using FastCraft3D.Model;
@@ -37,7 +37,8 @@ public partial class ExportDialog : Window
     public ExportOptions? Result { get; private set; }
 
     private ExportOptions CurrentOptions() => new(
-        FormatObj.IsChecked == true ? ExportFormat.Obj
+        FormatThreeMf.IsChecked == true ? ExportFormat.ThreeMf
+            : FormatObj.IsChecked == true ? ExportFormat.Obj
             : FormatAscii.IsChecked == true ? ExportFormat.AsciiStl
             : ExportFormat.BinaryStl,
         SelectedOnly: ScopeSelected.IsChecked == true,
