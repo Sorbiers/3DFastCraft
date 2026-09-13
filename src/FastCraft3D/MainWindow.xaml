@@ -561,6 +561,9 @@
                     <Button Style="{StaticResource ToolButton}" Content="Split with connectors" Tag="{StaticResource IconSplitConnectors}"
                             Command="{Binding BeginSplitWithConnectorsCommand}" MinWidth="120"
                             ToolTip="Cut a model too big for the plate into two halves that go back together one way only: round pins in holes on both halves, or pegs on one half and sockets in the other." />
+                    <Button Style="{StaticResource ToolButton}" Content="Connect objects" Tag="{StaticResource IconConnect}"
+                            Command="{Binding BeginConnectCommand}" MinWidth="100"
+                            ToolTip="Pins or pegs through the face two parts rest against each other on - a floor on its basement, two blocks side by side - so they go together one way only. Select the two parts." />
                     <Separator Margin="8,0" />
                     <Button Style="{StaticResource ToolButton}" Content="Measure" Tag="{StaticResource IconMeasure}"
                             Command="{Binding BeginMeasureCommand}"
@@ -1177,6 +1180,86 @@
                 <!-- Colour. Bound to the view model rather than to Selected, because painting
                      applies to the whole selection and Selected is null once more than one
                      object is picked. -->
+                <!-- Connect objects panel: pins through the face two parts rest against each other on. -->
+                <Border Grid.Row="6" Margin="0,10,0,0" Padding="8" Background="#FFEFF5FF"
+                        BorderBrush="#FFB8D2F0" BorderThickness="1" CornerRadius="3"
+                        Visibility="{Binding IsConnectMode, Converter={StaticResource BoolToVisibility}}">
+                    <StackPanel>
+                        <TextBlock Text="Connect objects" FontWeight="SemiBold" Margin="0,0,0,6" />
+                        <TextBlock Text="{Binding ConnectSummary}" TextWrapping="Wrap"
+                                   Foreground="#FF3A4550" Margin="0,0,0,8" />
+                        <StackPanel Margin="0,2,0,8">
+                            <TextBlock Text="Connectors" FontWeight="SemiBold" Margin="0,0,0,4" />
+                            <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
+                                <RadioButton Content="Separate pins" GroupName="ConnectStyle" Margin="0,0,10,0"
+                                             IsChecked="{Binding ConnectorsArePins, Mode=TwoWay}"
+                                             ToolTip="Holes in both halves, and the pins made as parts of their own - printed lying down, so they are strong along their length. A broken pin is a reprint, not a lost half." />
+                                <RadioButton Content="Pegs on one half" GroupName="ConnectStyle"
+                                             IsChecked="{Binding ConnectorsArePegs, Mode=TwoWay}"
+                                             ToolTip="Pegs standing out of one half, sockets in the other. Nothing loose to lose, but pegs printed standing up are weak across their layers." />
+                            </StackPanel>
+                            <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
+                                <RadioButton Content="Square to cut" GroupName="ConnectDirection" Margin="0,0,8,0"
+                                             IsChecked="{Binding ConnectorsPerpendicular, Mode=TwoWay}"
+                                             ToolTip="Square to the cut face, whichever way the plane is turned." />
+                                <RadioButton Content="Vertical" GroupName="ConnectDirection" Margin="0,0,8,0"
+                                             IsChecked="{Binding ConnectorsVertical, Mode=TwoWay}"
+                                             ToolTip="Straight up and down, so the top half of a tilted cut still lifts straight off. Not on a vertical cut, which they would run along." />
+                                <RadioButton Content="Horizontal" GroupName="ConnectDirection"
+                                             IsChecked="{Binding ConnectorsHorizontal, Mode=TwoWay}"
+                                             ToolTip="Level, towards the cut, so a half on a leaning cut slides off sideways. Not on a level cut, which they would run along." />
+                            </StackPanel>
+                            <StackPanel Orientation="Horizontal" Margin="0,0,0,2">
+                                <TextBlock Text="How many" Style="{StaticResource FieldLabel}" Width="76"
+                                           ToolTip="At most this many. They go only where there is solid round them, as far apart as they will fit." />
+                                <TextBox Width="64" Style="{StaticResource NumberBox}" Tag="number"
+                                         AutomationProperties.AutomationId="ConnectCount"
+                                         Text="{Binding ConnectorCount, UpdateSourceTrigger=LostFocus}" />
+                            </StackPanel>
+                            <StackPanel Orientation="Horizontal" Margin="0,0,0,2">
+                                <TextBlock Text="Diameter" Style="{StaticResource FieldLabel}" Width="76" />
+                                <TextBox Width="64" Style="{StaticResource NumberBox}" Tag="number"
+                                         AutomationProperties.AutomationId="ConnectDiameter"
+                                         Text="{Binding ConnectorDiameter, StringFormat=N1, UpdateSourceTrigger=LostFocus}" />
+                                <TextBlock Text="mm" Foreground="#FF9AA0A8" VerticalAlignment="Center" Margin="5,0,0,0" />
+                            </StackPanel>
+                            <StackPanel Orientation="Horizontal" Margin="0,0,0,2">
+                                <TextBlock Text="Depth" Style="{StaticResource FieldLabel}" Width="76"
+                                           ToolTip="How far a connector goes into each half." />
+                                <TextBox Width="64" Style="{StaticResource NumberBox}" Tag="number"
+                                         AutomationProperties.AutomationId="ConnectDepth"
+                                         Text="{Binding ConnectorDepth, StringFormat=N1, UpdateSourceTrigger=LostFocus}" />
+                                <TextBlock Text="mm" Foreground="#FF9AA0A8" VerticalAlignment="Center" Margin="5,0,0,0" />
+                            </StackPanel>
+                            <StackPanel Orientation="Horizontal" Margin="0,0,0,2">
+                                <TextBlock Text="Clearance" Style="{StaticResource FieldLabel}" Width="76"
+                                           ToolTip="Per side, as for Subtract: a 5 mm pin with 0.2 goes into a 5.4 mm hole." />
+                                <TextBox Width="64" Style="{StaticResource NumberBox}" Tag="number"
+                                         AutomationProperties.AutomationId="ConnectClearance"
+                                         Text="{Binding ConnectorClearance, StringFormat=N2, UpdateSourceTrigger=LostFocus}" />
+                                <TextBlock Text="mm" Foreground="#FF9AA0A8" VerticalAlignment="Center" Margin="5,0,0,0" />
+                            </StackPanel>
+                            <StackPanel Orientation="Horizontal" Margin="0,0,0,2">
+                                <TextBlock Text="From edge" Style="{StaticResource FieldLabel}" Width="76"
+                                           ToolTip="Material left between a hole and the outside of the part. Pins go out towards the edges until this much is left - further apart registers better, but a thin wall beside a hole can split." />
+                                <TextBox Width="64" Style="{StaticResource NumberBox}" Tag="number"
+                                         AutomationProperties.AutomationId="ConnectEdgeDistance"
+                                         Text="{Binding ConnectorEdgeDistance, StringFormat=N1, UpdateSourceTrigger=LostFocus}" />
+                                <TextBlock Text="mm" Foreground="#FF9AA0A8" VerticalAlignment="Center" Margin="5,0,0,0" />
+                            </StackPanel>
+                            <TextBlock Text="Both parts are kept, each as itself." Foreground="#FF7A8088" Margin="0,4,0,0" />
+                        </StackPanel>
+
+                        <StackPanel Orientation="Horizontal">
+                            <Button Content="Connect" Style="{StaticResource PanelButton}"
+                                    AutomationProperties.AutomationId="ConnectApply"
+                                    Command="{Binding ApplyConnectCommand}" />
+                            <Button Content="Cancel" Style="{StaticResource PanelButton}"
+                                    Command="{Binding CancelConnectCommand}" />
+                        </StackPanel>
+                    </StackPanel>
+                </Border>
+
                 <!-- Extrude down panel. The plane on the model shows where the cut goes. -->
                 <Border Grid.Row="6" Margin="0,10,0,0" Padding="8" Background="#FFEFF5FF"
                         BorderBrush="#FFB8D2F0" BorderThickness="1" CornerRadius="3"

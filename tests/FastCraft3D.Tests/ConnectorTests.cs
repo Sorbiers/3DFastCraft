@@ -127,7 +127,8 @@ public class ConnectorTests
     [Fact]
     public void ARingsHoleIsNoPlaceForAPin()
     {
-        var points = Connectors.Place(Primitives.Torus(20, 7, 64, 32), Vector3.UnitZ, 0f, Pins(4, diameter: 4f));
+        // Shallow, since a round tube is thinner a few millimetres either side of its middle.
+        var points = Connectors.Place(Primitives.Torus(20, 7, 64, 32), Vector3.UnitZ, 0f, Pins(4, diameter: 4f) with { Depth = 2f });
 
         Assert.NotEmpty(points);
         foreach (var p in points)
@@ -196,6 +197,99 @@ public class ConnectorTests
         Assert.True(joined.Value.Back.CheckHealth().IsWatertight);
     }
 
+    private static Bounds BoxAt(float sx, float sy, float sz, Vector3 centre) =>
+        MeshTransform.Transformed(Primitives.Box(sx, sy, sz), Matrix4x4.CreateTranslation(centre)).ComputeBounds();
+
+    [Fact]
+    public void OnePartStandingOnAnotherShareTheLevelFace()
+    {
+        var basement = BoxAt(40, 40, 10, new Vector3(0, 0, 5));  // 0 to 10
+        var floor = BoxAt(40, 40, 10, new Vector3(0, 0, 15));    // 10 to 20
+
+        var contact = Connectors.SharedFace(basement, floor);
+
+        Assert.NotNull(contact);
+        Assert.Equal(Vector3.UnitZ, contact.Normal);
+        Assert.Equal(10f, contact.Offset, 3);
+        Assert.True(contact.SecondIsFront);
+    }
+
+    /// <summary>Laid against each other by eye, and a hair apart: still resting on each other.</summary>
+    [Fact]
+    public void PartsSideBySideAHairApartStillShareAFace()
+    {
+        var left = BoxAt(10, 20, 20, new Vector3(-5.2f, 0, 10));   // right face at -0.2
+        var right = BoxAt(10, 20, 20, new Vector3(5.1f, 0, 10));   // left face at 0.1
+
+        var contact = Connectors.SharedFace(right, left);
+
+        Assert.NotNull(contact);
+        Assert.Equal(Vector3.UnitX, contact.Normal);
+        Assert.Equal(-0.05f, contact.Offset, 3);
+        Assert.False(contact.SecondIsFront); // the first, on the right, is the one X points into
+        Assert.Equal(0.3f, contact.Gap, 3);
+    }
+
+    [Fact]
+    public void PartsApartOrOverlappingShareNothing()
+    {
+        var one = BoxAt(20, 20, 10, new Vector3(0, 0, 5));
+        Assert.Null(Connectors.SharedFace(one, BoxAt(20, 20, 10, new Vector3(0, 0, 17))));  // 2 mm gap
+        Assert.Null(Connectors.SharedFace(one, BoxAt(20, 20, 10, new Vector3(30, 0, 15)))); // not over it
+    }
+
+    /// <summary>
+    /// A floor on a basement: pins only where both have material. The basement is a box of walls
+    /// round an open inside, so the pins go into its walls - not into the floor over its rooms.
+    /// </summary>
+    [Fact]
+    public void ConnectorsBetweenTwoPartsGoWhereBothHaveMaterial()
+    {
+        // Walls 8 mm thick round rooms open at the top, 0 to 10; the floor on it, 10 to 20.
+        var basement = MeshTransform.Transformed(
+            FastCraft3D.Geometry.Csg.CsgSolid.Subtract(
+                Primitives.Box(40, 40, 10),
+                MeshTransform.Transformed(Primitives.Box(24, 24, 12), Matrix4x4.CreateTranslation(0, 0, 2f))),
+            Matrix4x4.CreateTranslation(0, 0, 5));
+        var floor = MeshTransform.Transformed(Primitives.Box(40, 40, 10), Matrix4x4.CreateTranslation(0, 0, 15));
+
+        var contact = Connectors.SharedFace(basement.ComputeBounds(), floor.ComputeBounds());
+        Assert.NotNull(contact);
+
+        var layout = Connectors.Survey(floor, basement, contact, Pins(4, diameter: 3f, edge: 1f));
+
+        Assert.NotEmpty(layout.Points);
+        foreach (var p in layout.Points)
+        {
+            float outer = MathF.Max(MathF.Abs(p.X), MathF.Abs(p.Y));
+            Assert.InRange(outer, 12f, 20f); // in the walls, between the rooms and the outside
+        }
+
+        var joined = Connectors.Join(floor, basement, layout.Points, contact.Normal, Pins(4, diameter: 3f, edge: 1f));
+        Assert.NotNull(joined);
+        Assert.True(joined.Value.Front.CheckHealth().IsWatertight);
+        Assert.True(joined.Value.Back.CheckHealth().IsWatertight);
+    }
+
+    /// <summary>
+    /// A pin needs solid all the way in, not just where it enters. Checking the face alone put holes
+    /// deeper than a thin floor was thick, and they broke out into the room above.
+    /// </summary>
+    [Fact]
+    public void AConnectorDeeperThanThePartIsThickIsNotPlaced()
+    {
+        var slab = BoxAt(40, 40, 3, new Vector3(0, 0, 11.5f));     // 10 to 13: 3 mm thick
+        var block = BoxAt(40, 40, 10, new Vector3(0, 0, 5));      // 0 to 10
+        var slabMesh = MeshTransform.Transformed(Primitives.Box(40, 40, 3), Matrix4x4.CreateTranslation(0, 0, 11.5f));
+        var blockMesh = MeshTransform.Transformed(Primitives.Box(40, 40, 10), Matrix4x4.CreateTranslation(0, 0, 5));
+
+        var contact = Connectors.SharedFace(block, slab);
+        Assert.NotNull(contact);
+
+        Assert.Empty(Connectors.Survey(slabMesh, blockMesh, contact, Pins(2) with { Depth = 6f }).Points);
+        Assert.NotEmpty(Connectors.Survey(slabMesh, blockMesh, contact, Pins(2) with { Depth = 2f }).Points);
+    }
+
     [Fact]
     public void AFaceTooSmallTakesNoPinsRatherThanOneThroughItsSide() =>
         Assert.Empty(Connectors.Place(Primitives.Box(6, 6, 6), Vector3.UnitZ, 0f, Pins(2)));
@@ -219,23 +313,49 @@ public class ConnectorTests
         Assert.Equal(points.Count, pins.Count);
     }
 
+    /// <summary>
+    /// Pegs stand up out of the lower part, sockets go in the upper. They used to go on the part the
+    /// normal points into - the top one on a level cut - and hung down off its underside, which
+    /// cannot be printed without supports.
+    /// </summary>
     [Fact]
-    public void WithPegsOneHalfGainsWhatTheOtherLoses()
+    public void PegsStandUpOutOfTheLowerPart()
     {
         var block = Primitives.Box(40, 40, 40);
-        var (front, back) = PlaneSplit.Split(block, Axis.Z, 0f, SplitKeep.Both);
+        var (upper, lower) = PlaneSplit.Split(block, Axis.Z, 0f, SplitKeep.Both); // front is on +Z
         var points = Connectors.Place(block, Vector3.UnitZ, 0f, Pins(2));
 
-        var joined = Connectors.Join(front!, back!, points, Vector3.UnitZ,
+        var joined = Connectors.Join(upper!, lower!, points, Vector3.UnitZ,
             ConnectorOptions.Default with { Style = ConnectorStyle.Pegs });
 
         Assert.NotNull(joined);
-        var (pegged, socketed, pins) = joined.Value;
+        var (socketed, pegged, pins) = joined.Value;
 
         Assert.True(pegged.CheckHealth().IsWatertight);
         Assert.True(socketed.CheckHealth().IsWatertight);
-        Assert.True(SignedVolume(pegged) > SignedVolume(front!) + 1f, "no pegs on the front half");
-        Assert.True(SignedVolume(socketed) < SignedVolume(back!) - 1f, "no sockets in the back half");
+        Assert.True(SignedVolume(pegged) > SignedVolume(lower!) + 1f, "no pegs on the lower part");
+        Assert.True(SignedVolume(socketed) < SignedVolume(upper!) - 1f, "no sockets in the upper part");
+        Assert.True(pegged.ComputeBounds().Max.Z > 1f, "the pegs do not stand up above the cut");
         Assert.Empty(pins);
+    }
+
+    /// <summary>The same when the cut faces down: the lower part is then the front one.</summary>
+    [Fact]
+    public void PegsStandUpOutOfTheLowerPartWhicheverWayTheCutFaces()
+    {
+        var block = Primitives.Box(40, 40, 40);
+        var down = -Vector3.UnitZ;
+        var (lower, upper) = PlaneSplit.Split(block, down, 0f, SplitKeep.Both); // front is on -Z
+        var points = Connectors.Place(block, down, 0f, Pins(2));
+
+        var joined = Connectors.Join(lower!, upper!, points, down,
+            ConnectorOptions.Default with { Style = ConnectorStyle.Pegs });
+
+        Assert.NotNull(joined);
+        var (pegged, socketed, _) = joined.Value;
+
+        Assert.True(SignedVolume(pegged) > SignedVolume(lower!) + 1f, "no pegs on the lower part");
+        Assert.True(SignedVolume(socketed) < SignedVolume(upper!) - 1f, "no sockets in the upper part");
+        Assert.True(pegged.ComputeBounds().Max.Z > 1f, "the pegs do not stand up above the cut");
     }
 }

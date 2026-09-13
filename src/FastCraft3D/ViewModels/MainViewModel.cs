@@ -58,6 +58,8 @@ public sealed class MainViewModel : INotifyPropertyChanged
     private SplitKeep splitKeep = SplitKeep.Both;
     private bool isExtrudeMode;
     private bool splitWithConnectors;
+    private bool isConnectMode;
+    private string connectSummary = "";
     private ConnectorOptions connectors = ConnectorOptions.Default;
     private float extrudeHeight = 1f;
     private Render.SplitOffcut splitOffcut = Render.SplitOffcut.Faded;
@@ -146,6 +148,9 @@ public sealed class MainViewModel : INotifyPropertyChanged
         CancelSubtractCommand = RelayCommand.Simple(() => IsSubtractMode = false);
         BeginSplitCommand = RelayCommand.Simple(
             () => { SplitWithConnectors = false; BeginSplit(); }, () => Scene.Selection.Count > 0);
+        BeginConnectCommand = RelayCommand.Simple(BeginConnect, () => Scene.Selection.Count == 2);
+        ApplyConnectCommand = AsyncRelayCommand.Simple(ApplyConnect, () => IsConnectMode);
+        CancelConnectCommand = RelayCommand.Simple(() => IsConnectMode = false);
         BeginSplitWithConnectorsCommand = RelayCommand.Simple(
             () => { SplitWithConnectors = true; BeginSplit(); }, () => Scene.Selection.Count > 0);
         AlignToAxesCommand = RelayCommand.Simple(AlignToAxes, AnythingTurned);
@@ -224,6 +229,9 @@ public sealed class MainViewModel : INotifyPropertyChanged
     public System.Windows.Input.ICommand CancelSubtractCommand { get; }
     public System.Windows.Input.ICommand BeginSplitCommand { get; }
     public System.Windows.Input.ICommand BeginSplitWithConnectorsCommand { get; }
+    public System.Windows.Input.ICommand BeginConnectCommand { get; }
+    public System.Windows.Input.ICommand ApplyConnectCommand { get; }
+    public System.Windows.Input.ICommand CancelConnectCommand { get; }
     public System.Windows.Input.ICommand BeginExtrudeCommand { get; }
     public System.Windows.Input.ICommand ApplyExtrudeCommand { get; }
     public System.Windows.Input.ICommand CancelExtrudeCommand { get; }
@@ -1225,7 +1233,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
     /// strip that goes with them, stand down while one of them is running rather than sitting
     /// underneath and leaving it to the pointer to decide which was meant.
     /// </summary>
-    public bool IsToolRunning => isSplitMode || isEngraveMode || isEmbossMode || isLayMode || isExtrudeMode;
+    public bool IsToolRunning => isSplitMode || isEngraveMode || isEmbossMode || isLayMode || isExtrudeMode || isConnectMode;
 
     /// <summary>
     /// Whether a tool has the object in hand, counting the two that do not take the handles
@@ -2984,6 +2992,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
     public bool CancelActiveTool()
     {
         if (IsExtrudeMode) IsExtrudeMode = false;
+        else if (IsConnectMode) IsConnectMode = false;
         else if (IsSplitMode) IsSplitMode = false;
         else if (IsMeasureMode) IsMeasureMode = false;
         else if (IsEngraveMode) IsEngraveMode = false;
@@ -4622,6 +4631,153 @@ public sealed class MainViewModel : INotifyPropertyChanged
         catch (Exception ex)
         {
             Status = $"Split failed: {ex.Message}";
+        }
+        finally
+        {
+            EndWork();
+        }
+    }
+
+    /// <summary>While this is on, the Connect objects panel is open and nothing has been cut yet.</summary>
+    public bool IsConnectMode
+    {
+        get => isConnectMode;
+        set
+        {
+            if (isConnectMode == value) return;
+
+            Set(ref isConnectMode, value);
+            Raise(nameof(IsToolRunning));
+            Raise(nameof(ShowManipulatorBar));
+            RaiseToolInHand();
+        }
+    }
+
+    /// <summary>Which face the two parts share, said in the panel so the user can see it was the right one.</summary>
+    public string ConnectSummary
+    {
+        get => connectSummary;
+        private set => Set(ref connectSummary, value);
+    }
+
+    private void BeginConnect()
+    {
+        var picked = Scene.SelectionInPickOrder;
+        if (picked.Count != 2) return;
+
+        if (Connectors.SharedFace(picked[0].WorldBounds, picked[1].WorldBounds) is not { } contact)
+        {
+            Status = "Those two do not rest against each other";
+            MessageBox.Show(
+                $"\"{picked[0].Name}\" and \"{picked[1].Name}\" do not rest against each other on a flat face.\n\n"
+                + $"Connect objects joins two parts that touch face to face - one standing on the other, or side by side - "
+                + $"square to the plate and no more than {Connectors.ContactGap:0.#} mm apart. "
+                + "Drop one onto the other first, or use Split with connectors on a single part.",
+                "3DFastCraft", MessageBoxButton.OK, MessageBoxImage.Information);
+            return;
+        }
+
+        string face = contact.Normal.Z > 0.5f ? "the level face"
+            : contact.Normal.X > 0.5f ? "the face square to X"
+            : "the face square to Y";
+
+        ConnectSummary = $"Connectors go through {face} \"{picked[0].Name}\" and \"{picked[1].Name}\" share"
+                       + (contact.Gap > 0.01f ? $", {contact.Gap:0.##} mm apart." : ".");
+
+        IsConnectMode = true;
+        Status = ConnectSummary;
+    }
+
+    /// <summary>
+    /// Pins or pegs through the face two parts rest against each other on, each part kept as itself.
+    ///
+    /// Split with connectors with the split already done: the same survey, read inside both parts
+    /// at once so a connector goes only where both have material, and the same cutting.
+    /// </summary>
+    private async Task ApplyConnect()
+    {
+        var picked = Scene.SelectionInPickOrder.ToList();
+        if (picked.Count != 2 || IsBusy) return;
+        if (Connectors.SharedFace(picked[0].WorldBounds, picked[1].WorldBounds) is not { } contact) return;
+
+        var options = connectors;
+        if (Connectors.Axis(contact.Normal, options.Direction) is null)
+        {
+            string which = options.Direction == ConnectorDirection.Vertical ? "Vertical" : "Horizontal";
+            MessageBox.Show(
+                $"{which} connectors cannot cross the face these two share - they would run along it. Choose Square to cut.",
+                "3DFastCraft", MessageBoxButton.OK, MessageBoxImage.Information);
+            return;
+        }
+
+        var front = contact.SecondIsFront ? picked[1] : picked[0];
+        var back = contact.SecondIsFront ? picked[0] : picked[1];
+        var frontMesh = front.ToWorldMesh();
+        var backMesh = back.ToWorldMesh();
+
+        var token = StartWork("Connecting");
+        try
+        {
+            var (layout, joined) = await Task.Run(() =>
+            {
+                var survey = Connectors.Survey(frontMesh, backMesh, contact, options);
+                return survey.Points.Count == 0
+                    ? (survey, null)
+                    : (survey, Connectors.Join(frontMesh, backMesh, survey.Points, contact.Normal, options, token));
+            });
+
+            if (layout.Points.Count == 0)
+            {
+                float wall = MathF.Max(options.EdgeDistance, Connectors.MinimumWall);
+                Status = "No room for connectors where the two meet - nothing was changed";
+                MessageBox.Show(
+                    "No connector fits where these two meet, so nothing was changed.\n\n"
+                    + $"A {options.Diameter:0.##} mm connector with {options.Clearance:0.##} mm clearance and "
+                    + $"{wall:0.##} mm of wall either side needs both parts to be at least {layout.WallNeeded:0.#} mm thick "
+                    + $"in the same place. Where they meet, the thickest that gets is about {layout.ThickestWall:0.#} mm.\n\n"
+                    + "Make the diameter or From edge smaller.",
+                    "3DFastCraft", MessageBoxButton.OK, MessageBoxImage.Information);
+                return;
+            }
+
+            if (joined is not { } done)
+            {
+                Status = "Connecting would have torn one of the parts - nothing was changed";
+                return;
+            }
+
+            var added = new List<SceneObject>
+            {
+                new SceneObject(front.Name, done.Front) { Colour = front.Colour }.Centred(),
+                new SceneObject(back.Name, done.Back) { Colour = back.Colour }.Centred()
+            };
+
+            var box = front.WorldBounds.Union(back.WorldBounds);
+            for (int p = 0; p < done.Pins.Count; p++)
+            {
+                added.Add(new SceneObject($"{front.Name} pin {p + 1}", done.Pins[p])
+                {
+                    Colour = front.Colour,
+                    Origin = PrimitiveKind.Cylinder,
+                    Rotation = new Vector3(0f, 90f, 0f),
+                    Position = new Vector3(
+                        box.Max.X + 10f + options.Depth,
+                        box.Min.Y + options.Radius + p * (options.Diameter + 4f),
+                        options.Radius)
+                });
+            }
+
+            Undo.Execute(new ReplaceObjectsCommand("Connect objects", [front, back], added));
+            IsConnectMode = false;
+            RefreshSelection();
+
+            Status = $"Connected {front.Name} and {back.Name} with {layout.Points.Count} "
+                   + (options.Style == ConnectorStyle.Pins ? "pin(s), made beside them" : "peg(s)")
+                   + (layout.Points.Count < options.Count ? " - fewer than asked, there is no room for more" : "");
+        }
+        catch (Exception abort) when (WasAborted(abort))
+        {
+            Status = $"{busyTitle} aborted - nothing was changed";
         }
         finally
         {

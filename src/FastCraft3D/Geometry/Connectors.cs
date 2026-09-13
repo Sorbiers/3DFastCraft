@@ -125,6 +125,104 @@ public static class Connectors
     /// </summary>
     public static Layout Survey(Mesh world, Vector3 normal, float offset, ConnectorOptions options)
     {
+        float reach = Reach(normal, options);
+        return Survey([(world, offset), (world, offset + reach), (world, offset - reach)], normal, offset, options);
+    }
+
+    /// <summary>
+    /// How far a connector goes into a part, measured square to the face.
+    ///
+    /// Read as well as the face itself, because a pin has to have solid round it all the way in, not
+    /// only where it enters. Checking the face alone put 6 mm holes into the 2 mm floor of a 1:87
+    /// house, where they broke out into the room above and the boolean tore on what was left.
+    /// </summary>
+    private static float Reach(Vector3 normal, ConnectorOptions options)
+    {
+        var axis = Axis(normal, options.Direction);
+        float cosine = axis is { } way ? Vector3.Dot(way, Vector3.Normalize(normal)) : 1f;
+        return (MathF.Max(0f, options.Depth) + MathF.Max(0f, options.Clearance)) * cosine;
+    }
+
+    /// <summary>
+    /// How near two parts may be and still count as resting on each other. Parts laid against each
+    /// other by eye, or by typing sizes that were rounded, are rarely exactly touching.
+    /// </summary>
+    public const float ContactGap = 0.5f;
+
+    /// <summary>How far into each part its face is read, clear of the face itself.</summary>
+    private const float SectionInset = 0.1f;
+
+    /// <param name="Normal">Square to the shared face, pointing into the front part.</param>
+    /// <param name="Offset">Where the shared face lies along the normal: halfway across any gap.</param>
+    /// <param name="Gap">How far apart the two faces actually are.</param>
+    /// <param name="SecondIsFront">Whether the second part is the one the normal points into.</param>
+    /// <param name="Overlap">The area the two boxes share on the face, for choosing between faces.</param>
+    public sealed record Contact(Vector3 Normal, float Offset, float Gap, bool SecondIsFront, float Overlap);
+
+    /// <summary>
+    /// The face two parts rest against each other on, if they do: the top of one against the
+    /// bottom of the other, or side against side, square to X, Y or Z.
+    ///
+    /// Read off the two boxes, which is exact for parts built square to the plate - a basement and
+    /// the floor that sits on it - and says nothing about parts turned at an angle, which get no
+    /// contact rather than a wrong one. Where two faces qualify, the one they share most of wins.
+    /// </summary>
+    public static Contact? SharedFace(Bounds first, Bounds second, float gap = ContactGap)
+    {
+        Contact? best = null;
+
+        for (int axis = 0; axis < 3; axis++)
+        {
+            float overlap = Overlap(first, second, axis);
+            if (overlap <= 0f) continue;
+
+            var normal = axis switch { 0 => Vector3.UnitX, 1 => Vector3.UnitY, _ => Vector3.UnitZ };
+
+            // The second part beyond the first along the axis, or the first beyond the second.
+            float secondAbove = Along(second.Min, axis) - Along(first.Max, axis);
+            float firstAbove = Along(first.Min, axis) - Along(second.Max, axis);
+
+            if (MathF.Abs(secondAbove) <= gap && (best is null || overlap > best.Overlap))
+                best = new Contact(normal, (Along(second.Min, axis) + Along(first.Max, axis)) / 2f, MathF.Abs(secondAbove), true, overlap);
+
+            if (MathF.Abs(firstAbove) <= gap && (best is null || overlap > best.Overlap))
+                best = new Contact(normal, (Along(first.Min, axis) + Along(second.Max, axis)) / 2f, MathF.Abs(firstAbove), false, overlap);
+        }
+
+        return best;
+    }
+
+    /// <summary>Where connectors go through the face two parts share: inside both, with room in both.</summary>
+    public static Layout Survey(Mesh front, Mesh back, Contact contact, ConnectorOptions options)
+    {
+        float reach = contact.Gap / 2f + SectionInset;
+        float deep = Reach(contact.Normal, options);
+
+        return Survey(
+            [
+                (front, contact.Offset + reach), (front, contact.Offset + reach + deep),
+                (back, contact.Offset - reach), (back, contact.Offset - reach - deep)
+            ],
+            contact.Normal, contact.Offset, options);
+    }
+
+    private static float Overlap(Bounds a, Bounds b, int axis)
+    {
+        float Span(int k) => MathF.Max(0f, MathF.Min(Along(a.Max, k), Along(b.Max, k)) - MathF.Max(Along(a.Min, k), Along(b.Min, k)));
+
+        return axis switch { 0 => Span(1) * Span(2), 1 => Span(0) * Span(2), _ => Span(0) * Span(1) };
+    }
+
+    private static float Along(Vector3 v, int axis) => axis switch { 0 => v.X, 1 => v.Y, _ => v.Z };
+
+    /// <summary>
+    /// The survey itself, over one solid or several read on the same plane. A point counts only if
+    /// it is inside every one of them, and its room is the least any of them gives it - so on a
+    /// floor resting on a basement, pins go where both have material, which is the walls.
+    /// </summary>
+    private static Layout Survey(
+        IReadOnlyList<(Mesh Mesh, float Section)> solids, Vector3 normal, float offset, ConnectorOptions options)
+    {
         normal = Vector3.Normalize(normal);
         var axis = Axis(normal, options.Direction);
 
@@ -138,36 +236,47 @@ public static class Connectors
         if (axis is null) return new([], false, 0f, 2f * needed);
         if (options.Count <= 0 || !(options.Radius > 0f)) return new([], true, 0f, 2f * needed);
 
-        var (_, rings) = PlaneClip.KeepOpen(world, Matrix4x4.Identity, normal, offset);
-        if (rings.Count == 0) return new([], true, 0f, 2f * needed);
-
         Vector3 u = Perpendicular(normal);
         Vector3 v = Vector3.Cross(normal, u);
         Vector3 origin = normal * offset;
 
-        var loops = rings
-            .Select(r => r.Select(p => new Vector2(Vector3.Dot(p - origin, u), Vector3.Dot(p - origin, v))).ToList())
-            .ToList();
-        var shapes = Polygon2.Nest(loops);
+        var low = new Vector2(float.MinValue);
+        var high = new Vector2(float.MaxValue);
+        var sections = new List<(List<List<Vector2>> Loops, List<(List<Vector2> Outline, List<List<Vector2>> Holes)> Shapes)>();
 
-        var low = new Vector2(float.MaxValue);
-        var high = new Vector2(float.MinValue);
-        foreach (var loop in loops)
-            foreach (var p in loop)
-            {
-                low = Vector2.Min(low, p);
-                high = Vector2.Max(high, p);
-            }
+        foreach (var (mesh, section) in solids)
+        {
+            var (_, rings) = PlaneClip.KeepOpen(mesh, Matrix4x4.Identity, normal, section);
+            if (rings.Count == 0) return new([], true, 0f, 2f * needed);
 
-        // A grid fine enough to find room in a narrow wall, coarse enough that a big face is not
-        // searched point by point: never more than about eighty steps across.
+            // Flattened into the one frame on the shared plane: reading a part a little way in
+            // moves its section along the normal only, which the frame does not see.
+            var loops = rings
+                .Select(r => r.Select(p => new Vector2(Vector3.Dot(p - origin, u), Vector3.Dot(p - origin, v))).ToList())
+                .ToList();
+
+            var own = (Low: new Vector2(float.MaxValue), High: new Vector2(float.MinValue));
+            foreach (var loop in loops)
+                foreach (var p in loop)
+                {
+                    own.Low = Vector2.Min(own.Low, p);
+                    own.High = Vector2.Max(own.High, p);
+                }
+
+            low = Vector2.Max(low, own.Low);
+            high = Vector2.Min(high, own.High);
+            sections.Add((loops, Polygon2.Nest(loops)));
+        }
+
+        if (high.X <= low.X || high.Y <= low.Y) return new([], true, 0f, 2f * needed);
+
+        // A grid fine enough to find the middle of a thin wall on a big part. It was capped at eighty
+        // steps across, which on a 1:87 house 110 mm long put a point every 1.4 mm - and walls there
+        // are under 3 mm thick, so the middle of one fell between points, the room in it was
+        // misread by a third, and a pin that fitted was never offered. A fifth of a millimetre at
+        // the finest, and never more than about two hundred and forty steps across.
         float extent = MathF.Max(high.X - low.X, high.Y - low.Y);
-        float step = MathF.Max(hole * 0.5f, extent / 80f);
-
-        // Every point of the face, for sharing it out, and the ones with room for a connector.
-        var area = new List<Vector2>();
-        var room = new List<Vector2>();
-        float deepest = 0f;
+        float step = MathF.Max(MathF.Min(hole * 0.5f, 0.5f), MathF.Max(extent / 240f, 0.2f));
 
         // Centred on the face's box, so a face that is the same on both sides gets a grid that is
         // too. Stepping in from one corner instead left the last row short by whatever the step did
@@ -177,15 +286,19 @@ public static class Connectors
         float firstX = (low.X + high.X) / 2f - (columns - 1) * step / 2f;
         float firstY = (low.Y + high.Y) / 2f - (rows - 1) * step / 2f;
 
+        var area = new List<Vector2>();
+        var room = new List<Vector2>();
+        float deepest = 0f;
+
         for (int column = 0; column < columns; column++)
         {
             for (int row = 0; row < rows; row++)
             {
                 var p = new Vector2(firstX + column * step, firstY + row * step);
-                if (!Inside(shapes, p)) continue;
+                float clear = Clear(p);
+                if (clear < 0f) continue;
 
                 area.Add(p);
-                float clear = NearestEdge(loops, p);
                 deepest = MathF.Max(deepest, clear);
                 if (clear >= needed) room.Add(p);
             }
@@ -210,8 +323,8 @@ public static class Connectors
 
         foreach (var centre in Spread(area, room, middle, options.Count))
         {
-            var start = Fits(centre, needed) ? centre : room.MinBy(r => Vector2.DistanceSquared(r, centre));
-            var at = TowardsEdge(start, centre - middle, needed, shapes, loops, step);
+            var start = Clear(centre) >= needed ? centre : room.MinBy(r => Vector2.DistanceSquared(r, centre));
+            var at = TowardsEdge(start, centre - middle, p => Clear(p) >= needed, step);
 
             // A face with room for fewer than asked: two connectors in the same place are one.
             if (placed.All(q => Vector2.Distance(q, at) >= apart)) placed.Add(at);
@@ -219,20 +332,30 @@ public static class Connectors
 
         return new(placed.Select(p => origin + u * p.X + v * p.Y).ToList(), true, 2f * deepest, 2f * needed);
 
-        bool Fits(Vector2 p, float keep) => Inside(shapes, p) && NearestEdge(loops, p) >= keep;
+        // How far a point is from the nearest edge of every section it has to be inside, or -1 when
+        // it is outside any of them.
+        float Clear(Vector2 p)
+        {
+            float least = float.MaxValue;
+            foreach (var (loops, shapes) in sections)
+            {
+                if (!Inside(shapes, p)) return -1f;
+                least = MathF.Min(least, NearestEdge(loops, p));
+            }
+
+            return least;
+        }
     }
 
     /// <summary>
-    /// A pin moved along the line from the middle of the face until it is <paramref name="keep"/>
-    /// from the nearest edge: outward if it has more room than that, inward if it has less.
+    /// A pin moved along the line from the middle of the face until it just fits: outward if it
+    /// has more room than it needs, inward if it has less.
     ///
-    /// Both ways, because the number is asked for. Outward only, a wall wider than the even spread
-    /// happened to leave was simply ignored. Inward it goes no further than the middle, and a pin
-    /// that finds no such place on the way stays where it was.
+    /// Both ways, because the wall is a number asked for. Outward only, a wall wider than the even
+    /// spread happened to leave was simply ignored. Inward it goes no further than the middle, and a
+    /// pin that finds no such place on the way stays where it was.
     /// </summary>
-    private static Vector2 TowardsEdge(
-        Vector2 pin, Vector2 away, float keep,
-        List<(List<Vector2> Outline, List<List<Vector2>> Holes)> shapes, List<List<Vector2>> loops, float step)
+    private static Vector2 TowardsEdge(Vector2 pin, Vector2 away, Func<Vector2, bool> fits, float step)
     {
         if (away.LengthSquared() < 1e-4f) return pin;
 
@@ -240,23 +363,21 @@ public static class Connectors
         away /= reach;
         float stride = MathF.Max(step * 0.25f, 0.05f);
 
-        bool Fits(Vector2 p) => Inside(shapes, p) && NearestEdge(loops, p) >= keep;
-
-        if (Fits(pin))
+        if (fits(pin))
         {
             Vector2 at = pin;
-            while (Fits(at + away * stride)) at += away * stride;
+            while (fits(at + away * stride)) at += away * stride;
 
             // The last stride halved down, so the wall comes out the number asked for rather than
             // whatever a whole stride happened to leave.
-            return at + away * Bisect(at, away, stride, Fits);
+            return at + away * Bisect(at, away, stride, fits);
         }
 
         // Too near the edge for what was asked: back towards the middle until it is not.
         for (float travelled = stride; travelled <= reach; travelled += stride)
         {
             Vector2 next = pin - away * travelled;
-            if (Fits(next)) return next + away * Bisect(next, away, stride, Fits);
+            if (fits(next)) return next + away * Bisect(next, away, stride, fits);
         }
 
         return pin;
@@ -359,6 +480,12 @@ public static class Connectors
         // on, as it is when it crosses straight.
         float embed = Embed / Vector3.Dot(axis, normal);
 
+        // Pegs on whichever part is lower, standing up. They went on the part the normal points
+        // into, which for a level cut is the top one - so they hung down off its underside and
+        // could not be printed without supports. A cut with nothing above or below, side by side,
+        // puts them on the back part, as good as either.
+        bool pegsBelow = normal.Z >= 0f;
+
         var pins = new List<Mesh>();
 
         foreach (var at in points)
@@ -374,11 +501,18 @@ public static class Connectors
 
                 pins.Add(Primitives.Prism(r, 2f * depth, Sides));
             }
+            else if (pegsBelow)
+            {
+                // The peg stands up out of the lower part into the upper, sunk a little way into its
+                // own part so the union meets solid material and not the cut face. The socket
+                // reaches past the upper part's face for the same reason.
+                var peg = Rod(at, axis, r, -embed, depth);
+                var socket = Rod(at, axis, r + c, -embed, depth + c);
+                back = LocalCsg.Union(back, peg, token);
+                front = LocalCsg.Subtract(front, socket, token);
+            }
             else
             {
-                // The peg stands out of the front half into the back, sunk a little way into its
-                // own half so the union meets solid material and not the cut face. The socket
-                // reaches past the back half's face for the same reason.
                 var peg = Rod(at, axis, r, -depth, embed);
                 var socket = Rod(at, axis, r + c, -(depth + c), embed);
                 front = LocalCsg.Union(front, peg, token);
