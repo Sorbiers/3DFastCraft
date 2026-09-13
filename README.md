@@ -15,7 +15,7 @@ them, and export a clean `.stl` or `.obj` for slicing.
 Windows 3D Builder was a beautiful thing: fast modelling for professionals and for people who had
 never modelled anything, with almost nothing to learn before the first part was on the plate.
 Microsoft retired it. This app exists to take its place, and works the same way — the same short
-path from a shape on the plate to a printable part. These are the eleven tools it adds on top.
+path from a shape on the plate to a printable part. These are the tools it adds on top.
 
 | | Tool | What it does |
 |---|---|---|
@@ -30,6 +30,9 @@ path from a shape on the plate to a printable part. These are the eleven tools i
 | 09 | **Mould** | A block to cast silicone in: works out which way the mould comes apart, cuts at the widest section, keys the halves together and drills the pour hole. |
 | 10 | **In-file versioning** | Named snapshots kept *inside* the `.3dfc` project itself, and a way back to any of them. |
 | 11 | **Scale auto conversion** | Set 1:87 and every box reads in real metres beside the millimetres. Type into either one. |
+| 12 | **Split with connectors** | Cut a part too big for the plate into halves that go back together one way only: round pins, or pegs standing up out of the lower half. |
+| 13 | **Connect objects** | Pins or pegs through the face two parts rest on each other on, only where both have solid material, each part kept as itself. |
+| 14 | **As one** | Move, turn and resize several objects as one about the middle of the lot, or each on its own - and type `+=5` into any box to change a value by that much. |
 
 **Almost all of it is vibecoded.** The geometry, the renderer, the interface and the tests were
 written by [Claude Code](https://claude.com/claude-code) from prompts, with only tiny manual
@@ -69,12 +72,12 @@ dotnet test
 
 | Tab | What it does |
 |---|---|
-| **Insert** | Cube, cylinder, cone, sphere, pyramid, wedge, torus, hexagon, tetrahedron; a stair; import a model or another project |
+| **Insert** | Cube, cylinder, cone, sphere, pyramid, wedge, torus, hexagon, tetrahedron; a stair; import an STL, OBJ or 3MF, or another project |
 | **Object** | What a thing is made of: Subtract / Intersect / Merge, split with a plane, duplicate (beside, in place, or repeated along a line or round a circle), delete, colour |
 | **Align** | Where it sits: drop to plate, lay on face, align to another object, mirror, and lining the selection up on X, Y or Z - flush to either edge, centred, or spread evenly |
 | **Edit** | What its surface is: emboss lettering or a drawing, engrave a pattern, smooth, round edges, simplify, hollow, undo, redo |
-| **Tools** | What changes nothing: measure, fit check, repair, rebuild, and make a mould of it |
-| **File** | New, open, recent, save, save as, save a version, versions, export STL/OBJ, about |
+| **Tools** | The work around a model: measure, fit check, repair, rebuild, make a mould of it, extrude down, split with connectors, connect objects |
+| **File** | New, open, recent, save, save as, save a version, versions, export STL/OBJ/3MF, about |
 | **View** | Zoom to fit, the six axis views and isometric, wireframe, x-ray, build plate size and visibility, model scale |
 
 The middle tabs are split by *what a tool changes*, which is worth knowing when hunting for one:
@@ -284,6 +287,32 @@ They combine - **Alt + Shift** grows one way to a round number - and pressing or
 mid-drag shows at once, without the mouse having to move. The buttons are left as they were, so
 the next drag does what they say. Shift snaps the *size*, not the distance dragged: snapping the
 travel would take a 20.4 mm part to 21.4 and 22.4 and never land on a whole number.
+
+**Several objects: as one, or each on its own.** With more than one object selected, a switch
+at the end of the bar decides what the handles do and what the numbers mean. On - the default -
+the selection is one object: it turns and resizes about the middle of the lot, gaps and all, and
+the boxes read the middle and the extent of the lot. Off, each part turns and grows where it
+stands, and the boxes show what the parts share.
+
+| Box | As one | Each on its own |
+|---|---|---|
+| X Y Z shows | the middle of the lot | the value they share, or *mixed* |
+| typing `20` | carries the lot so its middle is at 20 | puts every part's centre at 20 - they line up |
+| W D H shows | the extent of the lot | the size they share, or *mixed* |
+| typing `100` | scales the lot about its middle to 100, gaps included | makes every part 100, each where it stands |
+| Roll Pitch Yaw shows | 0 | the angle they share, or *mixed* |
+| typing `15` | turns the lot 15° about its middle; the box reads 0 again | sets every part to 15° |
+
+A group of parts turned different ways has no single angle, so as one a rotation box can only
+mean *turn by*. Moving a lot and moving each part by the same amount are the same thing, so the
+switch changes what a typed position means, not what a drag does.
+
+**Typing a change rather than a value.** Any transform box takes `+=5` or `-=5` to change the value
+by that much, and `+5` as a shortcut for the first. A plain number sets the value, negatives
+included - positions below zero are normal on a plate centred on the origin, so `-5` has to go on
+meaning minus five. With several objects each on their own, the change goes to every one of
+them. A box whose parts disagree shows nothing and a quiet *mixed* rather than a 0, which is a
+value and invites typing over it as though it were true.
 
 Turning and resizing work in different frames on purpose. The rings are world axes, because
 turning *about Z* means the world's Z - it is what the plate is square to. The resize arrows are
@@ -722,9 +751,74 @@ one stroke and one undo step - which is how an assembly gets sliced in half. Its
 handles are sized to the whole selection, and objects the plane misses are left alone rather than
 being dropped. Both halves come out capped and closed.
 
+### Split with connectors
+
+**Split with connectors** on the Tools tab is the same split with one more section in its panel:
+the two halves come back with something to hold them together, so they go back one way only.
+Both halves are always kept.
+
+- **Separate pins** - holes in both halves, and the pins made as parts of their own beside the
+  model, lying down, so they print strong along their length. A broken pin is a reprint, not a
+  lost half.
+- **Pegs on one half** - pegs standing up out of the *lower* half and sockets in the upper one.
+  Nothing loose to lose. Always the lower half: pegs on the upper one hang off its underside and
+  cannot be printed without supports.
+
+They run **square to the cut**, **vertical** or **horizontal** - vertical keeps the top half of a
+tilted cut lifting straight off. A direction that would run along the cut rather than through it
+(vertical pins on a vertical cut) is refused before anything is cut.
+
+| Setting | Meaning |
+|---|---|
+| **How many** | at most this many; a face with room for fewer gets fewer, and says so |
+| **Diameter** | of the pin or peg itself |
+| **Depth** | how far a connector goes into each half |
+| **Clearance** | per side, as for Subtract: a 5 mm pin with 0.2 goes into a 5.4 mm hole |
+| **From edge** | solid left between a hole and the outside of the part |
+
+**Where they go.** Only where there is solid round them - inside the cut face, outside any hole in
+it, with the wall asked for on every side, and with that much solid all the way down to the
+connector's depth rather than only at the face. Then spread evenly: each pin goes to the middle of
+its own share of the face, and from there out towards the edge until the wall left beside its hole
+is the **From edge** asked for. Four on a square land towards its corners, three on a disc go
+evenly round it, one stays in the middle. Registration is better the further apart they are.
+
+If not one connector fits anywhere, **nothing is split**, and the message gives the two numbers
+that matter: how thick the solid would have to be, and how thick the cut face actually gets. A
+hollow box with 3 mm walls will not take a 5 mm pin, and it says so rather than splitting plain
+with no reason given.
+
+### Connect objects
+
+**Connect objects** on the Tools tab is Split with connectors with the split already done. Select
+two parts that rest on each other - one standing on the other, or side by side - and pins or pegs
+go through the face they share, with the same settings and the same rules. A connector goes only
+where **both** parts have material: on a floor resting on a basement, that is the basement's walls.
+Each part is kept as itself, with its name and colour.
+
+The shared face is found from the two parts' boxes, so it works for parts square to the plate, no
+more than 0.5 mm apart; parts turned at an angle get no shared face rather than a wrong one. A
+joint thinner than a printable pin - under 3 mm of wall, as at the joints of a 1:87 house - gets a
+message rather than a pin cut through its side.
+
+### Extrude down
+
+**Extrude down** on the Tools tab is for a model with the right top and the wrong bottom: a
+scanned bust ending in a ragged neck, a relief that is only a skin, a figure tilted until one toe
+touches the plate. Set a height - drag the arrows on the plane or type it - and everything below it
+is replaced by straight walls down to a flat base on the plate, following the model's outline at
+that height. A section with a hole in it keeps the hole all the way down, so a hollow neck stays
+hollow.
+
+It cuts first rather than extending whatever the bottom happens to be. That is what 3D Builder
+did, and it carries a ragged edge all the way to the plate; cutting above the ragged part and
+building down from a clean section is the difference between a plinth and a skirt. A height that
+misses the model, or a section that does not close, is refused - a base on a torn model is still a
+torn model.
+
 ### Dropping files on the window
 
-Drag a `.3dfc`, `.stl` or `.obj` onto the window, one file or several, and it asks which of the
+Drag a `.3dfc`, `.stl`, `.obj` or `.3mf` onto the window, one file or several, and it asks which of the
 two things you meant: **open as a project**, putting its plate up in place of this one, or
 **import onto this plate**, keeping both. It asks rather than guessing because guessing the first
 way throws out work that was never saved. Opening is only offered for a single project file;
@@ -827,9 +921,12 @@ otherwise undo the step the rebuild is about to replace.
 | `.stl` (binary, default) | Smallest and fastest. Objects merge into one triangle soup — STL has no notion of separate parts. |
 | `.stl` (ASCII) | Human-readable, roughly five times larger. |
 | `.obj` | Keeps objects named and separate, and writes a `.mtl` sidecar with colours. |
+| `.3mf` | 3D Builder's own format and what slicers prefer: separate parts, names, colours and units in one file. |
 | `.3dfc` | The project format: GZip-compressed JSON that keeps objects and transforms editable. |
 
-**Import** takes all three. An STL or OBJ arrives as new objects on the plate; a `.3dfc`
+**Import** takes all four. An STL, OBJ or 3MF arrives as new objects on the plate - a 3MF with its
+parts' own names and colours, placed where its build list put them, assemblies saved by a slicer
+flattened into one part each, and a file in inches or metres converted to millimetres; a `.3dfc`
 **joins** what is already there, keeping its own objects, names, colours and positions - which is
 how two projects are brought together, since **Open** would replace the plate instead.
 
@@ -838,7 +935,7 @@ how two projects are brought together, since **Open** would replace the plate in
 - **What to export** — everything on the plate (the default) or just the selection. Scope is
   asked for rather than inferred from what happens to be selected, because a model that quietly
   lost half its parts is only discovered in the slicer.
-- **Format** — binary STL, ASCII STL or OBJ.
+- **Format** — binary STL, ASCII STL, OBJ or 3MF.
 - **Drop to the build plate** — moves the whole export together so its lowest point rests on
   Z = 0, keeping the parts in their relative positions.
 
