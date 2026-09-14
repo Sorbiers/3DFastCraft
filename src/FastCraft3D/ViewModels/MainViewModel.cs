@@ -127,6 +127,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
 
         InsertCommand = new RelayCommand(p => Insert(p));
         InsertStairCommand = RelayCommand.Simple(InsertStair);
+        InsertFitTestCommand = RelayCommand.Simple(InsertFitTest);
         InsertCustomCommand = RelayCommand.Simple(InsertCustom);
         DeleteCommand = RelayCommand.Simple(Delete, () => Scene.Selection.Count > 0);
         DuplicateCommand = new RelayCommand(p => Duplicate(offset: !Equals(p, "InPlace")),
@@ -219,6 +220,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
 
     public System.Windows.Input.ICommand InsertCommand { get; }
     public System.Windows.Input.ICommand InsertStairCommand { get; }
+    public System.Windows.Input.ICommand InsertFitTestCommand { get; }
     public System.Windows.Input.ICommand InsertCustomCommand { get; }
     public System.Windows.Input.ICommand DeleteCommand { get; }
     public System.Windows.Input.ICommand DuplicateCommand { get; }
@@ -2560,7 +2562,9 @@ public sealed class MainViewModel : INotifyPropertyChanged
         new(PatternKind.Tiles, "Tiles"),
         new(PatternKind.Planks, "Planks"),
         new(PatternKind.Wood, "Wood grain"),
-        new(PatternKind.Stripes, "Stripes")
+        new(PatternKind.Stripes, "Stripes"),
+        new(PatternKind.Studs, "Studs (brick-compatible)"),
+        new(PatternKind.StudUnderside, "Brick underside")
     ];
     public IReadOnlyList<PatternDirection> EngraveDirections { get; } = Enum.GetValues<PatternDirection>();
 
@@ -2571,7 +2575,54 @@ public sealed class MainViewModel : INotifyPropertyChanged
         // Aspect is cleared with the pattern. Each bond has its own proportions - a tile is not
         // three times as long as it is tall - and carrying the last one across meant picking
         // Roof tiles and getting bricks in a different colour.
-        set => SetEngrave(engrave.Options with { Kind = value, Aspect = 0f });
+        set
+        {
+            var options = engrave.Options with { Kind = value, Aspect = 0f };
+
+            // An underside's depth is the hollow's, and a groove's 0.6 mm is no hollow at all. It
+            // starts as deep as a real brick's, or as deep as this part allows under a roof.
+            if (value == PatternKind.StudUnderside && engrave.Options.Kind != PatternKind.StudUnderside)
+            {
+                depthBeforeUnderside = engrave.Options.Depth;
+
+                float deepest = engrave.WorldMesh is { } mesh && engrave.Face is { } face
+                    ? BrickStuds.DeepestHollow(mesh, face)
+                    : BrickStuds.BrickHollow;
+                options = options with { Depth = MathF.Round(MathF.Min(BrickStuds.BrickHollow, deepest), 1) };
+            }
+
+            // And back again on the way out. Keeping the hollow's depth left a brick pattern set to
+            // cut 8.6 mm deep - through most walls it would be put on.
+            else if (engrave.Options.Kind == PatternKind.StudUnderside && value != PatternKind.StudUnderside)
+            {
+                options = options with { Depth = depthBeforeUnderside };
+            }
+
+            SetEngrave(options);
+        }
+    }
+
+    /// <summary>The groove depth to go back to when the brick underside, which sets its own, is left.</summary>
+    private float depthBeforeUnderside = EngraveOptions.Default.Depth;
+
+    /// <summary>Studs and brick undersides have their own settings, and none of the groove ones.</summary>
+    public bool EngraveIsStuds => BrickStuds.Handles(engrave.Options.Kind);
+
+    public bool EngraveIsGrooves => !EngraveIsStuds;
+
+    /// <summary>A stud's height is the standard one; only the underside's hollow has a depth to choose.</summary>
+    public bool EngraveDepthApplies => engrave.Options.Kind != PatternKind.Studs;
+
+    public string EngraveDepthLabel => engrave.Options.Kind == PatternKind.StudUnderside ? "Hollow" : "Depth";
+
+    /// <summary>
+    /// How much fatter than standard the studs, tubes and walls are made, in millimetres across.
+    /// Held small: past a few tenths it is no longer a fit, it is a different size.
+    /// </summary>
+    public float EngraveStudFit
+    {
+        get => engrave.Options.StudFit;
+        set => SetEngrave(engrave.Options with { StudFit = Math.Clamp(value, -0.4f, 0.4f) });
     }
 
     public float EngraveSize
@@ -2655,7 +2706,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
     public bool EngraveAspectApplies => GroovePattern.IsMasonry(engrave.Options.Kind);
 
     /// <summary>Boarding and grain can run either way; courses of brick and tile are level.</summary>
-    public bool EngraveDirectionApplies => GroovePattern.Turns(engrave.Options.Kind);
+    public bool EngraveDirectionApplies => !EngraveIsStuds && GroovePattern.Turns(engrave.Options.Kind);
 
     /// <summary>
     /// While this is on, the subtract panel is open and nothing has been cut yet. Its own mode
@@ -2741,6 +2792,11 @@ public sealed class MainViewModel : INotifyPropertyChanged
         Raise(nameof(EngraveAspect));
         Raise(nameof(EngraveAspectApplies));
         Raise(nameof(EngraveRaised));
+        Raise(nameof(EngraveIsStuds));
+        Raise(nameof(EngraveIsGrooves));
+        Raise(nameof(EngraveDepthApplies));
+        Raise(nameof(EngraveDepthLabel));
+        Raise(nameof(EngraveStudFit));
         Raise(nameof(EngraveOffsetU));
         Raise(nameof(EngraveOffsetV));
         Raise(nameof(EngravePlacement));
@@ -2919,11 +2975,33 @@ public sealed class MainViewModel : INotifyPropertyChanged
         set { if (value) SetConnectorStyle(ConnectorStyle.Pegs); }
     }
 
+    /// <summary>Brick studs on the lower half, a shallow brick underside in the upper.</summary>
+    public bool ConnectorsAreBricks
+    {
+        get => connectors.Style == ConnectorStyle.Bricks;
+        set { if (value) SetConnectorStyle(ConnectorStyle.Bricks); }
+    }
+
+    /// <summary>Pins and pegs have a size, depth, clearance and direction; brick studs have a grid and a fit.</summary>
+    public bool ConnectorsAreRound => !ConnectorsAreBricks;
+
+    /// <summary>
+    /// How much fatter than standard the studs and what grips them are made, on each half. Held
+    /// small: past a few tenths it is a different size, not a fit.
+    /// </summary>
+    public float ConnectorBrickFit
+    {
+        get => connectors.BrickFit;
+        set { if (float.IsFinite(value)) connectors = connectors with { BrickFit = Math.Clamp(value, -0.4f, 0.4f) }; Raise(nameof(ConnectorBrickFit)); }
+    }
+
     private void SetConnectorStyle(ConnectorStyle style)
     {
         connectors = connectors with { Style = style };
         Raise(nameof(ConnectorsArePins));
         Raise(nameof(ConnectorsArePegs));
+        Raise(nameof(ConnectorsAreBricks));
+        Raise(nameof(ConnectorsAreRound));
     }
 
     /// <summary>How many to place, at most. A face with room for fewer gets fewer, and the status line says so.</summary>
@@ -3450,6 +3528,37 @@ public sealed class MainViewModel : INotifyPropertyChanged
         var check = StairBuilder.Measure(s.Rise, s.Run, s.Steps, modelScale);
         Status = $"Inserted a flight of {s.Steps} - {check.RiserMm:0.#} mm risers on "
                + $"{check.GoingMm:0.#} mm treads{(check.IsClimbable ? "" : ", which is steep")}";
+    }
+
+    /// <summary>
+    /// Four small brick plates in a row, studs on top and the underside below, each at one of the
+    /// test fits and marked with that many notches. Printed once per filament, tried on real bricks
+    /// and on each other, they say which Fit to type - which no table of tolerances can.
+    /// </summary>
+    private void InsertFitTest()
+    {
+        var colour = NextAutomaticColour();
+        var plates = new List<SceneObject>();
+        var fits = BrickStuds.CouponFits;
+
+        for (int i = 0; i < fits.Length; i++)
+        {
+            if (BrickStuds.FitCoupon(fits[i], i + 1) is not { } mesh) continue;
+
+            plates.Add(new SceneObject(Scene.UniqueName($"Fit test {fits[i]:+0.00;-0.00;0.00}"), mesh)
+            {
+                Colour = colour,
+                Position = new Vector3((i - (fits.Length - 1) / 2f) * 22f, 0f, 0f)
+            }.Centred());
+        }
+
+        if (plates.Count == 0) return;
+
+        Undo.Execute(new AddObjectsCommand("Insert fit test", plates));
+        RefreshSelection();
+
+        Status = "Fit test: " + string.Join(", ", fits.Select((f, i) => $"{i + 1} notch{(i == 0 ? "" : "es")} = {f:+0.00;-0.00;0.00}"))
+                 + " mm. Print them, press each onto real bricks and onto each other, and use the one that grips.";
     }
 
     /// <summary>The last custom shape added, so the next one starts from it rather than from scratch.</summary>
@@ -4663,8 +4772,11 @@ public sealed class MainViewModel : INotifyPropertyChanged
         bool joining = splitWithConnectors;
         var options = connectors;
 
+        bool bricks = options.Style == ConnectorStyle.Bricks;
+
         // Asked before anything is cut, since no amount of room fixes a pin that runs along the cut.
-        if (joining && Connectors.Axis(normal, options.Direction) is null)
+        // Brick studs stand square to the cut whatever the direction says, so they are not asked.
+        if (joining && !bricks && Connectors.Axis(normal, options.Direction) is null)
         {
             string which = options.Direction == ConnectorDirection.Vertical ? "Vertical" : "Horizontal";
             string runs = options.Direction == ConnectorDirection.Vertical ? "upright" : "level";
@@ -4687,6 +4799,13 @@ public sealed class MainViewModel : INotifyPropertyChanged
                 var (front, back) = PlaneSplit.Split(mesh, normal, offset, keep, token);
                 if (!joining || front is null || back is null) return new SplitOutcome(front, back, [], 0, false, 0f, 0f);
 
+                if (bricks)
+                {
+                    return Connectors.JoinBricks(front, back, normal, options, token) is { } built
+                        ? new SplitOutcome(built.Front, built.Back, [], built.Studs, false, 0f, 0f)
+                        : new SplitOutcome(front, back, [], 0, true, 0f, 0f);
+                }
+
                 // Placed on the whole object's section, then cut into the halves: the place a pin
                 // can go is a question about the cut face, which both halves share.
                 var layout = Connectors.Survey(mesh, normal, offset, options);
@@ -4704,6 +4823,18 @@ public sealed class MainViewModel : INotifyPropertyChanged
             if (joining && halves.Any(h => h.Front is not null && h.Back is not null)
                 && halves.All(h => h.Placed == 0 && !h.Refused))
             {
+                if (bricks)
+                {
+                    float needs = BrickStuds.StudDiameter + 2 * (BrickStuds.Wall(options.BrickFit) + 0.2f);
+                    Status = "No brick stud fits on the cut face - nothing was split";
+                    MessageBox.Show(
+                        "No brick stud fits on this cut face, so nothing was split.\n\n"
+                        + $"A stud keeps the upper half's wall clear of it, so it needs a circle about {needs:0.#} mm across "
+                        + "inside the cut face, on the 8 mm grid.\n\nMove the plane to a wider part, or use pins or pegs.",
+                        "3DFastCraft", MessageBoxButton.OK, MessageBoxImage.Information);
+                    return;
+                }
+
                 float thickest = halves.Max(h => h.Thickest);
                 float needed = halves.Max(h => h.WallNeeded);
                 float wall = MathF.Max(options.EdgeDistance, Connectors.MinimumWall);
@@ -4793,7 +4924,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
             string joined = !joining ? ""
                 : torn.Count > 0 ? $"; connectors would have torn {string.Join(", ", torn)}, so it was split plain"
                 : tooSmall.Count > 0 && placed == 0 ? "; the cut face has no room for a connector"
-                : $"; {placed} {(options.Style == ConnectorStyle.Pins ? "pin(s), made beside the parts" : "peg(s)")}"
+                : $"; {placed} {options.Style switch { ConnectorStyle.Pins => "pin(s), made beside the parts", ConnectorStyle.Bricks => "brick stud(s)", _ => "peg(s)" }}"
                   + (fewer || tooSmall.Count > 0 ? " - fewer than asked, the face has no room for more" : "");
 
             Status = (missed == 0
@@ -4870,6 +5001,64 @@ public sealed class MainViewModel : INotifyPropertyChanged
     /// Split with connectors with the split already done: the same survey, read inside both parts
     /// at once so a connector goes only where both have material, and the same cutting.
     /// </summary>
+    /// <summary>
+    /// Connect objects with brick studs: studs on the lower part's face, the shallow underside in
+    /// the upper part's, both on one grid. Each part is kept as itself.
+    /// </summary>
+    private async Task ConnectWithBricks(List<SceneObject> picked, Connectors.Contact contact, ConnectorOptions options)
+    {
+        var front = contact.SecondIsFront ? picked[1] : picked[0];
+        var back = contact.SecondIsFront ? picked[0] : picked[1];
+        var frontMesh = front.ToWorldMesh();
+        var backMesh = back.ToWorldMesh();
+
+        var token = StartWork("Connecting");
+        try
+        {
+            var joined = await Task.Run(() => Connectors.JoinBricks(frontMesh, backMesh, contact.Normal, options, token));
+
+            if (joined is not { } done)
+            {
+                Status = "Connecting would have torn one of the parts - nothing was changed";
+                return;
+            }
+
+            if (done.Studs == 0)
+            {
+                Status = "No brick stud fits where the two meet - nothing was changed";
+                MessageBox.Show(
+                    "No brick stud fits where these two meet, so nothing was changed.\n\n"
+                    + "A stud needs room for itself and the upper part's wall round it, on the 8 mm grid. "
+                    + "Use pins or pegs for a narrow joint.",
+                    "3DFastCraft", MessageBoxButton.OK, MessageBoxImage.Information);
+                return;
+            }
+
+            var added = new List<SceneObject>
+            {
+                new SceneObject(front.Name, done.Front) { Colour = front.Colour }.Centred(),
+                new SceneObject(back.Name, done.Back) { Colour = back.Colour }.Centred()
+            };
+
+            Undo.Execute(new ReplaceObjectsCommand("Connect with brick studs", [front, back], added));
+            IsConnectMode = false;
+            RefreshSelection();
+            Status = $"Connected {front.Name} and {back.Name} with {done.Studs} brick stud(s)";
+        }
+        catch (Exception abort) when (WasAborted(abort))
+        {
+            Status = $"{busyTitle} aborted - nothing was changed";
+        }
+        catch (Exception ex)
+        {
+            Status = $"Connect failed: {ex.Message}";
+        }
+        finally
+        {
+            EndWork();
+        }
+    }
+
     private async Task ApplyConnect()
     {
         var picked = Scene.SelectionInPickOrder.ToList();
@@ -4877,6 +5066,12 @@ public sealed class MainViewModel : INotifyPropertyChanged
         if (Connectors.SharedFace(picked[0].WorldBounds, picked[1].WorldBounds) is not { } contact) return;
 
         var options = connectors;
+        if (options.Style == ConnectorStyle.Bricks)
+        {
+            await ConnectWithBricks(picked, contact, options);
+            return;
+        }
+
         if (Connectors.Axis(contact.Normal, options.Direction) is null)
         {
             string which = options.Direction == ConnectorDirection.Vertical ? "Vertical" : "Horizontal";
@@ -4954,7 +5149,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
             RefreshSelection();
 
             Status = $"Connected {front.Name} and {back.Name} with {layout.Points.Count} "
-                   + (options.Style == ConnectorStyle.Pins ? "pin(s), made beside them" : "peg(s)")
+                   + (options.Style switch { ConnectorStyle.Pins => "pin(s), made beside them", ConnectorStyle.Bricks => "brick stud(s)", _ => "peg(s)" })
                    + (layout.Points.Count < options.Count ? " - fewer than asked, there is no room for more" : "");
         }
         catch (Exception abort) when (WasAborted(abort))

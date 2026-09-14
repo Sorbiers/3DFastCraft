@@ -23,7 +23,13 @@ public enum PatternKind
     Wood,
 
     /// <summary>Evenly spaced parallel grooves - lap siding, panelling, ribs.</summary>
-    Stripes
+    Stripes,
+
+    /// <summary>Round studs on the 8 mm grid of the common building bricks, so real bricks press on.</summary>
+    Studs,
+
+    /// <summary>The hollow underside of such a brick, with its tubes, so the part presses onto real bricks.</summary>
+    StudUnderside
 }
 
 /// <summary>Which way the pattern runs across the face.</summary>
@@ -40,6 +46,10 @@ public enum PatternDirection
 /// <param name="Direction">Which way the courses, grain or stripes run.</param>
 /// <param name="OffsetU">Slides the pattern across the face, for lining a corner up.</param>
 /// <param name="OffsetV">Slides the pattern along the face.</param>
+/// <param name="StudFit">
+/// For studs and brick undersides: how much fatter than standard to make whatever grips, in
+/// millimetres across. Printers differ, and a stud that fits on one is loose or jammed on another.
+/// </param>
 /// <param name="Aspect">
 /// How many times longer each piece is than it is tall. Zero takes the default for the pattern,
 /// which is brick. A roof tile is nearer one and a half, and there was no way to say so - the
@@ -54,7 +64,8 @@ public readonly record struct EngraveOptions(
     float OffsetU = 0f,
     float OffsetV = 0f,
     bool Raised = false,
-    float Aspect = 0f)
+    float Aspect = 0f,
+    float StudFit = 0f)
 {
     /// <summary>Below this the pattern is finer than the cutter can meaningfully resolve.</summary>
     public const float MinimumSize = 0.5f;
@@ -67,7 +78,7 @@ public readonly record struct EngraveOptions(
     /// showing nothing but zeros, and Sane() would quietly turn them into the finest pattern it
     /// allows rather than a sensible brick.
     /// </summary>
-    public static EngraveOptions Default => new(PatternKind.Brick, 20f, 1.2f, 0.6f);
+    public static EngraveOptions Default => new(PatternKind.Brick, 20f, 1.2f, 0.6f, StudFit: BrickStuds.FdmFit);
 
     /// <summary>The proportions to use, with zero meaning "whatever the pattern normally is".</summary>
     public float Courses => Aspect <= 0

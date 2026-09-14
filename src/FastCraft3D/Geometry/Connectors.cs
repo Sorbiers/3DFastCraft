@@ -1,4 +1,4 @@
-﻿using System.Numerics;
+using System.Numerics;
 using FastCraft3D.Geometry.Csg;
 
 namespace FastCraft3D.Geometry;
@@ -22,7 +22,13 @@ public enum ConnectorStyle
     Pins,
 
     /// <summary>Pegs standing out of one half, sockets in the other.</summary>
-    Pegs
+    Pegs,
+
+    /// <summary>
+    /// Brick studs on the lower half and a shallow brick underside in the upper, so the halves hold
+    /// by grip as bricks do - and each takes real bricks along the cut.
+    /// </summary>
+    Bricks
 }
 
 /// <param name="Count">How many to place, at most. Fewer go in when the cut face has no room.</param>
@@ -34,16 +40,23 @@ public enum ConnectorStyle
 /// until this much is left, since registration is better the further apart they are.
 /// </param>
 /// <param name="Direction">Which way the connectors run through the cut.</param>
+/// <param name="BrickFit">
+/// For brick studs: how much fatter than standard the studs and what grips them, in millimetres
+/// across, on each half. Both halves are printed, so each carries its own share of the error.
+/// </param>
 public readonly record struct ConnectorOptions(
     ConnectorStyle Style, int Count, float Diameter, float Depth, float Clearance, float EdgeDistance,
-    ConnectorDirection Direction)
+    ConnectorDirection Direction, float BrickFit = Engraving.BrickStuds.FdmFit)
 {
     /// <summary>
     /// Written out, because a record struct's new() skips the defaults and hands back zeros - a
     /// pin with no diameter going nowhere.
+    ///
+    /// The clearance is a sliding fit on a well set up filament printer, 0.2 mm a side, for pins
+    /// that should come apart again; PETG and entry-level printers want 0.25 to 0.3.
     /// </summary>
     public static ConnectorOptions Default =>
-        new(ConnectorStyle.Pins, 2, 5f, 6f, 0.2f, 3f, ConnectorDirection.Perpendicular);
+        new(ConnectorStyle.Pins, 2, 5f, 6f, 0.2f, 3f, ConnectorDirection.Perpendicular, Engraving.BrickStuds.FdmFit);
 
     public float Radius => Diameter / 2f;
 }
@@ -546,6 +559,102 @@ public static class Connectors
 
         if (!front.CheckHealth().IsWatertight || !back.CheckHealth().IsWatertight) return null;
         return (front, back, pins);
+    }
+
+    /// <summary>
+    /// Brick studs on the lower of two parts and a shallow brick underside in the upper, on the
+    /// faces where they meet; or null when either part would not come back watertight.
+    ///
+    /// Both faces are laid out on one grid, taken from the lower part's largest face, so the studs
+    /// and the tubes between them line up across the cut. Studs keep a wall's thickness in from the
+    /// edge, since the upper part's wall stands there. The underside is only as deep as a stud is
+    /// tall and a little more, so the upper part stays nearly solid.
+    /// </summary>
+    /// <param name="normal">Square to the faces, pointing from <paramref name="back"/> into <paramref name="front"/>.</param>
+    /// <returns>The two parts and how many studs were placed.</returns>
+    public static (Mesh Front, Mesh Back, int Studs)? JoinBricks(
+        Mesh front, Mesh back, Vector3 normal, ConnectorOptions options, CancellationToken token = default)
+    {
+        normal = Vector3.Normalize(normal);
+
+        // Studs on whichever part is lower, standing up, for the same reason as pegs.
+        bool backIsLower = normal.Z >= 0f;
+        var lower = backIsLower ? back : front;
+        var upper = backIsLower ? front : back;
+        var up = backIsLower ? normal : -normal;
+
+        var lowerFaces = FacesAt(lower, up);
+        var upperFaces = FacesAt(upper, -up);
+        if (lowerFaces.Count == 0 || upperFaces.Count == 0) return null;
+
+        var studs = Engraving.EngraveOptions.Default with { Kind = Engraving.PatternKind.Studs, StudFit = options.BrickFit };
+        var sockets = studs with { Kind = Engraving.PatternKind.StudUnderside, Depth = Engraving.BrickStuds.StudHeight + Engraving.BrickStuds.SocketClearance };
+
+        var reference = FacePatch.Find(lower, lowerFaces[0], up)!;
+        var grid = Engraving.BrickGrid.Of(reference, studs, Engraving.BrickStuds.Wall(options.BrickFit) + 0.2f);
+
+        int placed = 0;
+        foreach (var point in lowerFaces)
+        {
+            token.ThrowIfCancellationRequested();
+            if (FacePatch.Find(lower, point, up) is not { } face) continue;
+
+            var result = Engraving.BrickStuds.Apply(lower, face, studs, grid, token);
+            if (result.Grooves == 0) continue;
+            if (!result.IsPrintable) return null;
+
+            lower = result.Mesh;
+            placed += result.Grooves;
+        }
+
+        if (placed == 0) return (front, back, 0);
+
+        foreach (var point in upperFaces)
+        {
+            token.ThrowIfCancellationRequested();
+            if (FacePatch.Find(upper, point, -up) is not { } face) continue;
+
+            var result = Engraving.BrickStuds.Apply(upper, face, sockets, grid, token);
+            if (result.Mesh == upper) continue;
+            if (!result.IsPrintable) return null;
+
+            upper = result.Mesh;
+        }
+
+        return backIsLower ? (upper, lower, placed) : (lower, upper, placed);
+    }
+
+    /// <summary>
+    /// A point on each flat face of the mesh that looks along <paramref name="outward"/> from the
+    /// furthest the mesh reaches that way - the faces of a cut, or of a part resting on another -
+    /// largest first. A cut through two legs makes two faces, and each gets its own.
+    /// </summary>
+    private static List<Vector3> FacesAt(Mesh mesh, Vector3 outward)
+    {
+        if (mesh.Positions.Count == 0) return [];
+
+        float reach = mesh.Positions.Max(p => Vector3.Dot(p, outward));
+        var covered = new HashSet<int>();
+        var faces = new List<(Vector3 Point, float Area)>();
+
+        for (int t = 0; t + 2 < mesh.Indices.Count; t += 3)
+        {
+            if (covered.Contains(t)) continue;
+
+            Vector3 a = mesh.Positions[mesh.Indices[t]], b = mesh.Positions[mesh.Indices[t + 1]], c = mesh.Positions[mesh.Indices[t + 2]];
+            var cross = Vector3.Cross(b - a, c - a);
+            if (cross.LengthSquared() < 1e-12f) continue;
+            if (Vector3.Dot(Vector3.Normalize(cross), outward) < 0.999f) continue;
+            if (MathF.Abs(Vector3.Dot(a, outward) - reach) > 0.01f) continue;
+
+            var centroid = (a + b + c) / 3f;
+            if (FacePatch.Find(mesh, centroid, outward) is not { } face) continue;
+
+            foreach (int covers in face.Triangles) covered.Add(covers);
+            faces.Add((centroid, face.Area));
+        }
+
+        return faces.OrderByDescending(f => f.Area).Select(f => f.Point).ToList();
     }
 
     private static Mesh Closed(Mesh mesh, CancellationToken token) =>

@@ -1,4 +1,4 @@
-﻿<Window x:Class="FastCraft3D.MainWindow"
+<Window x:Class="FastCraft3D.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:hx="http://helix-toolkit.org/wpf/SharpDX"
@@ -116,10 +116,33 @@
             </Setter>
         </Style>
 
+        <!-- A label with more to say is underlined with dots and shows the help cursor; one
+             without stays plain. Decided by whether the label has a tooltip at all, so a label
+             given one later is marked without anyone remembering to. -->
+        <TextDecorationCollection x:Key="HintUnderline">
+            <TextDecoration Location="Underline" PenOffset="1.5">
+                <TextDecoration.Pen>
+                    <Pen Brush="#FFA5ABB3" Thickness="1">
+                        <Pen.DashStyle>
+                            <DashStyle Dashes="1,2" />
+                        </Pen.DashStyle>
+                    </Pen>
+                </TextDecoration.Pen>
+            </TextDecoration>
+        </TextDecorationCollection>
+
         <Style x:Key="FieldLabel" TargetType="TextBlock">
             <Setter Property="VerticalAlignment" Value="Center" />
             <Setter Property="Margin" Value="0,0,6,0" />
             <Setter Property="Foreground" Value="#FF5A5F66" />
+            <Setter Property="TextDecorations" Value="{StaticResource HintUnderline}" />
+            <Setter Property="Cursor" Value="Help" />
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding ToolTip, RelativeSource={RelativeSource Self}}" Value="{x:Null}">
+                    <Setter Property="TextDecorations" Value="{x:Null}" />
+                    <Setter Property="Cursor" Value="{x:Null}" />
+                </DataTrigger>
+            </Style.Triggers>
         </Style>
 
         <Style x:Key="NumberBox" TargetType="TextBox">
@@ -405,6 +428,9 @@
                     <Button Style="{StaticResource ToolButton}" Content="Custom..." Tag="{StaticResource IconCustom}"
                             Command="{Binding InsertCustomCommand}" MinWidth="70"
                             ToolTip="A cube, cylinder, cone, sphere or torus with its size, segments and roundness chosen before it is made - more segments for a smoother shape" />
+                    <Button Style="{StaticResource ToolButton}" Content="Fit test" Tag="{StaticResource IconFitTest}"
+                            Command="{Binding InsertFitTestCommand}" MinWidth="64"
+                            ToolTip="Four small 2x2 brick plates at Fit -0.2, -0.1, 0 and +0.1 mm, marked with one to four notches, each with studs on top and the underside below. Print them in your filament and press each onto real bricks. Without real bricks, stack one plate on another: the pair grips like the sum of their two Fits. To test two printed halves exactly as Split with connectors makes them - the same Fit on both - print the set twice and try each plate on its twin. Type the Fit that holds firmly but still comes apart by hand." />
                     <Button Style="{StaticResource ToolButton}" Content="Stair..." Tag="{StaticResource IconStair}"
                             Command="{Binding InsertStairCommand}" MinWidth="70"
                             ToolTip="A straight flight, built as one solid, with the riser and going reported in real units" />
@@ -892,10 +918,25 @@
                                 <RadioButton Content="Separate pins" GroupName="ConnectorStyle" Margin="0,0,10,0"
                                              IsChecked="{Binding ConnectorsArePins, Mode=TwoWay}"
                                              ToolTip="Holes in both halves, and the pins made as parts of their own - printed lying down, so they are strong along their length. A broken pin is a reprint, not a lost half." />
-                                <RadioButton Content="Pegs on one half" GroupName="ConnectorStyle"
+                                <RadioButton Content="Pegs on one half" GroupName="ConnectorStyle" Margin="0,0,10,0"
                                              IsChecked="{Binding ConnectorsArePegs, Mode=TwoWay}"
                                              ToolTip="Pegs standing out of one half, sockets in the other. Nothing loose to lose, but pegs printed standing up are weak across their layers." />
+                                <RadioButton Content="Brick studs" GroupName="ConnectorStyle"
+                                             IsChecked="{Binding ConnectorsAreBricks, Mode=TwoWay}"
+                                             ToolTip="Brick studs on the lower half and a shallow brick underside in the upper, on the 8 mm grid. The halves hold by grip, and each takes real bricks along the join. The grid repeats, so line the edges up by eye." />
                             </StackPanel>
+                            <StackPanel Orientation="Horizontal" Margin="0,0,0,6"
+                                        Visibility="{Binding ConnectorsAreBricks, Converter={StaticResource BoolToVisibility}}">
+                                <TextBlock Text="Fit" Style="{StaticResource FieldLabel}" Width="76"
+                                           ToolTip="How much fatter than standard the studs, and the tubes and walls that grip them, are made - in mm across, on both halves. The two halves add up: at -0.1 each there is about 0.2 mm of play in all. -0.1 suits PLA on a tuned printer, about -0.15 PETG." />
+                                <TextBox Width="64" Style="{StaticResource NumberBox}" Tag="number"
+                                         Text="{Binding ConnectorBrickFit, StringFormat=N2, UpdateSourceTrigger=LostFocus}" />
+                                <TextBlock Text="mm" Foreground="#FF9AA0A8" VerticalAlignment="Center" Margin="5,0,0,0" />
+                            </StackPanel>
+                            <TextBlock TextWrapping="Wrap" Foreground="#FF7A8088" Margin="0,0,0,6"
+                                       Visibility="{Binding ConnectorsAreBricks, Converter={StaticResource BoolToVisibility}}"
+                                       Text="Use Fit test on the Insert tab to find your Fit: print the set twice and try each plate on its twin - that is how these two halves will meet." />
+                            <StackPanel Visibility="{Binding ConnectorsAreRound, Converter={StaticResource BoolToVisibility}}">
                             <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
                                 <RadioButton Content="Square to cut" GroupName="ConnectorDirection" Margin="0,0,8,0"
                                              IsChecked="{Binding ConnectorsPerpendicular, Mode=TwoWay}"
@@ -944,6 +985,7 @@
                                          AutomationProperties.AutomationId="ConnectorEdgeDistance"
                                          Text="{Binding ConnectorEdgeDistance, StringFormat=N1, UpdateSourceTrigger=LostFocus}" />
                                 <TextBlock Text="mm" Foreground="#FF9AA0A8" VerticalAlignment="Center" Margin="5,0,0,0" />
+                            </StackPanel>
                             </StackPanel>
                             <TextBlock Text="Both halves are kept." Foreground="#FF7A8088" Margin="0,4,0,0" />
                         </StackPanel>
@@ -1001,7 +1043,8 @@
                                       SelectedItem="{Binding EngraveDirection}" />
                         </StackPanel>
 
-                        <StackPanel Orientation="Horizontal" Margin="0,0,0,2">
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,2"
+                                    Visibility="{Binding EngraveIsGrooves, Converter={StaticResource BoolToVisibility}}">
                             <TextBlock Text="Size" Style="{StaticResource FieldLabel}" Width="76"
                                        ToolTip="Brick length, board width, or the gap between stripes" />
                             <TextBox AutomationProperties.AutomationId="EngraveSize" Width="64" Style="{StaticResource NumberBox}" Tag="number"
@@ -1009,17 +1052,29 @@
                             <TextBlock Text="mm" Foreground="#FF9AA0A8" VerticalAlignment="Center" />
                         </StackPanel>
 
-                        <StackPanel Orientation="Horizontal" Margin="0,0,0,2">
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,2"
+                                    Visibility="{Binding EngraveIsGrooves, Converter={StaticResource BoolToVisibility}}">
                             <TextBlock Text="Line width" Style="{StaticResource FieldLabel}" Width="76" />
                             <TextBox AutomationProperties.AutomationId="EngraveWidth" Width="64" Style="{StaticResource NumberBox}" Tag="number"
                                      Text="{Binding EngraveGrooveWidth, StringFormat=N2, UpdateSourceTrigger=LostFocus}" />
                             <TextBlock Text="mm" Foreground="#FF9AA0A8" VerticalAlignment="Center" />
                         </StackPanel>
 
-                        <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
-                            <TextBlock Text="Depth" Style="{StaticResource FieldLabel}" Width="76" />
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,6"
+                                    Visibility="{Binding EngraveDepthApplies, Converter={StaticResource BoolToVisibility}}">
+                            <TextBlock Text="{Binding EngraveDepthLabel}" Style="{StaticResource FieldLabel}" Width="76" />
                             <TextBox AutomationProperties.AutomationId="EngraveDepth" Width="64" Style="{StaticResource NumberBox}" Tag="number"
                                      Text="{Binding EngraveDepth, StringFormat=N2, UpdateSourceTrigger=LostFocus}" />
+                            <TextBlock Text="mm" Foreground="#FF9AA0A8" VerticalAlignment="Center" />
+                        </StackPanel>
+
+                        <!-- Studs and brick undersides: the grid is fixed, only the fit is the printer's -->
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,6"
+                                    Visibility="{Binding EngraveIsStuds, Converter={StaticResource BoolToVisibility}}">
+                            <TextBlock Text="Fit" Style="{StaticResource FieldLabel}" Width="76"
+                                       ToolTip="How much fatter than standard to make the studs, or the tubes and walls that grip them - in mm across. Positive grips harder, negative looser. Studs change by the whole Fit; tubes, rods and walls by half of it on each surface, so the space for a stud shrinks by the whole Fit too. Printed studs come out a little fat, so -0.1 suits PLA on a tuned printer and about -0.15 PETG. Print the Fit test from the Insert tab to find yours." />
+                            <TextBox AutomationProperties.AutomationId="EngraveStudFit" Width="64" Style="{StaticResource NumberBox}" Tag="number"
+                                     Text="{Binding EngraveStudFit, StringFormat=N2, UpdateSourceTrigger=LostFocus}" />
                             <TextBlock Text="mm" Foreground="#FF9AA0A8" VerticalAlignment="Center" />
                         </StackPanel>
 
@@ -1050,7 +1105,8 @@
                             <TextBlock Text=": 1" Foreground="#FF9AA0A8" VerticalAlignment="Center" />
                         </StackPanel>
 
-                        <CheckBox Content="Raised pattern" Margin="0,6,0,0"
+                        <CheckBox Content="Raised pattern" Margin="0,6,0,10"
+                                  Visibility="{Binding EngraveIsGrooves, Converter={StaticResource BoolToVisibility}}"
                                   AutomationProperties.AutomationId="EngraveRaised"
                                   IsChecked="{Binding EngraveRaised, Mode=TwoWay}"
                                   ToolTip="Stand the bricks off the face rather than cutting the joints in. Separate pieces rather than one web of joints, which the boolean finds easier - and a raised line prints where a groove the same size is missed." />
@@ -1206,10 +1262,25 @@
                                 <RadioButton Content="Separate pins" GroupName="ConnectStyle" Margin="0,0,10,0"
                                              IsChecked="{Binding ConnectorsArePins, Mode=TwoWay}"
                                              ToolTip="Holes in both halves, and the pins made as parts of their own - printed lying down, so they are strong along their length. A broken pin is a reprint, not a lost half." />
-                                <RadioButton Content="Pegs on one half" GroupName="ConnectStyle"
+                                <RadioButton Content="Pegs on one half" GroupName="ConnectStyle" Margin="0,0,10,0"
                                              IsChecked="{Binding ConnectorsArePegs, Mode=TwoWay}"
                                              ToolTip="Pegs standing out of one half, sockets in the other. Nothing loose to lose, but pegs printed standing up are weak across their layers." />
+                                <RadioButton Content="Brick studs" GroupName="ConnectStyle"
+                                             IsChecked="{Binding ConnectorsAreBricks, Mode=TwoWay}"
+                                             ToolTip="Brick studs on the lower half and a shallow brick underside in the upper, on the 8 mm grid. The halves hold by grip, and each takes real bricks along the join. The grid repeats, so line the edges up by eye." />
                             </StackPanel>
+                            <StackPanel Orientation="Horizontal" Margin="0,0,0,6"
+                                        Visibility="{Binding ConnectorsAreBricks, Converter={StaticResource BoolToVisibility}}">
+                                <TextBlock Text="Fit" Style="{StaticResource FieldLabel}" Width="76"
+                                           ToolTip="How much fatter than standard the studs, and the tubes and walls that grip them, are made - in mm across, on both halves. The two halves add up: at -0.1 each there is about 0.2 mm of play in all. -0.1 suits PLA on a tuned printer, about -0.15 PETG." />
+                                <TextBox Width="64" Style="{StaticResource NumberBox}" Tag="number"
+                                         Text="{Binding ConnectorBrickFit, StringFormat=N2, UpdateSourceTrigger=LostFocus}" />
+                                <TextBlock Text="mm" Foreground="#FF9AA0A8" VerticalAlignment="Center" Margin="5,0,0,0" />
+                            </StackPanel>
+                            <TextBlock TextWrapping="Wrap" Foreground="#FF7A8088" Margin="0,0,0,6"
+                                       Visibility="{Binding ConnectorsAreBricks, Converter={StaticResource BoolToVisibility}}"
+                                       Text="Use Fit test on the Insert tab to find your Fit: print the set twice and try each plate on its twin - that is how these two halves will meet." />
+                            <StackPanel Visibility="{Binding ConnectorsAreRound, Converter={StaticResource BoolToVisibility}}">
                             <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
                                 <RadioButton Content="Square to cut" GroupName="ConnectDirection" Margin="0,0,8,0"
                                              IsChecked="{Binding ConnectorsPerpendicular, Mode=TwoWay}"
@@ -1258,6 +1329,7 @@
                                          AutomationProperties.AutomationId="ConnectEdgeDistance"
                                          Text="{Binding ConnectorEdgeDistance, StringFormat=N1, UpdateSourceTrigger=LostFocus}" />
                                 <TextBlock Text="mm" Foreground="#FF9AA0A8" VerticalAlignment="Center" Margin="5,0,0,0" />
+                            </StackPanel>
                             </StackPanel>
                             <TextBlock Text="Both parts are kept, each as itself." Foreground="#FF7A8088" Margin="0,4,0,0" />
                         </StackPanel>

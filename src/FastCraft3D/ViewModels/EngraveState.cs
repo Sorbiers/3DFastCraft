@@ -56,6 +56,15 @@ public sealed class EngraveState
         var size = Face.Size;
         int grooves = Engraver.CountGrooves(Face, Options);
 
+        if (BrickStuds.Handles(Options.Kind))
+        {
+            var (across, along) = BrickStuds.Count(Face);
+            return Options.Kind == PatternKind.Studs
+                ? $"Face {size.X:0.#} x {size.Y:0.#} mm - {grooves} stud(s) fit inside it"
+                : $"Face {size.X:0.#} x {size.Y:0.#} mm - hollowed {Options.Depth:0.##} mm deep, "
+                  + $"{grooves} {(across == 1 || along == 1 ? "rod(s)" : "tube(s)")} inside";
+        }
+
         return Options.Raised
             ? $"Face {size.X:0.#} x {size.Y:0.#} mm - about {grooves:N0} pieces standing {Options.Depth:0.##} mm proud"
             : $"Face {size.X:0.#} x {size.Y:0.#} mm - about {grooves:N0} grooves at {Options.Depth:0.##} mm deep";
@@ -72,6 +81,9 @@ public sealed class EngraveState
         if (Face is null || WorldMesh is null) return "";
 
         var options = Options.Sane();
+
+        if (BrickStuds.Handles(options.Kind)) return StudAdvice(options);
+
         float behind = Engraver.MaterialBehind(WorldMesh, Face);
 
         // Standing proud adds material rather than taking it away, so none of the advice about
@@ -98,6 +110,42 @@ public sealed class EngraveState
 
         if (Engraver.CountGrooves(Face, options) > GroovePattern.MaximumGrooves / 2)
             return "That is a very fine pattern for a face this size, and it will take a while.";
+
+        return "";
+    }
+
+    /// <summary>
+    /// What stops studs or an underside working with real bricks. The grid is the point of them,
+    /// so a face that is not a whole number of studs is worth saying even though it builds.
+    /// </summary>
+    private string StudAdvice(EngraveOptions options)
+    {
+        var face = Face!;
+        var (across, along) = BrickStuds.Count(face);
+
+        if (options.Kind == PatternKind.Studs && BrickStuds.CountPieces(face, options) == 0)
+            return $"No stud fits wholly inside this face - it needs room for a {BrickStuds.StudDiameter:0.#} mm circle "
+                 + "on the 8 mm grid. Shift across or along may find one.";
+
+        if (options.Kind == PatternKind.StudUnderside)
+        {
+            float deepest = BrickStuds.DeepestHollow(WorldMesh!, face);
+            if (options.Depth > deepest)
+                return $"{options.Depth:0.##} mm leaves less than {BrickStuds.RoofThickness:0.#} mm over the hollow - "
+                     + $"this part takes {deepest:0.#} mm at most.";
+        }
+
+        // Only a rectangle can be a whole brick. Any other outline is laid out for what fits, and
+        // saying it is not a brick would be saying what it plainly is.
+        if (!BrickStuds.IsRectangular(face) || across == 0 || along == 0) return "";
+
+        float wantX = across * BrickStuds.Pitch - 2 * BrickStuds.EdgePlay;
+        float wantY = along * BrickStuds.Pitch - 2 * BrickStuds.EdgePlay;
+        if (MathF.Abs(face.Size.X - wantX) > 0.3f || MathF.Abs(face.Size.Y - wantY) > 0.3f)
+            return $"A {across} x {along} brick is {wantX:0.#} x {wantY:0.#} mm. This face is not, so its edges "
+                 + (options.Kind == PatternKind.StudUnderside
+                     ? "will not grip the studs it goes over."
+                     : "will not line up with the bricks around it.");
 
         return "";
     }

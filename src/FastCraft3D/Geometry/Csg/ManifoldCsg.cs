@@ -38,6 +38,51 @@ public static class ManifoldCsg
     public static Mesh? Intersect(Mesh solid, Mesh tool, CancellationToken token = default) =>
         Run(solid, tool, ManifoldOpType.Intersect, token);
 
+    /// <summary>
+    /// The first solid with all the others taken away in one go. Many small cutters that overlap
+    /// each other - a wall swept round an outline in short pieces - go in as they are, since
+    /// Manifold unions them as part of the same operation.
+    /// </summary>
+    public static Mesh? SubtractAll(Mesh solid, IReadOnlyList<Mesh> tools, CancellationToken token = default)
+    {
+        if (unavailable) return null;
+        if (tools.Count == 0) return solid;
+
+        var operands = new List<Manifold>(tools.Count + 1);
+        try
+        {
+            foreach (var mesh in tools.Prepend(solid))
+            {
+                token.ThrowIfCancellationRequested();
+
+                var imported = Import(mesh.Welded());
+                operands.Add(imported);
+                if (imported.Status != ManifoldStatus.NoError) return null;
+            }
+
+            using var result = Manifold.BatchBoolean(operands, ManifoldOpType.Subtract, token);
+            return result.Status == ManifoldStatus.NoError ? Export(result.GetMeshGL()) : null;
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex) when (ex is DllNotFoundException or EntryPointNotFoundException
+                                       or BadImageFormatException or TypeInitializationException)
+        {
+            unavailable = true;
+            return null;
+        }
+        catch (Exception)
+        {
+            return null;
+        }
+        finally
+        {
+            foreach (var operand in operands) operand.Dispose();
+        }
+    }
+
     public static Mesh? Apply(Mesh solid, Mesh tool, BooleanOp op, CancellationToken token = default) => op switch
     {
         BooleanOp.Subtract => Subtract(solid, tool, token),

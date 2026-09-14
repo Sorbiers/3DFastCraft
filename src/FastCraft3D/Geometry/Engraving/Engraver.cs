@@ -106,6 +106,8 @@ public static class Engraver
 
         options = options.Sane();
 
+        if (BrickStuds.Handles(options.Kind)) return BrickStuds.Apply(mesh, face, options, token);
+
         EngraveResult? best = null;
 
         foreach (var (across, along, size, width) in Nudges)
@@ -221,6 +223,7 @@ public static class Engraver
     /// </summary>
     public static GrooveSet Pattern(FacePatch face, EngraveOptions options)
     {
+        if (BrickStuds.Handles(options.Kind)) return BrickStuds.Preview(face, options);
         if (!options.Raised) return Grooves(face, options);
 
         var area = RaisedArea(face);
@@ -259,7 +262,8 @@ public static class Engraver
 
     /// <summary>How many grooves the pattern would cut, without cutting them.</summary>
     public static int CountGrooves(FacePatch face, EngraveOptions options) =>
-        options.Raised
+        BrickStuds.Handles(options.Kind) ? BrickStuds.CountPieces(face, options)
+        : options.Raised
             ? GroovePattern.Raised(options.Sane(), RaisedArea(face)).Count
             : GroovePattern.Count(options, PatternArea(face));
 
