@@ -161,6 +161,9 @@ public sealed class MainViewModel : INotifyPropertyChanged
 
         RepairCommand = AsyncRelayCommand.Simple(RepairObjects, () => Scene.Objects.Count > 0);
         SmoothCommand = RelayCommand.Simple(SmoothSelection, () => Scene.Selection.Count > 0);
+        TwistCommand = RelayCommand.Simple(TwistSelection, () => Scene.Selection.Count > 0);
+        TaperCommand = RelayCommand.Simple(TaperSelection, () => Scene.Selection.Count > 0);
+        BendCommand = RelayCommand.Simple(BendSelection, () => Scene.Selection.Count > 0);
         RebuildCommand = AsyncRelayCommand.Simple(RebuildObjects, () => Scene.Objects.Count > 0);
         SimplifyCommand = AsyncRelayCommand.Simple(SimplifySelection, () => Scene.Selection.Count > 0);
         HollowCommand = AsyncRelayCommand.Simple(HollowSelection, () => Scene.Selection.Count > 0);
@@ -243,6 +246,9 @@ public sealed class MainViewModel : INotifyPropertyChanged
     public System.Windows.Input.ICommand CancelSplitCommand { get; }
     public System.Windows.Input.ICommand RepairCommand { get; }
     public System.Windows.Input.ICommand SmoothCommand { get; }
+    public System.Windows.Input.ICommand TwistCommand { get; }
+    public System.Windows.Input.ICommand TaperCommand { get; }
+    public System.Windows.Input.ICommand BendCommand { get; }
     public System.Windows.Input.ICommand RebuildCommand { get; }
     public System.Windows.Input.ICommand SimplifyCommand { get; }
     public System.Windows.Input.ICommand HollowCommand { get; }
@@ -4233,6 +4239,93 @@ public sealed class MainViewModel : INotifyPropertyChanged
         {
             EndWork();
         }
+    }
+
+    /// <summary>The last value each shape-bending tool was used with, so a second part done to match starts there.</summary>
+    private readonly Dictionary<string, (float Value, Axis Axis)> lastDeform = new()
+    {
+        ["Twist"] = (90f, Axis.X),
+        ["Taper"] = (50f, Axis.X),
+        ["Bend"] = (45f, Axis.X)
+    };
+
+    private static readonly DeformSpec TwistSpec = new(
+        "Twist", "Twisting", "It turns about its upright axis, more the higher up; the bottom stays where it is.",
+        "Turn", "degrees at the top", -720, 720, 15, 0, "clockwise", "anticlockwise", false,
+        (world, value, _) => MeshDeform.Twist(world, value));
+
+    private static readonly DeformSpec TaperSpec = new(
+        "Taper", "Tapering", "It narrows or widens towards the top, about its upright axis; the bottom keeps its size.",
+        "Top", "% of the bottom", MeshDeform.SmallestTaper * 100, 300, 5, 100, "narrower", "wider", false,
+        (world, value, _) => MeshDeform.Taper(world, value / 100f));
+
+    private static readonly DeformSpec BendSpec = new(
+        "Bend", "Bending", "It curves over as if round a pipe; the bottom stays where it is and the top leans over.",
+        "Bend", "degrees", -360, 360, 5, 0, "the other way", "towards +X or +Y", true,
+        (world, value, axis) => MeshDeform.Bend(world, value, axis),
+        (world, value, axis) => MeshDeform.Folds(world, value, axis)
+            ? $"Bent this far the inside of the curve would fold through itself. This shape takes at most "
+              + $"{MeshDeform.LargestBend(world, axis):0}° towards {axis}; a taller or thinner shape takes more."
+            : null);
+
+    private void TwistSelection() => DeformSelection(TwistSpec);
+
+    private void TaperSelection() => DeformSelection(TaperSpec);
+
+    private void BendSelection() => DeformSelection(BendSpec);
+
+    /// <summary>
+    /// Twists, tapers or bends each selected object, shown on the plate as the value is set.
+    ///
+    /// Each object is worked in plate coordinates, so a part lying on its side twists about the
+    /// plate's upright, as it is seen, not about the axis it was modelled on.
+    /// </summary>
+    private void DeformSelection(DeformSpec spec)
+    {
+        var selection = Scene.Selection.ToList();
+        if (selection.Count == 0) return;
+
+        var before = selection.Select(o => o.Mesh).ToList();
+        var worlds = selection.Select(o => o.ToWorldMesh()).ToList();
+        var (start, startAxis) = lastDeform[spec.Title];
+
+        string subject = selection.Count == 1 ? selection[0].Name : $"{selection.Count} objects";
+        var dialog = new DeformDialog(spec, subject, worlds, start, startAxis, changed =>
+        {
+            for (int i = 0; i < selection.Count; i++)
+            {
+                if (changed is null)
+                {
+                    selection[i].Mesh = before[i];
+                    continue;
+                }
+
+                // Shown through the object's own transform, so the preview is brought back into
+                // its coordinates; what is kept is rebuilt from the plate coordinates instead.
+                selection[i].Mesh = Matrix4x4.Invert(selection[i].Transform, out var toLocal)
+                    ? MeshTransform.Transformed(changed[i], toLocal)
+                    : before[i];
+            }
+        })
+        { Owner = Application.Current?.MainWindow };
+
+        bool accepted = dialog.ShowDialog() == true && dialog.Result is not null;
+
+        for (int i = 0; i < selection.Count; i++) selection[i].Mesh = before[i];
+
+        if (!accepted || dialog.Result is not { } value || Math.Abs(value - spec.Identity) < 1e-3) return;
+
+        var axis = dialog.ResultAxis;
+        lastDeform[spec.Title] = (value, axis);
+
+        var produced = selection.Select((o, i) =>
+            new SceneObject(o.Name, spec.Deform(worlds[i], value, axis)) { Colour = o.Colour }.Centred()).ToList();
+
+        string amount = $"{value:0.#}{(spec == TaperSpec ? "%" : "°")}";
+        Undo.Execute(new ReplaceObjectsCommand($"{spec.Title} {amount}", selection, produced));
+        RefreshSelection();
+
+        Status = $"{spec.Title} {amount} on {produced.Count} object(s) - {produced.Sum(o => o.Mesh.TriangleCount):N0} triangles";
     }
 
     /// <summary>
