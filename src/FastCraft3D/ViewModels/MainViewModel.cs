@@ -486,6 +486,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
             {
                 Colour = o.Colour,
                 Position = o.Position,
+                // Not pristine: the turn is in the mesh now, and rounding would rebuild it upright.
                 Origin = o.Origin
             });
         }
@@ -3232,7 +3233,8 @@ public sealed class MainViewModel : INotifyPropertyChanged
         var o = new SceneObject(Scene.UniqueName(kind.ToString()), mesh)
         {
             Colour = NextAutomaticColour(),
-            Origin = kind
+            Origin = kind,
+            IsPristine = true
         };
 
         // Primitives are centred on their own origin, so lift by half the height to sit on the plate.
@@ -3613,6 +3615,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
         {
             Colour = colour,
             Origin = shape.Kind,
+            IsPristine = true,
             Position = new Vector3(0, 0, built.ComputeBounds().Size.Z / 2f)
         };
 
@@ -3824,7 +3827,8 @@ public sealed class MainViewModel : INotifyPropertyChanged
                 Position = o.Position,
                 Rotation = o.Rotation,
                 Colour = o.Colour,
-                Origin = o.Origin
+                Origin = o.Origin,
+                IsPristine = true
             };
         }).ToList();
 
@@ -4887,6 +4891,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
                     {
                         Colour = source.Colour,
                         Origin = PrimitiveKind.Cylinder,
+                        IsPristine = true,
                         Rotation = new Vector3(0f, 90f, 0f),
                         Position = new Vector3(
                             box.Max.X + 10f + options.Depth,
@@ -5136,6 +5141,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
                 {
                     Colour = front.Colour,
                     Origin = PrimitiveKind.Cylinder,
+                    IsPristine = true,
                     Rotation = new Vector3(0f, 90f, 0f),
                     Position = new Vector3(
                         box.Max.X + 10f + options.Depth,

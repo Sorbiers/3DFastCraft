@@ -145,21 +145,60 @@ public static class SceneSerializer
         Scale = ToArray(o.Scale),
         Colour = ToArray(o.Colour),
         Origin = o.Origin?.ToString(),
+        Pristine = o.IsPristine,
         PiecesTakeClearance = o.PiecesTakeClearance,
         Vertices = Flatten(o.Mesh.Positions),
         Triangles = o.Mesh.Indices.ToArray()
     };
 
-    private static SceneObject FromDto(ObjectDto o) =>
-        new(o.Name ?? "Object", new Mesh(Unflatten(o.Vertices), o.Triangles ?? []))
+    private static SceneObject FromDto(ObjectDto o)
+    {
+        var mesh = new Mesh(Unflatten(o.Vertices), o.Triangles ?? []);
+        PrimitiveKind? origin = Enum.TryParse<PrimitiveKind>(o.Origin, out var kind) ? kind : null;
+
+        return new SceneObject(o.Name ?? "Object", mesh)
         {
             Position = ToVector(o.Position),
             Rotation = ToVector(o.Rotation),
             Scale = o.Scale is { Length: 3 } ? ToVector(o.Scale) : Vector3.One,
             Colour = o.Colour is { Length: 3 } ? ToVector(o.Colour) : new Vector3(0.3f, 0.55f, 0.85f),
-            Origin = Enum.TryParse<PrimitiveKind>(o.Origin, out var kind) ? kind : null,
+            Origin = origin,
+            IsPristine = origin is not null && (o.Pristine ?? IsConvex(mesh)),
             PiecesTakeClearance = o.PiecesTakeClearance
         };
+    }
+
+    /// <summary>
+    /// A guess at whether a file written before the pristine flag still holds the primitive.
+    ///
+    /// Such a file kept the origin on a cylinder with a hole subtracted from it, and nothing else
+    /// says whether the hole is there. Every shape that can be rounded is convex, rounded or not,
+    /// and a hole or a notch is not - so a convex mesh is taken as untouched. Turning everything
+    /// old into "not roundable" would have been safe, and would have taken Round away from every
+    /// plain cube in every existing project.
+    /// </summary>
+    private static bool IsConvex(Mesh mesh)
+    {
+        var positions = mesh.Positions;
+        var indices = mesh.Indices;
+        if (indices.Count < 12) return false;
+
+        float tolerance = 1e-4f * mesh.ComputeBounds().Size.Length() + 1e-5f;
+
+        for (int t = 0; t + 2 < indices.Count; t += 3)
+        {
+            Vector3 a = positions[indices[t]];
+            Vector3 normal = Vector3.Cross(positions[indices[t + 1]] - a, positions[indices[t + 2]] - a);
+            float length = normal.Length();
+            if (length < 1e-9f) continue;
+            normal /= length;
+
+            foreach (var p in positions)
+                if (Vector3.Dot(p - a, normal) > tolerance) return false;
+        }
+
+        return true;
+    }
 
     private static float[] ToArray(Vector3 v) => [v.X, v.Y, v.Z];
 
@@ -209,6 +248,9 @@ public static class SceneSerializer
         public float[]? Scale { get; set; }
         public float[]? Colour { get; set; }
         public string? Origin { get; set; }
+
+        /// <summary>Null in files written before it existed, which are then judged by shape.</summary>
+        public bool? Pristine { get; set; }
 
         /// <summary>A group every piece of which can be grown by a clearance.</summary>
         public bool PiecesTakeClearance { get; set; }

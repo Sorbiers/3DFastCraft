@@ -145,8 +145,8 @@ public class WorkflowTests : IDisposable
     [Fact]
     public void OnlyPrimitivesStillKnownAsSuchCanBeRounded()
     {
-        var cube = new SceneObject("Cube", Primitives.Box(20, 20, 20)) { Origin = PrimitiveKind.Cube };
-        var sphere = new SceneObject("Ball", Primitives.Create(PrimitiveKind.Sphere)) { Origin = PrimitiveKind.Sphere };
+        var cube = new SceneObject("Cube", Primitives.Box(20, 20, 20)) { Origin = PrimitiveKind.Cube, IsPristine = true };
+        var sphere = new SceneObject("Ball", Primitives.Create(PrimitiveKind.Sphere)) { Origin = PrimitiveKind.Sphere, IsPristine = true };
         var booleanResult = new SceneObject("Subtract", Primitives.Box(20, 20, 20));
 
         Assert.True(cube.CanRound);
@@ -157,7 +157,7 @@ public class WorkflowTests : IDisposable
     [Fact]
     public void CopyingAnObjectCarriesItsOriginSoTheCopyCanStillBeRounded()
     {
-        var cube = new SceneObject("Cube", Primitives.Box(20, 20, 20)) { Origin = PrimitiveKind.Cube };
+        var cube = new SceneObject("Cube", Primitives.Box(20, 20, 20)) { Origin = PrimitiveKind.Cube, IsPristine = true };
 
         Assert.True(cube.Clone().CanRound);
     }
@@ -165,7 +165,7 @@ public class WorkflowTests : IDisposable
     [Fact]
     public void ARoundedObjectKeepsItsPlaceAndSize()
     {
-        var cube = new SceneObject("Cube", Primitives.Box(20, 20, 20)) { Origin = PrimitiveKind.Cube };
+        var cube = new SceneObject("Cube", Primitives.Box(20, 20, 20)) { Origin = PrimitiveKind.Cube, IsPristine = true };
         cube.Position = new Vector3(30, 10, 10);
         cube.SizeX = 40f;
 
