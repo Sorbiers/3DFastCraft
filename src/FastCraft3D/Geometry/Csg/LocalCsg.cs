@@ -15,6 +15,12 @@ namespace FastCraft3D.Geometry.Csg;
 /// capping them would leave a pair of faces inside the solid at every wall. The piece the
 /// boolean is given is the one exception - a boolean needs a closed solid, not a patch - and its
 /// lids are dropped again on the way out.
+///
+/// Every boolean here goes to Manifold first, on the whole solid, and only comes this way when
+/// Manifold declines - the native library will not load, or a solid is not closed. Manifold does
+/// not slice the solid along the planes of the tool, which is both what tore fine detail against a
+/// curved surface and what made the whole-solid route slow enough to need this one; it answered a
+/// heart on a cylinder in milliseconds where the BSP engine took half a second and tore.
 /// </summary>
 public static class LocalCsg
 {
@@ -50,10 +56,27 @@ public static class LocalCsg
     /// </summary>
     public static Mesh Apply(Mesh solid, Mesh tool, BooleanOp op, CancellationToken token = default)
     {
+        if (Robust(solid, tool, op, token) is { } exact) return exact;
+
         if (op == BooleanOp.Intersect || !Worthwhile(solid, tool))
             return CsgSolid.Apply(solid, tool, op, token: token);
 
-        return op == BooleanOp.Subtract ? Subtract(solid, tool, token) : Union(solid, tool, token);
+        return Apply(solid, tool, subtract: op == BooleanOp.Subtract, token);
+    }
+
+    /// <summary>
+    /// The boolean through Manifold, or null to carry on with the BSP engine.
+    ///
+    /// Kept only if it is a closed solid - or nothing at all, which is a real answer when the tool
+    /// swallowed the solid whole. The callers still check their own results; this only decides
+    /// which engine's result they get to check.
+    /// </summary>
+    private static Mesh? Robust(Mesh solid, Mesh tool, BooleanOp op, CancellationToken token)
+    {
+        var result = ManifoldCsg.Apply(solid, tool, op, token);
+        if (result is null) return null;
+
+        return result.TriangleCount == 0 || result.CheckHealth().IsWatertight ? result : null;
     }
 
     /// <summary>
@@ -85,10 +108,17 @@ public static class LocalCsg
     }
 
     public static Mesh Subtract(Mesh solid, Mesh tool, CancellationToken token = default) =>
-        Apply(solid, tool, subtract: true, token);
+        Robust(solid, tool, BooleanOp.Subtract, token) ?? Apply(solid, tool, subtract: true, token);
 
     public static Mesh Union(Mesh solid, Mesh tool, CancellationToken token = default) =>
-        Apply(solid, tool, subtract: false, token);
+        Robust(solid, tool, BooleanOp.Union, token) ?? Apply(solid, tool, subtract: false, token);
+
+    /// <summary>
+    /// The local BSP route alone, without asking Manifold - what runs on a PC where Manifold
+    /// cannot. Public so the fallback stays tested now that the ordinary route rarely reaches it.
+    /// </summary>
+    public static Mesh SubtractByBsp(Mesh solid, Mesh tool, CancellationToken token = default) =>
+        Apply(solid, tool, subtract: true, token);
 
     private static Mesh Apply(Mesh solid, Mesh tool, bool subtract, CancellationToken token)
     {

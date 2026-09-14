@@ -13,6 +13,9 @@ namespace FastCraft3D.Tests;
 /// The engine is quadratic in the triangle count and nearly all of that is building a tree over
 /// the solid, which is wasted on a pour hole that could not touch nine tenths of it. The answer
 /// has to be the same as the whole-solid boolean would give, and it has to come back closed.
+///
+/// These call the BSP route directly. The ordinary route asks Manifold first and seldom gets here,
+/// but this is still what runs on a PC Manifold cannot load on.
 /// </summary>
 public class LocalCsgTests(ITestOutputHelper output)
 {
@@ -34,7 +37,7 @@ public class LocalCsgTests(ITestOutputHelper output)
         var (top, _) = PlaneSplit.Split(box, Axis.Z, 0f, SplitKeep.Both);
 
         var socket = MeshTransform.Transformed(Primitives.Prism(0.5f, 6f, 32), Matrix4x4.CreateTranslation(7.9f, 7.9f, 0f));
-        var cut = LocalCsg.Subtract(top!, socket);
+        var cut = LocalCsg.SubtractByBsp(top!, socket);
 
         Assert.True(cut.CheckHealth().IsWatertight, "the socket left the half open");
 
@@ -55,7 +58,7 @@ public class LocalCsgTests(ITestOutputHelper output)
         var block = Primitives.Box(60, 60, 20);
         var bore = Bore(new Vector3(10, 5, 0), 6, 40);
 
-        var holed = LocalCsg.Subtract(block, bore);
+        var holed = LocalCsg.SubtractByBsp(block, bore);
         var health = holed.CheckHealth();
 
         Assert.True(health.IsWatertight, health.Describe());
@@ -71,7 +74,7 @@ public class LocalCsgTests(ITestOutputHelper output)
         var bore = Bore(new Vector3(10, 5, 0), 6, 40);
 
         double whole = Math.Abs(CsgSolid.Subtract(block, bore).ComputeSignedVolume());
-        double local = Math.Abs(LocalCsg.Subtract(block, bore).ComputeSignedVolume());
+        double local = Math.Abs(LocalCsg.SubtractByBsp(block, bore).ComputeSignedVolume());
 
         Assert.Equal(whole, local, 1);
     }
@@ -83,7 +86,7 @@ public class LocalCsgTests(ITestOutputHelper output)
         var block = Primitives.Box(20, 20, 20);
         var bore = Bore(new Vector3(200, 0, 0), 6, 10);
 
-        var after = LocalCsg.Subtract(block, bore);
+        var after = LocalCsg.SubtractByBsp(block, bore);
 
         Assert.Equal(block.TriangleCount, after.TriangleCount);
     }
@@ -100,10 +103,10 @@ public class LocalCsgTests(ITestOutputHelper output)
         long Time(int segments, int rings)
         {
             var ball = Primitives.Sphere(20, segments, rings);
-            LocalCsg.Subtract(ball, bore); // warm
+            LocalCsg.SubtractByBsp(ball, bore); // warm
 
             var clock = Stopwatch.StartNew();
-            var holed = LocalCsg.Subtract(ball, bore);
+            var holed = LocalCsg.SubtractByBsp(ball, bore);
             clock.Stop();
 
             output.WriteLine($"{ball.TriangleCount,7:N0} triangles: {clock.ElapsedMilliseconds,6:N0} ms, "

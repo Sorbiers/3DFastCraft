@@ -283,15 +283,14 @@ public class TextProjectionTests
     }
 
     /// <summary>
-    /// Lettering with counters - O, B, A - wrapped round a barrel is past what the boolean will
-    /// do: it comes back with a few torn edges however it is nudged. What matters is that this
-    /// is caught rather than shipped, so the tool reports it and leaves the object alone.
+    /// Lettering with counters - O, B, A - wrapped round a barrel cuts cleanly.
     ///
-    /// Written down as a test because it is a real limit of the engine rather than an oversight,
-    /// and because the day it starts passing is worth knowing about.
+    /// This was written as a limit of the BSP engine: it came back with a few torn edges however
+    /// it was nudged, and the test asserted only that the tear was caught rather than shipped.
+    /// It started passing the day lettering went to Manifold first.
     /// </summary>
     [Fact]
-    public void LetteringWithCountersWrappedRoundABarrelIsCaughtRatherThanShipped()
+    public void LetteringWithCountersWrappedRoundABarrelCutsCleanly()
     {
         var barrel = Primitives.Create(PrimitiveKind.Cylinder);
         var bounds = barrel.ComputeBounds();
@@ -301,14 +300,12 @@ public class TextProjectionTests
             .Select(g => new TextShape(g.Outline, g.Holes))
             .ToList();
 
-        // The cutter itself is sound; it is the boolean against a faceted barrel that is not.
         var solid = TextSolid.Build(shapes, surface, surface.ClearanceMm, -0.8f);
         Assert.True(solid.CheckHealth().IsWatertight, solid.CheckHealth().Describe());
 
         var result = TextCutter.Apply(barrel, shapes, surface, raised: false, depthMm: 0.8f)!;
 
-        // Whatever comes back, the tool checks it before keeping it - and this does not pass.
-        Assert.False(result.CheckHealth().IsWatertight);
+        Assert.True(result.CheckHealth().IsWatertight, result.CheckHealth().Describe());
     }
 
     /// <summary>Standing the cutter further off must not change how deep the lettering goes.</summary>

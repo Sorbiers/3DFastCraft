@@ -18,6 +18,17 @@
 
   <ItemGroup>
     <PackageReference Include="HelixToolkit.SharpDX.Core.Wpf" Version="2.27.3" />
+    <PackageReference Include="ManifoldRust" Version="0.5.0" />
+  </ItemGroup>
+
+  <!-- The Visual C++ runtime manifold_rs.dll links against. Self-contained .NET does not supply
+       it - WPF ships its own renamed copy, vcruntime140_cor3.dll - and without it Manifold does
+       not load, so lettering quietly falls back to the BSP engine. Beside the exe it is packed and
+       extracted with the other native libraries, and Windows finds it in the folder the library
+       that needs it was loaded from. -->
+  <ItemGroup>
+    <None Include="Native\vcruntime140.dll" Link="vcruntime140.dll"
+          CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
   </ItemGroup>
 
 </Project>

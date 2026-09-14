@@ -139,9 +139,7 @@ public static class Engraver
             // Repair before judging it. The automatic pass inside the boolean handles the
             // ordinary leftovers; this catches the rest, and declines when it cannot help, so
             // what is measured here is the best this attempt is going to get.
-            var worked = retiled ?? (moved.Raised
-                ? CsgSolid.Union(mesh, solid, token: token)
-                : CsgSolid.Subtract(mesh, solid, token: token));
+            var worked = retiled ?? Cut(mesh, solid, moved.Raised, token);
 
             var cut = MeshHealer.Heal(worked, token: token).Mesh;
             var result = new EngraveResult(
@@ -154,6 +152,25 @@ public static class Engraver
         }
 
         return best!.Value;
+    }
+
+    /// <summary>
+    /// The grooves cut, or the pattern raised, through Manifold when it gives a closed solid and
+    /// through the BSP engine when it does not.
+    ///
+    /// Manifold first for the reason lettering goes there first: the BSP engine splits the model
+    /// along every plane of a cutter made of hundreds of grooves, and on a faceted or already cut
+    /// face that is where it tore and the nudges below came in. With Manifold the first attempt
+    /// is normally the one kept, and the nudges are left for a model it will not take.
+    /// </summary>
+    private static Mesh Cut(Mesh mesh, Mesh solid, bool raised, CancellationToken token)
+    {
+        var robust = raised ? ManifoldCsg.Union(mesh, solid, token) : ManifoldCsg.Subtract(mesh, solid, token);
+        if (robust is { TriangleCount: > 0 } && robust.CheckHealth().IsWatertight) return robust;
+
+        return raised
+            ? CsgSolid.Union(mesh, solid, token: token)
+            : CsgSolid.Subtract(mesh, solid, token: token);
     }
 
     private static EngraveResult Nothing(Mesh mesh, EngraveOptions options, int grooves = 0) =>

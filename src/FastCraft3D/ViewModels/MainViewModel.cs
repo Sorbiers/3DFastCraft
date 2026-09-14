@@ -3404,7 +3404,8 @@ public sealed class MainViewModel : INotifyPropertyChanged
             return;
         }
 
-        double volume = CsgSolid.Intersect(picked[0].ToWorldMesh(), picked[1].ToWorldMesh())
+        // Through LocalCsg for Manifold first: a torn intersection measures the wrong volume.
+        double volume = LocalCsg.Apply(picked[0].ToWorldMesh(), picked[1].ToWorldMesh(), BooleanOp.Intersect)
             .ComputeSignedVolume();
 
         Status = Math.Abs(volume) < 1e-6

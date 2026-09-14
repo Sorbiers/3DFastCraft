@@ -18,6 +18,11 @@ namespace FastCraft3D.Geometry.Engraving;
 ///
 /// Retrying is the standard answer to this in a BSP engine and is much the cheaper of the two on
 /// offer - the alternative being exact arithmetic throughout.
+///
+/// Retrying was not enough on a curve: a heart wrapped on the default cylinder tore in every one
+/// of 32 placements. So the cut goes to Manifold first, which is robust where the BSP engine is
+/// unlucky (see <see cref="ManifoldCsg"/>), and the retries are what is left for a PC it cannot
+/// run on or a model it will not take.
 /// </summary>
 public static class TextCutter
 {
@@ -52,6 +57,28 @@ public static class TextCutter
 
         var laid = FaceRelief.Apply(world, face, area, outlines, depthMm);
         return laid is not null && laid.CheckHealth().IsWatertight ? laid : null;
+    }
+
+    /// <summary>
+    /// The cut through Manifold, kept only if it is printable. Null sends the caller on to the BSP
+    /// engine and its retries.
+    /// </summary>
+    private static Mesh? Robust(
+        Mesh world, IReadOnlyList<TextShape> shapes, IPlacementSurface surface,
+        bool raised, float depthMm, float bevelMm, CancellationToken token)
+    {
+        float clear = surface.ClearanceMm;
+        var solid = raised
+            ? TextSolid.Build(shapes, surface, -clear, depthMm, bevelMm)
+            : TextSolid.Build(shapes, surface, clear, -depthMm, bevelMm);
+
+        if (solid.TriangleCount == 0) return null;
+
+        var result = raised
+            ? ManifoldCsg.Union(world, solid, token)
+            : ManifoldCsg.Subtract(world, solid, token);
+
+        return result is { TriangleCount: > 0 } && result.CheckHealth().IsWatertight ? result : null;
     }
 
     /// <summary>
@@ -91,6 +118,7 @@ public static class TextCutter
         token.ThrowIfCancellationRequested();
 
         if (Retiled(world, shapes, surface, raised, depthMm, bevelMm) is { } laid) return laid;
+        if (Robust(world, shapes, surface, raised, depthMm, bevelMm, token) is { } exact) return exact;
 
         Mesh? best = null;
 

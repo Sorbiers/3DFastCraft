@@ -74,8 +74,16 @@ public static class PlaneSplit
             ? NullIfEmpty(PlaneClip.Keep(mesh, Matrix4x4.Identity, -normal, -offset).Welded())
             : null;
 
-        if (mesh.TriangleCount <= BooleanLimit && (Torn(front) || Torn(back)))
-            return Carve(mesh, normal, offset, keep, token);
+        if (Torn(front) || Torn(back))
+        {
+            // Manifold before the old boolean, and at any size: it is quick where the BSP engine is
+            // quadratic, so the limit below does not apply to it. It needs a closed solid to start
+            // from, so a model that was already open still goes on to the old way.
+            if (Robust(mesh, normal, offset, keep, token) is { } exact) return exact;
+
+            if (mesh.TriangleCount <= BooleanLimit)
+                return Carve(mesh, normal, offset, keep, token);
+        }
 
         return (front, back);
 
@@ -92,6 +100,36 @@ public static class PlaneSplit
     /// whatever the clip handed back and a great deal slower to arrive at.
     /// </summary>
     private const int BooleanLimit = 20_000;
+
+    /// <summary>
+    /// The same carve as <see cref="Carve"/>, through Manifold. Null unless every half asked for
+    /// comes back closed, so a partial answer never replaces the clip's.
+    /// </summary>
+    private static (Mesh? Front, Mesh? Back)? Robust(Mesh mesh, Vector3 normal, float offset,
+                                                     SplitKeep keep, CancellationToken token)
+    {
+        var halfSpace = BuildHalfSpaceBox(mesh.ComputeBounds(), normal, offset);
+
+        Mesh? front = null, back = null;
+
+        if (keep is SplitKeep.Front or SplitKeep.Both)
+        {
+            var cut = ManifoldCsg.Subtract(mesh, halfSpace, token);
+            if (!Closed(cut)) return null;
+            front = cut!.TriangleCount > 0 ? cut : null;
+        }
+
+        if (keep is SplitKeep.Back or SplitKeep.Both)
+        {
+            var cut = ManifoldCsg.Intersect(mesh, halfSpace, token);
+            if (!Closed(cut)) return null;
+            back = cut!.TriangleCount > 0 ? cut : null;
+        }
+
+        return (front, back);
+
+        static bool Closed(Mesh? m) => m is not null && (m.TriangleCount == 0 || m.CheckHealth().IsWatertight);
+    }
 
     /// <summary>
     /// The old way: subtract, or intersect with, an oversized box covering one half-space.
