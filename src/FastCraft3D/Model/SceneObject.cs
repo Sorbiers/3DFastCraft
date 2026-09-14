@@ -72,17 +72,28 @@ public sealed class SceneObject : INotifyPropertyChanged
     }
 
     /// <summary>
-    /// The primitive this object still is, if it is one.
+    /// The primitive this object started as, if it did.
     ///
-    /// Rounding regenerates a shape from its parameters rather than filleting its mesh, so it
-    /// can only be offered while those parameters still describe the object. A boolean, a split
-    /// or an import produces a new object with no origin, and rounding is refused there - which
-    /// is the honest answer, not a limitation to work around.
+    /// A boolean, a split or an import produces a new object with no origin. Subtracting from a
+    /// part, repairing it and aligning it keep the origin, because a cube with a hole in it still
+    /// grows by a clearance the way a cube does - but the mesh is no longer the primitive, which
+    /// is what <see cref="IsPristine"/> is for.
     /// </summary>
     public PrimitiveKind? Origin { get; set; }
 
+    /// <summary>
+    /// Whether the mesh is still exactly the primitive <see cref="Origin"/> generated.
+    ///
+    /// Rounding regenerates a shape from its parameters rather than filleting its mesh, so it
+    /// can only be offered while those parameters describe the whole object. Keying it on the
+    /// origin alone rebuilt a subtracted cylinder from scratch and the hole vanished. Set only
+    /// where a primitive is generated - inserting, rounding, connector pins - and never copied by
+    /// anything that replaces the mesh.
+    /// </summary>
+    public bool IsPristine { get; set; }
+
     /// <summary>Whether this object can be regenerated with rounded edges.</summary>
-    public bool CanRound => Origin is { } kind && RoundedPrimitives.Supports(kind);
+    public bool CanRound => IsPristine && Origin is { } kind && RoundedPrimitives.Supports(kind);
 
     public bool IsSelected
     {
@@ -357,6 +368,7 @@ public sealed class SceneObject : INotifyPropertyChanged
     public SceneObject Clone() => new(Name, mesh.Clone())
     {
         Origin = Origin,
+        IsPristine = IsPristine,
         position = position,
         rotation = rotation,
         scale = scale,
