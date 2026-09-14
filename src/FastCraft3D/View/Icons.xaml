@@ -13,6 +13,7 @@
     <StreamGeometry x:Key="IconWedge">M3,19 L21,19 L21,7 Z M3,19 L3,15 L21,4 L21,7</StreamGeometry>
     <StreamGeometry x:Key="IconTorus">M12,5 A10,7 0 1 1 11.9,5 Z M12,10 A4,2.5 0 1 1 11.9,10 Z</StreamGeometry>
     <StreamGeometry x:Key="IconHexagon">M8,4 L16,4 L20,12 L16,20 L8,20 L4,12 Z</StreamGeometry>
+    <StreamGeometry x:Key="IconCustom">M4,7 L12,3 L20,7 L20,17 L12,21 L4,17 Z M4,7 L12,11 L20,7 M12,11 L12,21 M8,5 L8,19 M16,5 L16,19 M4,12 L12,16 L20,12</StreamGeometry>
     <StreamGeometry x:Key="IconTetrahedron">M12,3 L21,19 L3,19 Z M12,3 L9,19 M9,19 L21,19</StreamGeometry>
 
     <!-- Files -->

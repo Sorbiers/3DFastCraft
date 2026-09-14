@@ -72,12 +72,19 @@ public static class RoundedPrimitives
         return limit is float.MaxValue ? 0f : MathF.Max(limit, 0f);
     }
 
+    /// <summary>
+    /// Steps round a rounded edge for a given segment count: five at the default 32, as it has
+    /// always been, and in proportion either side, so an edge gets as smooth as the rim it runs
+    /// into rather than staying five flats on a barrel of two hundred.
+    /// </summary>
+    public static int ArcStepsFor(int segments) => Math.Max(2, (int)MathF.Round(5f * segments / Primitives.DefaultSegments));
+
     public static Mesh Create(PrimitiveKind kind, Vector3 size, float radius,
-        RoundEdges edges = RoundEdges.All, int arcSteps = 5) => kind switch
+        RoundEdges edges = RoundEdges.All, int arcSteps = 5, int segments = Primitives.DefaultSegments) => kind switch
     {
         PrimitiveKind.Cube => RoundedBox(size.X, size.Y, size.Z, radius, edges, arcSteps),
         PrimitiveKind.Cylinder => RoundedCylinder(MathF.Min(size.X, size.Y) / 2f, size.Z, radius,
-            edges, Primitives.DefaultSegments, arcSteps),
+            edges, segments, arcSteps),
         _ => throw new ArgumentOutOfRangeException(nameof(kind), $"{kind} cannot be rounded.")
     };
 

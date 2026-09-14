@@ -27,15 +27,15 @@ public static class Primitives
 {
     public const int DefaultSegments = 32;
 
-    public static Mesh Create(PrimitiveKind kind, float size = 20f) => kind switch
+    public static Mesh Create(PrimitiveKind kind, float size = 20f, int segments = DefaultSegments) => kind switch
     {
         PrimitiveKind.Cube => Box(size, size, size),
-        PrimitiveKind.Cylinder => Prism(size / 2f, size, DefaultSegments),
-        PrimitiveKind.Cone => Cone(size / 2f, size, DefaultSegments),
-        PrimitiveKind.Sphere => Sphere(size / 2f, DefaultSegments, DefaultSegments / 2),
+        PrimitiveKind.Cylinder => Prism(size / 2f, size, segments),
+        PrimitiveKind.Cone => Cone(size / 2f, size, segments),
+        PrimitiveKind.Sphere => Sphere(size / 2f, segments, segments / 2),
         PrimitiveKind.Pyramid => Pyramid(size, size),
         PrimitiveKind.Wedge => Wedge(size, size, size),
-        PrimitiveKind.Torus => Torus(size * 0.35f, size * 0.15f, DefaultSegments, DefaultSegments / 2),
+        PrimitiveKind.Torus => Torus(size * 0.35f, size * 0.15f, segments, segments / 2),
         PrimitiveKind.Hexagon => Prism(size / 2f, size, 6),
         PrimitiveKind.Tetrahedron => Tetrahedron(size),
         _ => throw new ArgumentOutOfRangeException(nameof(kind))

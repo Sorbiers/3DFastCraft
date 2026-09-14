@@ -402,6 +402,9 @@
                     <Button Style="{StaticResource ToolButton}" Content="Tetrahedron" Tag="{StaticResource IconTetrahedron}"
                             Command="{Binding InsertCommand}" CommandParameter="Tetrahedron" />
                     <Separator Margin="8,0" />
+                    <Button Style="{StaticResource ToolButton}" Content="Custom..." Tag="{StaticResource IconCustom}"
+                            Command="{Binding InsertCustomCommand}" MinWidth="70"
+                            ToolTip="A cube, cylinder, cone, sphere or torus with its size, segments and roundness chosen before it is made - more segments for a smoother shape" />
                     <Button Style="{StaticResource ToolButton}" Content="Stair..." Tag="{StaticResource IconStair}"
                             Command="{Binding InsertStairCommand}" MinWidth="70"
                             ToolTip="A straight flight, built as one solid, with the riser and going reported in real units" />

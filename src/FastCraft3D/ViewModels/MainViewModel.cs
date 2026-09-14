@@ -127,6 +127,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
 
         InsertCommand = new RelayCommand(p => Insert(p));
         InsertStairCommand = RelayCommand.Simple(InsertStair);
+        InsertCustomCommand = RelayCommand.Simple(InsertCustom);
         DeleteCommand = RelayCommand.Simple(Delete, () => Scene.Selection.Count > 0);
         DuplicateCommand = new RelayCommand(p => Duplicate(offset: !Equals(p, "InPlace")),
             _ => Scene.Selection.Count > 0);
@@ -215,6 +216,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
 
     public System.Windows.Input.ICommand InsertCommand { get; }
     public System.Windows.Input.ICommand InsertStairCommand { get; }
+    public System.Windows.Input.ICommand InsertCustomCommand { get; }
     public System.Windows.Input.ICommand DeleteCommand { get; }
     public System.Windows.Input.ICommand DuplicateCommand { get; }
     public System.Windows.Input.ICommand MirrorCommand { get; }
@@ -3442,6 +3444,66 @@ public sealed class MainViewModel : INotifyPropertyChanged
         var check = StairBuilder.Measure(s.Rise, s.Run, s.Steps, modelScale);
         Status = $"Inserted a flight of {s.Steps} - {check.RiserMm:0.#} mm risers on "
                + $"{check.GoingMm:0.#} mm treads{(check.IsClimbable ? "" : ", which is steep")}";
+    }
+
+    /// <summary>The last custom shape added, so the next one starts from it rather than from scratch.</summary>
+    private CustomShape lastCustom = CustomShape.Default;
+
+    /// <summary>
+    /// Inserts a shape with its size, segments and roundness chosen first, shown on the plate while
+    /// they are set.
+    ///
+    /// The preview is a real object on the plate, added and taken away outside the undo history,
+    /// so what is seen is exactly what Add puts there, lit and placed the same way.
+    /// </summary>
+    private void InsertCustom()
+    {
+        var colour = NextAutomaticColour();
+        bool wireframeBefore = ShowWireframe;
+        SceneObject? shown = null;
+
+        var dialog = new CustomShapeDialog(lastCustom, wireframeBefore, mesh =>
+        {
+            if (mesh is null)
+            {
+                if (shown is not null) Scene.Objects.Remove(shown);
+                shown = null;
+                return;
+            }
+
+            float lift = mesh.ComputeBounds().Size.Z / 2f;
+            if (shown is null)
+            {
+                shown = new SceneObject("Custom shape", mesh) { Colour = colour, Position = new Vector3(0, 0, lift) };
+                Scene.Objects.Add(shown);
+            }
+            else
+            {
+                shown.Mesh = mesh;
+                shown.Position = new Vector3(0, 0, lift);
+            }
+        }, on => ShowWireframe = on)
+        { Owner = Application.Current?.MainWindow };
+
+        bool accepted = dialog.ShowDialog() == true && dialog.Result is not null;
+
+        if (shown is not null) Scene.Objects.Remove(shown);
+        ShowWireframe = wireframeBefore;
+
+        if (!accepted || dialog.Result is not { } shape) return;
+        lastCustom = shape;
+
+        var built = shape.Build();
+        var o = new SceneObject(Scene.UniqueName(shape.Kind.ToString()), built)
+        {
+            Colour = colour,
+            Origin = shape.Kind,
+            Position = new Vector3(0, 0, built.ComputeBounds().Size.Z / 2f)
+        };
+
+        Undo.Execute(new AddObjectsCommand($"Insert custom {shape.Kind}", [o]));
+        RefreshSelection();
+        Status = $"Inserted a custom {shape.Kind.ToString().ToLowerInvariant()} - {built.TriangleCount:N0} triangles";
     }
 
     private void Mirror(object? parameter)

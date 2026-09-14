@@ -1,0 +1,76 @@
+<Window x:Class="FastCraft3D.View.CustomShapeDialog"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Custom shape" SizeToContent="Height" Width="430"
+        WindowStartupLocation="CenterOwner" ResizeMode="NoResize"
+        ShowInTaskbar="False" Background="#FFF7F7F8">
+
+    <StackPanel Margin="18,14,18,14">
+        <TextBlock Text="A shape with its size and smoothness chosen before it is made. The preview is on the plate."
+                   TextWrapping="Wrap" Foreground="#FF33383F" Margin="0,0,0,14" />
+
+        <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
+            <TextBlock Text="Shape" VerticalAlignment="Center" Foreground="#FF5A5F66" Width="86" />
+            <ComboBox x:Name="KindBox" Width="120" SelectionChanged="OnKindChanged"
+                      AutomationProperties.AutomationId="CustomKind" />
+        </StackPanel>
+
+        <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
+            <TextBlock Text="Width" VerticalAlignment="Center" Foreground="#FF5A5F66" Width="86" />
+            <TextBox x:Name="WidthBox" Width="70" Padding="4,3" TextChanged="OnChanged"
+                     AutomationProperties.AutomationId="CustomWidth" />
+            <TextBlock Text="mm, along X" VerticalAlignment="Center" Foreground="#FF9AA0A8" Margin="8,0,0,0" />
+        </StackPanel>
+
+        <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
+            <TextBlock Text="Depth" VerticalAlignment="Center" Foreground="#FF5A5F66" Width="86" />
+            <TextBox x:Name="DepthBox" Width="70" Padding="4,3" TextChanged="OnChanged"
+                     AutomationProperties.AutomationId="CustomDepth" />
+            <TextBlock Text="mm, along Y" VerticalAlignment="Center" Foreground="#FF9AA0A8" Margin="8,0,0,0" />
+        </StackPanel>
+
+        <StackPanel Orientation="Horizontal" Margin="0,0,0,12">
+            <TextBlock x:Name="HeightLabel" Text="Height" VerticalAlignment="Center" Foreground="#FF5A5F66" Width="86" />
+            <TextBox x:Name="HeightBox" Width="70" Padding="4,3" TextChanged="OnChanged"
+                     AutomationProperties.AutomationId="CustomHeight" />
+            <TextBlock x:Name="HeightNote" Text="mm, along Z" VerticalAlignment="Center" Foreground="#FF9AA0A8" Margin="8,0,0,0" />
+        </StackPanel>
+
+        <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
+            <TextBlock Text="Segments" VerticalAlignment="Center" Foreground="#FF5A5F66" Width="86" />
+            <TextBox x:Name="SegmentsBox" Width="70" Padding="4,3" TextChanged="OnChanged"
+                     AutomationProperties.AutomationId="CustomSegments" />
+            <TextBlock x:Name="SegmentsNote" Text="round the circumference" VerticalAlignment="Center"
+                       Foreground="#FF9AA0A8" Margin="8,0,0,0" />
+        </StackPanel>
+
+        <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
+            <TextBlock x:Name="RingsLabel" Text="Rings" VerticalAlignment="Center" Foreground="#FF5A5F66" Width="86" />
+            <TextBox x:Name="RingsBox" Width="70" Padding="4,3" TextChanged="OnChanged"
+                     AutomationProperties.AutomationId="CustomRings" />
+            <TextBlock x:Name="RingsNote" Text="pole to pole" VerticalAlignment="Center"
+                       Foreground="#FF9AA0A8" Margin="8,0,0,0" />
+        </StackPanel>
+
+        <StackPanel Orientation="Horizontal" Margin="0,0,0,12">
+            <TextBlock Text="Roundness" VerticalAlignment="Center" Foreground="#FF5A5F66" Width="86" />
+            <TextBox x:Name="RoundnessBox" Width="70" Padding="4,3" TextChanged="OnChanged"
+                     AutomationProperties.AutomationId="CustomRoundness" />
+            <TextBlock x:Name="RoundnessNote" VerticalAlignment="Center" Foreground="#FF9AA0A8" Margin="8,0,0,0" />
+        </StackPanel>
+
+        <CheckBox x:Name="WireframeBox" Content="Show the triangles" Margin="0,0,0,4"
+                  Checked="OnWireframeChanged" Unchecked="OnWireframeChanged" />
+
+        <Border Margin="0,10,0,0" Padding="10,8" CornerRadius="3"
+                Background="#FFEFF1F4" BorderBrush="#FFDDE0E4" BorderThickness="1">
+            <TextBlock x:Name="SummaryText" TextWrapping="Wrap" Foreground="#FF3A3F45" />
+        </Border>
+
+        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,18,0,0">
+            <Button Content="Add" IsDefault="True" Click="OnAccept"
+                    MinWidth="88" Padding="10,6" Margin="0,0,8,0" />
+            <Button Content="Cancel" IsCancel="True" MinWidth="80" Padding="10,6" />
+        </StackPanel>
+    </StackPanel>
+</Window>
