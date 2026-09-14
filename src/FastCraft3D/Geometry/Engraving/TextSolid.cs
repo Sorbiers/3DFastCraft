@@ -63,6 +63,13 @@ public static class TextSolid
         return Warp(flat, surface);
     }
 
+    /// <summary>
+    /// The outlines as a solid lying flat, from <paramref name="from"/> to <paramref name="to"/>
+    /// in Z, laid on nothing - which is what an imported drawing is.
+    /// </summary>
+    public static Mesh Extrude(IReadOnlyList<TextShape> shapes, float from, float to, float bevelMm = 0) =>
+        BuildFlat(shapes, from, to, bevelMm).Welded();
+
     /// <summary>Convenience for the common case of flat lettering on a picked face.</summary>
     public static Mesh Build(
         IReadOnlyList<TextShape> shapes, FacePatch face, float from, float to, float bevelMm = 0) =>

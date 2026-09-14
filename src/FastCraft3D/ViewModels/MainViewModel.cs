@@ -5377,8 +5377,8 @@ public sealed class MainViewModel : INotifyPropertyChanged
     {
         var dialog = new OpenFileDialog
         {
-            Filter = "3D models (*.stl;*.obj;*.3mf;*.3dfc)|*.stl;*.obj;*.3mf;*.3dfc"
-                   + "|STL (*.stl)|*.stl|Wavefront OBJ (*.obj)|*.obj"
+            Filter = "Models and drawings (*.stl;*.obj;*.3mf;*.svg;*.3dfc)|*.stl;*.obj;*.3mf;*.svg;*.3dfc"
+                   + "|STL (*.stl)|*.stl|Wavefront OBJ (*.obj)|*.obj|3MF (*.3mf)|*.3mf|SVG drawing (*.svg)|*.svg"
                    + $"|3DFastCraft project (*{SceneSerializer.Extension})|*{SceneSerializer.Extension}",
             Title = "Import model",
             Multiselect = true
@@ -5429,6 +5429,10 @@ public sealed class MainViewModel : INotifyPropertyChanged
                             Colour = colour ?? NextAutomaticColour()
                         }.Centred());
                 }
+                else if (extension.Equals(".svg", StringComparison.OrdinalIgnoreCase))
+                {
+                    imported.AddRange(ImportDrawing(path, naming));
+                }
                 else if (extension.Equals(".obj", StringComparison.OrdinalIgnoreCase))
                 {
                     foreach (var (name, mesh) in ObjReader.Read(path))
@@ -5469,6 +5473,56 @@ public sealed class MainViewModel : INotifyPropertyChanged
         {
             MessageBox.Show(ex.Message, "Could not import", MessageBoxButton.OK, MessageBoxImage.Error);
         }
+    }
+
+    /// <summary>The last drawing import's settings, so a second drawing to match starts at the same size.</summary>
+    private SvgImportOptions lastSvgImport = SvgImportOptions.Default;
+
+    /// <summary>
+    /// A drawing, made solid: asks for its size and thickness, then builds its filled shapes lying
+    /// flat on the plate. Nothing when it is cancelled or has nothing filled in it - the second said
+    /// so, since an empty result from a drawing that plainly has lines in it needs explaining.
+    /// </summary>
+    private List<SceneObject> ImportDrawing(string path, Func<string, string> naming)
+    {
+        var outlines = SvgImport.Outlines(path);
+        float aspect = SvgImport.Aspect(outlines);
+        string name = Path.GetFileNameWithoutExtension(path);
+
+        if (aspect <= 0f)
+        {
+            MessageBox.Show(
+                $"{Path.GetFileName(path)} has no filled shape in it, so there is nothing to make solid.\n\n"
+                + "Lines on their own have no area. Give them a fill, or turn strokes and text into paths, in the drawing program.",
+                "Import drawing", MessageBoxButton.OK, MessageBoxImage.Information);
+            return [];
+        }
+
+        var dialog = new SvgImportDialog(path, aspect, outlines.Count, lastSvgImport) { Owner = Application.Current?.MainWindow };
+        if (dialog.ShowDialog() != true || dialog.Result is not { } options) return [];
+        lastSvgImport = options;
+
+        var solids = SvgImport.BuildFile(path, options);
+        var colour = NextAutomaticColour();
+
+        var objects = solids.Select((mesh, i) => new SceneObject(
+            naming(solids.Count == 1 ? name : $"{name} {i + 1}"), mesh)
+        {
+            // Separate shapes of one drawing share its colour, so they still read as one drawing.
+            Colour = colour
+        }.Centred()).ToList();
+
+        var torn = objects.Where(o => !o.Mesh.CheckHealth().IsWatertight).Select(o => o.Name).ToList();
+        if (torn.Count > 0)
+        {
+            MessageBox.Show(
+                $"Part of {Path.GetFileName(path)} did not come out as a closed solid: {string.Join(", ", torn)}.\n\n"
+                + "It is imported anyway so it can be seen; Repair or Rebuild on the Tools tab can close it. "
+                + "Shapes that cross themselves in the drawing are the usual cause.",
+                "Import drawing", MessageBoxButton.OK, MessageBoxImage.Warning);
+        }
+
+        return objects;
     }
 
     /// <summary>
