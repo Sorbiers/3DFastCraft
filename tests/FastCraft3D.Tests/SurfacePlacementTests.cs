@@ -445,9 +445,9 @@ public class EmbossProjectionWiringTests
             var surface = Assert.IsType<CylinderSurface>(model.EmbossSurface());
             var middle = surface.At(Vector2.Zero, 0);
 
-            Assert.Equal(side.X, middle.X, 2);
-            Assert.Equal(side.Y, middle.Y, 2);
-            Assert.Equal(side.Z, middle.Z, 2);
+            // On the object's surface, smoothed over its flats, so within a flat's sag of the click
+            // rather than on it exactly - that is what keeps a wrapped cutter off the flats' corners.
+            Assert.InRange((middle - side).Length(), 0f, 0.2f);
         });
     }
 

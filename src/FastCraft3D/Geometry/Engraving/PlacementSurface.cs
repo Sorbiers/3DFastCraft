@@ -100,13 +100,19 @@ public sealed class PlanarSurface(FacePatch face) : IPlacementSurface
 ///
 /// Across is arc length, so a letter keeps its proportions however big the barrel is, and text
 /// long enough to go right round meets itself rather than piling up.
+///
+/// Given the object's <see cref="SurfaceProfile"/>, heights are measured from its real surface
+/// rather than from the circle, so an oval or tapered barrel is cut to an even depth and the
+/// cutter never crosses the surface at a shallow angle. Its centre must be the profile's axis.
 /// </summary>
-public sealed class CylinderSurface(Vector3 centre, float radius, float startAngle = 0) : IPlacementSurface
+public sealed class CylinderSurface(
+    Vector3 centre, float radius, float startAngle = 0, SurfaceProfile? profile = null) : IPlacementSurface
 {
     public Vector3 At(Vector2 uv, float height)
     {
         float angle = startAngle + (radius > 0 ? uv.X / radius : 0);
-        float out_ = radius + height;
+        float surface = profile?.RadiusAt(angle, centre.Z + uv.Y) ?? radius;
+        float out_ = surface + height;
 
         return new Vector3(
             centre.X + out_ * MathF.Cos(angle),

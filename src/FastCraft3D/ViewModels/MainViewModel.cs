@@ -76,6 +76,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
     private bool isLayMode;
     private FacePatch? embossFace;
     private Mesh? embossMesh;
+    private SurfaceProfile? embossProfile;
     private string embossText = "TEXT";
     private string svgFile = "";
     private string embossFont = "Arial";
@@ -1216,9 +1217,6 @@ public sealed class MainViewModel : INotifyPropertyChanged
             Raise(nameof(SplitPlaneVisible));
             Raise(nameof(IsToolRunning));
             RaiseToolInHand();
-            RaiseToolInHand();
-            RaiseToolInHand();
-            RaiseToolInHand();
             Raise(nameof(ShowManipulatorBar));
         }
     }
@@ -1269,6 +1267,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
 
             Set(ref isLayMode, value);
             Raise(nameof(IsToolRunning));
+            RaiseToolInHand();
             Raise(nameof(ShowManipulatorBar));
         }
     }
@@ -1294,6 +1293,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
             if (!value) engrave.Clear();
 
             Raise(nameof(IsToolRunning));
+            RaiseToolInHand();
             Raise(nameof(ShowManipulatorBar));
             Raise(nameof(HasEngraveFace));
             RaiseEngraveText();
@@ -1321,11 +1321,13 @@ public sealed class MainViewModel : INotifyPropertyChanged
             {
                 embossFace = null;
                 embossMesh = null;
+                embossProfile = null;
                 embossPlacement = SurfacePlacement.Middle;
                 letteringCache = null;
             }
 
             Raise(nameof(IsToolRunning));
+            RaiseToolInHand();
             Raise(nameof(ShowManipulatorBar));
             Raise(nameof(HasEmbossFace));
             Raise(nameof(EmbossSummary));
@@ -1479,9 +1481,12 @@ public sealed class MainViewModel : INotifyPropertyChanged
                 float radius = outward.Length();
                 if (radius < 0.05f) return new PlanarSurface(face);
 
+                // Measured once per face picked: every drag of the handles asks for the surface.
+                embossProfile ??= embossMesh is { } mesh ? SurfaceProfile.Build(mesh, axis) : null;
+
                 return new CylinderSurface(
                     new Vector3(axis.X, axis.Y, embossPick.Z), radius,
-                    MathF.Atan2(outward.Y, outward.X));
+                    MathF.Atan2(outward.Y, outward.X), embossProfile);
             }
 
             case TextProjection.Spherical:
@@ -1611,6 +1616,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
         if (!SameFace(embossFace, face)) embossPlacement = SurfacePlacement.Middle;
 
         embossMesh = world;
+        embossProfile = null;
         embossFace = face;
         embossPick = worldPoint;
         embossBounds = world.ComputeBounds();
@@ -1620,6 +1626,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
         Raise(nameof(EmbossAcross));
         Raise(nameof(EmbossUp));
         Raise(nameof(EmbossAngle));
+        Raise(nameof(DrawingShapes));
         RefreshEmboss();
         Status = EmbossSummary;
         return true;
@@ -1643,7 +1650,10 @@ public sealed class MainViewModel : INotifyPropertyChanged
     /// </summary>
     private List<TextShape> Lettering()
     {
-        if (embossFace is null) return [];
+        // A drawing is read without a face: its preview in the panel is how anyone finds out the
+        // file came in right, and that is wanted before a face has been picked, not after. Waiting
+        // for the face left the preview blank and said a good drawing had no filled shape in it.
+        if (embossFace is null && svgFile.Length == 0) return [];
         if (letteringCache is not null) return letteringCache;
 
         if (svgFile.Length > 0)
@@ -1693,6 +1703,9 @@ public sealed class MainViewModel : INotifyPropertyChanged
 
     private void RefreshDrawing()
     {
+        // Emptied before anything asks for the shapes: the preview is raised first, and it was
+        // drawing whatever the cache still held - the typed TEXT, not the drawing just loaded.
+        letteringCache = null;
         Raise(nameof(HasDrawing));
         Raise(nameof(UsesText));
         Raise(nameof(SvgName));
@@ -3947,9 +3960,10 @@ public sealed class MainViewModel : INotifyPropertyChanged
             return;
         }
 
-        // The cutter is put back after the results, so it ends up below them in the list.
+        // The cutter is taken off and put back after the results, so it ends up below them in the
+        // list. Putting it back without taking it off first listed the same object twice.
         List<SceneObject> added = subtractKeepsCutter ? [.. kept, cutter] : [.. kept];
-        var removed = subtractKeepsCutter ? targets : [.. targets, cutter];
+        List<SceneObject> removed = [.. targets, cutter];
 
         Undo.Execute(new ReplaceObjectsCommand("Subtract", removed, added));
         RefreshSelection();
