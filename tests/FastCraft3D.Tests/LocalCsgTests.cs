@@ -1,4 +1,4 @@
-using System.Diagnostics;
+﻿using System.Diagnostics;
 using System.Numerics;
 using FastCraft3D.Geometry;
 using FastCraft3D.Geometry.Csg;
@@ -19,6 +19,35 @@ public class LocalCsgTests(ITestOutputHelper output)
     private static Mesh Bore(Vector3 at, float side, float length) =>
         MeshTransform.Transformed(
             Primitives.Box(side, side, length), Matrix4x4.CreateTranslation(at));
+
+    /// <summary>
+    /// The surface nothing reaches comes back as the same triangles, not only the same shape.
+    ///
+    /// Cutting along the six walls of the working box sliced the whole solid, since a plane has no
+    /// edges: one 1 mm peg socket near the corner of a rounded box moved 279 corners more than 5 mm
+    /// away from it, and every rounded edge came back striped under the light.
+    /// </summary>
+    [Fact]
+    public void ACutMovesNoCornerOfTheSurfaceAwayFromItself()
+    {
+        var box = RoundedPrimitives.RoundedBox(20, 20, 20, 3f, RoundEdges.All, 45);
+        var (top, _) = PlaneSplit.Split(box, Axis.Z, 0f, SplitKeep.Both);
+
+        var socket = MeshTransform.Transformed(Primitives.Prism(0.5f, 6f, 32), Matrix4x4.CreateTranslation(7.9f, 7.9f, 0f));
+        var cut = LocalCsg.Subtract(top!, socket);
+
+        Assert.True(cut.CheckHealth().IsWatertight, "the socket left the half open");
+
+        // Above the working box, the only corners allowed to be new are on triangles that reach down
+        // into it - so within its width of the socket. Before, they ran right round the part.
+        var before = new HashSet<Vector3>(top!.Positions.Where(p => p.Z > 5f));
+        var moved = cut.Positions.Where(p => p.Z > 5f && !before.Contains(p)).ToList();
+        float farthest = moved.Count == 0 ? 0f : moved.Max(p => MathF.Max(MathF.Abs(p.X - 7.9f), MathF.Abs(p.Y - 7.9f)));
+
+        output.WriteLine($"new corners above 5 mm: {moved.Count}, the farthest {farthest:0.###} mm across from the socket");
+        Assert.True(farthest <= 0.5f + 1.5f + 1e-3f, $"a corner {farthest} mm from the socket was moved");
+        Assert.True(moved.Count < 20, $"{moved.Count} corners above the socket were moved");
+    }
 
     [Fact]
     public void ABoreThroughABlockLeavesItClosed()

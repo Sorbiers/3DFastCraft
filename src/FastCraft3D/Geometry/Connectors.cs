@@ -105,7 +105,11 @@ public static class Connectors
     /// <param name="Crosses">False when the direction asked for runs along the cut instead of through it.</param>
     /// <param name="ThickestWall">The thickest the solid gets anywhere on the face, near enough.</param>
     /// <param name="WallNeeded">How thick solid has to be to take one connector with the wall asked for.</param>
-    public sealed record Layout(List<Vector3> Points, bool Crosses, float ThickestWall, float WallNeeded);
+    /// <param name="BreaksOut">
+    /// Whether a connector goes right through a part it enters, so its hole or its end will show on
+    /// the far side. Asked about, not refused: sometimes that is exactly what is wanted.
+    /// </param>
+    public sealed record Layout(List<Vector3> Points, bool Crosses, float ThickestWall, float WallNeeded, bool BreaksOut = false);
 
     /// <summary>How far a peg is sunk into its own half, so the join is inside material rather than on the face.</summary>
     private const float Embed = 1.5f;
@@ -126,7 +130,7 @@ public static class Connectors
     public static Layout Survey(Mesh world, Vector3 normal, float offset, ConnectorOptions options)
     {
         float reach = Reach(normal, options);
-        return Survey([(world, offset), (world, offset + reach), (world, offset - reach)], normal, offset, options);
+        return Survey([(world, offset)], [(world, offset + reach), (world, offset - reach)], normal, offset, options);
     }
 
     /// <summary>
@@ -199,10 +203,8 @@ public static class Connectors
         float deep = Reach(contact.Normal, options);
 
         return Survey(
-            [
-                (front, contact.Offset + reach), (front, contact.Offset + reach + deep),
-                (back, contact.Offset - reach), (back, contact.Offset - reach - deep)
-            ],
+            [(front, contact.Offset + reach), (back, contact.Offset - reach)],
+            [(front, contact.Offset + reach + deep), (back, contact.Offset - reach - deep)],
             contact.Normal, contact.Offset, options);
     }
 
@@ -221,7 +223,8 @@ public static class Connectors
     /// floor resting on a basement, pins go where both have material, which is the walls.
     /// </summary>
     private static Layout Survey(
-        IReadOnlyList<(Mesh Mesh, float Section)> solids, Vector3 normal, float offset, ConnectorOptions options)
+        IReadOnlyList<(Mesh Mesh, float Section)> solids, IReadOnlyList<(Mesh Mesh, float Section)> deep,
+        Vector3 normal, float offset, ConnectorOptions options)
     {
         normal = Vector3.Normalize(normal);
         var axis = Axis(normal, options.Direction);
@@ -330,7 +333,25 @@ public static class Connectors
             if (placed.All(q => Vector2.Distance(q, at) >= apart)) placed.Add(at);
         }
 
-        return new(placed.Select(p => origin + u * p.X + v * p.Y).ToList(), true, 2f * deepest, 2f * needed);
+        // How far down the solid goes is checked, not required. Requiring it refused a 12 mm pin
+        // through a 10 mm half - which was what was asked for - and, reading no part at all that far
+        // down, reported the thickest wall as 0 mm. A pin placed by the room at the face, that then
+        // runs out of material on the way in, is said to break out, and the caller asks.
+        bool breaksOut = false;
+        foreach (var (mesh, section) in deep)
+        {
+            if (breaksOut || placed.Count == 0) break;
+
+            var (_, rings) = PlaneClip.KeepOpen(mesh, Matrix4x4.Identity, normal, section);
+            var loops = rings
+                .Select(r => r.Select(q => new Vector2(Vector3.Dot(q - origin, u), Vector3.Dot(q - origin, v))).ToList())
+                .ToList();
+            var shapes = Polygon2.Nest(loops);
+
+            breaksOut = placed.Any(p => rings.Count == 0 || !Inside(shapes, p) || NearestEdge(loops, p) < hole);
+        }
+
+        return new(placed.Select(p => origin + u * p.X + v * p.Y).ToList(), true, 2f * deepest, 2f * needed, breaksOut);
 
         // How far a point is from the nearest edge of every section it has to be inside, or -1 when
         // it is outside any of them.

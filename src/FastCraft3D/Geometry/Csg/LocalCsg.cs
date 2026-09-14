@@ -107,8 +107,22 @@ public static class LocalCsg
             (Vector3.UnitZ, min.Z), (-Vector3.UnitZ, -max.Z)
         };
 
-        var rest = new List<Mesh>();
-        var middle = solid;
+        // Only the triangles that reach into the box are cut apart; every other triangle goes back
+        // exactly as it was.
+        //
+        // A plane has no edges. Cutting the whole solid along the six walls sliced it right through,
+        // far beyond the tool - one 1 mm peg socket in a rounded box split about four thousand
+        // triangles all the way round the part. The shape did not change, every piece lay on the old
+        // surface, but the shading works from the corners, and the new corners sat in the middle of
+        // what had been smoothly lit triangles: every rounded edge came back striped. Now only the
+        // triangles touching the box are split. Where one of those shares an edge with an untouched
+        // triangle, the split leaves a T-junction on that edge, which the mend at the end closes -
+        // one extra corner on that one edge, not a ring round the part.
+        var (near, far) = Partition(solid, min, max);
+        if (near.TriangleCount == 0) return solid;
+
+        var rest = new List<Mesh> { far };
+        var middle = near;
 
         foreach (var (facing, at) in walls)
         {
@@ -147,6 +161,61 @@ public static class LocalCsg
         // across the piece it was given, so the ring it hands back has corners along it that the
         // piece next door does not - a T-junction at every one, and a boundary edge for each.
         return MeshHealer.Heal(Mesh.Combine(rest), token: token).Mesh;
+    }
+
+    /// <summary>
+    /// The triangles whose box overlaps the working box, and the ones clear of it.
+    ///
+    /// The ones clear of it keep their shared corners exactly as they were, so the part of the
+    /// surface nothing reaches is not merely the same shape but the same triangles.
+    /// </summary>
+    private static (Mesh Near, Mesh Far) Partition(Mesh solid, Vector3 min, Vector3 max)
+    {
+        var near = new Mesh();
+        var farIndices = new List<int>();
+
+        for (int t = 0; t + 2 < solid.Indices.Count; t += 3)
+        {
+            int ia = solid.Indices[t], ib = solid.Indices[t + 1], ic = solid.Indices[t + 2];
+            Vector3 a = solid.Positions[ia], b = solid.Positions[ib], c = solid.Positions[ic];
+
+            Vector3 low = Vector3.Min(a, Vector3.Min(b, c));
+            Vector3 high = Vector3.Max(a, Vector3.Max(b, c));
+
+            bool touches = high.X >= min.X && low.X <= max.X
+                && high.Y >= min.Y && low.Y <= max.Y
+                && high.Z >= min.Z && low.Z <= max.Z;
+
+            if (touches)
+            {
+                near.AddTriangle(a, b, c);
+            }
+            else
+            {
+                farIndices.Add(ia);
+                farIndices.Add(ib);
+                farIndices.Add(ic);
+            }
+        }
+
+        // Compacted to the corners it uses, keeping them shared.
+        var remap = new Dictionary<int, int>();
+        var positions = new List<Vector3>();
+        var indices = new List<int>(farIndices.Count);
+
+        foreach (int i in farIndices)
+        {
+            if (!remap.TryGetValue(i, out int j))
+            {
+                j = positions.Count;
+                positions.Add(solid.Positions[i]);
+                remap[i] = j;
+            }
+
+            indices.Add(j);
+        }
+
+        return (near, new Mesh(positions, indices));
     }
 
     /// <summary>

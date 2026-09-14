@@ -4524,7 +4524,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
                     return new SplitOutcome(front, back, [], 0, false, layout.ThickestWall, layout.WallNeeded);
 
                 return Connectors.Join(front, back, layout.Points, normal, options, token) is { } joined
-                    ? new SplitOutcome(joined.Front, joined.Back, joined.Pins, layout.Points.Count, false, layout.ThickestWall, layout.WallNeeded)
+                    ? new SplitOutcome(joined.Front, joined.Back, joined.Pins, layout.Points.Count, false, layout.ThickestWall, layout.WallNeeded, layout.BreaksOut)
                     : new SplitOutcome(front, back, [], 0, true, layout.ThickestWall, layout.WallNeeded);
             }).ToList());
 
@@ -4550,6 +4550,12 @@ public sealed class MainViewModel : INotifyPropertyChanged
                 return;
             }
 
+            if (joining && halves.Any(h => h.BreaksOut) && !GoThrough(options))
+            {
+                Status = "Nothing was split";
+                return;
+            }
+
             var consumed = new List<SceneObject>();
             var produced = new List<SceneObject>();
             int missed = 0;
@@ -4561,7 +4567,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
             for (int i = 0; i < selection.Count; i++)
             {
                 var source = selection[i];
-                var (front, back, pins, count, refused, _, _) = halves[i];
+                var (front, back, pins, count, refused, _, _, _) = halves[i];
 
                 if (joining && front is not null && back is not null)
                 {
@@ -4740,6 +4746,12 @@ public sealed class MainViewModel : INotifyPropertyChanged
                 return;
             }
 
+            if (layout.BreaksOut && !GoThrough(options))
+            {
+                Status = "Nothing was changed";
+                return;
+            }
+
             if (joined is not { } done)
             {
                 Status = "Connecting would have torn one of the parts - nothing was changed";
@@ -4785,9 +4797,30 @@ public sealed class MainViewModel : INotifyPropertyChanged
         }
     }
 
+    /// <summary>
+    /// Asked when a connector is deeper than a part it goes into is thick.
+    ///
+    /// It used to be refused outright, which was the wrong call: a pin through a lid, a peg standing
+    /// proud of the top, are things people make on purpose. Breaking out of a thin floor by accident
+    /// is worth a question, not a veto.
+    /// </summary>
+    private static bool GoThrough(ConnectorOptions options)
+    {
+        string what = options.Style == ConnectorStyle.Pins ? "pins" : "pegs";
+        string shows = options.Style == ConnectorStyle.Pins
+            ? "the holes will show on its far side"
+            : "the pegs will stand out of its far side, and the sockets go right through";
+
+        return MessageBox.Show(
+            $"The {what} are {options.Depth:0.##} mm deep, which goes right through part of the model - {shows}.\n\n"
+            + "Go ahead?",
+            "3DFastCraft", MessageBoxButton.YesNo, MessageBoxImage.Question) == MessageBoxResult.Yes;
+    }
+
     /// <summary>What one object's split came to: its halves, any pins, and how the connectors went.</summary>
     private sealed record SplitOutcome(
-        Mesh? Front, Mesh? Back, List<Mesh> Pins, int Placed, bool Refused, float Thickest, float WallNeeded);
+        Mesh? Front, Mesh? Back, List<Mesh> Pins, int Placed, bool Refused, float Thickest, float WallNeeded,
+        bool BreaksOut = false);
 
     // --- Files -----------------------------------------------------------------------
 

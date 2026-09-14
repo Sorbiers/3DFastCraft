@@ -272,11 +272,12 @@ public class ConnectorTests
     }
 
     /// <summary>
-    /// A pin needs solid all the way in, not just where it enters. Checking the face alone put holes
-    /// deeper than a thin floor was thick, and they broke out into the room above.
+    /// A pin deeper than the part is thick is placed, and said to break out, so the user is asked
+    /// rather than refused: a pin through a lid is a thing people make on purpose. It was refused
+    /// outright for a while, and a 12 mm pin through a 10 mm half reported a wall of 0 mm.
     /// </summary>
     [Fact]
-    public void AConnectorDeeperThanThePartIsThickIsNotPlaced()
+    public void AConnectorDeeperThanThePartIsThickSaysItBreaksOut()
     {
         var slab = BoxAt(40, 40, 3, new Vector3(0, 0, 11.5f));     // 10 to 13: 3 mm thick
         var block = BoxAt(40, 40, 10, new Vector3(0, 0, 5));      // 0 to 10
@@ -286,8 +287,14 @@ public class ConnectorTests
         var contact = Connectors.SharedFace(block, slab);
         Assert.NotNull(contact);
 
-        Assert.Empty(Connectors.Survey(slabMesh, blockMesh, contact, Pins(2) with { Depth = 6f }).Points);
-        Assert.NotEmpty(Connectors.Survey(slabMesh, blockMesh, contact, Pins(2) with { Depth = 2f }).Points);
+        var through = Connectors.Survey(slabMesh, blockMesh, contact, Pins(2) with { Depth = 6f });
+        Assert.NotEmpty(through.Points);
+        Assert.True(through.BreaksOut);
+        Assert.True(through.ThickestWall > 30f, "the wall was read at the depth rather than at the face");
+
+        var inside = Connectors.Survey(slabMesh, blockMesh, contact, Pins(2) with { Depth = 2f });
+        Assert.NotEmpty(inside.Points);
+        Assert.False(inside.BreaksOut);
     }
 
     [Fact]
