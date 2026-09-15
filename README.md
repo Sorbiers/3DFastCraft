@@ -4,6 +4,8 @@ A small Windows desktop app for building simple printable geometry — a replace
 retired Microsoft 3D Builder. Drop in primitive shapes, size them exactly, cut and combine
 them, and export a clean `.stl` or `.obj` for slicing.
 
+**Website: [3dfastcraft.com](https://3dfastcraft.com/)** · [Download the latest release](https://github.com/Sorbiers/3DFastCraft/releases/latest)
+
 > *In loving memory of Windows 3D Builder. Rest in peace.*
 
 
