@@ -542,7 +542,8 @@ public sealed class MainViewModel : INotifyPropertyChanged
         float ratio = millimetres / now;
         if (MathF.Abs(ratio - 1f) < 1e-4f) return;
 
-        float anchor = Along(GroupCentre(), axis);
+        var centre = GroupCentre();
+        float anchor = Along(centre, axis);
 
         foreach (var o in Scene.Selection)
         {
@@ -557,12 +558,19 @@ public sealed class MainViewModel : INotifyPropertyChanged
                 };
 
             var at = o.Position;
-            o.Position = axis switch
-            {
-                Axis.X => at with { X = GizmoMath.ScaledAbout(anchor, at.X, ratio) },
-                Axis.Y => at with { Y = GizmoMath.ScaledAbout(anchor, at.Y, ratio) },
-                _ => at with { Z = GizmoMath.ScaledAbout(anchor, at.Z, ratio) }
-            };
+
+            // With the lock on, every part grows on all three axes, so the gaps have to grow on
+            // all three as well - as they do when a handle is dragged. Moving the parts along the
+            // typed axis alone left them growing into one another, and the lot came out the wrong
+            // size on the other two, which read as every part being resized where it stood.
+            o.Position = UniformScale
+                ? centre + (at - centre) * ratio
+                : axis switch
+                {
+                    Axis.X => at with { X = GizmoMath.ScaledAbout(anchor, at.X, ratio) },
+                    Axis.Y => at with { Y = GizmoMath.ScaledAbout(anchor, at.Y, ratio) },
+                    _ => at with { Z = GizmoMath.ScaledAbout(anchor, at.Z, ratio) }
+                };
         }
 
         RaiseGroup();

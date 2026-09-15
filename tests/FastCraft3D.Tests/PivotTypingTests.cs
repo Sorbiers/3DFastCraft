@@ -1,4 +1,4 @@
-﻿using System.Numerics;
+using System.Numerics;
 using System.Runtime.ExceptionServices;
 using FastCraft3D.Geometry;
 using FastCraft3D.Model;
@@ -102,6 +102,27 @@ public class PivotTypingTests
 
             Assert.Equal(24f, b.PositionX, 2);
             Assert.Equal(12f, b.SizeX, 2);
+        });
+    }
+
+    /// <summary>
+    /// The lock scales a part on every axis, so as one it has to spread them on every axis too.
+    /// Typing a width moved them along X alone: the parts grew into each other and the lot came
+    /// out the wrong depth and height, which looked as though each had been resized where it stood.
+    /// </summary>
+    [Fact]
+    public void AsOneALockedSizeSpreadsThePartsOnEveryAxis()
+    {
+        WithTwo((model, a, b) =>
+        {
+            b.Position = new Vector3(20, 0, 30);
+            model.UniformScale = true;
+
+            float depth = model.GroupSizeY, height = model.GroupSizeZ;
+            model.GroupSizeX *= 2f;
+
+            Assert.Equal(depth * 2f, model.GroupSizeY, 2);
+            Assert.Equal(height * 2f, model.GroupSizeZ, 2);
         });
     }
 
