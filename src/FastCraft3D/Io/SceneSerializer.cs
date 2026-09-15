@@ -1,4 +1,4 @@
-﻿using System.IO;
+using System.IO;
 using System.IO.Compression;
 using System.Numerics;
 using System.Text.Json;
@@ -12,6 +12,12 @@ namespace FastCraft3D.Io;
 /// <param name="SavedUtc">When it was kept.</param>
 /// <param name="ObjectCount">How many objects it holds, for the picker.</param>
 public readonly record struct SceneVersion(string Label, DateTime SavedUtc, int ObjectCount);
+
+/// <summary>How the project is looked at and measured: none of it touches the geometry.</summary>
+/// <param name="PlateSize">The printer's bed, in millimetres.</param>
+/// <param name="Unit">What the boxes read in - "mm", "in" and so on.</param>
+/// <param name="ModelScale">87 for a model drawn at 1:87.</param>
+public readonly record struct ProjectSettings(float PlateSize, string Unit, float ModelScale);
 
 /// <summary>
 /// The project format (.3dfc): GZip-compressed JSON.
@@ -40,20 +46,22 @@ public static class SceneSerializer
     };
 
     /// <summary>Writes the scene as the current state, leaving any kept versions untouched.</summary>
-    public static void Save(string path, Scene scene)
+    public static void Save(string path, Scene scene, ProjectSettings? settings = null)
     {
         var dto = ReadIfPresent(path) ?? new SceneDto();
         dto.Version = CurrentVersion;
         dto.Objects = scene.Objects.Select(ToDto).ToList();
+        Keep(dto, settings);
         Write(path, dto);
     }
 
     /// <summary>Keeps a labelled snapshot in the file, and saves the scene as current.</summary>
-    public static void SaveVersion(string path, Scene scene, string label)
+    public static void SaveVersion(string path, Scene scene, string label, ProjectSettings? settings = null)
     {
         var dto = ReadIfPresent(path) ?? new SceneDto();
         dto.Version = CurrentVersion;
         dto.Objects = scene.Objects.Select(ToDto).ToList();
+        Keep(dto, settings);
 
         (dto.Versions ??= []).Add(new VersionDto
         {
@@ -65,7 +73,29 @@ public static class SceneSerializer
         Write(path, dto);
     }
 
-    public static List<SceneObject> Load(string path) => Read(path).Objects?.Select(FromDto).ToList() ?? [];
+    public static List<SceneObject> Load(string path) => Load(path, out _);
+
+    /// <summary>
+    /// The scene, and the bed, unit and scale it was saved with - null for a file from before
+    /// they were kept, which then opens with whatever is set now.
+    /// </summary>
+    public static List<SceneObject> Load(string path, out ProjectSettings? settings)
+    {
+        var dto = Read(path);
+        settings = dto.PlateSize is { } plate && dto.Unit is { } unit && dto.ModelScale is { } scale
+            ? new ProjectSettings(plate, unit, scale)
+            : null;
+        return dto.Objects?.Select(FromDto).ToList() ?? [];
+    }
+
+    /// <summary>Settings given are written; none given leaves what the file already held.</summary>
+    private static void Keep(SceneDto dto, ProjectSettings? settings)
+    {
+        if (settings is not { } s) return;
+        dto.PlateSize = s.PlateSize;
+        dto.Unit = s.Unit;
+        dto.ModelScale = s.ModelScale;
+    }
 
     /// <summary>The versions kept in a file, oldest first.</summary>
     public static List<SceneVersion> ReadVersions(string path)
@@ -231,6 +261,12 @@ public static class SceneSerializer
         public int Version { get; set; }
         public List<ObjectDto>? Objects { get; set; }
         public List<VersionDto>? Versions { get; set; }
+
+        // Added without a format bump: a file without them still reads, and an older copy of
+        // the app skips names it does not know.
+        public float? PlateSize { get; set; }
+        public string? Unit { get; set; }
+        public float? ModelScale { get; set; }
     }
 
     private sealed class VersionDto

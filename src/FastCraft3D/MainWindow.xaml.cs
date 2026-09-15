@@ -1,4 +1,4 @@
-﻿using System.ComponentModel;
+using System.ComponentModel;
 using System.Diagnostics;
 using System.Globalization;
 using System.IO;
@@ -71,6 +71,12 @@ public partial class MainWindow : Window
         InitializeComponent();
         DataContext = viewModel;
 
+        // Before the plate is first drawn, or it is drawn at the default size and then redrawn.
+        if (LocalSettings.Load() is { } remembered) viewModel.ApplySettings(remembered);
+        viewModel.SettingsChanged += () => LocalSettings.Save(viewModel.Remembered);
+
+        ToolPanel.Host = viewModel.ShowPanel;
+
         EffectsManager = new DefaultEffectsManager();
         View.EffectsManager = EffectsManager;
         View.Camera = CreateCamera();
@@ -85,6 +91,7 @@ public partial class MainWindow : Window
         viewModel.MeasureChanged += () => measure.Show(viewModel.MeasureFrom, viewModel.MeasureTo);
 
         viewModel.EngraveFaceChanged += ShowFacePreview;
+        viewModel.RestingFacesChanged += () => renderer?.ShowRestingFaces(viewModel.RestingFaceList, viewModel.RestingHover);
 
         listSync = new SelectionListSync(ObjectList, viewModel.Scene);
         listSync.ChangedFromList += viewModel.RefreshSelection;
@@ -187,7 +194,21 @@ public partial class MainWindow : Window
 
         // The last chance to save: this is the only path where unsaved work would vanish
         // without the user having asked for anything.
-        Closing += (_, e) => e.Cancel = !viewModel.ConfirmDiscardChanges();
+        Closing += (_, e) =>
+        {
+            // A tool's panel is waiting in the middle of its command, and closing under it would
+            // run the rest of that command against a window already torn down. The tool is put
+            // down first, and the close asked for again once it has let go.
+            if (ToolPanel.Open is { } panel)
+            {
+                e.Cancel = true;
+                panel.DialogResult = false;
+                Dispatcher.BeginInvoke(new Action(Close));
+                return;
+            }
+
+            e.Cancel = !viewModel.ConfirmDiscardChanges();
+        };
 
         Closed += (_, _) =>
         {
@@ -672,6 +693,17 @@ public partial class MainWindow : Window
         pendingClear = false;
         pressScreen = screen;
 
+        // A tool's panel leaves the viewport live for looking round its preview, not for picking:
+        // a click that changed the selection would change what the tool is working on.
+        if (viewModel.HasOpenPanel) return;
+
+        if (viewModel.IsLayMode && SightLine(screen) is var (origin, direction)
+            && viewModel.LayOnRestingFace(origin, direction))
+        {
+            e.Handled = true;
+            return;
+        }
+
         if (target is null)
         {
             // With sticky selection on, empty space never changes anything. With it off, a
@@ -841,6 +873,10 @@ public partial class MainWindow : Window
 
     private void OnViewportMove(object sender, MouseEventArgs e)
     {
+        if (viewModel.IsLayMode && e.LeftButton != MouseButtonState.Pressed
+            && SightLine(e.GetPosition(View)) is var (origin, direction))
+            viewModel.HoverRestingFace(origin, direction);
+
         if (dragTarget is null || e.LeftButton != MouseButtonState.Pressed) return;
 
         var screen = e.GetPosition(View);
@@ -955,6 +991,14 @@ public partial class MainWindow : Window
     }
 
     private static Vector3 ToVector3(SharpDXVector3 v) => new(v.X, v.Y, v.Z);
+
+    /// <summary>The line from the eye through a point on the screen, in world space.</summary>
+    private (Vector3 Origin, Vector3 Direction)? SightLine(Point screen)
+    {
+        var ray = View.UnProject(new SharpDXVector2((float)screen.X, (float)screen.Y));
+        var direction = ToVector3(ray.Direction);
+        return direction.LengthSquared() < 1e-12f ? null : (ToVector3(ray.Position), Vector3.Normalize(direction));
+    }
 
     private static bool IsControlDown => Keyboard.Modifiers.HasFlag(ModifierKeys.Control);
     private static bool IsShiftDown => Keyboard.Modifiers.HasFlag(ModifierKeys.Shift);

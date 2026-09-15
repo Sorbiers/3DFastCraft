@@ -1,4 +1,4 @@
-﻿using System.Collections.Specialized;
+using System.Collections.Specialized;
 using System.ComponentModel;
 using System.Numerics;
 using System.Windows;
@@ -64,6 +64,8 @@ public sealed class SceneRenderer : IDisposable
     private MeshGeometryModel3D? faceHighlight;
     private LineGeometryModel3D? faceOutline;
     private MeshGeometryModel3D? facePreview;
+    private MeshGeometryModel3D? restingShown;
+    private MeshGeometryModel3D? restingHovered;
 
     public SceneRenderer(GroupModel3D root, Scene scene)
     {
@@ -153,6 +155,64 @@ public sealed class SceneRenderer : IDisposable
         root.Children.Add(faceOutline);
 
         ShowPreview(face, preview, overlay);
+    }
+
+    /// <summary>
+    /// Marks the faces an object can be laid on, pale, with the one under the pointer in the
+    /// highlight blue.
+    ///
+    /// Each is drawn shrunk towards its middle and a hair off the surface. Shrunk, two faces meeting
+    /// at a shallow angle read as two patches rather than one sheet; lifted, a face does not fight
+    /// the model's own for the same pixels.
+    /// </summary>
+    public void ShowRestingFaces(IReadOnlyList<RestingFace> faces, int hovered)
+    {
+        foreach (var shown in new[] { restingShown, restingHovered })
+        {
+            if (shown is null) continue;
+            root.Children.Remove(shown);
+            shown.Dispose();
+        }
+        restingShown = restingHovered = null;
+
+        if (faces.Count == 0) return;
+
+        var pale = new Mesh();
+        var lit = new Mesh();
+        for (int i = 0; i < faces.Count; i++)
+        {
+            var face = faces[i];
+            var into = i == hovered ? lit : pale;
+            var lift = face.Normal * 0.08f;
+            for (int t = 0; t + 2 < face.Triangles.Count; t += 3)
+                into.AddTriangle(Drawn(face.Triangles[t]), Drawn(face.Triangles[t + 1]), Drawn(face.Triangles[t + 2]));
+
+            Vector3 Drawn(Vector3 corner) => face.Centre + (corner - face.Centre) * RestingFaces.DrawnShare + lift;
+        }
+
+        restingShown = Patches(pale, new SharpDX.Color4(1f, 1f, 1f, 0.5f));
+        restingHovered = Patches(lit, new SharpDX.Color4(0.20f, 0.62f, 1f, 0.75f));
+
+        MeshGeometryModel3D? Patches(Mesh mesh, SharpDX.Color4 colour)
+        {
+            if (mesh.TriangleCount == 0) return null;
+
+            var model = new MeshGeometryModel3D
+            {
+                Geometry = MeshConverter.ToGeometry(mesh),
+                Material = new PhongMaterial
+                {
+                    DiffuseColor = colour,
+                    AmbientColor = new SharpDX.Color4(colour.Red * 0.5f, colour.Green * 0.5f, colour.Blue * 0.5f, 1f),
+                    SpecularColor = new SharpDX.Color4(0, 0, 0, 1)
+                },
+                IsTransparent = true,
+                CullMode = SharpDX.Direct3D11.CullMode.None,
+                IsHitTestVisible = false
+            };
+            root.Children.Add(model);
+            return model;
+        }
     }
 
     /// <summary>

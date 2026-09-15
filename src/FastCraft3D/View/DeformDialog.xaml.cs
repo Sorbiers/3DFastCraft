@@ -28,7 +28,7 @@ public sealed record DeformSpec(
 /// value over a dense part breaks a great many edges, and doing that on every step of a dragged
 /// slider made the slider stick.
 /// </summary>
-public partial class DeformDialog : Window
+public partial class DeformDialog : ToolPanel
 {
     private readonly DeformSpec spec;
     private readonly IReadOnlyList<Mesh> worlds;

@@ -11,7 +11,7 @@ namespace FastCraft3D.View;
 /// Boxes that mean nothing for the chosen shape are greyed rather than hidden, so the dialog does
 /// not jump about as the shape changes and it is plain what each shape takes.
 /// </summary>
-public partial class CustomShapeDialog : Window
+public partial class CustomShapeDialog : ToolPanel
 {
     private readonly Action<Mesh?> preview;
     private readonly Action<bool> wireframe;
@@ -77,16 +77,16 @@ public partial class CustomShapeDialog : Window
 
         SegmentsBox.IsEnabled = shape.UsesSegments;
         SegmentsNote.Text = shape.Kind == PrimitiveKind.Cube
-            ? "round each rounded edge"
-            : $"round the circumference, {CustomShape.MinimumSegments} to {CustomShape.MaximumSegments}";
+            ? "per edge"
+            : $"{CustomShape.MinimumSegments} to {CustomShape.MaximumSegments}";
 
         RingsBox.IsEnabled = shape.UsesRings;
         RingsNote.Text = shape.Kind == PrimitiveKind.Torus ? "round the tube" : "pole to pole";
 
         RoundnessBox.IsEnabled = shape.CanRound;
-        RoundnessNote.Text = shape.CanRound ? $"mm, up to {sane.MaximumRoundness:0.##}" : "only a cube or cylinder";
+        RoundnessNote.Text = shape.CanRound ? $"mm, up to {sane.MaximumRoundness:0.##}" : "cube or cylinder";
 
-        HeightNote.Text = shape.Kind == PrimitiveKind.Torus ? "mm, the thickness of the ring" : "mm, along Z";
+        HeightNote.Text = shape.Kind == PrimitiveKind.Torus ? "mm thick" : "mm";
 
         var mesh = sane.Build();
         preview(mesh);

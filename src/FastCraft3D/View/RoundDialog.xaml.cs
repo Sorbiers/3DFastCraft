@@ -1,4 +1,4 @@
-﻿using System.Globalization;
+using System.Globalization;
 using System.Numerics;
 using System.Windows;
 using System.Windows.Controls;
@@ -14,7 +14,7 @@ namespace FastCraft3D.View;
 /// It reports the largest radius each shape allows, because past that a box is simply a sphere
 /// and the number stops meaning anything.
 /// </summary>
-public partial class RoundDialog : Window
+public partial class RoundDialog : ToolPanel
 {
     private readonly IReadOnlyList<SceneObject> subjects;
     private readonly Action<IReadOnlyList<Mesh>?> preview;
@@ -204,7 +204,7 @@ public partial class RoundDialog : Window
         var edges = SelectedEdges();
         if (edges == RoundEdges.None)
         {
-            MessageBox.Show(this, "Choose at least one group of edges to round.",
+            MessageBox.Show("Choose at least one group of edges to round.",
                 "Round edges", MessageBoxButton.OK, MessageBoxImage.Information);
             return;
         }

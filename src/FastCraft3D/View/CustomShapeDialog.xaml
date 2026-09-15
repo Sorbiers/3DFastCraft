@@ -1,76 +1,76 @@
-<Window x:Class="FastCraft3D.View.CustomShapeDialog"
-        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="Custom shape" SizeToContent="Height" Width="430"
-        WindowStartupLocation="CenterOwner" ResizeMode="NoResize"
-        ShowInTaskbar="False" Background="#FFF7F7F8">
+<view:ToolPanel x:Class="FastCraft3D.View.CustomShapeDialog"
+                xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                xmlns:view="clr-namespace:FastCraft3D.View"
+                Title="Custom shape">
 
-    <StackPanel Margin="18,14,18,14">
+    <StackPanel>
         <TextBlock Text="A shape with its size and smoothness chosen before it is made. The preview is on the plate."
-                   TextWrapping="Wrap" Foreground="#FF33383F" Margin="0,0,0,14" />
+                   TextWrapping="Wrap" Foreground="#FF3A4550" Margin="0,0,0,8" />
 
-        <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
-            <TextBlock Text="Shape" VerticalAlignment="Center" Foreground="#FF5A5F66" Width="86" />
+        <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
+            <TextBlock Text="Shape" Style="{DynamicResource FieldLabel}" Width="70" />
             <ComboBox x:Name="KindBox" Width="120" SelectionChanged="OnKindChanged"
                       AutomationProperties.AutomationId="CustomKind" />
         </StackPanel>
 
-        <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
-            <TextBlock Text="Width" VerticalAlignment="Center" Foreground="#FF5A5F66" Width="86" />
-            <TextBox x:Name="WidthBox" Width="70" Padding="4,3" TextChanged="OnChanged"
+        <StackPanel Orientation="Horizontal">
+            <TextBlock Text="Width" Style="{DynamicResource FieldLabel}" Width="70" ToolTip="Along X" />
+            <TextBox x:Name="WidthBox" Width="60" Style="{DynamicResource NumberBox}" TextChanged="OnChanged"
                      AutomationProperties.AutomationId="CustomWidth" />
-            <TextBlock Text="mm, along X" VerticalAlignment="Center" Foreground="#FF9AA0A8" Margin="8,0,0,0" />
+            <TextBlock Text="mm" Foreground="#FF9AA0A8" VerticalAlignment="Center" />
         </StackPanel>
 
-        <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
-            <TextBlock Text="Depth" VerticalAlignment="Center" Foreground="#FF5A5F66" Width="86" />
-            <TextBox x:Name="DepthBox" Width="70" Padding="4,3" TextChanged="OnChanged"
+        <StackPanel Orientation="Horizontal">
+            <TextBlock Text="Depth" Style="{DynamicResource FieldLabel}" Width="70" ToolTip="Along Y" />
+            <TextBox x:Name="DepthBox" Width="60" Style="{DynamicResource NumberBox}" TextChanged="OnChanged"
                      AutomationProperties.AutomationId="CustomDepth" />
-            <TextBlock Text="mm, along Y" VerticalAlignment="Center" Foreground="#FF9AA0A8" Margin="8,0,0,0" />
+            <TextBlock Text="mm" Foreground="#FF9AA0A8" VerticalAlignment="Center" />
         </StackPanel>
 
-        <StackPanel Orientation="Horizontal" Margin="0,0,0,12">
-            <TextBlock x:Name="HeightLabel" Text="Height" VerticalAlignment="Center" Foreground="#FF5A5F66" Width="86" />
-            <TextBox x:Name="HeightBox" Width="70" Padding="4,3" TextChanged="OnChanged"
+        <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
+            <TextBlock x:Name="HeightLabel" Text="Height" Style="{DynamicResource FieldLabel}" Width="70"
+                       ToolTip="Along Z. For a ring, the thickness of the ring." />
+            <TextBox x:Name="HeightBox" Width="60" Style="{DynamicResource NumberBox}" TextChanged="OnChanged"
                      AutomationProperties.AutomationId="CustomHeight" />
-            <TextBlock x:Name="HeightNote" Text="mm, along Z" VerticalAlignment="Center" Foreground="#FF9AA0A8" Margin="8,0,0,0" />
+            <TextBlock x:Name="HeightNote" Text="mm" Foreground="#FF9AA0A8" VerticalAlignment="Center" />
         </StackPanel>
 
-        <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
-            <TextBlock Text="Segments" VerticalAlignment="Center" Foreground="#FF5A5F66" Width="86" />
-            <TextBox x:Name="SegmentsBox" Width="70" Padding="4,3" TextChanged="OnChanged"
+        <StackPanel Orientation="Horizontal">
+            <TextBlock Text="Segments" Style="{DynamicResource FieldLabel}" Width="70"
+                       ToolTip="How many flat sides make up a curve: round the circumference, or round each rounded edge of a cube." />
+            <TextBox x:Name="SegmentsBox" Width="60" Style="{DynamicResource NumberBox}" TextChanged="OnChanged"
                      AutomationProperties.AutomationId="CustomSegments" />
-            <TextBlock x:Name="SegmentsNote" Text="round the circumference" VerticalAlignment="Center"
-                       Foreground="#FF9AA0A8" Margin="8,0,0,0" />
+            <TextBlock x:Name="SegmentsNote" Foreground="#FF9AA0A8" VerticalAlignment="Center" />
+        </StackPanel>
+
+        <StackPanel Orientation="Horizontal">
+            <TextBlock x:Name="RingsLabel" Text="Rings" Style="{DynamicResource FieldLabel}" Width="70"
+                       ToolTip="Pole to pole on a sphere, round the tube on a ring." />
+            <TextBox x:Name="RingsBox" Width="60" Style="{DynamicResource NumberBox}" TextChanged="OnChanged"
+                     AutomationProperties.AutomationId="CustomRings" />
+            <TextBlock x:Name="RingsNote" Foreground="#FF9AA0A8" VerticalAlignment="Center" />
         </StackPanel>
 
         <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
-            <TextBlock x:Name="RingsLabel" Text="Rings" VerticalAlignment="Center" Foreground="#FF5A5F66" Width="86" />
-            <TextBox x:Name="RingsBox" Width="70" Padding="4,3" TextChanged="OnChanged"
-                     AutomationProperties.AutomationId="CustomRings" />
-            <TextBlock x:Name="RingsNote" Text="pole to pole" VerticalAlignment="Center"
-                       Foreground="#FF9AA0A8" Margin="8,0,0,0" />
-        </StackPanel>
-
-        <StackPanel Orientation="Horizontal" Margin="0,0,0,12">
-            <TextBlock Text="Roundness" VerticalAlignment="Center" Foreground="#FF5A5F66" Width="86" />
-            <TextBox x:Name="RoundnessBox" Width="70" Padding="4,3" TextChanged="OnChanged"
+            <TextBlock Text="Roundness" Style="{DynamicResource FieldLabel}" Width="70"
+                       ToolTip="The radius of the rounded edges. Only a cube or a cylinder has edges to round." />
+            <TextBox x:Name="RoundnessBox" Width="60" Style="{DynamicResource NumberBox}" TextChanged="OnChanged"
                      AutomationProperties.AutomationId="CustomRoundness" />
-            <TextBlock x:Name="RoundnessNote" VerticalAlignment="Center" Foreground="#FF9AA0A8" Margin="8,0,0,0" />
+            <TextBlock x:Name="RoundnessNote" Foreground="#FF9AA0A8" VerticalAlignment="Center" />
         </StackPanel>
 
-        <CheckBox x:Name="WireframeBox" Content="Show the triangles" Margin="0,0,0,4"
+        <CheckBox x:Name="WireframeBox" Content="Show the triangles"
                   Checked="OnWireframeChanged" Unchecked="OnWireframeChanged" />
 
-        <Border Margin="0,10,0,0" Padding="10,8" CornerRadius="3"
-                Background="#FFEFF1F4" BorderBrush="#FFDDE0E4" BorderThickness="1">
+        <Border Margin="0,8,0,0" Padding="8,6" CornerRadius="3"
+                Background="White" BorderBrush="#FFD5DEEA" BorderThickness="1">
             <TextBlock x:Name="SummaryText" TextWrapping="Wrap" Foreground="#FF3A3F45" />
         </Border>
 
-        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,18,0,0">
-            <Button Content="Add" IsDefault="True" Click="OnAccept"
-                    MinWidth="88" Padding="10,6" Margin="0,0,8,0" />
-            <Button Content="Cancel" IsCancel="True" MinWidth="80" Padding="10,6" />
+        <StackPanel Orientation="Horizontal" Margin="0,10,0,0">
+            <Button Content="Add" Style="{DynamicResource PanelButton}" Click="OnAccept" />
+            <Button Content="Cancel" Style="{DynamicResource PanelButton}" IsCancel="True" />
         </StackPanel>
     </StackPanel>
-</Window>
+</view:ToolPanel>

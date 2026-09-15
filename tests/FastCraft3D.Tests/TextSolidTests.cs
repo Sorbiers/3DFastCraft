@@ -1,4 +1,4 @@
-﻿using System.Numerics;
+using System.Numerics;
 using System.Runtime.ExceptionServices;
 using FastCraft3D.Geometry;
 using FastCraft3D.Geometry.Csg;
@@ -195,6 +195,39 @@ public class GlyphOutlineTests
 
             Assert.Equal(0f, (all.Max(p => p.X) + all.Min(p => p.X)) / 2, 1);
             Assert.Equal(0f, (all.Max(p => p.Y) + all.Min(p => p.Y)) / 2, 1);
+        });
+    }
+
+    /// <summary>In millimetres after every letter, so four letters grow by three gaps.</summary>
+    [Fact]
+    public void SpacingWidensTheLetteringByAGapBetweenEachLetter()
+    {
+        RunSta(() =>
+        {
+            static float Width(float spacing)
+            {
+                var all = GlyphOutlines.Build("AVIO", "Arial", 10f, false, spacingMm: spacing).SelectMany(g => g.Outline).ToList();
+                return all.Max(p => p.X) - all.Min(p => p.X);
+            }
+
+            Assert.Equal(Width(0f) + 6f, Width(2f), 1);
+            Assert.Equal(Width(0f), Width(1e-4f), 1);
+        });
+    }
+
+    [Fact]
+    public void ItalicLettersLeanOver()
+    {
+        RunSta(() =>
+        {
+            static float TopMinusBottom(bool italic)
+            {
+                var all = GlyphOutlines.Build("I", "Arial", 10f, false, italic).SelectMany(g => g.Outline).ToList();
+                return all.Where(p => p.Y > 4f).Average(p => p.X) - all.Where(p => p.Y < -4f).Average(p => p.X);
+            }
+
+            Assert.Equal(0f, TopMinusBottom(false), 1);
+            Assert.True(TopMinusBottom(true) > 1f);
         });
     }
 

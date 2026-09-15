@@ -15,7 +15,7 @@ namespace FastCraft3D.View;
 /// hundreds of thousands of edge collapses, which is a second or two of work rather than the
 /// instant a slider needs, so it happens once when the dialog is accepted.
 /// </summary>
-public partial class SimplifyDialog : Window
+public partial class SimplifyDialog : ToolPanel
 {
     private readonly int triangles;
 

@@ -1,4 +1,4 @@
-﻿using System.Globalization;
+using System.Globalization;
 using System.Numerics;
 using System.Windows;
 using FastCraft3D.Geometry;
@@ -13,7 +13,7 @@ namespace FastCraft3D.View;
 /// prompt: which way the part comes out, how much of it is undercut, and where the air will sit.
 /// Everything below it is the arrangement, and the recommendation is only the starting position.
 /// </summary>
-public partial class MouldDialog : Window
+public partial class MouldDialog : ToolPanel
 {
     private readonly MouldStudy study;
     private readonly int triangles;

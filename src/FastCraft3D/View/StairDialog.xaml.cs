@@ -18,7 +18,7 @@ public readonly record struct StairSettings(float Rise, float Run, float Width, 
 /// arithmetic nobody should be doing on paper, so the dialog does it and reports in real
 /// millimetres as the numbers are typed.
 /// </summary>
-public partial class StairDialog : Window
+public partial class StairDialog : ToolPanel
 {
     private readonly float scale;
 

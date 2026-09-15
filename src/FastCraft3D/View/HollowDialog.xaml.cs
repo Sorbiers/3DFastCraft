@@ -1,4 +1,4 @@
-﻿using System.Globalization;
+using System.Globalization;
 using System.Windows;
 using System.Windows.Controls;
 using FastCraft3D.Geometry;
@@ -19,7 +19,7 @@ public readonly record struct HollowSettings(float WallMm, int Resolution, OpenS
 /// letting someone ask for a 0.5 mm wall at a resolution that can only place it to the nearest
 /// millimetre.
 /// </summary>
-public partial class HollowDialog : Window
+public partial class HollowDialog : ToolPanel
 {
     private readonly float longestSideMm;
     private readonly float thinnestMm;

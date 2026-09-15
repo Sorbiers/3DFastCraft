@@ -1,4 +1,4 @@
-﻿using System.Globalization;
+using System.Globalization;
 using System.Windows;
 using System.Windows.Controls;
 using FastCraft3D.Geometry;
@@ -14,7 +14,7 @@ namespace FastCraft3D.View;
 /// the cost - but says the millimetres, because that is what tells someone whether their
 /// lettering is about to disappear.
 /// </summary>
-public partial class RebuildDialog : Window
+public partial class RebuildDialog : ToolPanel
 {
     private readonly float longestSideMm;
     private readonly float surfaceAreaMm2;

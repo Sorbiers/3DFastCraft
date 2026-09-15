@@ -34,6 +34,50 @@ public class SceneVersionTests : IDisposable
     }
 
     [Fact]
+    public void TheBedUnitAndScaleComeBackWithTheScene()
+    {
+        string path = File_("settings.3dfc");
+        SceneSerializer.Save(path, SceneWith("A"), new ProjectSettings(250f, "in", 87f));
+
+        SceneSerializer.Load(path, out var settings);
+
+        Assert.Equal(new ProjectSettings(250f, "in", 87f), settings);
+    }
+
+    [Fact]
+    public void SavingWithoutSettingsKeepsTheOnesTheFileHad()
+    {
+        string path = File_("kept-settings.3dfc");
+        SceneSerializer.Save(path, SceneWith("A"), new ProjectSettings(300f, "cm", 12f));
+        SceneSerializer.SaveVersion(path, SceneWith("A", "B"), "later");
+
+        SceneSerializer.Load(path, out var settings);
+
+        Assert.Equal(new ProjectSettings(300f, "cm", 12f), settings);
+    }
+
+    [Fact]
+    public void AFileFromBeforeSettingsWereKeptHasNone()
+    {
+        string path = File_("old.3dfc");
+        SceneSerializer.Save(path, SceneWith("A"));
+
+        Assert.Single(SceneSerializer.Load(path, out var settings));
+        Assert.Null(settings);
+    }
+
+    [Fact]
+    public void LocalSettingsAreRememberedAndADamagedFileIsIgnored()
+    {
+        string store = File_("settings.json");
+        LocalSettings.Save(new RememberedSettings(220f, "in"), store);
+        Assert.Equal(new RememberedSettings(220f, "in"), LocalSettings.Load(store));
+
+        File.WriteAllText(store, "{ not json");
+        Assert.Null(LocalSettings.Load(store));
+    }
+
+    [Fact]
     public void AFreshFileHasNoVersions()
     {
         string path = File_("plain.3dfc");

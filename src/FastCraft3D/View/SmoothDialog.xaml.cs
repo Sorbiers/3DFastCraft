@@ -1,4 +1,4 @@
-﻿using System.Windows;
+using System.Windows;
 using FastCraft3D.Geometry;
 using FastCraft3D.Model;
 
@@ -24,7 +24,7 @@ public readonly record struct SmoothSettings(int Passes, int Levels, bool MoveRi
 /// The result appears in the viewport as the sliders move, because the only reliable way to
 /// judge smoothing is to look at it.
 /// </summary>
-public partial class SmoothDialog : Window
+public partial class SmoothDialog : ToolPanel
 {
     private readonly IReadOnlyList<SceneObject> targets;
     private readonly List<Mesh> originals;

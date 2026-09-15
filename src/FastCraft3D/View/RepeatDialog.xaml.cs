@@ -1,4 +1,4 @@
-﻿using System.Globalization;
+using System.Globalization;
 using System.Numerics;
 using System.Windows;
 using FastCraft3D.Model;
@@ -16,7 +16,7 @@ namespace FastCraft3D.View;
 /// One dialog rather than two commands, because it is the same idea either way - make N copies,
 /// arranged - and only the fields differ.
 /// </summary>
-public partial class RepeatDialog : Window
+public partial class RepeatDialog : ToolPanel
 {
     private readonly IReadOnlyList<SceneObject> subjects;
 

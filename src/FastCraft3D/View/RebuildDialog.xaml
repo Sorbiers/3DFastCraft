@@ -1,38 +1,37 @@
-<Window x:Class="FastCraft3D.View.RebuildDialog"
-        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="Rebuild surface" SizeToContent="Height" Width="430"
-        WindowStartupLocation="CenterOwner" ResizeMode="NoResize"
-        ShowInTaskbar="False" Background="#FFF7F7F8">
+<view:ToolPanel x:Class="FastCraft3D.View.RebuildDialog"
+                xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                xmlns:view="clr-namespace:FastCraft3D.View"
+                Title="Rebuild surface">
 
-    <StackPanel Margin="18,14,18,14">
-        <TextBlock TextWrapping="Wrap" Foreground="#FF33383F" Margin="0,0,0,12">
+    <StackPanel>
+        <TextBlock TextWrapping="Wrap" Foreground="#FF3A4550" Margin="0,0,0,8">
             Rebuilds the surface from scratch by working out what is inside the model and what is
             outside, rather than by mending the triangles. It fixes anything - including a model
             whose surface passes through itself, which nothing else here can touch.
         </TextBlock>
 
-        <TextBlock x:Name="SubjectText" TextWrapping="Wrap" Foreground="#FF5A5F66" Margin="0,0,0,12" />
+        <TextBlock x:Name="SubjectText" TextWrapping="Wrap" Foreground="#FF5A5F66" Margin="0,0,0,8" />
 
-        <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
-            <TextBlock Text="Detail" VerticalAlignment="Center" Foreground="#FF5A5F66" Margin="0,0,8,0" />
-            <TextBox x:Name="ResolutionBox" Width="64" Padding="4,3" HorizontalContentAlignment="Right"
+        <StackPanel Orientation="Horizontal">
+            <TextBlock Text="Detail" Style="{DynamicResource FieldLabel}" Width="62"
+                       ToolTip="Voxels across the model. The smallest feature that survives is one voxel." />
+            <TextBox x:Name="ResolutionBox" Width="64" Style="{DynamicResource NumberBox}"
                      TextChanged="OnResolutionTyped" />
-            <TextBlock Text="voxels across" VerticalAlignment="Center" Foreground="#FF9AA0A8" Margin="6,0,0,0" />
+            <TextBlock Text="voxels" Foreground="#FF9AA0A8" VerticalAlignment="Center" />
         </StackPanel>
 
         <Slider x:Name="ResolutionSlider" TickFrequency="8" IsSnapToTickEnabled="True"
-                ValueChanged="OnResolutionDragged" />
+                ValueChanged="OnResolutionDragged" Margin="0,4,0,0" />
 
-        <Border Margin="0,14,0,0" Padding="10,8" CornerRadius="3"
+        <Border Margin="0,8,0,0" Padding="8,6" CornerRadius="3"
                 Background="#FFFFF6E8" BorderBrush="#FFE8C88A" BorderThickness="1">
             <TextBlock x:Name="WarningText" TextWrapping="Wrap" Foreground="#FF6B4E12" />
         </Border>
 
-        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,18,0,0">
-            <Button Content="Rebuild" IsDefault="True" Click="OnAccept"
-                    MinWidth="88" Padding="10,6" Margin="0,0,8,0" />
-            <Button Content="Cancel" IsCancel="True" MinWidth="80" Padding="10,6" />
+        <StackPanel Orientation="Horizontal" Margin="0,10,0,0">
+            <Button Content="Rebuild" Style="{DynamicResource PanelButton}" Click="OnAccept" />
+            <Button Content="Cancel" Style="{DynamicResource PanelButton}" IsCancel="True" />
         </StackPanel>
     </StackPanel>
-</Window>
+</view:ToolPanel>

@@ -1,4 +1,4 @@
-﻿using System.ComponentModel;
+using System.ComponentModel;
 using System.IO;
 using System.Numerics;
 using System.Runtime.CompilerServices;
@@ -80,9 +80,12 @@ public sealed class MainViewModel : INotifyPropertyChanged
     private string embossText = "TEXT";
     private string svgFile = "";
     private string embossFont = "Arial";
+    private List<string>? installedFonts;
     private float embossHeight = 10f;
     private float embossDepth = 0.8f;
     private bool embossBold = true;
+    private bool embossItalic;
+    private float embossSpacing;
     private bool embossRaised;
     private float embossBevel;
     private TextProjection embossProjection = TextProjection.Planar;
@@ -1118,6 +1121,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
             Set(ref unit, value);
             Raise(nameof(UnitLabel));
             RaiseTransformFields();
+            SettingChanged();
         }
     }
 
@@ -1242,7 +1246,8 @@ public sealed class MainViewModel : INotifyPropertyChanged
     /// strip that goes with them, stand down while one of them is running rather than sitting
     /// underneath and leaving it to the pointer to decide which was meant.
     /// </summary>
-    public bool IsToolRunning => isSplitMode || isEngraveMode || isEmbossMode || isLayMode || isExtrudeMode || isConnectMode;
+    public bool IsToolRunning => isSplitMode || isEngraveMode || isEmbossMode || isLayMode || isExtrudeMode || isConnectMode
+                                 || openPanel is not null;
 
     /// <summary>
     /// Whether a tool has the object in hand, counting the two that do not take the handles
@@ -1258,6 +1263,32 @@ public sealed class MainViewModel : INotifyPropertyChanged
 
     /// <summary>The same thing the other way up, for everything that has to grey out.</summary>
     public bool NothingInHand => !IsToolInHand;
+
+    private ToolPanel? openPanel;
+
+    /// <summary>The settings of the tool being used - Repeat, Smooth, Mould and the rest - or null.</summary>
+    public ToolPanel? OpenPanel => openPanel;
+
+    public bool HasOpenPanel => openPanel is not null;
+
+    /// <summary>The object's properties give way to a tool's panel, which needs the room.</summary>
+    public bool PropertiesVisible => openPanel is null;
+
+    /// <summary>
+    /// Where a <see cref="ToolPanel"/> shows itself. The tool has the object in hand while it is
+    /// open, so the ribbon, the list and the handles stand down as they do for Split, and only the
+    /// viewport stays live to look round the preview.
+    /// </summary>
+    public void ShowPanel(ToolPanel? panel)
+    {
+        openPanel = panel;
+        Raise(nameof(OpenPanel));
+        Raise(nameof(HasOpenPanel));
+        Raise(nameof(PropertiesVisible));
+        Raise(nameof(IsToolRunning));
+        RaiseToolInHand();
+        Raise(nameof(ShowManipulatorBar));
+    }
 
     private void RaiseToolInHand()
     {
@@ -1277,6 +1308,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
             if (isLayMode == value) return;
 
             Set(ref isLayMode, value);
+            if (!value) ForgetRestingFaces();
             Raise(nameof(IsToolRunning));
             RaiseToolInHand();
             Raise(nameof(ShowManipulatorBar));
@@ -1363,9 +1395,13 @@ public sealed class MainViewModel : INotifyPropertyChanged
         set { Set(ref embossFont, string.IsNullOrWhiteSpace(value) ? "Arial" : value); RefreshLettering(); }
     }
 
-    /// <summary>Common faces, so the usual ones need no typing.</summary>
-    public IReadOnlyList<string> EmbossFonts { get; } =
-        ["Arial", "Segoe UI", "Calibri", "Consolas", "Georgia", "Impact", "Times New Roman", "Verdana"];
+    /// <summary>
+    /// Every font on the machine. A drop-down and not a box to type in: the typed name waited for
+    /// the box to lose focus, so a font picked from the list and one half-typed in the box could
+    /// disagree, and the scene showed whichever had last got through.
+    /// </summary>
+    public IReadOnlyList<string> EmbossFonts => installedFonts ??= GlyphOutlines.InstalledFonts();
+
 
     public float EmbossHeight
     {
@@ -1384,6 +1420,19 @@ public sealed class MainViewModel : INotifyPropertyChanged
     {
         get => embossBold;
         set { Set(ref embossBold, value); RefreshLettering(); }
+    }
+
+    public bool EmbossItalic
+    {
+        get => embossItalic;
+        set { Set(ref embossItalic, value); RefreshLettering(); }
+    }
+
+    /// <summary>Extra room after every letter, in millimetres; negative draws them closer.</summary>
+    public float EmbossSpacing
+    {
+        get => embossSpacing;
+        set { Set(ref embossSpacing, Math.Clamp(float.IsFinite(value) ? value : 0f, -5f, 50f)); RefreshLettering(); }
     }
 
     /// <summary>Raised off the face rather than cut into it.</summary>
@@ -1553,6 +1602,87 @@ public sealed class MainViewModel : INotifyPropertyChanged
         IsLayMode = true;
 
         Status = "Click the face you want it to stand on";
+        FindRestingFaces(Scene.Selection.First());
+    }
+
+    private List<RestingFace> restingFaces = [];
+    private SceneObject? restingTarget;
+    private int restingHover = -1;
+    private int restingRun;
+
+    /// <summary>The faces the object being laid can stand on, for the viewport to show.</summary>
+    public IReadOnlyList<RestingFace> RestingFaceList => restingFaces;
+
+    /// <summary>Which of them is under the pointer, or -1.</summary>
+    public int RestingHover => restingHover;
+
+    public event Action? RestingFacesChanged;
+
+    /// <summary>
+    /// Works out the faces to offer, away from the window: the hull of a dense scan is a moment's
+    /// work, and the mode is usable before it is done - a click on the model lays it as it always did.
+    /// </summary>
+    private async void FindRestingFaces(SceneObject target)
+    {
+        int run = ++restingRun;
+        var world = target.ToWorldMesh();
+
+        List<RestingFace> found;
+        try
+        {
+            found = await Task.Run(() => RestingFaces.Find(world));
+        }
+        catch
+        {
+            // The faces are an aid to picking, not the tool itself, which works without them.
+            return;
+        }
+
+        if (run != restingRun || !isLayMode) return;
+
+        restingFaces = found;
+        restingTarget = target;
+        restingHover = -1;
+        RestingFacesChanged?.Invoke();
+
+        if (found.Count > 0)
+            Status = $"Click a face to stand it on - the {found.Count} it can rest on are marked";
+    }
+
+    private void ForgetRestingFaces()
+    {
+        restingRun++;
+        restingTarget = null;
+        restingHover = -1;
+        if (restingFaces.Count == 0) return;
+
+        restingFaces = [];
+        RestingFacesChanged?.Invoke();
+    }
+
+    /// <summary>Marks the offered face along a line of sight, redrawing only when that changes.</summary>
+    public void HoverRestingFace(Vector3 origin, Vector3 direction)
+    {
+        int under = restingFaces.Count == 0 ? -1 : RestingFaces.Under(restingFaces, origin, direction);
+        if (under == restingHover) return;
+
+        restingHover = under;
+        RestingFacesChanged?.Invoke();
+    }
+
+    /// <summary>
+    /// Lays the object on the offered face along a line of sight, if there is one. Asked before the
+    /// model is: a cup's mouth is a face to stand it on with nothing of the model there to click.
+    /// </summary>
+    public bool LayOnRestingFace(Vector3 origin, Vector3 direction)
+    {
+        if (!isLayMode || restingTarget is null || restingFaces.Count == 0) return false;
+
+        int under = RestingFaces.Under(restingFaces, origin, direction);
+        if (under < 0) return false;
+
+        Lay(restingTarget, restingFaces[under].Normal);
+        return true;
     }
 
     /// <summary>
@@ -1576,6 +1706,13 @@ public sealed class MainViewModel : INotifyPropertyChanged
         // outward face that has to end up against the bed.
         if (Vector3.Dot(facing, worldPoint - target.WorldBounds.Center) < 0) facing = -facing;
 
+        Lay(target, facing);
+        return true;
+    }
+
+    /// <summary>Turns <paramref name="facing"/>, an outward direction in world space, to point straight down.</summary>
+    private void Lay(SceneObject target, Vector3 facing)
+    {
         var before = new[] { TransformState.Capture(target) };
 
         var turn = MeshTransform.TurnFromTo(facing, -Vector3.UnitZ);
@@ -1590,8 +1727,6 @@ public sealed class MainViewModel : INotifyPropertyChanged
         IsLayMode = false;
         RefreshSelection();
         Status = $"{target.Name} laid on the picked face";
-
-        return true;
     }
 
     private void BeginEmboss()
@@ -1661,10 +1796,9 @@ public sealed class MainViewModel : INotifyPropertyChanged
     /// </summary>
     private List<TextShape> Lettering()
     {
-        // A drawing is read without a face: its preview in the panel is how anyone finds out the
-        // file came in right, and that is wanted before a face has been picked, not after. Waiting
+        // Read without a face: the preview in the panel is how anyone sees the file came in right,
+        // or which font is being used, and that is wanted before a face has been picked. Waiting
         // for the face left the preview blank and said a good drawing had no filled shape in it.
-        if (embossFace is null && svgFile.Length == 0) return [];
         if (letteringCache is not null) return letteringCache;
 
         if (svgFile.Length > 0)
@@ -1684,7 +1818,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
         }
 
         return letteringCache = GlyphOutlines
-            .Build(embossText, embossFont, embossHeight, embossBold)
+            .Build(embossText, embossFont, embossHeight, embossBold, embossItalic, embossSpacing)
             .Select(g => new TextShape(g.Outline, g.Holes))
             .ToList();
     }
@@ -1728,11 +1862,11 @@ public sealed class MainViewModel : INotifyPropertyChanged
     public bool HasDrawing => svgFile.Length > 0;
 
     /// <summary>
-    /// The loaded drawing's outlines, for the panel to show. The very ones that will be stamped,
-    /// so what is on screen is what will be on the object - which is the only way to see that a
-    /// drawing came in with its holes intact before committing to it.
+    /// The lettering or the loaded drawing's outlines, for the panel to show. The very ones that
+    /// will be stamped, so what is on screen is what will be on the object - which is the only way
+    /// to see that a drawing came in with its holes intact, or that a font has the letters typed.
     /// </summary>
-    public IReadOnlyList<TextShape> DrawingShapes => HasDrawing ? Lettering() : [];
+    public IReadOnlyList<TextShape> DrawingShapes => Lettering();
 
     public bool UsesText => svgFile.Length == 0;
 
@@ -1745,6 +1879,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
     private void RefreshLettering()
     {
         letteringCache = null;
+        Raise(nameof(DrawingShapes));
         RefreshEmboss();
     }
 
@@ -1761,8 +1896,14 @@ public sealed class MainViewModel : INotifyPropertyChanged
         // Standing proud whichever way it will go: a preview sunk into the object would be
         // hidden by the very face it is being placed on.
         float clear = surface.ClearanceMm + 0.06f;
+        if (shapes.Count == 0) return null;
 
-        return shapes.Count == 0 ? null : TextSolid.Build(shapes, surface, clear, clear + 0.03f);
+        // Raised lettering is shown as it will print, at its full height and bevel: it is only
+        // added to the object, so the solid alone is the whole of it. Cut lettering stays a thin
+        // slab - seeing it sunk in would take the boolean itself on every change.
+        return embossRaised
+            ? TextSolid.Build(shapes, surface, clear, Math.Max(embossDepth, clear + 0.03f), embossBevel)
+            : TextSolid.Build(shapes, surface, clear, clear + 0.03f);
     }
 
     /// <summary>
@@ -2168,6 +2309,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
 
             Set(ref plateSize, wanted);
             ViewChanged?.Invoke();
+            SettingChanged();
         }
     }
 
@@ -2196,7 +2338,37 @@ public sealed class MainViewModel : INotifyPropertyChanged
             Raise(nameof(RealUnit));
             RaiseReal();
             RefreshSelection();
+            SettingChanged();
         }
+    }
+
+    /// <summary>The bed, the unit and the scale, as the project file and the local settings keep them.</summary>
+    public ProjectSettings ViewSettings => new(plateSize, unit.Label, modelScale);
+
+    /// <summary>Raised when the bed, the unit or the scale changes, for the window to remember it.</summary>
+    public event Action? SettingsChanged;
+
+    public void ApplySettings(ProjectSettings settings)
+    {
+        ApplySettings(new RememberedSettings(settings.PlateSize, settings.Unit));
+        ModelScale = settings.ModelScale;
+    }
+
+    /// <summary>The bed and unit last used; the scale belongs to a project and is not carried over.</summary>
+    public void ApplySettings(RememberedSettings settings)
+    {
+        PlateSize = settings.PlateSize;
+        Unit = MeasureUnit.All.FirstOrDefault(u => u.Label == settings.Unit, MeasureUnit.Default);
+    }
+
+    public RememberedSettings Remembered => new(plateSize, unit.Label);
+
+    private void SettingChanged()
+    {
+        // Part of the project now, so an open project has something unsaved - or a bed set
+        // for this model would be lost by closing it without being asked.
+        if (projectPath is not null) IsDirty = true;
+        SettingsChanged?.Invoke();
     }
 
     /// <summary>
@@ -3091,7 +3263,8 @@ public sealed class MainViewModel : INotifyPropertyChanged
     /// </summary>
     public bool CancelActiveTool()
     {
-        if (IsExtrudeMode) IsExtrudeMode = false;
+        if (openPanel is not null) openPanel.DialogResult = false;
+        else if (IsExtrudeMode) IsExtrudeMode = false;
         else if (IsConnectMode) IsConnectMode = false;
         else if (IsSplitMode) IsSplitMode = false;
         else if (IsMeasureMode) IsMeasureMode = false;
@@ -3292,7 +3465,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
         var selection = Scene.Selection.ToList();
         if (selection.Count == 0) return;
 
-        var dialog = new RepeatDialog(selection) { Owner = Application.Current?.MainWindow };
+        var dialog = new RepeatDialog(selection);
         if (dialog.ShowDialog() != true) return;
 
         if (dialog.RingResult is { } ring)
@@ -3357,10 +3530,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
             return;
         }
 
-        var dialog = new MouldDialog(source.Name, study, model)
-        {
-            Owner = Application.Current?.MainWindow
-        };
+        var dialog = new MouldDialog(source.Name, study, model);
         if (dialog.ShowDialog() != true) return;
 
         token = StartWork($"Moulding {source.Name}");
@@ -3512,7 +3682,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
     /// </summary>
     private void InsertStair()
     {
-        var dialog = new StairDialog(modelScale) { Owner = Application.Current?.MainWindow };
+        var dialog = new StairDialog(modelScale);
         if (dialog.ShowDialog() != true || dialog.Result is not { } s) return;
 
         var mesh = StairBuilder.Build(s.Rise, s.Run, s.Width, s.Steps);
@@ -3599,8 +3769,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
                 shown.Mesh = mesh;
                 shown.Position = new Vector3(0, 0, lift);
             }
-        }, on => ShowWireframe = on)
-        { Owner = Application.Current?.MainWindow };
+        }, on => ShowWireframe = on);
 
         bool accepted = dialog.ShowDialog() == true && dialog.Result is not null;
 
@@ -3801,8 +3970,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
                 roundable[i].Mesh = meshes is null ? before[i].Mesh : meshes[i];
                 roundable[i].Scale = meshes is null ? before[i].Scale : Vector3.One;
             }
-        })
-        { Owner = Application.Current?.MainWindow };
+        });
 
         bool accepted = dialog.ShowDialog() == true && dialog.Result is not null;
 
@@ -4172,7 +4340,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
         var selection = Scene.Selection.ToList();
         if (selection.Count == 0) return;
 
-        var dialog = new HollowDialog(selection) { Owner = Application.Current?.MainWindow };
+        var dialog = new HollowDialog(selection);
         if (dialog.ShowDialog() != true || dialog.Result is not { } settings) return;
 
         if (IsBusy) return;
@@ -4245,7 +4413,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
         var selection = Scene.Selection.ToList();
         if (selection.Count == 0) return;
 
-        var dialog = new SimplifyDialog(selection) { Owner = Application.Current?.MainWindow };
+        var dialog = new SimplifyDialog(selection);
         if (dialog.ShowDialog() != true || dialog.Result is not { } keep) return;
 
         if (IsBusy) return;
@@ -4301,7 +4469,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
         var targets = Scene.Selection.Count > 0 ? Scene.Selection.ToList() : Scene.Objects.ToList();
         if (targets.Count == 0) return;
 
-        var dialog = new RebuildDialog(targets) { Owner = Application.Current?.MainWindow };
+        var dialog = new RebuildDialog(targets);
         if (dialog.ShowDialog() != true || dialog.Result is not { } resolution) return;
 
         if (IsBusy) return;
@@ -4419,8 +4587,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
                     ? MeshTransform.Transformed(changed[i], toLocal)
                     : before[i];
             }
-        })
-        { Owner = Application.Current?.MainWindow };
+        });
 
         bool accepted = dialog.ShowDialog() == true && dialog.Result is not null;
 
@@ -4460,8 +4627,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
         {
             for (int i = 0; i < selection.Count && i < meshes.Count; i++)
                 selection[i].Mesh = meshes[i];
-        })
-        { Owner = Application.Current?.MainWindow };
+        });
 
         bool accepted = dialog.ShowDialog() == true && dialog.Result is { } settings && settings.Passes > 0;
 
@@ -5232,6 +5398,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
         Scene.Objects.Clear();
         Undo.Clear();
         projectPath = null;
+        ModelScale = 1f; // the scale was the last project's, not this one's
         IsDirty = false;
         RefreshSelection();
         Status = "New scene";
@@ -5255,7 +5422,11 @@ public sealed class MainViewModel : INotifyPropertyChanged
     {
         try
         {
-            var loaded = SceneSerializer.Load(path);
+            var loaded = SceneSerializer.Load(path, out var settings);
+            // A file from before the scale was kept is taken as life size rather than inheriting
+            // whatever the last project was drawn at.
+            if (settings is { } kept) ApplySettings(kept);
+            else ModelScale = 1f;
             Scene.Objects.Clear();
             foreach (var o in loaded) Scene.Objects.Add(o);
             Undo.Clear();
@@ -5281,7 +5452,8 @@ public sealed class MainViewModel : INotifyPropertyChanged
             {
                 Filter = $"3DFastCraft project (*{SceneSerializer.Extension})|*{SceneSerializer.Extension}",
                 DefaultExt = SceneSerializer.Extension,
-                FileName = "scene" + SceneSerializer.Extension
+                FileName = SuggestedName() + SceneSerializer.Extension,
+                InitialDirectory = ProjectFolder()
             };
             if (dialog.ShowDialog() != true) return;
             target = dialog.FileName;
@@ -5289,7 +5461,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
 
         try
         {
-            SceneSerializer.Save(target, Scene);
+            SceneSerializer.Save(target, Scene, ViewSettings);
             projectPath = target;
             IsDirty = false;
             recent.Add(target);
@@ -5324,7 +5496,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
 
         try
         {
-            SceneSerializer.SaveVersion(projectPath, Scene, prompt.VersionLabel);
+            SceneSerializer.SaveVersion(projectPath, Scene, prompt.VersionLabel, ViewSettings);
             IsDirty = false;
 
             // There is a way back again, so the notice has done its job.
@@ -5541,6 +5713,17 @@ public sealed class MainViewModel : INotifyPropertyChanged
         LoadProject(path);
     }
 
+    /// <summary>
+    /// What a file is offered as: the project's own name once it has one, and otherwise dated, so
+    /// one export is not left waiting to be overwritten by the next.
+    /// </summary>
+    private string SuggestedName() => projectPath is not null
+        ? Path.GetFileNameWithoutExtension(projectPath)
+        : $"model_{DateTime.Now:yyyyMMdd_HHmmss}";
+
+    /// <summary>The project's folder, or empty to let Windows pick the last one used.</summary>
+    private string ProjectFolder() => Path.GetDirectoryName(projectPath) ?? "";
+
     private void Export()
     {
         if (Scene.Objects.Count == 0) return;
@@ -5558,7 +5741,8 @@ public sealed class MainViewModel : INotifyPropertyChanged
         {
             Filter = chosen.Filter,
             DefaultExt = chosen.Extension,
-            FileName = "model" + chosen.Extension,
+            FileName = SuggestedName() + chosen.Extension,
+            InitialDirectory = ProjectFolder(),
             Title = chosen.SelectedOnly
                 ? $"Export {subjects.Count} selected object(s)"
                 : $"Export all {subjects.Count} object(s)"
