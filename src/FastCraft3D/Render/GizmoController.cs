@@ -1,4 +1,4 @@
-﻿using System.Numerics;
+using System.Numerics;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
@@ -151,6 +151,18 @@ public sealed class GizmoController
     /// their way to a boolean.
     /// </summary>
     public bool StopOnContact { get; set; }
+
+    /// <summary>
+    /// Nothing moved goes below the bed. Measured against where the drag began, like everything
+    /// else here, so easing back undoes a lift rather than leaving the part stranded above the bed.
+    /// </summary>
+    public bool KeepOnBedMove { get; set; }
+
+    /// <summary>
+    /// Nothing resized goes below the bed, and what stood on the bed when the drag began stays
+    /// standing on it, so it grows upward only.
+    /// </summary>
+    public bool KeepOnBedScale { get; set; }
 
     /// <summary>Millimetres to snap a move to, or zero for free movement.</summary>
     public double SnapStep { get; set; }
@@ -696,10 +708,12 @@ public sealed class GizmoController
         for (int i = 0; i < dragObjects.Count; i++)
             dragObjects[i].Position = dragBefore[i].Position + offset;
 
+        bool held = KeepOnBedMove && BedPlacement.HoldToBed(dragObjects, dragBounds, together: true, settle: false);
+
         dragChanged = true;
-        Feedback?.Invoke(stopped
+        Feedback?.Invoke((stopped
             ? $"Move {active.Axis} {millimetres:+0.##;-0.##;0} mm - stopped against another object"
-            : $"Move {active.Axis} {millimetres:+0.##;-0.##;0} mm");
+            : $"Move {active.Axis} {millimetres:+0.##;-0.##;0} mm") + BedNote(held));
     }
 
     private void DragScale(Point screen)
@@ -770,15 +784,23 @@ public sealed class GizmoController
                 dragObjects[i].Position =
                     was + direction * (active.Sign * reach / 2f * (ratio - 1f));
             }
+            else if (KeepOnBedScale)
+            {
+                // Put back where it started, or the lift from the last frame would stay in and a
+                // part eased back smaller would be left floating.
+                dragObjects[i].Position = was;
+            }
         }
+
+        bool onBed = KeepOnBedScale && BedPlacement.HoldToBed(dragObjects, dragBounds, together: asOne || !several, settle: true);
 
         dragChanged = true;
         string stillThere = oneSide ? ", far side held" : "";
         string size = whole ? $", {startExtent * ratio:0} mm" : "";
         string pivotNote = several ? (asOne ? ", as one" : ", each on its own") : "";
-        Feedback?.Invoke(uniform
+        Feedback?.Invoke((uniform
             ? $"Resize {ratio * 100:0.#}% (uniform{stillThere}{size}{pivotNote})"
-            : $"Resize {active.Axis} {ratio * 100:0.#}%{stillThere}{size}{pivotNote}");
+            : $"Resize {active.Axis} {ratio * 100:0.#}%{stillThere}{size}{pivotNote}") + BedNote(onBed));
     }
 
     private void DragRotate(Point screen)
@@ -820,6 +842,8 @@ public sealed class GizmoController
         Feedback?.Invoke(
             $"Rotate {active.Axis} {degrees:+0.#;-0.#;0} deg{(SnapRotation ? " (snapped)" : "")}{pivot}");
     }
+
+    private static string BedNote(bool held) => held ? ", kept on the bed" : "";
 
     /// <summary>+1 when the axis points towards the camera, -1 when away.</summary>
     private float FacingSign(Axis axis) =>

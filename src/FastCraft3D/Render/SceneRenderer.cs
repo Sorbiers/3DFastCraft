@@ -174,10 +174,26 @@ public sealed class SceneRenderer : IDisposable
 
         if (marks.Count == 0 || normal.LengthSquared() < 1e-6f) return;
 
-        var lying = MeshTransform.RotationBetween(Vector3.UnitZ, Vector3.Normalize(normal));
-        var discs = Mesh.Combine(marks.Select(mark => MeshTransform.Transformed(
-            Primitives.Prism(mark.Radius, 0.5f, 28),
-            lying * Matrix4x4.CreateTranslation(mark.At))));
+        var up = Vector3.Normalize(normal);
+        var lying = MeshTransform.RotationBetween(Vector3.UnitZ, up);
+        var discs = Mesh.Combine(marks.Select(mark => mark.Side.LengthSquared() > 1e-8f
+            ? MeshTransform.Transformed(Tile(mark.Radius), Facing(mark.Side) * Matrix4x4.CreateTranslation(mark.At))
+            : MeshTransform.Transformed(Primitives.Prism(mark.Radius, 0.5f, 28), lying * Matrix4x4.CreateTranslation(mark.At))));
+
+        // A square peg marked as a square, turned as it will be cut.
+        static Mesh Tile(float half) => MeshTransform.Transformed(
+            Primitives.Prism(half * MathF.Sqrt(2f), 0.5f, 4), Matrix4x4.CreateRotationZ(MathF.PI / 4f));
+
+        Matrix4x4 Facing(Vector3 side)
+        {
+            side = Vector3.Normalize(side - up * Vector3.Dot(side, up));
+            var other = Vector3.Cross(up, side);
+            return new Matrix4x4(
+                side.X, side.Y, side.Z, 0f,
+                other.X, other.Y, other.Z, 0f,
+                up.X, up.Y, up.Z, 0f,
+                0f, 0f, 0f, 1f);
+        }
 
         if (discs.TriangleCount == 0) return;
 

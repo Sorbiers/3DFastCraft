@@ -37,7 +37,9 @@ public class ViewSettingsTests
             Assert.False(model.ShowWireframe);
             Assert.False(model.ShowXray);
             Assert.True(model.ShowPlate);
-            Assert.Equal(Scene.PlateSize, model.PlateSize, 3);
+            Assert.Equal(Scene.PlateSize, model.PlateWidth, 3);
+            Assert.Equal(Scene.PlateSize, model.PlateDepth, 3);
+            Assert.Equal(Scene.PrintHeight, model.PlateHeight, 3);
         });
     }
 
@@ -53,9 +55,12 @@ public class ViewSettingsTests
             model.ShowWireframe = true;
             model.ShowXray = true;
             model.ShowPlate = false;
-            model.PlateSize = 300;
+            model.PlateWidth = 300;
+            model.PlateDepth = 250;
+            model.PlateHeight = 180;
+            model.ShowGridLabels = true;
 
-            Assert.Equal(4, redraws);
+            Assert.Equal(7, redraws);
         });
     }
 
@@ -65,12 +70,12 @@ public class ViewSettingsTests
     {
         RunSta(() =>
         {
-            var model = new MainViewModel { PlateSize = 250 };
+            var model = new MainViewModel { PlateWidth = 250 };
             int redraws = 0;
             model.ViewChanged += () => redraws++;
 
-            model.PlateSize = 250;
-            model.PlateSize = 250.001f;
+            model.PlateWidth = 250;
+            model.PlateWidth = 250.001f;
 
             Assert.Equal(0, redraws);
         });
@@ -83,39 +88,37 @@ public class ViewSettingsTests
         {
             var model = new MainViewModel();
 
-            model.PlateSize = -50;
-            Assert.Equal(20f, model.PlateSize, 3);
+            model.PlateDepth = -50;
+            Assert.Equal(20f, model.PlateDepth, 3);
 
-            model.PlateSize = 99999;
-            Assert.Equal(2000f, model.PlateSize, 3);
+            model.PlateHeight = 99999;
+            Assert.Equal(2000f, model.PlateHeight, 3);
         });
     }
 
-    [Fact]
-    public void TheOfferedBedSizesCoverTheUsualPrinters()
-    {
-        RunSta(() =>
-        {
-            var model = new MainViewModel();
-
-            Assert.Contains(200f, model.PlateSizes); // the default, and an Ender's bed
-            Assert.Contains(250f, model.PlateSizes); // a Bambu's
-            Assert.All(model.PlateSizes, size => Assert.True(size is >= 20f and <= 2000f));
-        });
-    }
-
-    /// <summary>The plate is rebuilt at whatever size it is asked for, squares and all.</summary>
+    /// <summary>The plate is built to the printable area asked for, whatever is drawn on it.</summary>
     [Theory]
-    [InlineData(120f)]
-    [InlineData(200f)]
-    [InlineData(400f)]
-    public void ThePlateIsBuiltToTheSizeAskedFor(float size)
+    [InlineData(120f, 120f, false, false)]
+    [InlineData(220f, 250f, true, false)]
+    [InlineData(400f, 300f, true, true)]
+    public void ThePlateIsBuiltToTheAreaAskedFor(float width, float depth, bool axes, bool labels)
     {
         RunSta(() =>
         {
-            var elements = BuildPlateVisual.Create(size).ToList();
+            var elements = BuildPlateVisual.Create(new PlateLook(width, depth, 200f, axes, axes, labels, "mm", 1f)).ToList();
 
             Assert.NotEmpty(elements);
         });
+    }
+
+    /// <summary>A round step between labels: 50 mm on a 200 mm bed, an inch on the same bed in inches.</summary>
+    [Theory]
+    [InlineData(100f, 1f, 50f)]
+    [InlineData(100f, 25.4f, 1f)]
+    [InlineData(150f, 10f, 5f)]
+    [InlineData(1000f, 1f, 500f)]
+    public void GridLabelsFallOnRoundNumbers(float halfSpan, float unitMillimetres, float step)
+    {
+        Assert.Equal(step, BuildPlateVisual.LabelStep(halfSpan, unitMillimetres), 3);
     }
 }

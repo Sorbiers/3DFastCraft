@@ -33,7 +33,7 @@ public partial class MainWindow : Window
 
     /// <summary>Which end of the tape is being dragged: 0, 1, or -1 for none.</summary>
     private int heldMeasureEnd = -1;
-    private float plateShown;
+    private PlateLook? plateShown;
     private GizmoController? gizmo;
     private SplitPlaneGizmo? splitGizmo;
     private SurfacePlacementGizmo? placeGizmo;
@@ -103,6 +103,8 @@ public partial class MainWindow : Window
 
         gizmo = new GizmoController(GizmoLayer, new Viewport3DXProjector(View), viewModel.Scene, viewModel.Undo);
         gizmo.Feedback += text => viewModel.Status = text;
+        gizmo.KeepOnBedMove = viewModel.KeepOnBedMove;
+        gizmo.KeepOnBedScale = viewModel.KeepOnBedScale;
         GizmoLayer.PreviewMouseLeftButtonDown += OnGizmoDown;
         GizmoLayer.PreviewMouseMove += OnGizmoMove;
         GizmoLayer.PreviewMouseLeftButtonUp += OnGizmoUp;
@@ -1200,7 +1202,7 @@ public partial class MainWindow : Window
         renderer.Wireframe = viewModel.ShowWireframe;
         renderer.Xray = viewModel.ShowXray;
 
-        if (Math.Abs(plateShown - viewModel.PlateSize) > 0.01f) RebuildPlate();
+        if (plateShown != PlateNow()) RebuildPlate();
 
         PlateGroup.Visibility = viewModel.ShowPlate ? Visibility.Visible : Visibility.Collapsed;
     }
@@ -1210,11 +1212,18 @@ public partial class MainWindow : Window
         foreach (var element in PlateGroup.Children) element.Dispose();
         PlateGroup.Children.Clear();
 
-        foreach (var element in BuildPlateVisual.Create(viewModel.PlateSize))
+        var look = PlateNow();
+        foreach (var element in BuildPlateVisual.Create(look))
             PlateGroup.Children.Add(element);
 
-        plateShown = viewModel.PlateSize;
+        plateShown = look;
     }
+
+    /// <summary>Everything the plate is drawn from, so a change to any of it redraws it.</summary>
+    private PlateLook PlateNow() => new(
+        viewModel.PlateWidth, viewModel.PlateDepth, viewModel.PlateHeight,
+        viewModel.ShowAxes, viewModel.ShowZAxis, viewModel.ShowGridLabels,
+        viewModel.Unit.Label, viewModel.Unit.Millimetres);
 
     private void OnViewModelChanged(object? sender, PropertyChangedEventArgs e)
     {
@@ -1227,6 +1236,9 @@ public partial class MainWindow : Window
             }
         }
 
+        // The labels are written in the current unit, so a change of unit redraws them.
+        if (e.PropertyName is nameof(MainViewModel.UnitLabel)) ApplyViewSettings();
+
         if (e.PropertyName is nameof(MainViewModel.UniformScale) && gizmo is not null)
             gizmo.UniformScale = viewModel.UniformScale;
 
@@ -1238,6 +1250,12 @@ public partial class MainWindow : Window
 
         if (e.PropertyName is nameof(MainViewModel.StopOnContact) && gizmo is not null)
             gizmo.StopOnContact = viewModel.StopOnContact;
+
+        if (e.PropertyName is nameof(MainViewModel.KeepOnBedMove) && gizmo is not null)
+            gizmo.KeepOnBedMove = viewModel.KeepOnBedMove;
+
+        if (e.PropertyName is nameof(MainViewModel.KeepOnBedScale) && gizmo is not null)
+            gizmo.KeepOnBedScale = viewModel.KeepOnBedScale;
 
         if (e.PropertyName is nameof(MainViewModel.SnapStep) && gizmo is not null)
             gizmo.SnapStep = viewModel.SnapStep;

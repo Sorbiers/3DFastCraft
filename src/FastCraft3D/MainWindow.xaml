@@ -507,6 +507,15 @@
                             Command="{Binding AlignToSelectionCommand}" MinWidth="72"
                             ToolTip="Move the first object you picked so its bounding box is centred on the second's. Two objects: the first moves, the second stays. Nothing is rotated or resized." />
                     <Separator Margin="8,0" />
+                    <Button Style="{StaticResource ToolButton}" Content="Fit" Tag="{StaticResource IconFitBed}"
+                            Command="{Binding FitToBedCommand}" MinWidth="58"
+                            AutomationProperties.Name="Fit to bed"
+                            ToolTip="Shrink the selection to fit the printable area, 20 mm clear of the edge, and stand it in the middle of the bed. Only shrinks what is too big - nothing is ever made bigger. The size and height come from View, Grid." />
+                    <Button Style="{StaticResource ToolButton}" Content="Distribute" Tag="{StaticResource IconArrangeBed}"
+                            Command="{Binding DistributeOnBedCommand}" MinWidth="72"
+                            AutomationProperties.Name="Distribute on bed"
+                            ToolTip="Set the selected objects out in rows across the bed, a gap you choose apart, standing on it" />
+                    <Separator Margin="8,0" />
                     <Button Style="{StaticResource ToolButton}" Content="Mirror X" Tag="{StaticResource IconMirror}"
                             Command="{Binding MirrorCommand}" CommandParameter="X" />
                     <Button Style="{StaticResource ToolButton}" Content="Mirror Y" Tag="{StaticResource IconMirror}"
@@ -691,13 +700,12 @@
                     <ToggleButton Style="{StaticResource ToolToggle}" Content="Plate" Tag="{StaticResource IconPlate}"
                                   IsChecked="{Binding ShowPlate}"
                                   ToolTip="Show or hide the build plate" />
+                    <ToggleButton Style="{StaticResource ToolToggle}" Content="Grid..." Tag="{StaticResource IconGrid}"
+                                  IsChecked="{Binding IsGridPanelOpen, Mode=TwoWay}"
+                                  AutomationProperties.Name="Grid"
+                                  ToolTip="The printable area, and how the axes and distances are drawn on the plate" />
                     <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="6,0,0,0">
-                        <TextBlock Text="Bed" Style="{StaticResource FieldLabel}" />
-                        <ComboBox Width="82" IsEditable="True" ItemsSource="{Binding PlateSizes}"
-                                  Text="{Binding PlateSize, UpdateSourceTrigger=LostFocus}"
-                                  ToolTip="The printer's bed size in millimetres. A guide, not a limit." />
-                        <TextBlock Text="mm" Foreground="#FF9AA0A8" VerticalAlignment="Center" Margin="5,0,0,0" />
-                        <TextBlock Text="Units" Style="{StaticResource FieldLabel}" Margin="14,0,6,0"
+                        <TextBlock Text="Units" Style="{StaticResource FieldLabel}" Margin="8,0,6,0"
                                    ToolTip="What the position and size boxes are read and typed in. Display only: millimetres are what is stored and what is written to an STL, which has no unit of its own and is read as millimetres by every slicer." />
                         <ComboBox Width="64" IsEditable="True" IsReadOnly="True"
                                   ItemsSource="{Binding Units}"
@@ -754,6 +762,7 @@
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto" />
                     <RowDefinition Height="180" />
+                    <RowDefinition Height="Auto" />
                     <RowDefinition Height="Auto" />
                     <RowDefinition Height="Auto" />
                     <RowDefinition Height="Auto" />
@@ -944,6 +953,16 @@
                                              ToolTip="Brick studs on the lower half and a shallow brick underside in the upper, on the 8 mm grid. The halves hold by grip, and each takes real bricks along the join. The grid repeats, so line the edges up by eye." />
                             </StackPanel>
                             <StackPanel Orientation="Horizontal" Margin="0,0,0,6"
+                                        Visibility="{Binding ConnectorsArePegs, Converter={StaticResource BoolToVisibility}}">
+                                <TextBlock Text="Peg shape" Style="{StaticResource FieldLabel}" Width="76" />
+                                <RadioButton Content="Round" GroupName="SplitPegShape" Margin="0,0,10,0" VerticalAlignment="Center"
+                                             IsChecked="{Binding ConnectorPegRound, Mode=TwoWay}"
+                                             ToolTip="Round pegs in round sockets. Use two or more: one round peg lets the halves turn on it." />
+                                <RadioButton Content="Square" GroupName="SplitPegShape" VerticalAlignment="Center"
+                                             IsChecked="{Binding ConnectorPegSquare, Mode=TwoWay}"
+                                             ToolTip="Square pegs in square sockets, the size box giving the side. A square peg cannot turn, so even one lines the halves up. Its corners reach further than a round peg, so it keeps a little further from the edge." />
+                            </StackPanel>
+                            <StackPanel Orientation="Horizontal" Margin="0,0,0,6"
                                         Visibility="{Binding ConnectorsAreBricks, Converter={StaticResource BoolToVisibility}}">
                                 <TextBlock Text="Fit" Style="{StaticResource FieldLabel}" Width="76"
                                            ToolTip="How much fatter than standard the studs, and the tubes and walls that grip them, are made - in mm across, on both halves. The two halves add up: at -0.1 each there is about 0.2 mm of play in all. -0.1 suits PLA on a tuned printer, about -0.15 PETG." />
@@ -974,7 +993,7 @@
                                          Text="{Binding ConnectorCount, UpdateSourceTrigger=LostFocus}" />
                             </StackPanel>
                             <StackPanel Orientation="Horizontal" Margin="0,0,0,2">
-                                <TextBlock Text="Diameter" Style="{StaticResource FieldLabel}" Width="76" />
+                                <TextBlock Text="{Binding ConnectorSizeLabel}" Style="{StaticResource FieldLabel}" Width="76" />
                                 <TextBox Width="64" Style="{StaticResource NumberBox}" Tag="number"
                                          AutomationProperties.AutomationId="ConnectorDiameter"
                                          Text="{Binding ConnectorDiameter, StringFormat=N1, UpdateSourceTrigger=LostFocus}" />
@@ -1330,6 +1349,16 @@
                                              ToolTip="Brick studs on the lower half and a shallow brick underside in the upper, on the 8 mm grid. The halves hold by grip, and each takes real bricks along the join. The grid repeats, so line the edges up by eye." />
                             </StackPanel>
                             <StackPanel Orientation="Horizontal" Margin="0,0,0,6"
+                                        Visibility="{Binding ConnectorsArePegs, Converter={StaticResource BoolToVisibility}}">
+                                <TextBlock Text="Peg shape" Style="{StaticResource FieldLabel}" Width="76" />
+                                <RadioButton Content="Round" GroupName="ConnectPegShape" Margin="0,0,10,0" VerticalAlignment="Center"
+                                             IsChecked="{Binding ConnectorPegRound, Mode=TwoWay}"
+                                             ToolTip="Round pegs in round sockets. Use two or more: one round peg lets the halves turn on it." />
+                                <RadioButton Content="Square" GroupName="ConnectPegShape" VerticalAlignment="Center"
+                                             IsChecked="{Binding ConnectorPegSquare, Mode=TwoWay}"
+                                             ToolTip="Square pegs in square sockets, the size box giving the side. A square peg cannot turn, so even one lines the halves up. Its corners reach further than a round peg, so it keeps a little further from the edge." />
+                            </StackPanel>
+                            <StackPanel Orientation="Horizontal" Margin="0,0,0,6"
                                         Visibility="{Binding ConnectorsAreBricks, Converter={StaticResource BoolToVisibility}}">
                                 <TextBlock Text="Fit" Style="{StaticResource FieldLabel}" Width="76"
                                            ToolTip="How much fatter than standard the studs, and the tubes and walls that grip them, are made - in mm across, on both halves. The two halves add up: at -0.1 each there is about 0.2 mm of play in all. -0.1 suits PLA on a tuned printer, about -0.15 PETG." />
@@ -1360,7 +1389,7 @@
                                          Text="{Binding ConnectorCount, UpdateSourceTrigger=LostFocus}" />
                             </StackPanel>
                             <StackPanel Orientation="Horizontal" Margin="0,0,0,2">
-                                <TextBlock Text="Diameter" Style="{StaticResource FieldLabel}" Width="76" />
+                                <TextBlock Text="{Binding ConnectorSizeLabel}" Style="{StaticResource FieldLabel}" Width="76" />
                                 <TextBox Width="64" Style="{StaticResource NumberBox}" Tag="number"
                                          AutomationProperties.AutomationId="ConnectDiameter"
                                          Text="{Binding ConnectorDiameter, StringFormat=N1, UpdateSourceTrigger=LostFocus}" />
@@ -1493,8 +1522,46 @@
                             ToolTip="Pick any colour" />
                 </StackPanel>
 
+                <!-- Grid settings: the printable area, and what is drawn on the plate. Not a tool - it
+                     stands nothing down and can stay open while working. -->
+                <Border Grid.Row="8" Margin="0,10,0,0" Padding="8" Background="#FFEFF5FF"
+                        BorderBrush="#FFB8D2F0" BorderThickness="1" CornerRadius="3"
+                        Visibility="{Binding IsGridPanelOpen, Converter={StaticResource BoolToVisibility}}">
+                    <StackPanel>
+                        <TextBlock Text="Grid" FontWeight="SemiBold" Margin="0,0,0,6" />
+
+                        <TextBlock Text="Printable area" Style="{StaticResource FieldLabel}" HorizontalAlignment="Left"
+                                   ToolTip="The build volume in millimetres. A guide, not a limit: Fit and Distribute use it, and nothing else is held to it." />
+                        <StackPanel Orientation="Horizontal" Margin="0,2,0,6">
+                            <TextBlock Text="W" Style="{StaticResource GizmoLabelX}" Margin="0,0,3,0" />
+                            <TextBox Width="48" Style="{StaticResource NumberBox}" Tag="number"
+                                     AutomationProperties.AutomationId="PlateWidth"
+                                     Text="{Binding PlateWidth, StringFormat=0.#, UpdateSourceTrigger=LostFocus}" />
+                            <TextBlock Text="D" Style="{StaticResource GizmoLabelY}" Margin="2,0,3,0" />
+                            <TextBox Width="48" Style="{StaticResource NumberBox}" Tag="number"
+                                     AutomationProperties.AutomationId="PlateDepth"
+                                     Text="{Binding PlateDepth, StringFormat=0.#, UpdateSourceTrigger=LostFocus}" />
+                            <TextBlock Text="H" Style="{StaticResource GizmoLabelZ}" Margin="2,0,3,0" />
+                            <TextBox Width="48" Style="{StaticResource NumberBox}" Tag="number"
+                                     AutomationProperties.AutomationId="PlateHeight"
+                                     Text="{Binding PlateHeight, StringFormat=0.#, UpdateSourceTrigger=LostFocus}" />
+                            <TextBlock Text="mm" Foreground="#FF9AA0A8" VerticalAlignment="Center" />
+                        </StackPanel>
+
+                        <CheckBox Content="Show axes" IsChecked="{Binding ShowAxes, Mode=TwoWay}" Margin="0,0,0,4"
+                                  ToolTip="The X and Y lines across the plate, paler on the negative side" />
+                        <CheckBox Content="Show Z axis" IsChecked="{Binding ShowZAxis, Mode=TwoWay}" Margin="0,0,0,4"
+                                  ToolTip="An upright line as tall as the printable height" />
+                        <CheckBox Content="Show grid labels" IsChecked="{Binding ShowGridLabels, Mode=TwoWay}" Margin="0,0,0,8"
+                                  ToolTip="Distances along the positive X and Y axes, in the current units" />
+
+                        <Button Content="Close" Style="{StaticResource PanelButton}" HorizontalAlignment="Left"
+                                Command="{Binding CloseGridPanelCommand}" />
+                    </StackPanel>
+                </Border>
+
                 <!-- Properties -->
-                <ScrollViewer Grid.Row="8" VerticalScrollBarVisibility="Auto" Margin="0,6,0,0"
+                <ScrollViewer Grid.Row="9" VerticalScrollBarVisibility="Auto" Margin="0,6,0,0"
                               Visibility="{Binding DataContext.PropertiesVisible,
                                            RelativeSource={RelativeSource AncestorType=Window},
                                            Converter={StaticResource BoolToVisibility}}"
@@ -1595,7 +1662,7 @@
                 <!-- A tool's settings: Custom, Stair, Repeat, Smooth, Round, Simplify, Hollow, Rebuild,
                      Mould, Twist, Taper and Bend. In the tall last row, so a long panel scrolls rather
                      than running off the bottom of the window. See View/ToolPanel. -->
-                <ScrollViewer Grid.Row="8" VerticalScrollBarVisibility="Auto" Margin="0,10,0,0"
+                <ScrollViewer Grid.Row="9" VerticalScrollBarVisibility="Auto" Margin="0,10,0,0"
                               Visibility="{Binding HasOpenPanel, Converter={StaticResource BoolToVisibility}}">
                     <Border Padding="8" Background="#FFEFF5FF" BorderBrush="#FFB8D2F0"
                             BorderThickness="1" CornerRadius="3" VerticalAlignment="Top">
@@ -1796,37 +1863,6 @@
 
                     <Rectangle Width="1" Margin="6,3" Fill="#FFD8DBE0" />
 
-                    <!-- Snapping in millimetres is about where a thing lands, so it belongs to
-                         moving alone. Turning has its own snap in degrees, and resizing has no
-                         grid to land on. -->
-                    <StackPanel Orientation="Horizontal"
-                                Visibility="{Binding IsMoveMode, Converter={StaticResource BoolToVisibility}}">
-                        <TextBlock Text="Snap" Style="{StaticResource GizmoLabel}" />
-                        <RadioButton Content="off" GroupName="Snap" VerticalAlignment="Center" Margin="0,0,7,0"
-                                     IsChecked="{Binding SnapOff, Mode=TwoWay}" />
-                        <RadioButton Content="1" GroupName="Snap" VerticalAlignment="Center" Margin="0,0,7,0"
-                                     IsChecked="{Binding SnapOne, Mode=TwoWay}" ToolTip="Snap moves to whole millimetres" />
-                        <RadioButton Content="5" GroupName="Snap" VerticalAlignment="Center" Margin="0,0,3,0"
-                                     IsChecked="{Binding SnapFive, Mode=TwoWay}" ToolTip="Snap moves to 5 mm" />
-
-                        <!-- Millimetres whatever the boxes are showing, because the choices are
-                             literally 1 and 5 mm - a grid to land a part on, not a reading of it.
-                             Relabelling this with the display unit made it say "5 ft". -->
-                        <TextBlock Text="mm" Style="{StaticResource GizmoUnit}" />
-                    </StackPanel>
-
-                    <ToggleButton Style="{StaticResource ModeButton}" Margin="6,0,0,0"
-                                  Visibility="{Binding IsMoveMode, Converter={StaticResource BoolToVisibility}}"
-                                  ToolTip="Stop where the object meets another rather than passing through it (C)"
-                                  AutomationProperties.Name="Stop on contact"
-                                  IsChecked="{Binding StopOnContact, Mode=TwoWay}">
-                        <!-- Two blocks meeting, with the contact marked. -->
-                        <Path Data="M2,5 L9,5 L9,15 L2,15 M18,5 L11,5 L11,15 L18,15 M10,3 L10,17"
-                              Stroke="#FF33383F" StrokeThickness="1.8" Fill="{x:Null}"
-                              Stretch="Uniform" Width="15" Height="15" />
-                    </ToggleButton>
-
-                    <Rectangle Width="1" Margin="6,3" Fill="#FFD8DBE0" />
 
                     <StackPanel Orientation="Horizontal"
                                 Visibility="{Binding IsMoveMode, Converter={StaticResource BoolToVisibility}}">
@@ -1886,6 +1922,44 @@
                                      Text="{Binding RealZ, StringFormat=N3, UpdateSourceTrigger=LostFocus}" />
                             <TextBlock Text="{Binding RealUnit}" Style="{StaticResource GizmoUnit}" />
                         </StackPanel>
+
+                        <!-- Snapping in millimetres is about where a thing lands, so it belongs to
+                             moving alone. Turning has its own snap in degrees, and resizing has no
+                             grid to land on. -->
+                        <StackPanel Orientation="Horizontal" Margin="8,0,0,0">
+                            <TextBlock Text="Snap" Style="{StaticResource GizmoLabel}" />
+                            <RadioButton Content="off" GroupName="Snap" VerticalAlignment="Center" Margin="0,0,7,0"
+                                         IsChecked="{Binding SnapOff, Mode=TwoWay}" />
+                            <RadioButton Content="1" GroupName="Snap" VerticalAlignment="Center" Margin="0,0,7,0"
+                                         IsChecked="{Binding SnapOne, Mode=TwoWay}" ToolTip="Snap moves to whole millimetres" />
+                            <RadioButton Content="5" GroupName="Snap" VerticalAlignment="Center" Margin="0,0,3,0"
+                                         IsChecked="{Binding SnapFive, Mode=TwoWay}" ToolTip="Snap moves to 5 mm" />
+
+                            <!-- Millimetres whatever the boxes are showing, because the choices are
+                                 literally 1 and 5 mm - a grid to land a part on, not a reading of it.
+                                 Relabelling this with the display unit made it say "5 ft". -->
+                            <TextBlock Text="mm" Style="{StaticResource GizmoUnit}" />
+                        </StackPanel>
+
+                        <ToggleButton Style="{StaticResource ModeButton}" Margin="4,0,0,0"
+                                      ToolTip="Stop where the object meets another rather than passing through it (C)"
+                                      AutomationProperties.Name="Stop on contact"
+                                      IsChecked="{Binding StopOnContact, Mode=TwoWay}">
+                            <!-- Two blocks meeting, with the contact marked. -->
+                            <Path Data="M2,5 L9,5 L9,15 L2,15 M18,5 L11,5 L11,15 L18,15 M10,3 L10,17"
+                                  Stroke="#FF33383F" StrokeThickness="1.8" Fill="{x:Null}"
+                                  Stretch="Uniform" Width="15" Height="15" />
+                        </ToggleButton>
+
+                        <ToggleButton Style="{StaticResource ModeButton}" Margin="2,0,0,0"
+                                      ToolTip="Keep on bed: nothing is moved below the bed. Off: parts go wherever they are put, into the bed too."
+                                      AutomationProperties.Name="Keep on bed when moving"
+                                      IsChecked="{Binding KeepOnBedMove, Mode=TwoWay}">
+                            <!-- A block standing on the hatched bed. -->
+                            <Path Data="{StaticResource IconKeepOnBed}"
+                                  Stroke="#FF33383F" StrokeThickness="1.8" Fill="{x:Null}"
+                                  Stretch="Uniform" Width="15" Height="15" />
+                        </ToggleButton>
                     </StackPanel>
 
                     <StackPanel Orientation="Horizontal"
@@ -2024,6 +2098,14 @@
                                       IsChecked="{Binding ScaleOneSide, Mode=TwoWay}">
                             <!-- A wall on the left, an arrow growing away from it. -->
                             <Path Data="M3,3 L3,17 M6,10 L16,10 M12.5,6.5 L16,10 L12.5,13.5"
+                                  Stroke="#FF33383F" StrokeThickness="1.8" Fill="{x:Null}"
+                                  Stretch="Uniform" Width="15" Height="15" />
+                        </ToggleButton>
+                        <ToggleButton Style="{StaticResource ModeButton}" Margin="2,0,0,0"
+                                      ToolTip="Keep on bed: a part standing on the bed stays on it and grows upward only, and nothing is resized below the bed. Off: it grows about its middle, into the bed as well."
+                                      AutomationProperties.Name="Keep on bed when resizing"
+                                      IsChecked="{Binding KeepOnBedScale, Mode=TwoWay}">
+                            <Path Data="{StaticResource IconKeepOnBed}"
                                   Stroke="#FF33383F" StrokeThickness="1.8" Fill="{x:Null}"
                                   Stretch="Uniform" Width="15" Height="15" />
                         </ToggleButton>

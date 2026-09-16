@@ -14,10 +14,12 @@ namespace FastCraft3D.Io;
 public readonly record struct SceneVersion(string Label, DateTime SavedUtc, int ObjectCount);
 
 /// <summary>How the project is looked at and measured: none of it touches the geometry.</summary>
-/// <param name="PlateSize">The printer's bed, in millimetres.</param>
+/// <param name="PlateWidth">The printable area across X, in millimetres.</param>
+/// <param name="PlateDepth">Across Y.</param>
+/// <param name="PlateHeight">How tall a part the printer takes.</param>
 /// <param name="Unit">What the boxes read in - "mm", "in" and so on.</param>
 /// <param name="ModelScale">87 for a model drawn at 1:87.</param>
-public readonly record struct ProjectSettings(float PlateSize, string Unit, float ModelScale);
+public readonly record struct ProjectSettings(float PlateWidth, float PlateDepth, float PlateHeight, string Unit, float ModelScale);
 
 /// <summary>
 /// The project format (.3dfc): GZip-compressed JSON.
@@ -82,8 +84,12 @@ public static class SceneSerializer
     public static List<SceneObject> Load(string path, out ProjectSettings? settings)
     {
         var dto = Read(path);
-        settings = dto.PlateSize is { } plate && dto.Unit is { } unit && dto.ModelScale is { } scale
-            ? new ProjectSettings(plate, unit, scale)
+
+        // A file from before the printable area had a depth and a height kept one square bed size.
+        float? width = dto.PlateWidth ?? dto.PlateSize;
+        float? depth = dto.PlateDepth ?? dto.PlateSize;
+        settings = width is { } w && depth is { } d && dto.Unit is { } unit && dto.ModelScale is { } scale
+            ? new ProjectSettings(w, d, dto.PlateHeight ?? Scene.PrintHeight, unit, scale)
             : null;
         return dto.Objects?.Select(FromDto).ToList() ?? [];
     }
@@ -92,7 +98,10 @@ public static class SceneSerializer
     private static void Keep(SceneDto dto, ProjectSettings? settings)
     {
         if (settings is not { } s) return;
-        dto.PlateSize = s.PlateSize;
+        dto.PlateSize = null;
+        dto.PlateWidth = s.PlateWidth;
+        dto.PlateDepth = s.PlateDepth;
+        dto.PlateHeight = s.PlateHeight;
         dto.Unit = s.Unit;
         dto.ModelScale = s.ModelScale;
     }
@@ -265,6 +274,9 @@ public static class SceneSerializer
         // Added without a format bump: a file without them still reads, and an older copy of
         // the app skips names it does not know.
         public float? PlateSize { get; set; }
+        public float? PlateWidth { get; set; }
+        public float? PlateDepth { get; set; }
+        public float? PlateHeight { get; set; }
         public string? Unit { get; set; }
         public float? ModelScale { get; set; }
     }

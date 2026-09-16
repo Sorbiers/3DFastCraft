@@ -3,12 +3,19 @@ using System.Text.Json;
 
 namespace FastCraft3D.Io;
 
-/// <param name="PlateSize">The printer's bed, in millimetres.</param>
+/// <param name="PlateWidth">The printable area across X, in millimetres.</param>
+/// <param name="PlateDepth">Across Y.</param>
+/// <param name="PlateHeight">How tall a part the printer takes.</param>
 /// <param name="Unit">What the boxes read in.</param>
-public readonly record struct RememberedSettings(float PlateSize, string Unit);
+/// <param name="ShowAxes">The X and Y lines across the plate.</param>
+/// <param name="ShowZAxis">The upright line, as tall as the printable height.</param>
+/// <param name="ShowGridLabels">Distances written along the positive X and Y axes.</param>
+public readonly record struct RememberedSettings(
+    float PlateWidth, float PlateDepth, float PlateHeight, string Unit,
+    bool ShowAxes = true, bool ShowZAxis = false, bool ShowGridLabels = false);
 
 /// <summary>
-/// The bed size and unit last used, remembered between sessions.
+/// The printable area, the unit and how the grid is drawn, as last used, remembered between sessions.
 ///
 /// The project file keeps them too, but a new scene has no file: without this every start went
 /// back to a 200 mm bed in millimetres, and anyone with a bigger printer or working in inches set

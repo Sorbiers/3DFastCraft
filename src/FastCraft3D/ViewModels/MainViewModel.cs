@@ -100,10 +100,19 @@ public sealed class MainViewModel : INotifyPropertyChanged
     private bool scaleOneSide;
     private bool aroundSelectionCentre = true;
     private bool stopOnContact;
+    private bool keepOnBedMove;
+    private bool keepOnBedScale = true;
+    private float distributeGap = 10f;
     private bool showWireframe;
     private bool showXray;
     private bool showPlate = true;
-    private float plateSize = Scene.PlateSize;
+    private float plateWidth = Scene.PlateSize;
+    private float plateDepth = Scene.PlateSize;
+    private float plateHeight = Scene.PrintHeight;
+    private bool showAxes = true;
+    private bool showZAxis;
+    private bool showGridLabels;
+    private bool isGridPanelOpen;
     private float modelScale = 1f;
     private readonly EngraveState engrave = new();
     private Vector3 splitNormal = Vector3.UnitZ;
@@ -137,6 +146,8 @@ public sealed class MainViewModel : INotifyPropertyChanged
             _ => Scene.Selection.Count > 0);
         MirrorCommand = new RelayCommand(p => Mirror(p), _ => Scene.Selection.Count > 0);
         AlignToPlateCommand = RelayCommand.Simple(AlignToPlate, () => Scene.Selection.Count > 0);
+        FitToBedCommand = RelayCommand.Simple(FitToBed, () => Scene.Selection.Count > 0);
+        DistributeOnBedCommand = RelayCommand.Simple(DistributeOnBed, () => Scene.Selection.Count > 1);
         SelectAllCommand = RelayCommand.Simple(SelectAll, () => Scene.Objects.Count > 0);
         InvertSelectionCommand = RelayCommand.Simple(InvertSelection, () => Scene.Objects.Count > 0);
         GroupCommand = RelayCommand.Simple(Group, () => Scene.Selection.Count > 1);
@@ -200,6 +211,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
         SaveVersionCommand = RelayCommand.Simple(SaveVersion, () => Scene.Objects.Count > 0);
         VersionsCommand = RelayCommand.Simple(ShowVersions, () => projectPath is not null);
         NewCommand = RelayCommand.Simple(NewScene);
+        CloseGridPanelCommand = RelayCommand.Simple(() => IsGridPanelOpen = false);
         OpenCommand = RelayCommand.Simple(OpenProject);
         SaveCommand = RelayCommand.Simple(() => SaveProject(saveAs: false));
         SaveAsCommand = RelayCommand.Simple(() => SaveProject(saveAs: true));
@@ -229,6 +241,8 @@ public sealed class MainViewModel : INotifyPropertyChanged
     public System.Windows.Input.ICommand DuplicateCommand { get; }
     public System.Windows.Input.ICommand MirrorCommand { get; }
     public System.Windows.Input.ICommand AlignToPlateCommand { get; }
+    public System.Windows.Input.ICommand FitToBedCommand { get; }
+    public System.Windows.Input.ICommand DistributeOnBedCommand { get; }
     public System.Windows.Input.ICommand SelectAllCommand { get; }
     public System.Windows.Input.ICommand InvertSelectionCommand { get; }
     public System.Windows.Input.ICommand GroupCommand { get; }
@@ -279,6 +293,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
     public System.Windows.Input.ICommand SaveVersionCommand { get; }
     public System.Windows.Input.ICommand VersionsCommand { get; }
     public System.Windows.Input.ICommand NewCommand { get; }
+    public System.Windows.Input.ICommand CloseGridPanelCommand { get; }
     public System.Windows.Input.ICommand OpenCommand { get; }
     public System.Windows.Input.ICommand SaveCommand { get; }
     public System.Windows.Input.ICommand SaveAsCommand { get; }
@@ -369,19 +384,19 @@ public sealed class MainViewModel : INotifyPropertyChanged
     public float GroupX
     {
         get => unit.From(aroundSelectionCentre ? GroupCentre().X : Shared(o => o.PositionX));
-        set { if (aroundSelectionCentre) MoveGroupTo(Axis.X, unit.To(value)); else PlaceEach(Axis.X, unit.To(value)); }
+        set => OnBed(moving: true, together: aroundSelectionCentre, () => { if (aroundSelectionCentre) MoveGroupTo(Axis.X, unit.To(value)); else PlaceEach(Axis.X, unit.To(value)); });
     }
 
     public float GroupY
     {
         get => unit.From(aroundSelectionCentre ? GroupCentre().Y : Shared(o => o.PositionY));
-        set { if (aroundSelectionCentre) MoveGroupTo(Axis.Y, unit.To(value)); else PlaceEach(Axis.Y, unit.To(value)); }
+        set => OnBed(moving: true, together: aroundSelectionCentre, () => { if (aroundSelectionCentre) MoveGroupTo(Axis.Y, unit.To(value)); else PlaceEach(Axis.Y, unit.To(value)); });
     }
 
     public float GroupZ
     {
         get => unit.From(aroundSelectionCentre ? GroupCentre().Z : Shared(o => o.PositionZ));
-        set { if (aroundSelectionCentre) MoveGroupTo(Axis.Z, unit.To(value)); else PlaceEach(Axis.Z, unit.To(value)); }
+        set => OnBed(moving: true, together: aroundSelectionCentre, () => { if (aroundSelectionCentre) MoveGroupTo(Axis.Z, unit.To(value)); else PlaceEach(Axis.Z, unit.To(value)); });
     }
 
     /// <summary>
@@ -423,19 +438,19 @@ public sealed class MainViewModel : INotifyPropertyChanged
     public float GroupSizeX
     {
         get => unit.From(aroundSelectionCentre ? GroupExtent().X : Shared(o => o.SizeX));
-        set { if (aroundSelectionCentre) ResizeGroup(Axis.X, unit.To(value)); else ResizeEach(Axis.X, unit.To(value)); }
+        set => OnBed(moving: false, together: aroundSelectionCentre, () => { if (aroundSelectionCentre) ResizeGroup(Axis.X, unit.To(value)); else ResizeEach(Axis.X, unit.To(value)); });
     }
 
     public float GroupSizeY
     {
         get => unit.From(aroundSelectionCentre ? GroupExtent().Y : Shared(o => o.SizeY));
-        set { if (aroundSelectionCentre) ResizeGroup(Axis.Y, unit.To(value)); else ResizeEach(Axis.Y, unit.To(value)); }
+        set => OnBed(moving: false, together: aroundSelectionCentre, () => { if (aroundSelectionCentre) ResizeGroup(Axis.Y, unit.To(value)); else ResizeEach(Axis.Y, unit.To(value)); });
     }
 
     public float GroupSizeZ
     {
         get => unit.From(aroundSelectionCentre ? GroupExtent().Z : Shared(o => o.SizeZ));
-        set { if (aroundSelectionCentre) ResizeGroup(Axis.Z, unit.To(value)); else ResizeEach(Axis.Z, unit.To(value)); }
+        set => OnBed(moving: false, together: aroundSelectionCentre, () => { if (aroundSelectionCentre) ResizeGroup(Axis.Z, unit.To(value)); else ResizeEach(Axis.Z, unit.To(value)); });
     }
 
     /// <summary>
@@ -587,6 +602,31 @@ public sealed class MainViewModel : INotifyPropertyChanged
         return bounds.IsEmpty ? Vector3.Zero : bounds.Size;
     }
 
+    /// <summary>
+    /// Runs a typed move or resize of the selection and holds the result to the bed when Keep on
+    /// bed is on for it. A resize also keeps what stood on the bed standing there; a move must
+    /// not, or nothing could be lifted off it.
+    /// </summary>
+    private void OnBed(bool moving, bool together, Action change)
+    {
+        if (!(moving ? keepOnBedMove : keepOnBedScale))
+        {
+            change();
+            return;
+        }
+
+        var objects = Scene.Selection.ToList();
+        var before = objects.Select(o => o.WorldBounds).ToList();
+
+        change();
+
+        if (BedPlacement.HoldToBed(objects, before, together || objects.Count == 1, settle: !moving))
+        {
+            RaiseTransformFields();
+            RaiseGroup();
+        }
+    }
+
     private void RaiseGroup()
     {
         Raise(nameof(GroupX));
@@ -706,20 +746,31 @@ public sealed class MainViewModel : INotifyPropertyChanged
 
         float d = unit.To(delta);
         var selection = Scene.Selection;
+        bool known = true;
+        bool moving = property is nameof(GroupX) or nameof(GroupY) or nameof(GroupZ);
+        bool turning = property is nameof(GroupRoll) or nameof(GroupPitch) or nameof(GroupYaw);
 
-        switch (property)
+        void Change()
         {
-            case nameof(GroupX): foreach (var o in selection) o.PositionX += d; break;
-            case nameof(GroupY): foreach (var o in selection) o.PositionY += d; break;
-            case nameof(GroupZ): foreach (var o in selection) o.PositionZ += d; break;
-            case nameof(GroupSizeX): foreach (var o in selection) ResizeObject(o, Axis.X, MathF.Max(0.01f, o.SizeX + d)); break;
-            case nameof(GroupSizeY): foreach (var o in selection) ResizeObject(o, Axis.Y, MathF.Max(0.01f, o.SizeY + d)); break;
-            case nameof(GroupSizeZ): foreach (var o in selection) ResizeObject(o, Axis.Z, MathF.Max(0.01f, o.SizeZ + d)); break;
-            case nameof(GroupRoll): foreach (var o in selection) o.RotationX = GizmoMath.NormaliseDegrees(o.RotationX + delta); break;
-            case nameof(GroupPitch): foreach (var o in selection) o.RotationY = GizmoMath.NormaliseDegrees(o.RotationY + delta); break;
-            case nameof(GroupYaw): foreach (var o in selection) o.RotationZ = GizmoMath.NormaliseDegrees(o.RotationZ + delta); break;
-            default: return false;
+            switch (property)
+            {
+                case nameof(GroupX): foreach (var o in selection) o.PositionX += d; break;
+                case nameof(GroupY): foreach (var o in selection) o.PositionY += d; break;
+                case nameof(GroupZ): foreach (var o in selection) o.PositionZ += d; break;
+                case nameof(GroupSizeX): foreach (var o in selection) ResizeObject(o, Axis.X, MathF.Max(0.01f, o.SizeX + d)); break;
+                case nameof(GroupSizeY): foreach (var o in selection) ResizeObject(o, Axis.Y, MathF.Max(0.01f, o.SizeY + d)); break;
+                case nameof(GroupSizeZ): foreach (var o in selection) ResizeObject(o, Axis.Z, MathF.Max(0.01f, o.SizeZ + d)); break;
+                case nameof(GroupRoll): foreach (var o in selection) o.RotationX = GizmoMath.NormaliseDegrees(o.RotationX + delta); break;
+                case nameof(GroupPitch): foreach (var o in selection) o.RotationY = GizmoMath.NormaliseDegrees(o.RotationY + delta); break;
+                case nameof(GroupYaw): foreach (var o in selection) o.RotationZ = GizmoMath.NormaliseDegrees(o.RotationZ + delta); break;
+                default: known = false; break;
+            }
         }
+
+        if (turning) Change();
+        else OnBed(moving, together: false, Change);
+
+        if (!known) return false;
 
         RaiseGroup();
         return true;
@@ -1209,6 +1260,31 @@ public sealed class MainViewModel : INotifyPropertyChanged
     {
         get => stopOnContact;
         set => Set(ref stopOnContact, value);
+    }
+
+    /// <summary>
+    /// Keep on bed while moving: nothing is moved below the bed.
+    ///
+    /// Off by default. Sinking a part into the bed is a real way to flatten its underside, and
+    /// moving is how it is done.
+    /// </summary>
+    public bool KeepOnBedMove
+    {
+        get => keepOnBedMove;
+        set => Set(ref keepOnBedMove, value);
+    }
+
+    /// <summary>
+    /// Keep on bed while resizing: a part standing on the bed stays standing on it, so it grows
+    /// upward only instead of half up and half into the bed, and nothing is resized below it.
+    ///
+    /// On by default, because a part on the bed is nearly always meant to stay there, and one
+    /// grown into it is cut off by the slicer without a word.
+    /// </summary>
+    public bool KeepOnBedScale
+    {
+        get => keepOnBedScale;
+        set => Set(ref keepOnBedScale, value);
     }
 
     /// <summary>
@@ -2314,25 +2390,77 @@ public sealed class MainViewModel : INotifyPropertyChanged
     }
 
     /// <summary>
-    /// The printer's bed, in millimetres. It is a guide rather than a limit - nothing stops an
-    /// object being placed off it - so any printer's size can be dialled in.
+    /// The printable area, in millimetres: across X, across Y and up. A guide rather than a limit -
+    /// nothing stops an object being placed off it - so any printer can be dialled in. The bed was
+    /// one square size picked from a list, which no printer with a rectangular bed could be.
     /// </summary>
-    public float PlateSize
+    public float PlateWidth
     {
-        get => plateSize;
-        set
-        {
-            float wanted = Math.Clamp(value, 20f, 2000f);
-            if (Math.Abs(wanted - plateSize) < 0.01f) return;
-
-            Set(ref plateSize, wanted);
-            ViewChanged?.Invoke();
-            SettingChanged();
-        }
+        get => plateWidth;
+        set => SetPlate(ref plateWidth, value);
     }
 
-    /// <summary>Common bed sizes, so the usual ones are one click rather than a typed number.</summary>
-    public IReadOnlyList<float> PlateSizes { get; } = [120f, 180f, 200f, 220f, 250f, 300f, 350f, 400f];
+    public float PlateDepth
+    {
+        get => plateDepth;
+        set => SetPlate(ref plateDepth, value);
+    }
+
+    public float PlateHeight
+    {
+        get => plateHeight;
+        set => SetPlate(ref plateHeight, value);
+    }
+
+    private void SetPlate(ref float field, float value, [System.Runtime.CompilerServices.CallerMemberName] string? property = null)
+    {
+        float wanted = Math.Clamp(float.IsFinite(value) ? value : field, 20f, 2000f);
+        if (Math.Abs(wanted - field) < 0.01f) return;
+
+        field = wanted;
+        Raise(property);
+        ViewChanged?.Invoke();
+        SettingChanged();
+    }
+
+    /// <summary>The X and Y lines across the plate, crossing at the origin.</summary>
+    public bool ShowAxes
+    {
+        get => showAxes;
+        set => SetGrid(ref showAxes, value);
+    }
+
+    /// <summary>The upright line, as tall as the printable height.</summary>
+    public bool ShowZAxis
+    {
+        get => showZAxis;
+        set => SetGrid(ref showZAxis, value);
+    }
+
+    /// <summary>Distances written along the positive X and Y axes, in the current unit.</summary>
+    public bool ShowGridLabels
+    {
+        get => showGridLabels;
+        set => SetGrid(ref showGridLabels, value);
+    }
+
+    /// <summary>How the grid is drawn is the viewer's own, not the project's: remembered, but not a change to save.</summary>
+    private void SetGrid(ref bool field, bool value, [System.Runtime.CompilerServices.CallerMemberName] string? property = null)
+    {
+        if (field == value) return;
+
+        field = value;
+        Raise(property);
+        ViewChanged?.Invoke();
+        SettingsChanged?.Invoke();
+    }
+
+    /// <summary>Whether the grid settings are showing in the side panel.</summary>
+    public bool IsGridPanelOpen
+    {
+        get => isGridPanelOpen;
+        set => Set(ref isGridPanelOpen, value);
+    }
 
     /// <summary>
     /// What the model is drawn to: 87 means 1:87, and 1 means the part is the size it says.
@@ -2361,25 +2489,35 @@ public sealed class MainViewModel : INotifyPropertyChanged
     }
 
     /// <summary>The bed, the unit and the scale, as the project file and the local settings keep them.</summary>
-    public ProjectSettings ViewSettings => new(plateSize, unit.Label, modelScale);
+    public ProjectSettings ViewSettings => new(plateWidth, plateDepth, plateHeight, unit.Label, modelScale);
 
     /// <summary>Raised when the bed, the unit or the scale changes, for the window to remember it.</summary>
     public event Action? SettingsChanged;
 
     public void ApplySettings(ProjectSettings settings)
     {
-        ApplySettings(new RememberedSettings(settings.PlateSize, settings.Unit));
+        PlateWidth = settings.PlateWidth;
+        PlateDepth = settings.PlateDepth;
+        PlateHeight = settings.PlateHeight;
+        Unit = MeasureUnit.All.FirstOrDefault(u => u.Label == settings.Unit, MeasureUnit.Default);
         ModelScale = settings.ModelScale;
     }
 
     /// <summary>The bed and unit last used; the scale belongs to a project and is not carried over.</summary>
     public void ApplySettings(RememberedSettings settings)
     {
-        PlateSize = settings.PlateSize;
+        // Nothing stored for a size, as a file from before the printable area had three, means the default.
+        PlateWidth = settings.PlateWidth > 0 ? settings.PlateWidth : Scene.PlateSize;
+        PlateDepth = settings.PlateDepth > 0 ? settings.PlateDepth : Scene.PlateSize;
+        PlateHeight = settings.PlateHeight > 0 ? settings.PlateHeight : Scene.PrintHeight;
         Unit = MeasureUnit.All.FirstOrDefault(u => u.Label == settings.Unit, MeasureUnit.Default);
+        ShowAxes = settings.ShowAxes;
+        ShowZAxis = settings.ShowZAxis;
+        ShowGridLabels = settings.ShowGridLabels;
     }
 
-    public RememberedSettings Remembered => new(plateSize, unit.Label);
+    public RememberedSettings Remembered =>
+        new(plateWidth, plateDepth, plateHeight, unit.Label, showAxes, showZAxis, showGridLabels);
 
     private void SettingChanged()
     {
@@ -2423,8 +2561,11 @@ public sealed class MainViewModel : INotifyPropertyChanged
         get => ToReal(HasOneSelected ? Selected!.PositionX : GroupAt(Axis.X));
         set
         {
-            if (HasOneSelected) Selected!.PositionX = FromReal(value);
-            else MoveGroupTo(Axis.X, FromReal(value));
+            OnBed(moving: true, together: true, () =>
+            {
+                if (HasOneSelected) Selected!.PositionX = FromReal(value);
+                else MoveGroupTo(Axis.X, FromReal(value));
+            });
             RaiseReal();
         }
     }
@@ -2434,8 +2575,11 @@ public sealed class MainViewModel : INotifyPropertyChanged
         get => ToReal(HasOneSelected ? Selected!.PositionY : GroupAt(Axis.Y));
         set
         {
-            if (HasOneSelected) Selected!.PositionY = FromReal(value);
-            else MoveGroupTo(Axis.Y, FromReal(value));
+            OnBed(moving: true, together: true, () =>
+            {
+                if (HasOneSelected) Selected!.PositionY = FromReal(value);
+                else MoveGroupTo(Axis.Y, FromReal(value));
+            });
             RaiseReal();
         }
     }
@@ -2445,8 +2589,11 @@ public sealed class MainViewModel : INotifyPropertyChanged
         get => ToReal(HasOneSelected ? Selected!.PositionZ : GroupAt(Axis.Z));
         set
         {
-            if (HasOneSelected) Selected!.PositionZ = FromReal(value);
-            else MoveGroupTo(Axis.Z, FromReal(value));
+            OnBed(moving: true, together: true, () =>
+            {
+                if (HasOneSelected) Selected!.PositionZ = FromReal(value);
+                else MoveGroupTo(Axis.Z, FromReal(value));
+            });
             RaiseReal();
         }
     }
@@ -2461,20 +2608,21 @@ public sealed class MainViewModel : INotifyPropertyChanged
     public float ObjectPositionX
     {
         get => unit.From(Selected?.PositionX ?? 0f);
-        set { if (Selected is { } o) { o.PositionX = unit.To(value); RaiseTransformFields(); } }
+        set { if (Selected is { } o) OnBed(moving: true, together: true, () => { o.PositionX = unit.To(value); RaiseTransformFields(); }); }
     }
 
     public float ObjectPositionY
     {
         get => unit.From(Selected?.PositionY ?? 0f);
-        set { if (Selected is { } o) { o.PositionY = unit.To(value); RaiseTransformFields(); } }
+        set { if (Selected is { } o) OnBed(moving: true, together: true, () => { o.PositionY = unit.To(value); RaiseTransformFields(); }); }
     }
 
     public float ObjectPositionZ
     {
         get => unit.From(Selected?.PositionZ ?? 0f);
-        set { if (Selected is { } o) { o.PositionZ = unit.To(value); RaiseTransformFields(); } }
+        set { if (Selected is { } o) OnBed(moving: true, together: true, () => { o.PositionZ = unit.To(value); RaiseTransformFields(); }); }
     }
+
 
     /// <summary>
     /// The selected object's own width, depth and height, honouring the proportions lock.
@@ -2516,7 +2664,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
         if (Selected is not { } o) return;
         if (!float.IsFinite(millimetres) || millimetres < 0.01f) return;
 
-        ResizeObject(o, axis, millimetres);
+        OnBed(moving: false, together: true, () => ResizeObject(o, axis, millimetres));
         RaiseReal();
     }
 
@@ -2552,7 +2700,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
         set
         {
             if (HasOneSelected) ResizeSelected(Axis.X, FromReal(value));
-            else ResizeGroup(Axis.X, FromReal(value));
+            else OnBed(moving: false, together: true, () => ResizeGroup(Axis.X, FromReal(value)));
             RaiseReal();
         }
     }
@@ -2563,7 +2711,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
         set
         {
             if (HasOneSelected) ResizeSelected(Axis.Y, FromReal(value));
-            else ResizeGroup(Axis.Y, FromReal(value));
+            else OnBed(moving: false, together: true, () => ResizeGroup(Axis.Y, FromReal(value)));
             RaiseReal();
         }
     }
@@ -2574,7 +2722,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
         set
         {
             if (HasOneSelected) ResizeSelected(Axis.Z, FromReal(value));
-            else ResizeGroup(Axis.Z, FromReal(value));
+            else OnBed(moving: false, together: true, () => ResizeGroup(Axis.Z, FromReal(value)));
             RaiseReal();
         }
     }
@@ -3193,6 +3341,31 @@ public sealed class MainViewModel : INotifyPropertyChanged
         Raise(nameof(ConnectorsArePegs));
         Raise(nameof(ConnectorsAreBricks));
         Raise(nameof(ConnectorsAreRound));
+        Raise(nameof(ConnectorSizeLabel));
+    }
+
+    public bool ConnectorPegRound
+    {
+        get => connectors.Shape == PegShape.Round;
+        set { if (value) SetPegShape(PegShape.Round); }
+    }
+
+    /// <summary>Square pegs and sockets: one cannot turn, so a single peg keeps the halves lined up.</summary>
+    public bool ConnectorPegSquare
+    {
+        get => connectors.Shape == PegShape.Square;
+        set { if (value) SetPegShape(PegShape.Square); }
+    }
+
+    /// <summary>What the size box is: across a round connector, or along the side of a square one.</summary>
+    public string ConnectorSizeLabel => connectors.IsSquare ? "Width" : "Diameter";
+
+    private void SetPegShape(PegShape shape)
+    {
+        connectors = connectors with { Shape = shape };
+        Raise(nameof(ConnectorPegRound));
+        Raise(nameof(ConnectorPegSquare));
+        Raise(nameof(ConnectorSizeLabel));
     }
 
     /// <summary>How many to place, at most. A face with room for fewer gets fewer, and the status line says so.</summary>
@@ -3854,6 +4027,68 @@ public sealed class MainViewModel : INotifyPropertyChanged
 
         RefreshSelection();
         Status = "Aligned to the build plate";
+    }
+
+    /// <summary>
+    /// Shrinks the selection to the printable area if it is too big for it, keeping a margin clear
+    /// round the edge, and stands it in the middle of the bed. It never makes anything bigger:
+    /// a part that already fits is only moved, so Fit is safe to press on anything.
+    /// </summary>
+    private void FitToBed()
+    {
+        var selection = Scene.Selection.ToList();
+        if (selection.Count == 0) return;
+
+        var before = selection.Select(TransformState.Capture).ToList();
+        float ratio = BedPlacement.FitRatio(BedPlacement.Reach(selection).Size, plateWidth, plateDepth, plateHeight);
+        BedPlacement.Fit(selection, ratio);
+
+        if (TransformCommand.CreateIfChanged("Fit to bed", selection, before) is { } command)
+            Undo.Execute(command);
+
+        RefreshSelection();
+        ZoomExtentsRequested?.Invoke();
+
+        Status = ratio < 1f
+            ? $"Scaled to {ratio * 100f:0.#}% to fit the bed, and centred on it"
+            : "Centred on the bed - it already fitted, so nothing was scaled";
+    }
+
+    /// <summary>
+    /// Sets the selection out in rows across the bed, a gap apart. The parts move while the gap is
+    /// being typed and go back where they were if the panel is cancelled.
+    /// </summary>
+    private void DistributeOnBed()
+    {
+        var selection = Scene.Selection.ToList();
+        if (selection.Count < 2) return;
+
+        var before = selection.Select(TransformState.Capture).ToList();
+
+        Vector2 Arrange(float gap)
+        {
+            for (int i = 0; i < selection.Count; i++) before[i].ApplyTo(selection[i]);
+            return BedPlacement.Distribute(selection, gap, plateWidth);
+        }
+
+        var panel = new DistributeDialog(selection.Count, distributeGap, new Vector2(plateWidth, plateDepth), Arrange);
+        if (panel.ShowDialog() != true || panel.Result is not { } chosen)
+        {
+            for (int i = 0; i < selection.Count; i++) before[i].ApplyTo(selection[i]);
+            RefreshSelection();
+            return;
+        }
+
+        distributeGap = chosen;
+        var covers = Arrange(chosen);
+
+        if (TransformCommand.CreateIfChanged("Distribute", selection, before) is { } command)
+            Undo.Execute(command);
+
+        RefreshSelection();
+        Status = covers.X <= plateWidth + 0.01f && covers.Y <= plateDepth + 0.01f
+            ? $"Distributed {selection.Count} objects {chosen:0.##} mm apart"
+            : $"Distributed {selection.Count} objects {chosen:0.##} mm apart - they cover {covers.X:0} x {covers.Y:0} mm, more than the bed";
     }
 
     private void SelectAll()

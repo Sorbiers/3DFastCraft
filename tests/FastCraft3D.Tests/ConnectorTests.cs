@@ -346,6 +346,54 @@ public class ConnectorTests
         Assert.Empty(pins);
     }
 
+    /// <summary>
+    /// A square peg is as wide as a round one is across, and its socket is square too: the volumes
+    /// added and taken away are a square's, not a circle's.
+    /// </summary>
+    [Fact]
+    public void SquarePegsGoIntoSquareSockets()
+    {
+        var block = Primitives.Box(40, 40, 40);
+        var (upper, lower) = PlaneSplit.Split(block, Axis.Z, 0f, SplitKeep.Both);
+        var options = ConnectorOptions.Default with
+        {
+            Style = ConnectorStyle.Pegs, Shape = PegShape.Square, Count = 1, Diameter = 6f, Depth = 5f, Clearance = 0.1f
+        };
+        var points = Connectors.Place(block, Vector3.UnitZ, 0f, options);
+        Assert.Single(points);
+
+        var joined = Connectors.Join(upper!, lower!, points, Vector3.UnitZ, options);
+
+        Assert.NotNull(joined);
+        var (socketed, pegged, _) = joined.Value;
+
+        Assert.True(pegged.CheckHealth().IsWatertight);
+        Assert.True(socketed.CheckHealth().IsWatertight);
+        Assert.Equal(6f * 6f * 5f, SignedVolume(pegged) - SignedVolume(lower!), 0);
+        Assert.Equal(6.2f * 6.2f * 5.1f, SignedVolume(upper!) - SignedVolume(socketed), 0);
+
+        // Sides along X and Y on a level cut: the peg's top is 6 mm square, not a diamond.
+        var top = pegged.ComputeBounds();
+        Assert.Equal(5f, top.Max.Z, 2);
+        var peg = PlaneClip.KeepOpen(pegged, System.Numerics.Matrix4x4.Identity, Vector3.UnitZ, 2.5f).Rings;
+        var reach = Bounds.FromPoints(peg.SelectMany(r => r));
+        Assert.Equal(6f, reach.Size.X, 2);
+        Assert.Equal(6f, reach.Size.Y, 2);
+    }
+
+    /// <summary>Its corners reach further than a round peg of the same width, so it keeps further in.</summary>
+    [Fact]
+    public void ASquarePegNeedsMoreRoomFromTheEdgeThanARoundOne()
+    {
+        var round = ConnectorOptions.Default with { Style = ConnectorStyle.Pegs, Diameter = 6f, Clearance = 0f, EdgeDistance = 1f };
+        var square = round with { Shape = PegShape.Square };
+
+        var roundWall = Connectors.Survey(Primitives.Box(9, 9, 20), Vector3.UnitZ, 0f, round).WallNeeded;
+        var squareWall = Connectors.Survey(Primitives.Box(9, 9, 20), Vector3.UnitZ, 0f, square).WallNeeded;
+
+        Assert.True(squareWall > roundWall + 1f, $"round {roundWall:0.##}, square {squareWall:0.##}");
+    }
+
     /// <summary>The same when the cut faces down: the lower part is then the front one.</summary>
     [Fact]
     public void PegsStandUpOutOfTheLowerPartWhicheverWayTheCutFaces()

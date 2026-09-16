@@ -31,6 +31,18 @@ public enum ConnectorStyle
     Bricks
 }
 
+/// <summary>The cross-section of a peg and its socket.</summary>
+public enum PegShape
+{
+    Round,
+
+    /// <summary>
+    /// Square, as wide as a round one is across. It cannot turn in its socket, so one peg holds the
+    /// halves square to each other where a round one needs a second.
+    /// </summary>
+    Square
+}
+
 /// <param name="Count">How many to place, at most. Fewer go in when the cut face has no room.</param>
 /// <param name="Diameter">Of the pin or peg itself; the hole is bigger by the clearance on every side.</param>
 /// <param name="Depth">How far a connector reaches into each half.</param>
@@ -44,9 +56,10 @@ public enum ConnectorStyle
 /// For brick studs: how much fatter than standard the studs and what grips them, in millimetres
 /// across, on each half. Both halves are printed, so each carries its own share of the error.
 /// </param>
+/// <param name="Shape">Of pegs and their sockets; pins are always round.</param>
 public readonly record struct ConnectorOptions(
     ConnectorStyle Style, int Count, float Diameter, float Depth, float Clearance, float EdgeDistance,
-    ConnectorDirection Direction, float BrickFit = Engraving.BrickStuds.FdmFit)
+    ConnectorDirection Direction, float BrickFit = Engraving.BrickStuds.FdmFit, PegShape Shape = PegShape.Round)
 {
     /// <summary>
     /// Written out, because a record struct's new() skips the defaults and hands back zeros - a
@@ -56,9 +69,19 @@ public readonly record struct ConnectorOptions(
     /// that should come apart again; PETG and entry-level printers want 0.25 to 0.3.
     /// </summary>
     public static ConnectorOptions Default =>
-        new(ConnectorStyle.Pins, 2, 5f, 6f, 0.2f, 3f, ConnectorDirection.Perpendicular, Engraving.BrickStuds.FdmFit);
+        new(ConnectorStyle.Pins, 2, 5f, 6f, 0.2f, 3f, ConnectorDirection.Perpendicular, Engraving.BrickStuds.FdmFit, PegShape.Round);
 
     public float Radius => Diameter / 2f;
+
+    /// <summary>Whether what is cut in is square: pegs asked for square. Pins are round whatever the shape says.</summary>
+    public bool IsSquare => Style == ConnectorStyle.Pegs && Shape == PegShape.Square;
+
+    /// <summary>
+    /// How far from its middle a connector reaches on the face, at most, as a share of its half
+    /// width: a square's corners are half as far again and a bit. Room is measured round the
+    /// middle in every direction, and the corners can point at any edge.
+    /// </summary>
+    public float Footprint => IsSquare ? MathF.Sqrt(2f) : 1f;
 }
 
 /// <summary>
@@ -125,8 +148,9 @@ public static class Connectors
     public sealed record Layout(List<Vector3> Points, bool Crosses, float ThickestWall, float WallNeeded, bool BreaksOut = false);
 
     /// <param name="At">The middle of a connector where it crosses the cut.</param>
-    /// <param name="Radius">How wide it is there.</param>
-    public readonly record struct Mark(Vector3 At, float Radius);
+    /// <param name="Radius">How wide it is there: the radius, or half the side of a square.</param>
+    /// <param name="Side">Along one side of a square connector, on the cut; zero for a round one.</param>
+    public readonly record struct Mark(Vector3 At, float Radius, Vector3 Side = default);
 
     /// <summary>
     /// Where the connectors would land, for the viewport to mark while the numbers are being set.
@@ -140,7 +164,7 @@ public static class Connectors
 
         return options.Style == ConnectorStyle.Bricks
             ? BrickMarks([(world, offset)], world, normal, offset, up, options)
-            : Round(Survey(world, normal, offset, options), options);
+            : Round(Survey(world, normal, offset, options), normal, options);
     }
 
     /// <summary>The same for two parts that rest against each other.</summary>
@@ -157,13 +181,16 @@ public static class Connectors
         return options.Style == ConnectorStyle.Bricks
             ? BrickMarks([(front, contact.Offset + inset), (back, contact.Offset - inset)],
                          upper, normal, contact.Offset, up, options)
-            : Round(Survey(front, back, contact, options), options);
+            : Round(Survey(front, back, contact, options), normal, options);
     }
 
-    private static List<Mark> Round(Layout layout, ConnectorOptions options) =>
-        layout.Points
-            .Select(at => new Mark(at, options.Radius + MathF.Max(0f, options.Clearance)))
+    private static List<Mark> Round(Layout layout, Vector3 normal, ConnectorOptions options)
+    {
+        var side = options.IsSquare ? Perpendicular(normal) : Vector3.Zero;
+        return layout.Points
+            .Select(at => new Mark(at, options.Radius + MathF.Max(0f, options.Clearance), side))
             .ToList();
+    }
 
     /// <summary>
     /// Where brick studs would stand: the 8 mm grid laid over the section exactly as the studs
@@ -362,7 +389,7 @@ public static class Connectors
         // The hole's footprint on the face: a circle square on, an ellipse at a slant, longer by
         // the cosine. Taken as a circle of the longer reach, which is the safe side of it.
         float cosine = axis is { } way ? Vector3.Dot(way, normal) : 1f;
-        float hole = (options.Radius + MathF.Max(0f, options.Clearance)) / cosine;
+        float hole = (options.Radius + MathF.Max(0f, options.Clearance)) * options.Footprint / cosine;
         float wall = MathF.Max(options.EdgeDistance, MinimumWall);
         float needed = hole + wall;
 
@@ -637,6 +664,13 @@ public static class Connectors
         // puts them on the back part, as good as either.
         bool pegsBelow = normal.Z >= 0f;
 
+        // A square peg's sides run with the frame the connectors were laid out in, so on a level
+        // cut they line up with X and Y.
+        var across = Perpendicular(normal);
+        Mesh Peg(Vector3 at, float half, float from, float to) => options.IsSquare
+            ? Bar(at, axis, across, half, from, to)
+            : Rod(at, axis, half, from, to);
+
         var pins = new List<Mesh>();
 
         foreach (var at in points)
@@ -657,15 +691,15 @@ public static class Connectors
                 // The peg stands up out of the lower part into the upper, sunk a little way into its
                 // own part so the union meets solid material and not the cut face. The socket
                 // reaches past the upper part's face for the same reason.
-                var peg = Rod(at, axis, r, -embed, depth);
-                var socket = Rod(at, axis, r + c, -embed, depth + c);
+                var peg = Peg(at, r, -embed, depth);
+                var socket = Peg(at, r + c, -embed, depth + c);
                 back = LocalCsg.Union(back, peg, token);
                 front = LocalCsg.Subtract(front, socket, token);
             }
             else
             {
-                var peg = Rod(at, axis, r, -depth, embed);
-                var socket = Rod(at, axis, r + c, -(depth + c), embed);
+                var peg = Peg(at, r, -depth, embed);
+                var socket = Peg(at, r + c, -(depth + c), embed);
                 front = LocalCsg.Union(front, peg, token);
                 back = LocalCsg.Subtract(back, socket, token);
             }
@@ -802,6 +836,32 @@ public static class Connectors
         mesh.CheckHealth().IsWatertight ? mesh : MeshHealer.Heal(mesh, token: token).Mesh;
 
     /// <summary>A round rod along the normal through a point, from one distance along it to another.</summary>
+    /// <summary>
+    /// A square rod along <paramref name="axis"/>, <paramref name="half"/> from its middle to each
+    /// side, with two sides running along <paramref name="across"/>.
+    /// </summary>
+    private static Mesh Bar(Vector3 through, Vector3 axis, Vector3 across, float half, float from, float to)
+    {
+        float length = to - from;
+        float middle = (from + to) / 2f;
+
+        var side = across - axis * Vector3.Dot(across, axis);
+        side = side.LengthSquared() < 1e-8f ? Perpendicular(axis) : Vector3.Normalize(side);
+        var other = Vector3.Cross(axis, side);
+
+        // A four-sided prism has its corners on the axes; an eighth of a turn puts its sides there.
+        var square = MeshTransform.Transformed(
+            Primitives.Prism(half * MathF.Sqrt(2f), length, 4), Matrix4x4.CreateRotationZ(MathF.PI / 4f));
+
+        var frame = new Matrix4x4(
+            side.X, side.Y, side.Z, 0f,
+            other.X, other.Y, other.Z, 0f,
+            axis.X, axis.Y, axis.Z, 0f,
+            0f, 0f, 0f, 1f);
+
+        return MeshTransform.Transformed(square, frame * Matrix4x4.CreateTranslation(through + axis * middle));
+    }
+
     private static Mesh Rod(Vector3 through, Vector3 normal, float radius, float from, float to)
     {
         float length = to - from;

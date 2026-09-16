@@ -1,4 +1,4 @@
-﻿using System.Collections.ObjectModel;
+using System.Collections.ObjectModel;
 using FastCraft3D.Geometry;
 
 namespace FastCraft3D.Model;
@@ -7,6 +7,9 @@ public sealed class Scene
 {
     /// <summary>Build plate edge length in millimetres, matching a common desktop printer bed.</summary>
     public const float PlateSize = 200f;
+
+    /// <summary>How tall a part the printer takes, by default: a cube with the bed.</summary>
+    public const float PrintHeight = 200f;
 
     public ObservableCollection<SceneObject> Objects { get; } = new();
 

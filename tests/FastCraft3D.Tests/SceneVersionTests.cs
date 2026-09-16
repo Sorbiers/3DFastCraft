@@ -37,23 +37,50 @@ public class SceneVersionTests : IDisposable
     public void TheBedUnitAndScaleComeBackWithTheScene()
     {
         string path = File_("settings.3dfc");
-        SceneSerializer.Save(path, SceneWith("A"), new ProjectSettings(250f, "in", 87f));
+        SceneSerializer.Save(path, SceneWith("A"), new ProjectSettings(250f, 210f, 180f, "in", 87f));
 
         SceneSerializer.Load(path, out var settings);
 
-        Assert.Equal(new ProjectSettings(250f, "in", 87f), settings);
+        Assert.Equal(new ProjectSettings(250f, 210f, 180f, "in", 87f), settings);
     }
 
     [Fact]
     public void SavingWithoutSettingsKeepsTheOnesTheFileHad()
     {
         string path = File_("kept-settings.3dfc");
-        SceneSerializer.Save(path, SceneWith("A"), new ProjectSettings(300f, "cm", 12f));
+        SceneSerializer.Save(path, SceneWith("A"), new ProjectSettings(300f, 300f, 250f, "cm", 12f));
         SceneSerializer.SaveVersion(path, SceneWith("A", "B"), "later");
 
         SceneSerializer.Load(path, out var settings);
 
-        Assert.Equal(new ProjectSettings(300f, "cm", 12f), settings);
+        Assert.Equal(new ProjectSettings(300f, 300f, 250f, "cm", 12f), settings);
+    }
+
+    [Fact]
+    public void AFileWithOneSquareBedSizeOpensWithThatBedAndTheUsualHeight()
+    {
+        string path = File_("square-bed.3dfc");
+        SceneSerializer.Save(path, SceneWith("A"), new ProjectSettings(250f, 210f, 180f, "mm", 1f));
+
+        // Rewritten as a file from before the printable area had a depth and a height.
+        System.Text.Json.Nodes.JsonObject json;
+        using (var file = File.OpenRead(path))
+        using (var gzip = new System.IO.Compression.GZipStream(file, System.IO.Compression.CompressionMode.Decompress))
+            json = System.Text.Json.Nodes.JsonNode.Parse(gzip)!.AsObject();
+
+        var plate = json.Select(p => p.Key).Where(k => k.StartsWith("plate", StringComparison.OrdinalIgnoreCase)).ToList();
+        Assert.Equal(3, plate.Count);
+        string size = plate[0][..5] + "Size";
+        foreach (var key in plate) json.Remove(key);
+        json[size] = 250f;
+
+        using (var file = File.Create(path))
+        using (var gzip = new System.IO.Compression.GZipStream(file, System.IO.Compression.CompressionLevel.Fastest))
+            System.Text.Json.JsonSerializer.Serialize(gzip, json);
+
+        SceneSerializer.Load(path, out var settings);
+
+        Assert.Equal(new ProjectSettings(250f, 250f, Scene.PrintHeight, "mm", 1f), settings);
     }
 
     [Fact]
@@ -70,8 +97,8 @@ public class SceneVersionTests : IDisposable
     public void LocalSettingsAreRememberedAndADamagedFileIsIgnored()
     {
         string store = File_("settings.json");
-        LocalSettings.Save(new RememberedSettings(220f, "in"), store);
-        Assert.Equal(new RememberedSettings(220f, "in"), LocalSettings.Load(store));
+        LocalSettings.Save(new RememberedSettings(220f, 220f, 250f, "in", ShowAxes: false, ShowGridLabels: true), store);
+        Assert.Equal(new RememberedSettings(220f, 220f, 250f, "in", ShowAxes: false, ShowGridLabels: true), LocalSettings.Load(store));
 
         File.WriteAllText(store, "{ not json");
         Assert.Null(LocalSettings.Load(store));
