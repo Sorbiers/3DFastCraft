@@ -1,4 +1,4 @@
-﻿using System.IO;
+using System.IO;
 using System.IO.Compression;
 using System.Numerics;
 using FastCraft3D.Geometry;
@@ -136,6 +136,41 @@ public class ThreeMfTests : IDisposable
 
         var part = Assert.Single(ThreeMf.Read(path));
         Assert.Equal(new Vector3(0f, 1f, 0f), part.Colour);
+    }
+
+    /// <summary>
+    /// Explorer shows a picture on a 3MF when the package carries one, which is why files from
+    /// slicers and from 3D Builder have an icon. Ours had the blank page.
+    /// </summary>
+    [Fact]
+    public void TheFileCarriesAPictureOfWhatIsInIt()
+    {
+        string path = Path.Combine(folder, "thumbnail.3mf");
+        var cube = MeshTransform.Transformed(Primitives.Box(20, 20, 20), Matrix4x4.CreateTranslation(0, 0, 10));
+        ThreeMf.Write(path, [new ObjObject("Cube", cube, new Vector3(0.8f, 0.3f, 0.2f))]);
+
+        using var zip = ZipFile.OpenRead(path);
+        var picture = zip.GetEntry("Metadata/thumbnail.png");
+        Assert.NotNull(picture);
+
+        // A PNG, and one with the model actually drawn in it rather than an empty square.
+        var bytes = new byte[picture.Length];
+        using (var stream = picture.Open()) stream.ReadExactly(bytes);
+        Assert.Equal<byte[]>([0x89, 0x50, 0x4E, 0x47], bytes[..4]);
+
+        var drawn = MeshThumbnail.Png([(cube, new Vector3(0.8f, 0.3f, 0.2f))], 64);
+        Assert.NotNull(drawn);
+
+        // The package says it has one, in the way the readers look for.
+        var rels = zip.GetEntry("_rels/.rels");
+        Assert.NotNull(rels);
+        using var reader = new StreamReader(rels.Open());
+        string text = reader.ReadToEnd();
+        Assert.Contains("relationships/metadata/thumbnail", text);
+        Assert.Contains("/Metadata/thumbnail.png", text);
+
+        using var types = new StreamReader(zip.GetEntry("[Content_Types].xml")!.Open());
+        Assert.Contains("image/png", types.ReadToEnd());
     }
 
     [Fact]

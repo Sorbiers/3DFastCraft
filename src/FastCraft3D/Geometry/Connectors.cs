@@ -139,7 +139,7 @@ public static class Connectors
         var up = normal.Z >= 0f ? normal : -normal;
 
         return options.Style == ConnectorStyle.Bricks
-            ? BrickMarks([world], world, normal, offset, up, options)
+            ? BrickMarks([(world, offset)], world, normal, offset, up, options)
             : Round(Survey(world, normal, offset, options), options);
     }
 
@@ -150,8 +150,13 @@ public static class Connectors
         var up = normal.Z >= 0f ? normal : -normal;
         var upper = normal.Z >= 0f ? front : back;
 
+        // Each part read a little inside its own face rather than on the plane between them: a
+        // section taken exactly on a face is a coin-toss between the whole face and nothing at all.
+        float inset = contact.Gap / 2f + SectionInset;
+
         return options.Style == ConnectorStyle.Bricks
-            ? BrickMarks([front, back], upper, normal, contact.Offset, up, options)
+            ? BrickMarks([(front, contact.Offset + inset), (back, contact.Offset - inset)],
+                         upper, normal, contact.Offset, up, options)
             : Round(Survey(front, back, contact, options), options);
     }
 
@@ -165,36 +170,43 @@ public static class Connectors
     /// themselves lay it out, kept where the section is wide enough for a stud and the socket's
     /// wall, and where the upper part is still that wide a socket and a roof deeper in.
     /// </summary>
-    private static List<Mark> BrickMarks(IReadOnlyList<Mesh> parts, Mesh upper, Vector3 normal,
-                                         float offset, Vector3 up, ConnectorOptions options)
+    private static List<Mark> BrickMarks(IReadOnlyList<(Mesh Mesh, float Section)> parts, Mesh upper,
+                                         Vector3 normal, float offset, Vector3 up, ConnectorOptions options)
     {
         var (u, v) = FacePatch.PlaneAxes(up);
         var origin = normal * offset;
 
-        var loops = new List<List<Vector2>>();
-        var low = new Vector2(float.MaxValue);
-        var high = new Vector2(float.MinValue);
+        // One section per part, nested on its own. Thrown in together, two parts that meet face to
+        // face give two outlines one inside the other, and the second reads as a hole in the first.
+        var sections = new List<(List<List<Vector2>> Loops, List<(List<Vector2> Outline, List<List<Vector2>> Holes)> Shapes)>();
 
-        foreach (var mesh in parts)
+        // The box the marks are laid out over is where every part reaches, so it starts as
+        // everything and is narrowed by each: started the other way round it narrowed to nothing.
+        var low = new Vector2(float.MinValue);
+        var high = new Vector2(float.MaxValue);
+
+        foreach (var (mesh, section) in parts)
         {
-            var (_, rings) = PlaneClip.KeepOpen(mesh, Matrix4x4.Identity, normal, offset);
+            var (_, rings) = PlaneClip.KeepOpen(mesh, Matrix4x4.Identity, normal, section);
             if (rings.Count == 0) return [];
 
-            foreach (var ring in rings)
-            {
-                var loop = ring.Select(Flat).ToList();
-                loops.Add(loop);
+            var loops = rings.Select(ring => ring.Select(Flat).ToList()).ToList();
+            sections.Add((loops, Polygon2.Nest(loops)));
+
+            // The marks go where every part has material, so the box is the overlap of the two.
+            var own = (Low: new Vector2(float.MaxValue), High: new Vector2(float.MinValue));
+            foreach (var loop in loops)
                 foreach (var p in loop)
                 {
-                    low = Vector2.Min(low, p);
-                    high = Vector2.Max(high, p);
+                    own.Low = Vector2.Min(own.Low, p);
+                    own.High = Vector2.Max(own.High, p);
                 }
-            }
+
+            low = Vector2.Max(low, own.Low);
+            high = Vector2.Min(high, own.High);
         }
 
-        if (loops.Count == 0 || high.X <= low.X || high.Y <= low.Y) return [];
-
-        var shapes = Polygon2.Nest(loops);
+        if (sections.Count == 0 || high.X <= low.X || high.Y <= low.Y) return [];
         float pitch = Engraving.BrickStuds.Pitch;
         float radius = Engraving.BrickStuds.StudRadius(options.BrickFit);
         float reach = radius + Engraving.BrickStuds.Wall(options.BrickFit);
@@ -216,7 +228,7 @@ public static class Connectors
             for (int j = -stepsV; j <= stepsV; j++)
             {
                 var at = middle + new Vector2((i - phaseU) * pitch, (j - phaseV) * pitch);
-                if (!Inside(shapes, at) || NearestEdge(loops, at) < reach) continue;
+                if (sections.Any(s => !Inside(s.Shapes, at) || NearestEdge(s.Loops, at) < reach)) continue;
 
                 var world = origin + u * at.X + v * at.Y;
                 if (deep(world) < reach) continue;

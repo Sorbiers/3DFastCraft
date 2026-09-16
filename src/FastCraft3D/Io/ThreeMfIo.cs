@@ -22,6 +22,9 @@ public static class ThreeMf
     private const string ProductionNamespace = "http://schemas.microsoft.com/3dmanufacturing/production/2015/06";
     private const string DefaultModelPath = "3D/3dmodel.model";
 
+    /// <summary>Where the package keeps its picture, by convention.</summary>
+    private const string ThumbnailPath = "Metadata/thumbnail.png";
+
     // --- reading ---------------------------------------------------------------------------------
 
     /// <summary>One part per item on the build plate, in millimetres, named and coloured if the file says.</summary>
@@ -344,6 +347,10 @@ public static class ThreeMf
         using var file = File.Create(path);
         using var zip = new ZipArchive(file, ZipArchiveMode.Create);
 
+        // The picture Explorer shows on the file. Drawn before the package is laid out, since what
+        // it declares depends on whether there is one.
+        var thumbnail = MeshThumbnail.Png(parts.Select(part => (part.Mesh, part.Colour)).ToList());
+
         WriteEntry(zip, "[Content_Types].xml", w =>
         {
             w.WriteStartElement("Types", "http://schemas.openxmlformats.org/package/2006/content-types");
@@ -355,6 +362,15 @@ public static class ThreeMf
             w.WriteAttributeString("Extension", "model");
             w.WriteAttributeString("ContentType", "application/vnd.ms-package.3dmanufacturing-3dmodel+xml");
             w.WriteEndElement();
+
+            if (thumbnail is not null)
+            {
+                w.WriteStartElement("Default");
+                w.WriteAttributeString("Extension", "png");
+                w.WriteAttributeString("ContentType", "image/png");
+                w.WriteEndElement();
+            }
+
             w.WriteEndElement();
         });
 
@@ -366,8 +382,26 @@ public static class ThreeMf
             w.WriteAttributeString("Id", "rel0");
             w.WriteAttributeString("Type", "http://schemas.microsoft.com/3dmanufacturing/2013/01/3dmodel");
             w.WriteEndElement();
+
+            if (thumbnail is not null)
+            {
+                // The package thumbnail relationship, which is what Explorer and 3D Viewer look for.
+                w.WriteStartElement("Relationship");
+                w.WriteAttributeString("Target", "/" + ThumbnailPath);
+                w.WriteAttributeString("Id", "rel1");
+                w.WriteAttributeString("Type", "http://schemas.openxmlformats.org/package/2006/relationships/metadata/thumbnail");
+                w.WriteEndElement();
+            }
+
             w.WriteEndElement();
         });
+
+        if (thumbnail is not null)
+        {
+            var picture = zip.CreateEntry(ThumbnailPath, CompressionLevel.Optimal);
+            using var stream = picture.Open();
+            stream.Write(thumbnail, 0, thumbnail.Length);
+        }
 
         WriteEntry(zip, DefaultModelPath, w =>
         {

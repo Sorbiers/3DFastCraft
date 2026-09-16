@@ -240,11 +240,7 @@ public partial class MainWindow : Window
     /// over by Windows was double-clicked, and the plate behind it is the empty one the app just
     /// started with. There is nothing to ask about and nothing to lose.
     /// </summary>
-    private void OpenOnStartup(IReadOnlyList<string> files)
-    {
-        if (IncomingFiles.IsProject(files[0])) viewModel.OpenDropped(files[0]);
-        else viewModel.ImportFiles(files);
-    }
+    private void OpenOnStartup(IReadOnlyList<string> files) => viewModel.OpenFromWindows(files);
 
     /// <summary>
     /// Swallows the keyboard while a long operation runs.
@@ -1291,7 +1287,12 @@ public partial class MainWindow : Window
             RefreshSplitGizmo();
         }
 
+        // Connect objects is in the list as well: it fades the upper part so the marks on the face
+        // the two share can be seen. Left out, the fade neither arrived when the tool opened nor
+        // went when it closed, and a part stayed see-through after Cancel.
         if (e.PropertyName is nameof(MainViewModel.IsSplitMode)
+            or nameof(MainViewModel.IsConnectMode)
+            or nameof(MainViewModel.SplitWithConnectors)
             or nameof(MainViewModel.SplitNormal)
             or nameof(MainViewModel.SplitOffset)
             or nameof(MainViewModel.SplitKeep)

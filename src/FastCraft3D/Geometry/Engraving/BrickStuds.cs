@@ -297,7 +297,13 @@ public static class BrickStuds
 
         var result = LocalCsg.Subtract(mesh, hollow, token);
 
-        var supports = Supports(face, outline, options, grid);
+        // Tubes and rods stand in the hollow, so they go only where the hollow does. Placed by the
+        // outline alone, one landed where the part was thinner than the hollow is deep and came out
+        // through the far side - a row of round slivers along a roof's slope.
+        var supports = Supports(face, outline, options, grid)
+            .Where(s => room is null || room(face.ToLocal(s.At)))
+            .ToList();
+
         if (supports.Count > 0)
         {
             token.ThrowIfCancellationRequested();

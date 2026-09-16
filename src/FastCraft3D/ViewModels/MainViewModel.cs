@@ -995,10 +995,20 @@ public sealed class MainViewModel : INotifyPropertyChanged
     {
         get
         {
-            string name = projectPath is null ? "Untitled" : Path.GetFileNameWithoutExtension(projectPath);
+            string name = projectPath is not null ? Path.GetFileNameWithoutExtension(projectPath)
+                        : openedFrom is not null ? Path.GetFileName(openedFrom)
+                        : "Untitled";
+
             return $"{name}{(isDirty ? " *" : string.Empty)} - 3DFastCraft {Version}";
         }
     }
+
+    /// <summary>
+    /// The model file Windows handed over, when there is no project. A file opened by
+    /// double-clicking it is the thing being worked on even though it is not a project of ours, and
+    /// the title bar said "Untitled" - which named none of several open windows.
+    /// </summary>
+    private string? openedFrom;
 
     /// <summary>
     /// The version, from the assembly rather than a constant here, so there is one place to
@@ -5447,6 +5457,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
         Scene.Objects.Clear();
         Undo.Clear();
         projectPath = null;
+        openedFrom = null;
         ModelScale = 1f; // the scale was the last project's, not this one's
         IsDirty = false;
         RefreshSelection();
@@ -5753,6 +5764,27 @@ public sealed class MainViewModel : INotifyPropertyChanged
     }
 
     /// <summary>
+    /// Opens what Windows handed over on the command line: a project as a project, a model onto
+    /// the empty plate the app has just started with. Either way the file names the window, and
+    /// nothing has been changed yet, so there is nothing to ask about on the way out.
+    /// </summary>
+    public void OpenFromWindows(IReadOnlyList<string> files)
+    {
+        if (files.Count == 0) return;
+
+        if (IncomingFiles.IsProject(files[0]))
+        {
+            LoadProject(files[0]);
+            return;
+        }
+
+        ImportFiles(files);
+        openedFrom = files[0];
+        IsDirty = false;
+        Raise(nameof(WindowTitle));
+    }
+
+    /// <summary>
     /// Opens a project that was dropped on the window, asking first if there is work to lose.
     /// </summary>
     public void OpenDropped(string path)
@@ -5766,8 +5798,9 @@ public sealed class MainViewModel : INotifyPropertyChanged
     /// What a file is offered as: the project's own name once it has one, and otherwise dated, so
     /// one export is not left waiting to be overwritten by the next.
     /// </summary>
-    private string SuggestedName() => projectPath is not null
-        ? Path.GetFileNameWithoutExtension(projectPath)
+    private string SuggestedName() =>
+        projectPath is not null ? Path.GetFileNameWithoutExtension(projectPath)
+        : openedFrom is not null ? Path.GetFileNameWithoutExtension(openedFrom)
         : $"model_{DateTime.Now:yyyyMMdd_HHmmss}";
 
     /// <summary>The project's folder, or empty to let Windows pick the last one used.</summary>

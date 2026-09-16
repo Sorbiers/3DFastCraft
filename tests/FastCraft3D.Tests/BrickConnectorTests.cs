@@ -87,6 +87,34 @@ public class BrickConnectorTests
     }
 
     /// <summary>
+    /// Connect objects marks its joint too. Each part is read a little inside its own face rather
+    /// than on the plane between them: a section taken exactly on a face comes back as the whole of
+    /// it or nothing at all, and nothing is what it came back as.
+    /// </summary>
+    [Fact]
+    public void ThePreviewMarksAJointBetweenTwoParts()
+    {
+        var below = MeshTransform.Transformed(Primitives.Box(80f, 80f, 30f), Matrix4x4.CreateTranslation(0, 0, 15f));
+        var above = MeshTransform.Transformed(Primitives.Box(80f, 80f, 30f), Matrix4x4.CreateTranslation(0, 0, 45f));
+        var roof = MeshTransform.Transformed(Primitives.Wedge(80f, 80f, 25f), Matrix4x4.CreateTranslation(0, 0, 42.5f));
+
+        var flat = Connectors.SharedFace(above.ComputeBounds(), below.ComputeBounds());
+        var sloping = Connectors.SharedFace(roof.ComputeBounds(), below.ComputeBounds());
+        Assert.NotNull(flat);
+        Assert.NotNull(sloping);
+
+        var onFlat = Connectors.Preview(above, below, flat, Bricks);
+        var onSlope = Connectors.Preview(roof, below, sloping, Bricks);
+
+        Assert.NotEmpty(onFlat);
+        Assert.All(onFlat, mark => Assert.Equal(30f, mark.At.Z, 0.01f));
+
+        // The roof takes fewer, and none out at the thin end where its socket would break through.
+        Assert.True(onSlope.Count < onFlat.Count, $"{onSlope.Count} marks under a roof, {onFlat.Count} under a block");
+        Assert.True(onSlope.Max(mark => mark.At.X) < onFlat.Max(mark => mark.At.X));
+    }
+
+    /// <summary>
     /// A part that thins out above the cut - a roof over a wall - takes studs only where there is
     /// still material a socket and a roof deep. Placed on the cut face alone, the pockets came out
     /// through the slope and the studs showed through the roof with them.
@@ -123,6 +151,14 @@ public class BrickConnectorTests
         var overlap = ManifoldCsg.Intersect(front, back);
         Assert.NotNull(overlap);
         Assert.True(Math.Abs(Volume(overlap)) < 0.05, $"the halves overlap by {Volume(overlap):0.###} mm3");
+
+        // And nothing of the roof ends up outside the shape it started as. A tube stands in the
+        // hollow and is as deep as it: one placed where the roof is thinner came out through the
+        // slope, a row of round slivers along it.
+        var out_ = ManifoldCsg.Subtract(front, roof);
+        Assert.NotNull(out_);
+        Assert.True(Math.Abs(Volume(out_)) < 0.05,
+                    $"{Math.Abs(Volume(out_)):0.##} mm3 of the roof came out through its own surface");
     }
 
     /// <summary>
