@@ -124,6 +124,111 @@ public static class Connectors
     /// </param>
     public sealed record Layout(List<Vector3> Points, bool Crosses, float ThickestWall, float WallNeeded, bool BreaksOut = false);
 
+    /// <param name="At">The middle of a connector where it crosses the cut.</param>
+    /// <param name="Radius">How wide it is there.</param>
+    public readonly record struct Mark(Vector3 At, float Radius);
+
+    /// <summary>
+    /// Where the connectors would land, for the viewport to mark while the numbers are being set.
+    /// Read off the section alone - nothing is cut and no boolean is run - so it can be redone as
+    /// the plane slides, and it says what the tool will do before it does it.
+    /// </summary>
+    public static List<Mark> Preview(Mesh world, Vector3 normal, float offset, ConnectorOptions options)
+    {
+        normal = Vector3.Normalize(normal);
+        var up = normal.Z >= 0f ? normal : -normal;
+
+        return options.Style == ConnectorStyle.Bricks
+            ? BrickMarks([world], world, normal, offset, up, options)
+            : Round(Survey(world, normal, offset, options), options);
+    }
+
+    /// <summary>The same for two parts that rest against each other.</summary>
+    public static List<Mark> Preview(Mesh front, Mesh back, Contact contact, ConnectorOptions options)
+    {
+        var normal = Vector3.Normalize(contact.Normal);
+        var up = normal.Z >= 0f ? normal : -normal;
+        var upper = normal.Z >= 0f ? front : back;
+
+        return options.Style == ConnectorStyle.Bricks
+            ? BrickMarks([front, back], upper, normal, contact.Offset, up, options)
+            : Round(Survey(front, back, contact, options), options);
+    }
+
+    private static List<Mark> Round(Layout layout, ConnectorOptions options) =>
+        layout.Points
+            .Select(at => new Mark(at, options.Radius + MathF.Max(0f, options.Clearance)))
+            .ToList();
+
+    /// <summary>
+    /// Where brick studs would stand: the 8 mm grid laid over the section exactly as the studs
+    /// themselves lay it out, kept where the section is wide enough for a stud and the socket's
+    /// wall, and where the upper part is still that wide a socket and a roof deeper in.
+    /// </summary>
+    private static List<Mark> BrickMarks(IReadOnlyList<Mesh> parts, Mesh upper, Vector3 normal,
+                                         float offset, Vector3 up, ConnectorOptions options)
+    {
+        var (u, v) = FacePatch.PlaneAxes(up);
+        var origin = normal * offset;
+
+        var loops = new List<List<Vector2>>();
+        var low = new Vector2(float.MaxValue);
+        var high = new Vector2(float.MinValue);
+
+        foreach (var mesh in parts)
+        {
+            var (_, rings) = PlaneClip.KeepOpen(mesh, Matrix4x4.Identity, normal, offset);
+            if (rings.Count == 0) return [];
+
+            foreach (var ring in rings)
+            {
+                var loop = ring.Select(Flat).ToList();
+                loops.Add(loop);
+                foreach (var p in loop)
+                {
+                    low = Vector2.Min(low, p);
+                    high = Vector2.Max(high, p);
+                }
+            }
+        }
+
+        if (loops.Count == 0 || high.X <= low.X || high.Y <= low.Y) return [];
+
+        var shapes = Polygon2.Nest(loops);
+        float pitch = Engraving.BrickStuds.Pitch;
+        float radius = Engraving.BrickStuds.StudRadius(options.BrickFit);
+        float reach = radius + Engraving.BrickStuds.Wall(options.BrickFit);
+        float through = Engraving.BrickStuds.StudHeight + Engraving.BrickStuds.SocketClearance
+                      + Engraving.BrickStuds.RoofThickness;
+        var deep = Section(upper, up, Vector3.Dot(origin, up) + through);
+
+        // Centred on the section's box, studs on whole steps from the middle when it takes an odd
+        // number of them and on half steps when it takes an even one - a brick's own grid.
+        var middle = (low + high) * 0.5f;
+        var size = high - low;
+        float phaseU = ((Math.Max(Engraving.BrickStuds.StudsAlong(size.X), 1) - 1) / 2f) % 1f;
+        float phaseV = ((Math.Max(Engraving.BrickStuds.StudsAlong(size.Y), 1) - 1) / 2f) % 1f;
+        int stepsU = (int)MathF.Ceiling(size.X / (2f * pitch)) + 1;
+        int stepsV = (int)MathF.Ceiling(size.Y / (2f * pitch)) + 1;
+
+        var marks = new List<Mark>();
+        for (int i = -stepsU; i <= stepsU; i++)
+            for (int j = -stepsV; j <= stepsV; j++)
+            {
+                var at = middle + new Vector2((i - phaseU) * pitch, (j - phaseV) * pitch);
+                if (!Inside(shapes, at) || NearestEdge(loops, at) < reach) continue;
+
+                var world = origin + u * at.X + v * at.Y;
+                if (deep(world) < reach) continue;
+
+                marks.Add(new Mark(world, radius));
+            }
+
+        return marks;
+
+        Vector2 Flat(Vector3 p) => new(Vector3.Dot(p - origin, u), Vector3.Dot(p - origin, v));
+    }
+
     /// <summary>How far a peg is sunk into its own half, so the join is inside material rather than on the face.</summary>
     private const float Embed = 1.5f;
 
@@ -591,7 +696,32 @@ public static class Connectors
         var sockets = studs with { Kind = Engraving.PatternKind.StudUnderside, Depth = Engraving.BrickStuds.StudHeight + Engraving.BrickStuds.SocketClearance };
 
         var reference = FacePatch.Find(lower, lowerFaces[0], up)!;
-        var grid = Engraving.BrickGrid.Of(reference, studs, Engraving.BrickStuds.Wall(options.BrickFit) + 0.2f);
+        var grid = Engraving.BrickGrid.Of(reference, studs, Engraving.BrickStuds.Wall(options.BrickFit));
+
+        // What the upper half has room to take. The two cut faces are not always the same shape -
+        // a thin wall above a wide ledge is the everyday case - and a stud placed where the upper
+        // half is solid wall has no socket to go into, since the pocket is cut a wall in from that
+        // half's own outline. Placed on the lower face alone, they simply held the halves apart.
+        var room = upperFaces
+            .Select(point => FacePatch.Find(upper, point, -up))
+            .OfType<FacePatch>()
+            .Select(face => (Face: face, Outline: Engraving.FaceOutline.Of(face)))
+            .ToList();
+        if (room.Count == 0) return null;
+
+        float socket = Engraving.BrickStuds.StudRadius(options.BrickFit)
+                     + Engraving.BrickStuds.Wall(options.BrickFit);
+
+        // And what it has room to take a socket deep. A part that thins out above the cut - a roof
+        // over a wall, a chamfer - has material on the cut face but none a socket and a roof further
+        // in, so the pocket came out through the slope and the studs showed through with it. Read at
+        // that depth, a stud is only offered where the material is still there.
+        float through = sockets.Depth + Engraving.BrickStuds.RoofThickness;
+        float cut = upper.Positions.Min(p => Vector3.Dot(p, up));
+        var deep = Section(upper, up, cut + through);
+
+        bool Takes(Vector3 at) =>
+            room.Any(r => r.Outline.Holds(r.Face.ToUv(at), socket)) && deep(at) >= socket;
 
         int placed = 0;
         foreach (var point in lowerFaces)
@@ -599,7 +729,7 @@ public static class Connectors
             token.ThrowIfCancellationRequested();
             if (FacePatch.Find(lower, point, up) is not { } face) continue;
 
-            var result = Engraving.BrickStuds.Apply(lower, face, studs, grid, token);
+            var result = Engraving.BrickStuds.Apply(lower, face, studs, grid, Takes, token);
             if (result.Grooves == 0) continue;
             if (!result.IsPrintable) return null;
 
@@ -609,12 +739,11 @@ public static class Connectors
 
         if (placed == 0) return (front, back, 0);
 
-        foreach (var point in upperFaces)
+        foreach (var (face, _) in room)
         {
             token.ThrowIfCancellationRequested();
-            if (FacePatch.Find(upper, point, -up) is not { } face) continue;
 
-            var result = Engraving.BrickStuds.Apply(upper, face, sockets, grid, token);
+            var result = Engraving.BrickStuds.Apply(upper, face, sockets, grid, Takes, token);
             if (result.Mesh == upper) continue;
             if (!result.IsPrintable) return null;
 
@@ -670,6 +799,28 @@ public static class Connectors
             Primitives.Prism(radius, length, Sides),
             MeshTransform.RotationBetween(Vector3.UnitZ, normal)
             * Matrix4x4.CreateTranslation(through + normal * middle));
+    }
+
+    /// <summary>
+    /// How much room a point has inside the mesh's cross-section at a height along
+    /// <paramref name="up"/>: how far it is from the nearest edge of the material there, or less
+    /// than nothing when it is outside it altogether.
+    /// </summary>
+    private static Func<Vector3, float> Section(Mesh mesh, Vector3 up, float at)
+    {
+        var (_, rings) = PlaneClip.KeepOpen(mesh, Matrix4x4.Identity, up, at);
+        if (rings.Count == 0) return _ => -1f;
+
+        var u = Perpendicular(up);
+        var v = Vector3.Cross(up, u);
+        var loops = rings.Select(ring => ring.Select(Flat).ToList()).ToList();
+        var shapes = Polygon2.Nest(loops);
+
+        // The frame is the one the section is read in; sliding it along the normal changes
+        // neither coordinate, so a point on the cut face can be asked about as it stands.
+        return point => Inside(shapes, Flat(point)) ? NearestEdge(loops, Flat(point)) : -1f;
+
+        Vector2 Flat(Vector3 p) => new(Vector3.Dot(p, u), Vector3.Dot(p, v));
     }
 
     private static bool Inside(List<(List<Vector2> Outline, List<List<Vector2>> Holes)> shapes, Vector2 p)

@@ -61,6 +61,146 @@ public class BrickConnectorTests
         Assert.True(Math.Abs(Volume(overlap)) < 0.05, $"the halves overlap by {Volume(overlap):0.###} mm3");
     }
 
+    /// <summary>
+    /// What the viewport marks on the cut while the settings are chosen: the same places the tool
+    /// will use, read off the section without cutting anything.
+    /// </summary>
+    [Fact]
+    public void ThePreviewMarksWhereTheConnectorsWillGo()
+    {
+        var block = MeshTransform.Transformed(Primitives.Box(40f, 40f, 40f), Matrix4x4.CreateTranslation(0, 0, 20f));
+
+        var pins = Connectors.Preview(block, Vector3.UnitZ, 20f, ConnectorOptions.Default);
+        Assert.Equal(ConnectorOptions.Default.Count, pins.Count);
+        Assert.All(pins, mark => Assert.Equal(20f, mark.At.Z, 0.01f));
+        Assert.All(pins, mark => Assert.Equal(ConnectorOptions.Default.Radius + ConnectorOptions.Default.Clearance, mark.Radius, 0.01f));
+
+        // Studs stand on the same grid the tool lays out, so the marks and the studs agree.
+        var marks = Connectors.Preview(block, Vector3.UnitZ, 20f, Bricks);
+        var (_, _, studs) = Connectors.JoinBricks(
+            PlaneSplit.Split(block, Axis.Z, 20f, SplitKeep.Both).Front!,
+            PlaneSplit.Split(block, Axis.Z, 20f, SplitKeep.Both).Back!,
+            Vector3.UnitZ, Bricks)!.Value;
+
+        Assert.Equal(studs, marks.Count);
+        Assert.All(marks, mark => Assert.Equal(BrickStuds.StudRadius(Bricks.BrickFit), mark.Radius, 0.01f));
+    }
+
+    /// <summary>
+    /// A part that thins out above the cut - a roof over a wall - takes studs only where there is
+    /// still material a socket and a roof deep. Placed on the cut face alone, the pockets came out
+    /// through the slope and the studs showed through the roof with them.
+    /// </summary>
+    [Fact]
+    public void NoStudGoesWhereTheSocketWouldBreakThroughASlope()
+    {
+        var slab = MeshTransform.Transformed(Primitives.Box(80f, 80f, 10f), Matrix4x4.CreateTranslation(0, 0, 5f));
+        // Twenty millimetres thick at x = -40 and nothing at x = +40, so it thins by a millimetre
+        // every four along: below x = 28 there is less than a socket and a roof.
+        var roof = MeshTransform.Transformed(Primitives.Wedge(80f, 80f, 20f), Matrix4x4.CreateTranslation(0, 0, 20f));
+
+        var joined = Connectors.JoinBricks(roof, slab, Vector3.UnitZ, Bricks);
+
+        Assert.NotNull(joined);
+        var (front, back, studs) = joined.Value;
+        Assert.True(studs > 0, "no stud fitted under the thick end");
+
+        // Where the studs stand: nothing above the cut belongs to the slab but them.
+        float furthest = back.Positions.Where(p => p.Z > 10.5f).Max(p => p.X);
+        Assert.True(furthest < 24f, $"a stud reaches x = {furthest:0.#}, where the roof is too thin for its socket");
+
+        // And the pocket stops with them. A millimetre into the roof, the slope past the last stud
+        // is still solid; cut to the whole face instead, the cavity came out through it in a row of
+        // holes with the tubes inside showing through.
+        var (_, rings) = PlaneClip.KeepOpen(front, Matrix4x4.Identity, Vector3.UnitZ, 11f);
+        var shapes = Polygon2.Nest(rings.Select(ring => ring.Select(p => new Vector2(p.X, p.Y)).ToList()).ToList());
+        var beyond = new Vector2(30f, 0f);
+
+        Assert.True(
+            shapes.Any(s => Polygon2.Contains(s.Outline, beyond) && !s.Holes.Any(h => Polygon2.Contains(h, beyond))),
+            "the pocket broke out through the slope");
+
+        var overlap = ManifoldCsg.Intersect(front, back);
+        Assert.NotNull(overlap);
+        Assert.True(Math.Abs(Volume(overlap)) < 0.05, $"the halves overlap by {Volume(overlap):0.###} mm3");
+    }
+
+    /// <summary>
+    /// A wall one stud wide gets a brick's own hollow - 8 mm less a wall each side - centred on the
+    /// studs. Cut to the wall's own outline instead, a 10 mm wall came out hollowed 7.1 mm wide for
+    /// a 4.65 mm stud, which located the halves and gripped nothing.
+    /// </summary>
+    [Fact]
+    public void TheSocketInAWallOneStudWideIsAsWideAsABricksHollow()
+    {
+        var slab = MeshTransform.Transformed(Primitives.Box(80f, 80f, 10f), Matrix4x4.CreateTranslation(0, 0, 5f));
+        var wall = LocalCsg.Subtract(
+            MeshTransform.Transformed(Primitives.Box(80f, 80f, 40f), Matrix4x4.CreateTranslation(0, 0, 30f)),
+            MeshTransform.Transformed(Primitives.Box(60f, 60f, 42f), Matrix4x4.CreateTranslation(0, 0, 30f)));
+
+        var joined = Connectors.JoinBricks(wall, slab, Vector3.UnitZ, Bricks);
+
+        Assert.NotNull(joined);
+        var (front, back, studs) = joined.Value;
+        Assert.True(studs > 0, "no stud fitted on a 10 mm wall");
+
+        // The hollow follows the middle of the wall - 70 mm a side - a brick's hollow wide and a
+        // socket deep. Hollowing the whole 10 mm wall instead would take half as much again.
+        double middle = 4 * (80 - 10);
+        double groove = BrickStuds.Pitch - 2 * BrickStuds.Wall(Bricks.BrickFit);
+        double socket = BrickStuds.StudHeight + BrickStuds.SocketClearance;
+        double taken = Volume(wall) - Volume(front);
+
+        Assert.InRange(taken, middle * groove * socket * 0.8, middle * groove * socket * 1.2);
+
+        var overlap = ManifoldCsg.Intersect(front, back);
+        Assert.NotNull(overlap);
+        Assert.True(Math.Abs(Volume(overlap)) < 0.05, $"the halves overlap by {Volume(overlap):0.###} mm3");
+    }
+
+    /// <summary>
+    /// A wall a little over two studs and two brick walls wide - 7.8 mm - is the narrowest that
+    /// takes a stud, and it has to: it is what a hollow model cut above its floor leaves.
+    /// </summary>
+    [Fact]
+    public void AWallJustWideEnoughStillTakesStudsAndTheirSockets()
+    {
+        var slab = MeshTransform.Transformed(Primitives.Box(80f, 80f, 10f), Matrix4x4.CreateTranslation(0, 0, 5f));
+        var wall = LocalCsg.Subtract(
+            MeshTransform.Transformed(Primitives.Box(80f, 80f, 40f), Matrix4x4.CreateTranslation(0, 0, 30f)),
+            MeshTransform.Transformed(Primitives.Box(64.4f, 64.4f, 42f), Matrix4x4.CreateTranslation(0, 0, 30f)));
+
+        var joined = Connectors.JoinBricks(wall, slab, Vector3.UnitZ, Bricks);
+
+        Assert.NotNull(joined);
+        var (front, back, studs) = joined.Value;
+        Assert.True(studs > 0, "no stud fitted on a 7.8 mm wall");
+        Assert.True(Volume(front) < Volume(wall) - 1.0, "the wall was not hollowed for the studs");
+
+        var overlap = ManifoldCsg.Intersect(front, back);
+        Assert.NotNull(overlap);
+        Assert.True(Math.Abs(Volume(overlap)) < 0.05, $"the halves overlap by {Volume(overlap):0.###} mm3");
+    }
+
+    /// <summary>
+    /// The two halves of a cut do not always have the same face: a hollow model cut just above its
+    /// floor leaves a wide ledge below and a thin wall above. Studs placed on the ledge alone met
+    /// solid wall rather than a socket, and held the halves apart.
+    /// </summary>
+    [Fact]
+    public void NoStudGoesWhereTheUpperHalfIsOnlyAThinWall()
+    {
+        var slab = MeshTransform.Transformed(Primitives.Box(80f, 80f, 10f), Matrix4x4.CreateTranslation(0, 0, 5f));
+        var wall = LocalCsg.Subtract(
+            MeshTransform.Transformed(Primitives.Box(80f, 80f, 40f), Matrix4x4.CreateTranslation(0, 0, 30f)),
+            MeshTransform.Transformed(Primitives.Box(77f, 77f, 42f), Matrix4x4.CreateTranslation(0, 0, 30f)));
+
+        var joined = Connectors.JoinBricks(wall, slab, Vector3.UnitZ, Bricks);
+
+        Assert.NotNull(joined);
+        Assert.Equal(0, joined.Value.Studs);
+    }
+
     [Fact]
     public void ACutTooNarrowForAStudPlacesNone()
     {

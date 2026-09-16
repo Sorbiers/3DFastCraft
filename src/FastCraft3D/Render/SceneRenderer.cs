@@ -64,6 +64,7 @@ public sealed class SceneRenderer : IDisposable
     private MeshGeometryModel3D? faceHighlight;
     private LineGeometryModel3D? faceOutline;
     private MeshGeometryModel3D? facePreview;
+    private MeshGeometryModel3D? connectorMarks;
     private MeshGeometryModel3D? restingShown;
     private MeshGeometryModel3D? restingHovered;
 
@@ -155,6 +156,44 @@ public sealed class SceneRenderer : IDisposable
         root.Children.Add(faceOutline);
 
         ShowPreview(face, preview, overlay);
+    }
+
+    /// <summary>
+    /// Marks where the connectors will land on the cut, while the numbers are being set: a disc
+    /// the width of each one, lying in the plane. Without them the panel asked for a diameter and
+    /// a count with nothing on the model to say where any of it was going.
+    /// </summary>
+    public void ShowConnectorMarks(IReadOnlyList<Connectors.Mark> marks, Vector3 normal)
+    {
+        if (connectorMarks is not null)
+        {
+            root.Children.Remove(connectorMarks);
+            connectorMarks.Dispose();
+            connectorMarks = null;
+        }
+
+        if (marks.Count == 0 || normal.LengthSquared() < 1e-6f) return;
+
+        var lying = MeshTransform.RotationBetween(Vector3.UnitZ, Vector3.Normalize(normal));
+        var discs = Mesh.Combine(marks.Select(mark => MeshTransform.Transformed(
+            Primitives.Prism(mark.Radius, 0.5f, 28),
+            lying * Matrix4x4.CreateTranslation(mark.At))));
+
+        if (discs.TriangleCount == 0) return;
+
+        connectorMarks = new MeshGeometryModel3D
+        {
+            Geometry = MeshConverter.ToGeometry(discs),
+            Material = new PhongMaterial
+            {
+                DiffuseColor = new SharpDX.Color4(0.18f, 0.60f, 1f, 0.75f),
+                AmbientColor = new SharpDX.Color4(0.08f, 0.26f, 0.45f, 1f),
+                SpecularColor = new SharpDX.Color4(0, 0, 0, 1)
+            },
+            IsTransparent = true,
+            IsHitTestVisible = false
+        };
+        root.Children.Add(connectorMarks);
     }
 
     /// <summary>

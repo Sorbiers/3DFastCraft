@@ -66,6 +66,10 @@ public partial class MainWindow : Window
     private List<SceneObject> editObjects = [];
     private List<TransformState> editBefore = [];
 
+    /// <summary>The viewport behind the plate: as it sits normally, and while a tool is running.</summary>
+    private static readonly Color PlainBackground = Color.FromRgb(0xB8, 0xBC, 0xC2);
+    private static readonly Color ToolBackground = Color.FromRgb(0xA6, 0xB2, 0xC4);
+
     public MainWindow()
     {
         InitializeComponent();
@@ -560,6 +564,7 @@ public partial class MainWindow : Window
 
     /// <summary>Keeps the split handles on the plane, and hides them outside split mode.</summary>
     private bool splitPreviewStale;
+    private bool connectorMarksStale;
     private readonly Stopwatch splitPreviewClock = Stopwatch.StartNew();
     private double splitPreviewWait;
 
@@ -593,6 +598,7 @@ public partial class MainWindow : Window
         if (gizmo.NeedsReposition || gizmo.IsStale()) gizmo.Reposition();
         if (viewModel.IsSplitMode || viewModel.IsExtrudeMode) splitGizmo?.Reposition();
         SettleSplitPreview();
+        SettleConnectorMarks();
         if (viewModel.IsEmbossMode || viewModel.IsEngraveMode) placeGizmo?.Reposition();
 
         // The tape is anchored to the model rather than to the screen, so it is reprojected with
@@ -1257,6 +1263,20 @@ public partial class MainWindow : Window
             RefreshPlacementGizmo();
         }
 
+        // A tool has the object: the plate goes a shade cooler, so which mode the window is in
+        // can be seen rather than worked out from which buttons have gone grey.
+        if (e.PropertyName is nameof(MainViewModel.IsToolInHand))
+            View.BackgroundColor = viewModel.IsToolInHand ? ToolBackground : PlainBackground;
+
+        if (e.PropertyName is nameof(MainViewModel.IsSplitMode) or nameof(MainViewModel.IsConnectMode)
+            or nameof(MainViewModel.SplitNormal) or nameof(MainViewModel.SplitOffset)
+            or nameof(MainViewModel.SplitWithConnectors) or nameof(MainViewModel.Selected)
+            || e.PropertyName?.StartsWith("Connector") == true)
+        {
+            connectorMarksStale = true;
+            if (e.PropertyName?.StartsWith("Connector") == true) RefreshSplitPreview();
+        }
+
         if (e.PropertyName is nameof(MainViewModel.SplitGizmoMode) && splitGizmo is not null)
             splitGizmo.Mode = viewModel.SplitGizmoMode;
 
@@ -1368,11 +1388,24 @@ public partial class MainWindow : Window
     /// Says the split preview needs redoing. Leaving is done at once; anything else waits for
     /// <see cref="SettleSplitPreview"/>, because a drag asks for this on every mouse move.
     /// </summary>
+    /// <summary>
+    /// Redraws the marks on the cut face when they are out of date. On the frame tick with the
+    /// split preview, since reading the section is the same order of work and both follow the
+    /// plane as it slides.
+    /// </summary>
+    private void SettleConnectorMarks()
+    {
+        if (!connectorMarksStale || renderer is null) return;
+
+        connectorMarksStale = false;
+        renderer.ShowConnectorMarks(viewModel.ConnectorMarks(), viewModel.ConnectorPlane?.Normal ?? viewModel.SplitNormal);
+    }
+
     private void RefreshSplitPreview(bool now = false)
     {
         if (renderer is null) return;
 
-        if (!viewModel.IsSplitMode)
+        if (!viewModel.IsSplitMode && viewModel.ConnectorPlane is null)
         {
             splitPreviewStale = false;
             renderer.IsolateForSplit(null);
@@ -1398,14 +1431,25 @@ public partial class MainWindow : Window
     /// </summary>
     private void SettleSplitPreview()
     {
-        if (!splitPreviewStale || renderer is null || !viewModel.IsSplitMode) return;
+        if (!splitPreviewStale || renderer is null) return;
+        if (!viewModel.IsSplitMode && viewModel.ConnectorPlane is null) return;
         if (splitPreviewClock.Elapsed.TotalMilliseconds < splitPreviewWait) return;
 
         splitPreviewStale = false;
 
+        // Connectors keep both halves, so nothing is being thrown away to fade - but the marks on
+        // the cut face are inside the model, and the half above them has to come off to see any of
+        // it. The upper half is the one faded, whichever way the plane faces.
+        var plane = viewModel.ConnectorPlane;
+        var normal = plane?.Normal ?? viewModel.SplitNormal;
+        float offset = plane?.Offset ?? viewModel.SplitOffset;
+        var keep = plane is null ? viewModel.SplitKeep
+            : normal.Z >= 0f ? SplitKeep.Back : SplitKeep.Front;
+        var offcut = plane is null ? viewModel.SplitOffcut : SplitOffcut.Faded;
+
         long started = Stopwatch.GetTimestamp();
-        renderer.ShowSplit(viewModel.Scene.Selection, viewModel.SplitNormal, viewModel.SplitOffset,
-                           viewModel.SplitKeep, viewModel.SplitOffcut, viewModel.SplitFillsCut);
+        renderer.ShowSplit(viewModel.Scene.Selection, normal, offset, keep, offcut,
+                           plane is null && viewModel.SplitFillsCut);
 
         splitPreviewWait = Math.Clamp(Stopwatch.GetElapsedTime(started).TotalMilliseconds * 4, 60, 600);
         splitPreviewClock.Restart();

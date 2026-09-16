@@ -5003,12 +5003,14 @@ public sealed class MainViewModel : INotifyPropertyChanged
             {
                 if (bricks)
                 {
-                    float needs = BrickStuds.StudDiameter + 2 * (BrickStuds.Wall(options.BrickFit) + 0.2f);
+                    float needs = BrickStuds.StudDiameter + 2 * BrickStuds.Wall(options.BrickFit);
                     Status = "No brick stud fits on the cut face - nothing was split";
                     MessageBox.Show(
                         "No brick stud fits on this cut face, so nothing was split.\n\n"
                         + $"A stud keeps the upper half's wall clear of it, so it needs a circle about {needs:0.#} mm across "
-                        + "inside the cut face, on the 8 mm grid.\n\nMove the plane to a wider part, or use pins or pegs.",
+                        + "inside the cut face of both halves, on the 8 mm grid. A thin wall above a wide ledge "
+                        + "takes none: there is nowhere above it for the socket.\n\n"
+                        + "Move the plane to a part where both halves are wide, or use pins or pegs.",
                         "3DFastCraft", MessageBoxButton.OK, MessageBoxImage.Information);
                     return;
                 }
@@ -5138,6 +5140,45 @@ public sealed class MainViewModel : INotifyPropertyChanged
             RaiseToolInHand();
         }
     }
+
+    /// <summary>
+    /// Where the connectors would land, for the viewport to mark. Read off the section rather than
+    /// from a cut, so it costs about what moving the plane costs and can follow the settings.
+    /// </summary>
+    public IReadOnlyList<Connectors.Mark> ConnectorMarks()
+    {
+        if (isSplitMode && splitWithConnectors && Scene.Selection.Count == 1)
+            return Connectors.Preview(Scene.Selection[0].ToWorldMesh(), SplitNormal, SplitOffset, connectors);
+
+        if (isConnectMode && Contact() is { } contact)
+        {
+            var picked = Scene.SelectionInPickOrder;
+            var front = contact.SecondIsFront ? picked[1] : picked[0];
+            var back = contact.SecondIsFront ? picked[0] : picked[1];
+            return Connectors.Preview(front.ToWorldMesh(), back.ToWorldMesh(), contact, connectors);
+        }
+
+        return [];
+    }
+
+    /// <summary>The face two picked parts rest against each other on, or null.</summary>
+    private Connectors.Contact? Contact()
+    {
+        var picked = Scene.SelectionInPickOrder;
+        return picked.Count == 2
+            ? Connectors.SharedFace(picked[0].WorldBounds, picked[1].WorldBounds)
+            : null;
+    }
+
+    /// <summary>
+    /// The plane the connectors cross, while a tool is setting them up: the cut, or the face two
+    /// parts share. The viewport lays the marks on it and fades whichever half is on top, since a
+    /// mark inside solid material is a mark nobody can see.
+    /// </summary>
+    public (Vector3 Normal, float Offset)? ConnectorPlane =>
+        isSplitMode && splitWithConnectors && Scene.Selection.Count == 1 ? (SplitNormal, SplitOffset)
+        : isConnectMode && Contact() is { } contact ? (contact.Normal, contact.Offset)
+        : null;
 
     /// <summary>Which face the two parts share, said in the panel so the user can see it was the right one.</summary>
     public string ConnectSummary

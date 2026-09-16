@@ -1,4 +1,6 @@
 using System.Runtime.ExceptionServices;
+using System.Windows.Threading;
+using FastCraft3D.View;
 using FastCraft3D.ViewModels;
 using Xunit;
 
@@ -81,6 +83,63 @@ public class CancelToolTests
 
         Assert.True(model.CancelActiveTool());
         Assert.False(model.IsLayMode);
+    });
+
+    [Fact]
+    public void SoIsACutWaitingToBeExtrudedDown() => WithModel(model =>
+    {
+        model.IsExtrudeMode = true;
+
+        Assert.True(model.CancelActiveTool());
+        Assert.False(model.IsExtrudeMode);
+    });
+
+    [Fact]
+    public void SoAreConnectorsBetweenTwoParts() => WithModel(model =>
+    {
+        model.IsConnectMode = true;
+
+        Assert.True(model.CancelActiveTool());
+        Assert.False(model.IsConnectMode);
+    });
+
+    /// <summary>
+    /// The tools that ask for numbers in the side panel answer it too, and the panel closes with
+    /// nothing applied - the window sends Escape here wherever the caret happens to be.
+    /// </summary>
+    [Fact]
+    public void SoIsAToolAskingForNumbersInThePanel() => WithModel(model =>
+    {
+        ToolPanel.Host = model.ShowPanel;
+        var panel = new ToolPanel { Title = "Asking" };
+        bool cancelled = false;
+
+        // Sent while the panel is up, as the key handler does.
+        Dispatcher.CurrentDispatcher.BeginInvoke(new Action(() => cancelled = model.CancelActiveTool()));
+
+        Assert.NotEqual(true, panel.ShowDialog());
+        Assert.True(cancelled);
+        Assert.False(model.IsToolInHand);
+        Assert.Null(model.OpenPanel);
+    });
+
+    /// <summary>Nothing is left holding the object: every mode the window greys out for is down.</summary>
+    [Fact]
+    public void AfterEscapeNothingHasTheObject() => WithModel(model =>
+    {
+        foreach (var open in new Action[]
+                 {
+                     () => model.IsSplitMode = true, () => model.IsMeasureMode = true,
+                     () => model.IsSubtractMode = true, () => model.IsEmbossMode = true,
+                     () => model.IsEngraveMode = true, () => model.IsLayMode = true,
+                     () => model.IsExtrudeMode = true, () => model.IsConnectMode = true
+                 })
+        {
+            open();
+            Assert.True(model.IsToolInHand, "the tool did not take the object");
+            Assert.True(model.CancelActiveTool());
+            Assert.False(model.IsToolInHand, "something still had the object after Escape");
+        }
     });
 
     /// <summary>

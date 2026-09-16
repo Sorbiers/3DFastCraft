@@ -173,8 +173,12 @@ public class BrickStudsTests
         Assert.Equal(centres.Count, result.Grooves);
     }
 
+    /// <summary>
+    /// A brick's hollow is set by its studs and not by its outline: the cells they stand in,
+    /// brought in by a wall and joined up between neighbours, and no further out than the face.
+    /// </summary>
     [Fact]
-    public void ARoundUndersideIsHollowedAlongItsOutlineWithTubesInside()
+    public void ARoundUndersideIsHollowedOnTheStudGridWithTubesInside()
     {
         var (post, _) = Post();
         var bottom = FacePatch.Find(post, new Vector3(0, 0, 0), -Vector3.UnitZ)!;
@@ -185,18 +189,63 @@ public class BrickStudsTests
         Assert.True(result.IsPrintable, result.Health.Describe());
         Assert.True(result.Grooves > 0, "no tube fitted in a 40 mm hollow");
 
-        // The hollow is the disc brought in by the wall: about pi (20 - 1.5)^2 deep enough, less
-        // the tubes standing in it.
+        // The cells, and the cavity measured by sampling them: in a cell brought in by a wall, or
+        // in the run between two neighbouring cells, and never nearer the face's edge than a wall.
         float wall = BrickStuds.Wall(0f);
-        double hollow = Math.PI * (20 - wall) * (20 - wall) * depth;
+        var outline = FaceOutline.Of(bottom);
+        var middle = (bottom.Min + bottom.Max) * 0.5f;
+        var cells = new List<Vector2>();
+        for (int i = -4; i <= 4; i++)
+            for (int j = -4; j <= 4; j++)
+            {
+                var c = middle + new Vector2(i * BrickStuds.Pitch, j * BrickStuds.Pitch);
+                if (outline.Contains(c)) cells.Add(c);
+            }
+
+        Assert.NotEmpty(cells);
+
+        const float step = 0.1f;
+        double area = 0;
+        for (float u = bottom.Min.X; u <= bottom.Max.X; u += step)
+            for (float v = bottom.Min.Y; v <= bottom.Max.Y; v += step)
+            {
+                var p = new Vector2(u, v);
+                if (!outline.Contains(p) || outline.DistanceToEdge(p) < wall) continue;
+                if (Hollowed(p)) area += step * step;
+            }
+
         double tubes = result.Grooves * (Cylinder(BrickStuds.TubeRadius(0f), depth) - Cylinder(2.4f, depth));
-        double expected = Volume(post) - hollow + tubes;
+        double expected = Volume(post) - area * depth + tubes;
 
         Assert.Equal(expected, Volume(result.Mesh), expected * 0.02);
 
         // Nothing broke through the side: the outside is as wide as it was.
         Assert.Equal(40f, result.Mesh.ComputeBounds().Size.X, 0.05f);
+
+        bool Hollowed(Vector2 p)
+        {
+            float half = BrickStuds.Pitch / 2f;
+            foreach (var c in cells)
+            {
+                var away = Vector2.Abs(p - c);
+                if (away.X <= half - wall && away.Y <= half - wall) return true;
+
+                foreach (var stepTo in new[] { new Vector2(BrickStuds.Pitch, 0f), new Vector2(0f, BrickStuds.Pitch) })
+                {
+                    if (!cells.Any(o => Vector2.DistanceSquared(o, c + stepTo) < 0.01f)) continue;
+
+                    var fromRun = Vector2.Abs(p - (c + stepTo * 0.5f));
+                    var run = stepTo.X > 0
+                        ? new Vector2(half, half - wall)
+                        : new Vector2(half - wall, half);
+                    if (fromRun.X <= run.X && fromRun.Y <= run.Y) return true;
+                }
+            }
+
+            return false;
+        }
     }
+
     [Fact]
     public void EngraveSendsStudsToTheirOwnBuilder()
     {

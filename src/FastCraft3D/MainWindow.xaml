@@ -268,6 +268,23 @@
             <Setter Property="FontSize" Value="11" />
         </Style>
 
+        <!-- X, Y and Z in the colours of the handles and the lines on the plate, so a box and the
+             arrow it drives are read as the same thing. W, D and H are the sizes along them. -->
+        <Style x:Key="GizmoLabelX" TargetType="TextBlock" BasedOn="{StaticResource GizmoLabel}">
+            <Setter Property="Foreground" Value="#FFD8404F" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+        </Style>
+
+        <Style x:Key="GizmoLabelY" TargetType="TextBlock" BasedOn="{StaticResource GizmoLabel}">
+            <Setter Property="Foreground" Value="#FF229B48" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+        </Style>
+
+        <Style x:Key="GizmoLabelZ" TargetType="TextBlock" BasedOn="{StaticResource GizmoLabel}">
+            <Setter Property="Foreground" Value="#FF2C86D8" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+        </Style>
+
         <Style x:Key="GizmoUnit" TargetType="TextBlock">
             <Setter Property="VerticalAlignment" Value="Center" />
             <Setter Property="Margin" Value="5,0,2,0" />
@@ -1718,15 +1735,15 @@
                          turning a plane about its own facing leaves it exactly where it was. -->
                     <StackPanel Orientation="Horizontal"
                                 Visibility="{Binding SplitTurnMode, Converter={StaticResource BoolToVisibility}}">
-                        <TextBlock Text="Roll" Style="{StaticResource GizmoLabel}" />
+                        <TextBlock Text="Roll" Style="{StaticResource GizmoLabelX}" />
                         <TextBox Style="{StaticResource GizmoBox}" Tag="number"
                                  AutomationProperties.AutomationId="SplitRoll"
                                  Text="{Binding SplitRoll, StringFormat=N1, UpdateSourceTrigger=LostFocus}" />
-                        <TextBlock Text="Pitch" Style="{StaticResource GizmoLabel}" />
+                        <TextBlock Text="Pitch" Style="{StaticResource GizmoLabelY}" />
                         <TextBox Style="{StaticResource GizmoBox}" Tag="number"
                                  AutomationProperties.AutomationId="SplitPitch"
                                  Text="{Binding SplitPitch, StringFormat=N1, UpdateSourceTrigger=LostFocus}" />
-                        <TextBlock Text="Yaw" Style="{StaticResource GizmoLabel}" />
+                        <TextBlock Text="Yaw" Style="{StaticResource GizmoLabelZ}" />
                         <TextBox Style="{StaticResource GizmoBox}" Tag="number"
                                  AutomationProperties.AutomationId="SplitYaw"
                                  Text="{Binding SplitYaw, StringFormat=N1, UpdateSourceTrigger=LostFocus}" />
@@ -1817,13 +1834,13 @@
                                     Visibility="{Binding DataContext.HasOneSelected,
                                                  RelativeSource={RelativeSource AncestorType=Window},
                                                  Converter={StaticResource BoolToVisibility}}">
-                            <TextBlock Text="X" Style="{StaticResource GizmoLabel}" />
+                            <TextBlock Text="X" Style="{StaticResource GizmoLabelX}" />
                             <TextBox Style="{StaticResource GizmoBox}" Tag="transform"
                                      Text="{Binding DataContext.ObjectPositionX, RelativeSource={RelativeSource AncestorType=Window}, StringFormat=0.####, UpdateSourceTrigger=LostFocus}" />
-                            <TextBlock Text="Y" Style="{StaticResource GizmoLabel}" />
+                            <TextBlock Text="Y" Style="{StaticResource GizmoLabelY}" />
                             <TextBox Style="{StaticResource GizmoBox}" Tag="transform"
                                      Text="{Binding DataContext.ObjectPositionY, RelativeSource={RelativeSource AncestorType=Window}, StringFormat=0.####, UpdateSourceTrigger=LostFocus}" />
-                            <TextBlock Text="Z" Style="{StaticResource GizmoLabel}" />
+                            <TextBlock Text="Z" Style="{StaticResource GizmoLabelZ}" />
                             <TextBox Style="{StaticResource GizmoBox}" Tag="transform"
                                      Text="{Binding DataContext.ObjectPositionZ, RelativeSource={RelativeSource AncestorType=Window}, StringFormat=0.####, UpdateSourceTrigger=LostFocus}" />
                         </StackPanel>
@@ -1832,15 +1849,15 @@
                              whole group there, keeping its shape, rather than piling them up. -->
                         <StackPanel Orientation="Horizontal"
                                     Visibility="{Binding HasManySelected, Converter={StaticResource BoolToVisibility}}">
-                            <TextBlock Text="X" Style="{StaticResource GizmoLabel}" />
+                            <TextBlock Text="X" Style="{StaticResource GizmoLabelX}" />
                             <TextBox Style="{StaticResource GizmoMixedBox}" Tag="transform"
                                      ToolTip="Type a value to set it, or +=5 / -=5 to change by that much. With the As one button off, every selected object gets it."
                                      Text="{Binding GroupX, Converter={StaticResource Mixed}, ConverterParameter=0.####, UpdateSourceTrigger=LostFocus}" />
-                            <TextBlock Text="Y" Style="{StaticResource GizmoLabel}" />
+                            <TextBlock Text="Y" Style="{StaticResource GizmoLabelY}" />
                             <TextBox Style="{StaticResource GizmoMixedBox}" Tag="transform"
                                      ToolTip="Type a value to set it, or +=5 / -=5 to change by that much. With the As one button off, every selected object gets it."
                                      Text="{Binding GroupY, Converter={StaticResource Mixed}, ConverterParameter=0.####, UpdateSourceTrigger=LostFocus}" />
-                            <TextBlock Text="Z" Style="{StaticResource GizmoLabel}" />
+                            <TextBlock Text="Z" Style="{StaticResource GizmoLabelZ}" />
                             <TextBox Style="{StaticResource GizmoMixedBox}" Tag="transform"
                                      ToolTip="Type a value to set it, or +=5 / -=5 to change by that much. With the As one button off, every selected object gets it."
                                      Text="{Binding GroupZ, Converter={StaticResource Mixed}, ConverterParameter=0.####, UpdateSourceTrigger=LostFocus}" />
@@ -1854,16 +1871,16 @@
                         <StackPanel Orientation="Horizontal" Margin="8,0,0,0"
                                     Visibility="{Binding ScaleApplies, Converter={StaticResource BoolToVisibility}}">
                             <Rectangle Width="1" Margin="2,3,8,3" Fill="#FFD8DBE0" />
-                            <TextBlock Text="X" Style="{StaticResource GizmoLabel}" />
+                            <TextBlock Text="X" Style="{StaticResource GizmoLabelX}" />
                             <TextBox Style="{StaticResource GizmoBox}" Tag="transform"
                                      AutomationProperties.AutomationId="RealPosX"
                                      ToolTip="Where it is at the scene's scale. Editing it sets the millimetres beside it."
                                      Text="{Binding RealX, StringFormat=N3, UpdateSourceTrigger=LostFocus}" />
-                            <TextBlock Text="Y" Style="{StaticResource GizmoLabel}" />
+                            <TextBlock Text="Y" Style="{StaticResource GizmoLabelY}" />
                             <TextBox Style="{StaticResource GizmoBox}" Tag="transform"
                                      AutomationProperties.AutomationId="RealPosY"
                                      Text="{Binding RealY, StringFormat=N3, UpdateSourceTrigger=LostFocus}" />
-                            <TextBlock Text="Z" Style="{StaticResource GizmoLabel}" />
+                            <TextBlock Text="Z" Style="{StaticResource GizmoLabelZ}" />
                             <TextBox Style="{StaticResource GizmoBox}" Tag="transform"
                                      AutomationProperties.AutomationId="RealPosZ"
                                      Text="{Binding RealZ, StringFormat=N3, UpdateSourceTrigger=LostFocus}" />
@@ -1877,13 +1894,13 @@
                                     Visibility="{Binding DataContext.HasOneSelected,
                                                  RelativeSource={RelativeSource AncestorType=Window},
                                                  Converter={StaticResource BoolToVisibility}}">
-                            <TextBlock Text="Roll" Style="{StaticResource GizmoLabel}" />
+                            <TextBlock Text="Roll" Style="{StaticResource GizmoLabelX}" />
                             <TextBox Style="{StaticResource GizmoBox}" Tag="transform"
                                      Text="{Binding RotationX, StringFormat=N1, UpdateSourceTrigger=LostFocus}" />
-                            <TextBlock Text="Pitch" Style="{StaticResource GizmoLabel}" />
+                            <TextBlock Text="Pitch" Style="{StaticResource GizmoLabelY}" />
                             <TextBox Style="{StaticResource GizmoBox}" Tag="transform"
                                      Text="{Binding RotationY, StringFormat=N1, UpdateSourceTrigger=LostFocus}" />
-                            <TextBlock Text="Yaw" Style="{StaticResource GizmoLabel}" />
+                            <TextBlock Text="Yaw" Style="{StaticResource GizmoLabelZ}" />
                             <TextBox Style="{StaticResource GizmoBox}" Tag="transform"
                                      Text="{Binding RotationZ, StringFormat=N1, UpdateSourceTrigger=LostFocus}" />
                         </StackPanel>
@@ -1891,15 +1908,15 @@
                              them to it. A group has no turn of its own to show. -->
                         <StackPanel Orientation="Horizontal"
                                     Visibility="{Binding HasManySelected, Converter={StaticResource BoolToVisibility}}">
-                            <TextBlock Text="Roll" Style="{StaticResource GizmoLabel}" />
+                            <TextBlock Text="Roll" Style="{StaticResource GizmoLabelX}" />
                             <TextBox Style="{StaticResource GizmoMixedBox}" Tag="transform"
                                      ToolTip="Type a value to set it, or +=5 / -=5 to change by that much. With the As one button off, every selected object gets it."
                                      Text="{Binding GroupRoll, Converter={StaticResource Mixed}, ConverterParameter=N1, UpdateSourceTrigger=LostFocus}" />
-                            <TextBlock Text="Pitch" Style="{StaticResource GizmoLabel}" />
+                            <TextBlock Text="Pitch" Style="{StaticResource GizmoLabelY}" />
                             <TextBox Style="{StaticResource GizmoMixedBox}" Tag="transform"
                                      ToolTip="Type a value to set it, or +=5 / -=5 to change by that much. With the As one button off, every selected object gets it."
                                      Text="{Binding GroupPitch, Converter={StaticResource Mixed}, ConverterParameter=N1, UpdateSourceTrigger=LostFocus}" />
-                            <TextBlock Text="Yaw" Style="{StaticResource GizmoLabel}" />
+                            <TextBlock Text="Yaw" Style="{StaticResource GizmoLabelZ}" />
                             <TextBox Style="{StaticResource GizmoMixedBox}" Tag="transform"
                                      ToolTip="Type a value to set it, or +=5 / -=5 to change by that much. With the As one button off, every selected object gets it."
                                      Text="{Binding GroupYaw, Converter={StaticResource Mixed}, ConverterParameter=N1, UpdateSourceTrigger=LostFocus}" />
@@ -1938,13 +1955,13 @@
                                     Visibility="{Binding DataContext.HasOneSelected,
                                                  RelativeSource={RelativeSource AncestorType=Window},
                                                  Converter={StaticResource BoolToVisibility}}">
-                            <TextBlock Text="W" Style="{StaticResource GizmoLabel}" ToolTip="Width - along X" />
+                            <TextBlock Text="W" Style="{StaticResource GizmoLabelX}" ToolTip="Width - along X" />
                             <TextBox Style="{StaticResource GizmoBox}" Tag="transform"
                                      Text="{Binding DataContext.ObjectSizeX, RelativeSource={RelativeSource AncestorType=Window}, StringFormat=0.####, UpdateSourceTrigger=LostFocus}" />
-                            <TextBlock Text="D" Style="{StaticResource GizmoLabel}" ToolTip="Depth - along Y" />
+                            <TextBlock Text="D" Style="{StaticResource GizmoLabelY}" ToolTip="Depth - along Y" />
                             <TextBox Style="{StaticResource GizmoBox}" Tag="transform"
                                      Text="{Binding DataContext.ObjectSizeY, RelativeSource={RelativeSource AncestorType=Window}, StringFormat=0.####, UpdateSourceTrigger=LostFocus}" />
-                            <TextBlock Text="H" Style="{StaticResource GizmoLabel}" ToolTip="Height - along Z" />
+                            <TextBlock Text="H" Style="{StaticResource GizmoLabelZ}" ToolTip="Height - along Z" />
                             <TextBox Style="{StaticResource GizmoBox}" Tag="transform"
                                      Text="{Binding DataContext.ObjectSizeZ, RelativeSource={RelativeSource AncestorType=Window}, StringFormat=0.####, UpdateSourceTrigger=LostFocus}" />
                         </StackPanel>
@@ -1954,15 +1971,15 @@
                                     Visibility="{Binding HasManySelected, Converter={StaticResource BoolToVisibility}}">
                             <!-- Several selected: the bounding box of the lot, so "width" here
                                  is how wide the group sits rather than any one part's own. -->
-                            <TextBlock Text="W" Style="{StaticResource GizmoLabel}" ToolTip="Width of the selection - along X" />
+                            <TextBlock Text="W" Style="{StaticResource GizmoLabelX}" ToolTip="Width of the selection - along X" />
                             <TextBox Style="{StaticResource GizmoMixedBox}" Tag="transform"
                                      ToolTip="Type a value to set it, or +=5 / -=5 to change by that much. With the As one button off, every selected object gets it."
                                      Text="{Binding GroupSizeX, Converter={StaticResource Mixed}, ConverterParameter=0.####, UpdateSourceTrigger=LostFocus}" />
-                            <TextBlock Text="D" Style="{StaticResource GizmoLabel}" ToolTip="Depth of the selection - along Y" />
+                            <TextBlock Text="D" Style="{StaticResource GizmoLabelY}" ToolTip="Depth of the selection - along Y" />
                             <TextBox Style="{StaticResource GizmoMixedBox}" Tag="transform"
                                      ToolTip="Type a value to set it, or +=5 / -=5 to change by that much. With the As one button off, every selected object gets it."
                                      Text="{Binding GroupSizeY, Converter={StaticResource Mixed}, ConverterParameter=0.####, UpdateSourceTrigger=LostFocus}" />
-                            <TextBlock Text="H" Style="{StaticResource GizmoLabel}" ToolTip="Height of the selection - along Z" />
+                            <TextBlock Text="H" Style="{StaticResource GizmoLabelZ}" ToolTip="Height of the selection - along Z" />
                             <TextBox Style="{StaticResource GizmoMixedBox}" Tag="transform"
                                      ToolTip="Type a value to set it, or +=5 / -=5 to change by that much. With the As one button off, every selected object gets it."
                                      Text="{Binding GroupSizeZ, Converter={StaticResource Mixed}, ConverterParameter=0.####, UpdateSourceTrigger=LostFocus}" />
@@ -1976,16 +1993,16 @@
                         <StackPanel Orientation="Horizontal" Margin="8,0,0,0"
                                     Visibility="{Binding ScaleApplies, Converter={StaticResource BoolToVisibility}}">
                             <Rectangle Width="1" Margin="2,3,8,3" Fill="#FFD8DBE0" />
-                            <TextBlock Text="W" Style="{StaticResource GizmoLabel}" ToolTip="Width - along X" />
+                            <TextBlock Text="W" Style="{StaticResource GizmoLabelX}" ToolTip="Width - along X" />
                             <TextBox Style="{StaticResource GizmoBox}" Tag="transform"
                                      AutomationProperties.AutomationId="RealSizeW"
                                      ToolTip="How big it is at the scene's scale. Editing it sets the millimetres beside it."
                                      Text="{Binding RealW, StringFormat=N3, UpdateSourceTrigger=LostFocus}" />
-                            <TextBlock Text="D" Style="{StaticResource GizmoLabel}" ToolTip="Depth - along Y" />
+                            <TextBlock Text="D" Style="{StaticResource GizmoLabelY}" ToolTip="Depth - along Y" />
                             <TextBox Style="{StaticResource GizmoBox}" Tag="transform"
                                      AutomationProperties.AutomationId="RealSizeD"
                                      Text="{Binding RealD, StringFormat=N3, UpdateSourceTrigger=LostFocus}" />
-                            <TextBlock Text="H" Style="{StaticResource GizmoLabel}" ToolTip="Height - along Z" />
+                            <TextBlock Text="H" Style="{StaticResource GizmoLabelZ}" ToolTip="Height - along Z" />
                             <TextBox Style="{StaticResource GizmoBox}" Tag="transform"
                                      AutomationProperties.AutomationId="RealSizeH"
                                      Text="{Binding RealH, StringFormat=N3, UpdateSourceTrigger=LostFocus}" />

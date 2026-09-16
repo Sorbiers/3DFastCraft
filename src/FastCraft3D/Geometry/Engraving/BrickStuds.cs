@@ -238,7 +238,16 @@ public static class BrickStuds
         Apply(mesh, face, options, BrickGrid.Of(face, options), token);
 
     /// <summary>The same, on a grid laid out elsewhere - the other face of a cut, say.</summary>
-    public static EngraveResult Apply(Mesh mesh, FacePatch face, EngraveOptions options, BrickGrid grid, CancellationToken token = default)
+    public static EngraveResult Apply(Mesh mesh, FacePatch face, EngraveOptions options, BrickGrid grid, CancellationToken token = default) =>
+        Apply(mesh, face, options, grid, null, token);
+
+    /// <param name="room">
+    /// Whether a stud may stand at a point, given in the coordinates the mesh is in. It is what
+    /// the other half of a cut has room to take a socket at; null lets every stud that fits this
+    /// face stand.
+    /// </param>
+    public static EngraveResult Apply(Mesh mesh, FacePatch face, EngraveOptions options, BrickGrid grid,
+                                     Func<Vector3, bool>? room, CancellationToken token = default)
     {
         token.ThrowIfCancellationRequested();
 
@@ -246,17 +255,19 @@ public static class BrickStuds
         if (outline.Shapes.Count == 0) return Nothing(mesh, options);
 
         return options.Kind == PatternKind.Studs
-            ? Studs(mesh, face, outline, options, grid, token)
-            : Underside(mesh, face, outline, options, grid, token);
+            ? Studs(mesh, face, outline, options, grid, room, token)
+            : Underside(mesh, face, outline, options, grid, room, token);
     }
 
     private static EngraveResult Nothing(Mesh mesh, EngraveOptions options) =>
         new(mesh, 0, 0, mesh.CheckHealth(), options);
 
-    private static EngraveResult Studs(Mesh mesh, FacePatch face, FaceOutline outline, EngraveOptions options, BrickGrid grid, CancellationToken token)
+    private static EngraveResult Studs(Mesh mesh, FacePatch face, FaceOutline outline, EngraveOptions options,
+                                       BrickGrid grid, Func<Vector3, bool>? room, CancellationToken token)
     {
         float r = StudRadius(options.StudFit);
         var centres = StudCentres(face, outline, options, grid);
+        if (room is not null) centres = centres.Where(c => room(face.ToLocal(c))).ToList();
         if (centres.Count == 0) return Nothing(mesh, options);
 
         // Studs stand apart, so all of them together are already one solid and go in one union.
@@ -266,12 +277,22 @@ public static class BrickStuds
         return new EngraveResult(result, centres.Count, studs.TriangleCount, result.CheckHealth(), options);
     }
 
-    private static EngraveResult Underside(Mesh mesh, FacePatch face, FaceOutline outline, EngraveOptions options, BrickGrid grid, CancellationToken token)
+    private static EngraveResult Underside(Mesh mesh, FacePatch face, FaceOutline outline, EngraveOptions options,
+                                           BrickGrid grid, Func<Vector3, bool>? room, CancellationToken token)
     {
         float depth = MathF.Max(options.Depth, 0.2f);
         float wall = Wall(options.StudFit);
 
-        var hollow = Hollow(face, outline, depth, wall, token);
+        // The cells the studs below stand in - every grid square whose middle is on this face, and,
+        // when the other half says so, only those it has room to take a socket at. A pocket cut
+        // where the part is thinner than itself comes out through the far side: on a roof it opened
+        // a row of holes along the slope, with the tubes inside them showing through.
+        var cells = Grid(face, grid, between: false)
+            .Where(outline.Contains)
+            .Where(c => room is null || room(face.ToLocal(c)))
+            .ToList();
+
+        var hollow = Hollow(face, outline, cells, depth, wall, token);
         if (hollow is null || hollow.TriangleCount == 0) return Nothing(mesh, options);
 
         var result = LocalCsg.Subtract(mesh, hollow, token);
@@ -300,8 +321,13 @@ public static class BrickStuds
     }
 
     /// <summary>
-    /// The pocket an underside takes out: the face's outline, brought in by a wall's thickness all
-    /// round and round every hole, and as deep as asked.
+    /// The pocket an underside takes out: the studs' own cells, brought in by a wall's thickness,
+    /// and clipped to the face so it never breaks out of the side.
+    ///
+    /// A brick's hollow is set by its studs and not by its outline: one stud wide it is 5 mm across
+    /// and grips the stud on both sides, two by two it is 13 mm with a tube in the middle. Following
+    /// the outline alone, a wall wider than the 8 mm module - a 10 mm one, say - came out 7.1 mm wide
+    /// for a 4.65 mm stud, which located the halves and gripped nothing.
     ///
     /// Bringing an irregular outline in is where polygon offsetting goes wrong - a wiggly scan
     /// outline folds over itself the moment the offset is wider than its wiggles. So it is not
@@ -310,14 +336,24 @@ public static class BrickStuds
     /// A rectangle, where that is not needed, is a plain box - which is also what is left when
     /// Manifold cannot run.
     /// </summary>
-    private static Mesh? Hollow(FacePatch face, FaceOutline outline, float depth, float wall, CancellationToken token)
+    private static Mesh? Hollow(FacePatch face, FaceOutline outline, IReadOnlyList<Vector2> cells,
+                                float depth, float wall, CancellationToken token)
     {
+        if (cells.Count == 0) return null;
+
+        // How far the studs' cells reach, which is what the cavity is cut from.
+        var low = new Vector2(cells.Min(c => c.X), cells.Min(c => c.Y)) - new Vector2(Pitch / 2f);
+        var high = new Vector2(cells.Max(c => c.X), cells.Max(c => c.Y)) + new Vector2(Pitch / 2f);
+
         if (IsRectangular(face) && outline.Loops.Count == 1)
         {
-            var size = face.Size - new Vector2(2f * wall);
+            // The cells of a rectangle fill a rectangle, so the two rectangles are all it takes.
+            var min = Vector2.Max(face.Min, low) + new Vector2(wall);
+            var max = Vector2.Min(face.Max, high) - new Vector2(wall);
+            var size = max - min;
             if (size.X <= 0 || size.Y <= 0) return null;
 
-            return Placed(Primitives.Box(size.X, size.Y, depth + Lift), face, (face.Min + face.Max) * 0.5f, -depth, Lift);
+            return Placed(Primitives.Box(size.X, size.Y, depth + Lift), face, (min + max) * 0.5f, -depth, Lift);
         }
 
         var surface = new PlanarSurface(face);
@@ -352,7 +388,39 @@ public static class BrickStuds
             }
         }
 
-        return ManifoldCsg.SubtractAll(solid, walls, token);
+        var hollow = ManifoldCsg.SubtractAll(solid, walls, token);
+        if (hollow is null) return null;
+
+        // Held to the studs' cells. Without Manifold there is nothing to hold it with, and the
+        // wider pocket of the face itself is better than none.
+        return ManifoldCsg.Intersect(hollow, Cells(face, cells, depth, wall, token), token) ?? hollow;
+    }
+
+    /// <summary>
+    /// The cells the studs stand in, each brought in by a wall, joined up where two cells are
+    /// neighbours - a brick's hollow is one space with tubes in it, not a pocket for every stud.
+    /// </summary>
+    private static Mesh Cells(FacePatch face, IReadOnlyList<Vector2> cells, float depth, float wall, CancellationToken token)
+    {
+        float inner = Pitch - 2f * wall;
+        float height = depth + 2f * Lift;
+        var pieces = new List<Mesh>(cells.Count * 2);
+
+        foreach (var at in cells)
+        {
+            pieces.Add(Placed(Primitives.Box(inner, inner, height), face, at, -depth - Lift, Lift));
+
+            foreach (var step in new[] { new Vector2(Pitch, 0f), new Vector2(0f, Pitch) })
+            {
+                if (!cells.Any(other => Vector2.DistanceSquared(other, at + step) < 0.01f)) continue;
+
+                // The bridge between two cells: as wide as the cavity, as long as the step.
+                var size = step.X > 0 ? new Vector2(Pitch, inner) : new Vector2(inner, Pitch);
+                pieces.Add(Placed(Primitives.Box(size.X, size.Y, height), face, at + step * 0.5f, -depth - Lift, Lift));
+            }
+        }
+
+        return ManifoldCsg.UnionAll(pieces, token) ?? Mesh.Combine(pieces);
     }
 
     /// <summary>

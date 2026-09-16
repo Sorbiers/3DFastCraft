@@ -43,15 +43,21 @@ public static class ManifoldCsg
     /// each other - a wall swept round an outline in short pieces - go in as they are, since
     /// Manifold unions them as part of the same operation.
     /// </summary>
-    public static Mesh? SubtractAll(Mesh solid, IReadOnlyList<Mesh> tools, CancellationToken token = default)
+    public static Mesh? SubtractAll(Mesh solid, IReadOnlyList<Mesh> tools, CancellationToken token = default) =>
+        tools.Count == 0 ? solid : Batch([solid, .. tools], ManifoldOpType.Subtract, token);
+
+    /// <summary>All of them as one solid. The pieces may overlap each other; that is what a batch is for.</summary>
+    public static Mesh? UnionAll(IReadOnlyList<Mesh> pieces, CancellationToken token = default) =>
+        pieces.Count == 0 ? null : Batch(pieces, ManifoldOpType.Add, token);
+
+    private static Mesh? Batch(IReadOnlyList<Mesh> meshes, ManifoldOpType op, CancellationToken token)
     {
         if (unavailable) return null;
-        if (tools.Count == 0) return solid;
 
-        var operands = new List<Manifold>(tools.Count + 1);
+        var operands = new List<Manifold>(meshes.Count);
         try
         {
-            foreach (var mesh in tools.Prepend(solid))
+            foreach (var mesh in meshes)
             {
                 token.ThrowIfCancellationRequested();
 
@@ -60,7 +66,7 @@ public static class ManifoldCsg
                 if (imported.Status != ManifoldStatus.NoError) return null;
             }
 
-            using var result = Manifold.BatchBoolean(operands, ManifoldOpType.Subtract, token);
+            using var result = Manifold.BatchBoolean(operands, op, token);
             return result.Status == ManifoldStatus.NoError ? Export(result.GetMeshGL()) : null;
         }
         catch (OperationCanceledException)
