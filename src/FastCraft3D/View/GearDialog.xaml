@@ -8,7 +8,7 @@
         <TextBlock Text="Involute teeth, cut as a gear cutter would cut them. The preview is on the plate."
                    TextWrapping="Wrap" Foreground="#FF3A4550" Margin="0,0,0,8" />
 
-        <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
+        <WrapPanel Margin="0,0,0,4">
             <RadioButton x:Name="GearKindBox" GroupName="GearKind" Content="Gear" Margin="0,0,10,0" Checked="OnChoice"
                          AutomationProperties.AutomationId="GearKindGear" />
             <RadioButton x:Name="RingKindBox" GroupName="GearKind" Content="Ring gear" Margin="0,0,10,0" Checked="OnChoice"
@@ -17,9 +17,9 @@
             <RadioButton x:Name="RackKindBox" GroupName="GearKind" Content="Rack" Checked="OnChoice"
                          AutomationProperties.AutomationId="GearKindRack"
                          ToolTip="Teeth along a straight bar, for a gear to drive back and forth" />
-        </StackPanel>
+        </WrapPanel>
 
-        <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+        <WrapPanel Margin="0,0,0,8">
             <RadioButton x:Name="StraightBox" GroupName="ToothForm" Content="Straight" Margin="0,0,10,0" Checked="OnChoice"
                          AutomationProperties.AutomationId="GearStraight" />
             <RadioButton x:Name="HelicalBox" GroupName="ToothForm" Content="Helical" Margin="0,0,10,0" Checked="OnChoice"
@@ -28,7 +28,7 @@
             <RadioButton x:Name="HerringboneBox" GroupName="ToothForm" Content="Herringbone" Checked="OnChoice"
                          AutomationProperties.AutomationId="GearHerringbone"
                          ToolTip="Helical one way to the middle and back the other: no sideways push, and printable without supports" />
-        </StackPanel>
+        </WrapPanel>
 
         <StackPanel Orientation="Horizontal">
             <TextBlock Text="Module" Style="{DynamicResource FieldLabel}" Width="86"
@@ -133,7 +133,7 @@
         </StackPanel>
 
         <StackPanel Orientation="Horizontal">
-            <CheckBox x:Name="PartnerBox" Content="And a gear to mesh with it:" VerticalAlignment="Center" Click="OnPartnerClicked"
+            <CheckBox x:Name="PartnerBox" Content="Meshing gear with" VerticalAlignment="Center" Click="OnPartnerClicked"
                       AutomationProperties.AutomationId="GearPartner"
                       ToolTip="Made beside it, already in mesh at the right distance, so the pair can be printed and used as it stands" />
             <TextBox x:Name="PartnerTeethBox" Width="50" Style="{DynamicResource NumberBox}" Tag="number" TextChanged="OnChanged"

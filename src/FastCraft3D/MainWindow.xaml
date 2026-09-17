@@ -45,6 +45,7 @@
         </Style>
 
         <Style x:Key="ToolButton" TargetType="Button">
+            <Setter Property="ToolTipService.ShowOnDisabled" Value="True" />
             <Setter Property="MinWidth" Value="68" />
             <Setter Property="Margin" Value="1,0" />
             <Setter Property="Cursor" Value="Hand" />
@@ -153,6 +154,7 @@
 
         <!-- Same look as a ribbon button, but it stays pressed while it is on. -->
         <Style x:Key="ToolToggle" TargetType="ToggleButton">
+            <Setter Property="ToolTipService.ShowOnDisabled" Value="True" />
             <Setter Property="MinWidth" Value="68" />
             <Setter Property="Margin" Value="1,0" />
             <Setter Property="Cursor" Value="Hand" />
@@ -182,6 +184,46 @@
                             <Trigger Property="IsChecked" Value="True">
                                 <Setter TargetName="Chrome" Property="Background" Value="#FFD3E0EF" />
                                 <Setter TargetName="Chrome" Property="BorderBrush" Value="#FF8FAFD0" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- The eye and the lock on a row of the object list: faint until they mean something. -->
+        <Style x:Key="RowIconButton" TargetType="Button">
+            <Setter Property="Width" Value="20" />
+            <Setter Property="Height" Value="18" />
+            <Setter Property="Margin" Value="2,0,0,0" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Focusable" Value="False" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Chrome" Background="Transparent" CornerRadius="3">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Chrome" Property="Background" Value="#FFDCE6F2" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="LinkButton" TargetType="Button">
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Foreground" Value="#FF2F6FB6" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <TextBlock x:Name="Label" Text="{TemplateBinding Content}" />
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Label" Property="TextDecorations" Value="Underline" />
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
@@ -224,6 +266,7 @@
         </Style>
 
         <Style x:Key="ModeButton" TargetType="ToggleButton">
+            <Setter Property="ToolTipService.ShowOnDisabled" Value="True" />
             <Setter Property="Width" Value="30" />
             <Setter Property="Height" Value="28" />
             <Setter Property="Margin" Value="1,0" />
@@ -243,6 +286,7 @@
              rather than staying on. A style cannot be shared between the two: ModeButton targets
              ToggleButton, and WPF refuses it on a plain Button at runtime. -->
         <Style x:Key="ModeAction" TargetType="Button">
+            <Setter Property="ToolTipService.ShowOnDisabled" Value="True" />
             <Setter Property="Width" Value="30" />
             <Setter Property="Height" Value="28" />
             <Setter Property="Margin" Value="1,0" />
@@ -312,6 +356,7 @@
         </Style>
 
         <Style x:Key="SelectionMenuItem" TargetType="ButtonBase">
+            <Setter Property="ToolTipService.ShowOnDisabled" Value="True" />
             <Setter Property="HorizontalContentAlignment" Value="Left" />
             <Setter Property="Padding" Value="10,7" />
             <Setter Property="Background" Value="Transparent" />
@@ -395,23 +440,7 @@
         </Style>
     </Window.Resources>
 
-    <Window.InputBindings>
-        <KeyBinding Key="Z" Modifiers="Control" Command="{Binding UndoCommand}" />
-        <KeyBinding Key="Y" Modifiers="Control" Command="{Binding RedoCommand}" />
-        <KeyBinding Key="Delete" Command="{Binding DeleteCommand}" />
-        <KeyBinding Key="C" Modifiers="Control" Command="{Binding CopyCommand}" />
-        <KeyBinding Key="V" Modifiers="Control" Command="{Binding PasteCommand}" />
-        <KeyBinding Key="D" Modifiers="Control" Command="{Binding DuplicateCommand}" />
-        <KeyBinding Key="D" Modifiers="Control+Shift" Command="{Binding DuplicateCommand}"
-                    CommandParameter="InPlace" />
-        <KeyBinding Key="A" Modifiers="Control" Command="{Binding SelectAllCommand}" />
-        <KeyBinding Key="A" Modifiers="Control+Shift" Command="{Binding DeselectAllCommand}" />
-        <KeyBinding Key="N" Modifiers="Control" Command="{Binding NewCommand}" />
-        <KeyBinding Key="O" Modifiers="Control" Command="{Binding OpenCommand}" />
-        <KeyBinding Key="S" Modifiers="Control" Command="{Binding SaveCommand}" />
-        <KeyBinding Key="E" Modifiers="Control" Command="{Binding ExportCommand}" />
-        <KeyBinding Key="I" Modifiers="Control" Command="{Binding ImportCommand}" />
-    </Window.InputBindings>
+    <!-- Keys are bound from View/Shortcuts, the same table F1 lists. -->
 
     <Grid>
     <DockPanel>
@@ -421,6 +450,21 @@
         <TabControl DockPanel.Dock="Top" Background="#FFFAFAFB" BorderThickness="0,0,0,1"
                     IsEnabled="{Binding NothingInHand}"
                     BorderBrush="#FFD8DBE0" Padding="6">
+            <TabControl.Resources>
+                <!-- A separator between groups of buttons, standing upright. WPF's own draws a
+                     horizontal line, which in a row of buttons has no width to show in, so every
+                     separator on the ribbon was there and none could be seen. -->
+                <Style TargetType="Separator">
+                    <Setter Property="Focusable" Value="False" />
+                    <Setter Property="Template">
+                        <Setter.Value>
+                            <ControlTemplate TargetType="Separator">
+                                <Border Width="1" Margin="0,8" Background="#FFC8CCD2" />
+                            </ControlTemplate>
+                        </Setter.Value>
+                    </Setter>
+                </Style>
+            </TabControl.Resources>
             <TabItem Header="Insert">
                 <WrapPanel Margin="4">
                     <Button Style="{StaticResource ToolButton}" Content="Cube" Tag="{StaticResource IconCube}"
@@ -442,24 +486,30 @@
                     <Button Style="{StaticResource ToolButton}" Content="Tetrahedron" Tag="{StaticResource IconTetrahedron}"
                             Command="{Binding InsertCommand}" CommandParameter="Tetrahedron" />
                     <Separator Margin="8,0" />
-                    <Button Style="{StaticResource ToolButton}" Content="Custom..." Tag="{StaticResource IconCustom}"
+                    <Button Style="{StaticResource ToolButton}" Content="Custom" Tag="{StaticResource IconCustom}"
                             Command="{Binding InsertCustomCommand}" MinWidth="70"
                             ToolTip="A cube, cylinder, cone, sphere or torus with its size, segments and roundness chosen before it is made - more segments for a smoother shape" />
+                    <Button Style="{StaticResource ToolButton}" Content="Text" Tag="{StaticResource IconText3D}"
+                            Command="{Binding InsertTextCommand}" MinWidth="58"
+                            ToolTip="Lettering as an object of its own - a sign, a name tag, a keychain - in any installed font, lying on the plate or standing up. To put letters on a face that is already there, use Emboss or Engrave." />
+                    <Button Style="{StaticResource ToolButton}" Content="Import" Tag="{StaticResource IconImport}"
+                            Command="{Binding ImportCommand}" ToolTip="Bring in an STL, an OBJ, or another 3DFastCraft project - its objects join what is already on the plate (Ctrl+I)" />
+                    <Separator Margin="8,0" />
                     <Button Style="{StaticResource ToolButton}" Content="Fit test" Tag="{StaticResource IconFitTest}"
                             Command="{Binding InsertFitTestCommand}" MinWidth="64"
                             ToolTip="Four small 2x2 brick plates at Fit -0.2, -0.1, 0 and +0.1 mm, marked with one to four notches, each with studs on top and the underside below. Print them in your filament and press each onto real bricks. Without real bricks, stack one plate on another: the pair grips like the sum of their two Fits. To test two printed halves exactly as Split with connectors makes them - the same Fit on both - print the set twice and try each plate on its twin. Type the Fit that holds firmly but still comes apart by hand." />
-                    <Button Style="{StaticResource ToolButton}" Content="Thread..." Tag="{StaticResource IconThread}"
+                    <Button Style="{StaticResource ToolButton}" Content="Hole" Tag="{StaticResource IconHole}"
+                            Command="{Binding InsertHoleCommand}" MinWidth="58"
+                            ToolTip="A screw hole - plain, countersunk or counterbored, with a nut pocket if asked - or a heat-set insert pocket, M2 to M8. Cut into the top of the one part selected, or made as a cutter to place and Subtract." />
+                    <Button Style="{StaticResource ToolButton}" Content="Thread" Tag="{StaticResource IconThread}"
                             Command="{Binding InsertThreadCommand}" MinWidth="70"
                             ToolTip="A threaded rod, a nut, or a cutter to Subtract for a threaded hole: ISO metric M3 to M20 or any diameter and pitch, with a clearance so a printed rod and nut screw together" />
-                    <Button Style="{StaticResource ToolButton}" Content="Stair..." Tag="{StaticResource IconStair}"
+                    <Button Style="{StaticResource ToolButton}" Content="Stair" Tag="{StaticResource IconStair}"
                             Command="{Binding InsertStairCommand}" MinWidth="70"
                             ToolTip="A straight flight, built as one solid, with the riser and going reported in real units" />
-                    <Button Style="{StaticResource ToolButton}" Content="Gear..." Tag="{StaticResource IconGear}"
+                    <Button Style="{StaticResource ToolButton}" Content="Gear" Tag="{StaticResource IconGear}"
                             Command="{Binding InsertGearCommand}" MinWidth="64"
                             ToolTip="An involute gear, ring gear or rack - straight, helical or herringbone - with a bore, a hub and a set-screw hole, and a partner made already in mesh with it" />
-                    <Separator Margin="8,0" />
-                    <Button Style="{StaticResource ToolButton}" Content="Import..." Tag="{StaticResource IconImport}"
-                            Command="{Binding ImportCommand}" ToolTip="Bring in an STL, an OBJ, or another 3DFastCraft project - its objects join what is already on the plate (Ctrl+I)" />
                 </WrapPanel>
             </TabItem>
 
@@ -468,17 +518,17 @@
                  Object and Smooth under it too. -->
             <TabItem Header="Object">
                 <WrapPanel Margin="4">
-                    <Button Style="{StaticResource ToolButton}" Content="Subtract..." Tag="{StaticResource IconSubtract}"
+                    <Button Style="{StaticResource ToolButton}" Content="Subtract" Tag="{StaticResource IconSubtract}"
                             Command="{Binding BeginSubtractCommand}" MinWidth="80"
-                            ToolTip="Take the last object picked away from everything picked before it. Each of those is cut on its own and stays a separate object. Opens the options on the right: a tolerance, and whether to keep the cutter." />
+                            ToolTip="Take the last object picked away from everything picked before it. Each of those is cut on its own and stays a separate object. Opens the options on the right: a tolerance, and whether to keep the cutter. Needs two or more objects selected, the cutter picked last." />
                     <Button Style="{StaticResource ToolButton}" Content="Intersect" Tag="{StaticResource IconIntersect}"
                             Command="{Binding BooleanCommand}" CommandParameter="Intersect"
-                            ToolTip="Keep only the overlapping volume" />
+                            ToolTip="Keep only the overlapping volume. Needs two or more objects selected." />
                     <Button Style="{StaticResource ToolButton}" Content="Merge" Tag="{StaticResource IconMerge}"
                             Command="{Binding BooleanCommand}" CommandParameter="Union"
-                            ToolTip="Fuse the selection into one solid" />
+                            ToolTip="Fuse the selection into one solid. Needs two or more objects selected." />
 
-                    <Button Style="{StaticResource ToolButton}" Content="Split..." Tag="{StaticResource IconSplit}"
+                    <Button Style="{StaticResource ToolButton}" Content="Split" Tag="{StaticResource IconSplit}"
                             Command="{Binding BeginSplitCommand}"
                             ToolTip="Cut the selected object in two with a plane, or with a face you pick" />
                     <Separator Margin="8,0" />
@@ -488,14 +538,14 @@
                     <Button Style="{StaticResource ToolButton}" Content="In place" Tag="{StaticResource IconDuplicate}"
                             Command="{Binding DuplicateCommand}" CommandParameter="InPlace" MinWidth="64"
                             ToolTip="Copy the selection without moving it - what you want before a boolean or a mirror (Ctrl+Shift+D)" />
-                    <Button Style="{StaticResource ToolButton}" Content="Repeat..." Tag="{StaticResource IconRepeat}"
+                    <Button Style="{StaticResource ToolButton}" Content="Repeat" Tag="{StaticResource IconRepeat}"
                             Command="{Binding RepeatCommand}" MinWidth="76"
                             ToolTip="Repeat the selection along a line or round a circle, growing as it goes - a flight of steps, a row of dowels, a ring of pins, a spiral stair" />
                     <Button Style="{StaticResource ToolButton}" Content="Delete" Tag="{StaticResource IconDelete}"
                             Command="{Binding DeleteCommand}"
                             ToolTip="Remove the selection (Del)" />
                     <Separator Margin="8,0" />
-                    <Button Style="{StaticResource ToolButton}" Content="Colour..." Tag="{StaticResource IconColour}"
+                    <Button Style="{StaticResource ToolButton}" Content="Colour" Tag="{StaticResource IconColour}"
                             Command="{Binding PickColourCommand}" MinWidth="78"
                             ToolTip="Paint the selection. The palette in the right-hand panel is one click." />
                 </WrapPanel>
@@ -508,10 +558,10 @@
                             ToolTip="Set the selection down on z = 0, so it is standing on the bed rather than floating over it" />
                     <Button Style="{StaticResource ToolButton}" Content="Lay on face" Tag="{StaticResource IconLayOnFace}"
                             Command="{Binding BeginLayCommand}" MinWidth="86"
-                            ToolTip="Pick a face and the object is tipped over to stand on it - the flat side down, for printing" />
+                            ToolTip="Pick a face and the object is tipped over to stand on it - the flat side down, for printing. Needs exactly one object selected." />
                     <Button Style="{StaticResource ToolButton}" Content="Align to" Tag="{StaticResource IconAlignCentre}"
                             Command="{Binding AlignToSelectionCommand}" MinWidth="72"
-                            ToolTip="Move the first object you picked so its bounding box is centred on the second's. Two objects: the first moves, the second stays. Nothing is rotated or resized." />
+                            ToolTip="Move the first object you picked so its bounding box is centred on the second's. Two objects: the first moves, the second stays. Nothing is rotated or resized. Needs exactly two objects selected." />
                     <Separator Margin="8,0" />
                     <Button Style="{StaticResource ToolButton}" Content="Fit" Tag="{StaticResource IconFitBed}"
                             Command="{Binding FitToBedCommand}" MinWidth="58"
@@ -520,7 +570,7 @@
                     <Button Style="{StaticResource ToolButton}" Content="Distribute" Tag="{StaticResource IconArrangeBed}"
                             Command="{Binding DistributeOnBedCommand}" MinWidth="72"
                             AutomationProperties.Name="Distribute on bed"
-                            ToolTip="Set the selected objects out in rows across the bed, a gap you choose apart, standing on it" />
+                            ToolTip="Set the selected objects out in rows across the bed, a gap you choose apart, standing on it. Needs two or more objects selected." />
                     <Separator Margin="8,0" />
                     <Button Style="{StaticResource ToolButton}" Content="Mirror X" Tag="{StaticResource IconMirror}"
                             Command="{Binding MirrorCommand}" CommandParameter="X" />
@@ -532,62 +582,71 @@
                     <TextBlock Text="X" VerticalAlignment="Center" FontWeight="SemiBold"
                                Foreground="#FF5A5F66" Margin="10,0,4,0" />
                     <Button Style="{StaticResource ToolButton}" Content="Left" Tag="{StaticResource IconAlignMin}"
-                            Command="{Binding AlignCommand}" CommandParameter="X:Minimum" MinWidth="58" />
+                            Command="{Binding AlignCommand}" CommandParameter="X:Minimum" MinWidth="58"
+                            ToolTip="Needs two or more objects selected." />
                     <Button Style="{StaticResource ToolButton}" Content="Centre" Tag="{StaticResource IconAlignCentre}"
-                            Command="{Binding AlignCommand}" CommandParameter="X:Centre" MinWidth="58" />
+                            Command="{Binding AlignCommand}" CommandParameter="X:Centre" MinWidth="58"
+                            ToolTip="Needs two or more objects selected." />
                     <Button Style="{StaticResource ToolButton}" Content="Right" Tag="{StaticResource IconAlignMax}"
-                            Command="{Binding AlignCommand}" CommandParameter="X:Maximum" MinWidth="58" />
+                            Command="{Binding AlignCommand}" CommandParameter="X:Maximum" MinWidth="58"
+                            ToolTip="Needs two or more objects selected." />
                     <Button Style="{StaticResource ToolButton}" Content="Spread" Tag="{StaticResource IconDistribute}"
                             Command="{Binding AlignCommand}" CommandParameter="X:Distribute" MinWidth="58"
-                            ToolTip="Even out the gaps along X, keeping the two outermost objects where they are" />
+                            ToolTip="Even out the gaps along X, keeping the two outermost objects where they are. Needs two or more objects selected." />
                     <Separator Margin="6,0" />
                     <TextBlock Text="Y" VerticalAlignment="Center" FontWeight="SemiBold"
                                Foreground="#FF5A5F66" Margin="10,0,4,0" />
                     <Button Style="{StaticResource ToolButton}" Content="Front" Tag="{StaticResource IconAlignMin}"
-                            Command="{Binding AlignCommand}" CommandParameter="Y:Minimum" MinWidth="58" />
+                            Command="{Binding AlignCommand}" CommandParameter="Y:Minimum" MinWidth="58"
+                            ToolTip="Needs two or more objects selected." />
                     <Button Style="{StaticResource ToolButton}" Content="Centre" Tag="{StaticResource IconAlignCentre}"
-                            Command="{Binding AlignCommand}" CommandParameter="Y:Centre" MinWidth="58" />
+                            Command="{Binding AlignCommand}" CommandParameter="Y:Centre" MinWidth="58"
+                            ToolTip="Needs two or more objects selected." />
                     <Button Style="{StaticResource ToolButton}" Content="Back" Tag="{StaticResource IconAlignMax}"
-                            Command="{Binding AlignCommand}" CommandParameter="Y:Maximum" MinWidth="58" />
+                            Command="{Binding AlignCommand}" CommandParameter="Y:Maximum" MinWidth="58"
+                            ToolTip="Needs two or more objects selected." />
                     <Button Style="{StaticResource ToolButton}" Content="Spread" Tag="{StaticResource IconDistribute}"
                             Command="{Binding AlignCommand}" CommandParameter="Y:Distribute" MinWidth="58"
-                            ToolTip="Even out the gaps along Y, keeping the two outermost objects where they are" />
+                            ToolTip="Even out the gaps along Y, keeping the two outermost objects where they are. Needs two or more objects selected." />
                     <Separator Margin="6,0" />
                     <TextBlock Text="Z" VerticalAlignment="Center" FontWeight="SemiBold"
                                Foreground="#FF5A5F66" Margin="10,0,4,0" />
                     <Button Style="{StaticResource ToolButton}" Content="Bottom" Tag="{StaticResource IconAlignMin}"
-                            Command="{Binding AlignCommand}" CommandParameter="Z:Minimum" MinWidth="58" />
+                            Command="{Binding AlignCommand}" CommandParameter="Z:Minimum" MinWidth="58"
+                            ToolTip="Needs two or more objects selected." />
                     <Button Style="{StaticResource ToolButton}" Content="Centre" Tag="{StaticResource IconAlignCentre}"
-                            Command="{Binding AlignCommand}" CommandParameter="Z:Centre" MinWidth="58" />
+                            Command="{Binding AlignCommand}" CommandParameter="Z:Centre" MinWidth="58"
+                            ToolTip="Needs two or more objects selected." />
                     <Button Style="{StaticResource ToolButton}" Content="Top" Tag="{StaticResource IconAlignMax}"
-                            Command="{Binding AlignCommand}" CommandParameter="Z:Maximum" MinWidth="58" />
+                            Command="{Binding AlignCommand}" CommandParameter="Z:Maximum" MinWidth="58"
+                            ToolTip="Needs two or more objects selected." />
                     <Button Style="{StaticResource ToolButton}" Content="Spread" Tag="{StaticResource IconDistribute}"
                             Command="{Binding AlignCommand}" CommandParameter="Z:Distribute" MinWidth="58"
-                            ToolTip="Even out the gaps along Z, keeping the two outermost objects where they are" />
+                            ToolTip="Even out the gaps along Z, keeping the two outermost objects where they are. Needs two or more objects selected." />
                     <Separator Margin="6,0" />
                 </WrapPanel>
             </TabItem>
 
             <TabItem Header="Edit">
                 <WrapPanel Margin="4">
-                    <Button Style="{StaticResource ToolButton}" Content="Emboss..." Tag="{StaticResource IconText}"
+                    <Button Style="{StaticResource ToolButton}" Content="Emboss" Tag="{StaticResource IconText}"
                             Command="{Binding BeginEmbossCommand}" MinWidth="78"
-                            ToolTip="Raise lettering or a drawing off a face, or cut it in" />
-                    <Button Style="{StaticResource ToolButton}" Content="Engrave..." Tag="{StaticResource IconEngrave}"
+                            ToolTip="Raise lettering or a drawing off a face, or cut it in. Needs exactly one object selected." />
+                    <Button Style="{StaticResource ToolButton}" Content="Engrave" Tag="{StaticResource IconEngrave}"
                             Command="{Binding BeginEngraveCommand}" MinWidth="82"
-                            ToolTip="Put brick, roof tiles, planks or grain on one flat face - cut in, or standing proud" />
+                            ToolTip="Put brick, roof tiles, planks or grain on one flat face - cut in, or standing proud. Needs exactly one object selected." />
                     <Separator Margin="8,0" />
-                    <Button Style="{StaticResource ToolButton}" Content="Smooth..." Tag="{StaticResource IconSmooth}"
+                    <Button Style="{StaticResource ToolButton}" Content="Smooth" Tag="{StaticResource IconSmooth}"
                             Command="{Binding SmoothCommand}"
                             ToolTip="Round the facets off, with the result shown as you set it" />
-                    <Button Style="{StaticResource ToolButton}" Content="Round..." Tag="{StaticResource IconRound}"
+                    <Button Style="{StaticResource ToolButton}" Content="Round" Tag="{StaticResource IconRound}"
                             Command="{Binding RoundCommand}" MinWidth="82"
-                            ToolTip="Round the edges of a cube or cylinder. Only shapes still described by their parameters can be rounded." />
+                            ToolTip="Round the edges of a cube or cylinder. Only shapes still described by their parameters can be rounded. Needs a cube or cylinder that has not been cut or reshaped since it was inserted." />
                     <Separator Margin="8,0" />
-                    <Button Style="{StaticResource ToolButton}" Content="Simplify..." Tag="{StaticResource IconSimplify}"
+                    <Button Style="{StaticResource ToolButton}" Content="Simplify" Tag="{StaticResource IconSimplify}"
                             Command="{Binding SimplifyCommand}" MinWidth="82"
                             ToolTip="Cut the triangle count down while keeping the shape. The natural partner to Rebuild." />
-                    <Button Style="{StaticResource ToolButton}" Content="Hollow..." Tag="{StaticResource IconHollow}"
+                    <Button Style="{StaticResource ToolButton}" Content="Hollow" Tag="{StaticResource IconHollow}"
                             Command="{Binding HollowCommand}" MinWidth="78"
                             ToolTip="Turn a solid into a shell of a chosen wall thickness, to save material" />
                     <Separator Margin="8,0" />
@@ -605,24 +664,24 @@
                  the things that move objects, and it moves nothing at all. -->
             <TabItem Header="Tools">
                 <WrapPanel Margin="4">
-                    <Button Style="{StaticResource ToolButton}" Content="Mould..." Tag="{StaticResource IconHollow}"
+                    <Button Style="{StaticResource ToolButton}" Content="Mould" Tag="{StaticResource IconHollow}"
                             Command="{Binding MouldCommand}" MinWidth="76"
-                            ToolTip="Make a mould of the selection to pour silicone into: a block with the model taken out of it, cut so the cast part comes out, with a pour hole and air vents. Select one object." />
+                            ToolTip="Make a mould of the selection to pour silicone into: a block with the model taken out of it, cut so the cast part comes out, with a pour hole and air vents. Select one object. Needs exactly one object selected." />
                     <Separator Margin="8,0" />
                     <Button Style="{StaticResource ToolButton}" Content="Repair" Tag="{StaticResource IconRepair}"
                             Command="{Binding RepairCommand}"
                             ToolTip="Mend objects that would not print: fill holes, drop slivers, turn faces the right way round" />
-                    <Button Style="{StaticResource ToolButton}" Content="Rebuild..." Tag="{StaticResource IconRebuild}"
+                    <Button Style="{StaticResource ToolButton}" Content="Rebuild" Tag="{StaticResource IconRebuild}"
                             Command="{Binding RebuildCommand}" MinWidth="82"
                             ToolTip="Rebuild the surface from scratch. Mends anything, including a model that passes through itself - at the cost of fine detail." />
                     <Separator Margin="8,0" />
-                    <Button Style="{StaticResource ToolButton}" Content="Twist..." Tag="{StaticResource IconTwist}"
+                    <Button Style="{StaticResource ToolButton}" Content="Twist" Tag="{StaticResource IconTwist}"
                             Command="{Binding TwistCommand}" MinWidth="70"
                             ToolTip="Turn a shape about its upright axis by more the higher up it goes - twisted columns, vases and spirals. The bottom stays put." />
-                    <Button Style="{StaticResource ToolButton}" Content="Taper..." Tag="{StaticResource IconTaper}"
+                    <Button Style="{StaticResource ToolButton}" Content="Taper" Tag="{StaticResource IconTaper}"
                             Command="{Binding TaperCommand}" MinWidth="70"
                             ToolTip="Narrow or widen a shape towards the top - tapered columns, spires, flared vases. The bottom keeps its size." />
-                    <Button Style="{StaticResource ToolButton}" Content="Bend..." Tag="{StaticResource IconBend}"
+                    <Button Style="{StaticResource ToolButton}" Content="Bend" Tag="{StaticResource IconBend}"
                             Command="{Binding BendCommand}" MinWidth="70"
                             ToolTip="Curve a shape over as if round a pipe, towards X or Y - arches, horns, hooks. The bottom stays put." />
                     <Button Style="{StaticResource ToolButton}" Content="Extrude down" Tag="{StaticResource IconExtrudeDown}"
@@ -633,14 +692,14 @@
                             ToolTip="Cut a model too big for the plate into two halves that go back together one way only: round pins in holes on both halves, or pegs on one half and sockets in the other." />
                     <Button Style="{StaticResource ToolButton}" Content="Connect objects" Tag="{StaticResource IconConnect}"
                             Command="{Binding BeginConnectCommand}" MinWidth="100"
-                            ToolTip="Pins or pegs through the face two parts rest against each other on - a floor on its basement, two blocks side by side - so they go together one way only. Select the two parts." />
+                            ToolTip="Pins or pegs through the face two parts rest against each other on - a floor on its basement, two blocks side by side - so they go together one way only. Select the two parts. Needs exactly two objects selected." />
                     <Separator Margin="8,0" />
                     <Button Style="{StaticResource ToolButton}" Content="Measure" Tag="{StaticResource IconMeasure}"
                             Command="{Binding BeginMeasureCommand}"
                             ToolTip="Click two points to measure between them, then drag either end to move it" />
                     <Button Style="{StaticResource ToolButton}" Content="Fit check" Tag="{StaticResource IconMeasure}"
                             Command="{Binding FitCheckCommand}" MinWidth="72"
-                            ToolTip="Measures two parts against each other without changing either: how far they overlap, or how big the gap is. A pin with no hole and a frame too big for its opening both look right on screen." />
+                            ToolTip="Measures two parts against each other without changing either: how far they overlap, or how big the gap is. A pin with no hole and a frame too big for its opening both look right on screen. Needs exactly two objects selected." />
                 </WrapPanel>
             </TabItem>
 
@@ -648,7 +707,7 @@
                 <WrapPanel Margin="4">
                     <Button Style="{StaticResource ToolButton}" Content="New" Tag="{StaticResource IconNew}"
                             Command="{Binding NewCommand}" ToolTip="Start an empty plate (Ctrl+N)" />
-                    <Button Style="{StaticResource ToolButton}" Content="Open..." Tag="{StaticResource IconOpen}"
+                    <Button Style="{StaticResource ToolButton}" Content="Open" Tag="{StaticResource IconOpen}"
                             Command="{Binding OpenCommand}" ToolTip="Open a 3DFastCraft project, replacing what is on the plate (Ctrl+O)" />
                     <Button Style="{StaticResource ToolButton}" Content="Recent" Tag="{StaticResource IconVersions}"
                             Click="OnShowRecent" ToolTip="Projects opened recently">
@@ -669,33 +728,42 @@
                     </Button>
                     <Button Style="{StaticResource ToolButton}" Content="Save" Tag="{StaticResource IconSave}"
                             Command="{Binding SaveCommand}" ToolTip="Save the project (Ctrl+S)" />
-                    <Button Style="{StaticResource ToolButton}" Content="Save as..." Tag="{StaticResource IconSaveAs}" Command="{Binding SaveAsCommand}" MinWidth="86" />
+                    <Button Style="{StaticResource ToolButton}" Content="Save as" Tag="{StaticResource IconSaveAs}" Command="{Binding SaveAsCommand}" MinWidth="86"
+                            ToolTip="Save the project under a new name (Ctrl+Shift+S)" />
                     <Button Style="{StaticResource ToolButton}" Content="Save a version" Tag="{StaticResource IconVersions}"
                             Command="{Binding SaveVersionCommand}" MinWidth="88"
                             ToolTip="Keep a named snapshot inside this project file, so you can come back to it later" />
-                    <Button Style="{StaticResource ToolButton}" Content="Versions..." Tag="{StaticResource IconVersions}"
+                    <Button Style="{StaticResource ToolButton}" Content="Versions" Tag="{StaticResource IconVersions}"
                             Command="{Binding VersionsCommand}" MinWidth="82"
-                            ToolTip="List the versions kept in this file, and restore one" />
+                            ToolTip="List the versions kept in this file, and restore one. Needs the project saved to a file first." />
                     <Separator Margin="8,0" />
-                    <Button Style="{StaticResource ToolButton}" Content="Export STL / OBJ..." Tag="{StaticResource IconExport}"
+                    <Button Style="{StaticResource ToolButton}" Content="Export STL / OBJ" Tag="{StaticResource IconExport}"
                             Command="{Binding ExportCommand}" MinWidth="140"
                             ToolTip="Export the selection, or everything when nothing is selected (Ctrl+E)" />
+                    <Button Style="{StaticResource ToolButton}" Content="Blueprint" Tag="{StaticResource IconDrawing}"
+                            Command="{Binding PrintDrawingCommand}" MinWidth="70"
+                            AutomationProperties.Name="Blueprint"
+                            ToolTip="A blueprint: front, top and right views, and an isometric, with the overall dimensions - to print, or save as a PDF. The selection, or everything when nothing is selected (Ctrl+P)" />
                     <Separator Margin="8,0" />
                     <Button Style="{StaticResource ToolButton}" Content="About" Tag="{StaticResource IconAbout}"
                             Click="OnAbout" ToolTip="Version, licence and where the source lives" />
+                    <ToggleButton Style="{StaticResource ToolToggle}" Content="Shortcuts" Tag="{StaticResource IconKeyboard}"
+                                  IsChecked="{Binding IsShortcutsPanelOpen, Mode=TwoWay}" MinWidth="76"
+                                  AutomationProperties.Name="Shortcuts"
+                                  ToolTip="Every key the app answers to, and the drags worth knowing (F1)" />
                 </WrapPanel>
             </TabItem>
 
             <TabItem Header="View">
                 <WrapPanel Margin="4">
-                    <Button Style="{StaticResource ToolButton}" Content="Zoom to fit" Tag="{StaticResource IconZoomFit}" Click="OnZoomExtents" MinWidth="90" />
-                    <Button Style="{StaticResource ToolButton}" Content="Top" Tag="{StaticResource IconViewTop}" Click="OnViewTop" />
-                    <Button Style="{StaticResource ToolButton}" Content="Front" Tag="{StaticResource IconViewFront}" Click="OnViewFront" />
-                    <Button Style="{StaticResource ToolButton}" Content="Right" Tag="{StaticResource IconViewRight}" Click="OnViewRight" />
+                    <Button Style="{StaticResource ToolButton}" Content="Zoom to fit" Tag="{StaticResource IconZoomFit}" Click="OnZoomExtents" ToolTip="Frame everything on the plate (F)" MinWidth="90" />
+                    <Button Style="{StaticResource ToolButton}" Content="Top" Tag="{StaticResource IconViewTop}" Click="OnViewTop" ToolTip="Look from the top (1)" />
+                    <Button Style="{StaticResource ToolButton}" Content="Front" Tag="{StaticResource IconViewFront}" Click="OnViewFront" ToolTip="Look from the front (2)" />
+                    <Button Style="{StaticResource ToolButton}" Content="Right" Tag="{StaticResource IconViewRight}" Click="OnViewRight" ToolTip="Look from the right (3)" />
                     <Button Style="{StaticResource ToolButton}" Content="Back" Tag="{StaticResource IconViewFront}" Click="OnViewBack" />
                     <Button Style="{StaticResource ToolButton}" Content="Left" Tag="{StaticResource IconViewRight}" Click="OnViewLeft" />
                     <Button Style="{StaticResource ToolButton}" Content="Bottom" Tag="{StaticResource IconViewTop}" Click="OnViewBottom" />
-                    <Button Style="{StaticResource ToolButton}" Content="Isometric" Tag="{StaticResource IconViewIso}" Click="OnViewIso" />
+                    <Button Style="{StaticResource ToolButton}" Content="Isometric" Tag="{StaticResource IconViewIso}" Click="OnViewIso" ToolTip="Look from the front right, above (4)" />
                     <Separator Margin="8,0" />
                     <ToggleButton Style="{StaticResource ToolToggle}" Content="Wireframe" Tag="{StaticResource IconWireframe}"
                                   IsChecked="{Binding ShowWireframe}" MinWidth="80"
@@ -706,7 +774,17 @@
                     <ToggleButton Style="{StaticResource ToolToggle}" Content="Plate" Tag="{StaticResource IconPlate}"
                                   IsChecked="{Binding ShowPlate}"
                                   ToolTip="Show or hide the build plate" />
-                    <ToggleButton Style="{StaticResource ToolToggle}" Content="Grid..." Tag="{StaticResource IconGrid}"
+                    <ToggleButton Style="{StaticResource ToolToggle}" Content="Overhangs" Tag="{StaticResource IconOverhang}"
+                                  IsChecked="{Binding ShowOverhangs, Mode=TwoWay}" MinWidth="76"
+                                  AutomationProperties.Name="Overhangs"
+                                  ToolTip="Faces that lean further from upright than the angle beside it, in red - what the slicer will want to support. Faces flat on the bed are left out: the bed holds them up." />
+                    <ComboBox Width="58" VerticalAlignment="Center" Margin="2,0,6,0"
+                              ItemsSource="{Binding OverhangAngles}" SelectedItem="{Binding OverhangAngle, Mode=TwoWay}"
+                              ItemStringFormat="{}{0:0}°"
+                              Visibility="{Binding ShowOverhangs, Converter={StaticResource BoolToVisibility}}"
+                              AutomationProperties.AutomationId="OverhangAngle"
+                              ToolTip="How far from upright a face may lean before it counts. 45 degrees suits most printers; a well-cooled one manages 50 or more." />
+                    <ToggleButton Style="{StaticResource ToolToggle}" Content="Grid" Tag="{StaticResource IconGrid}"
                                   IsChecked="{Binding IsGridPanelOpen, Mode=TwoWay}"
                                   AutomationProperties.Name="Grid"
                                   ToolTip="The printable area, and how the axes and distances are drawn on the plate" />
@@ -813,7 +891,7 @@
                                          Converter={StaticResource BoolToVisibility}}">
                     <Button Style="{StaticResource SelectionMenuItem}" Command="{Binding GroupCommand}"
                             AutomationProperties.Name="Group"
-                            ToolTip="Combine the selected objects into one">
+                            ToolTip="Combine the selected objects into one (Ctrl+G). Needs two or more objects selected.">
                         <StackPanel Orientation="Horizontal">
                             <Path Style="{StaticResource MenuIcon}"
                                   Data="M 1,1 L 11,1 L 11,11 L 1,11 Z M 5,5 L 15,5 L 15,15 L 5,15 Z" />
@@ -823,7 +901,7 @@
 
                     <Button Style="{StaticResource SelectionMenuItem}" Command="{Binding UngroupCommand}"
                             AutomationProperties.Name="Ungroup"
-                            ToolTip="Split the selection into its separate pieces">
+                            ToolTip="Split the selection into its separate pieces (Ctrl+Shift+G)">
                         <StackPanel Orientation="Horizontal">
                             <Path Style="{StaticResource MenuIcon}"
                                   Data="M 0,0 L 7,0 L 7,7 L 0,7 Z M 10,10 L 17,10 L 17,17 L 10,17 Z" />
@@ -877,17 +955,59 @@
                     </ToggleButton>
                 </StackPanel>
 
-                    <TextBlock Text="Objects" Style="{StaticResource SectionHeader}" Margin="0,6,0,4" />
+                    <DockPanel Margin="0,6,0,4">
+                        <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Bottom">
+                            <Button Content="Show all" Style="{StaticResource LinkButton}" Margin="0,0,10,0"
+                                    Command="{Binding ShowAllCommand}"
+                                    Visibility="{Binding AnyHidden, Converter={StaticResource BoolToVisibility}}"
+                                    ToolTip="Show every hidden object again (Alt+H)" />
+                            <Button Content="Unlock all" Style="{StaticResource LinkButton}"
+                                    Command="{Binding UnlockAllCommand}"
+                                    Visibility="{Binding AnyLocked, Converter={StaticResource BoolToVisibility}}"
+                                    ToolTip="Unlock every locked object (Alt+L)" />
+                        </StackPanel>
+                        <TextBlock Text="Objects" Style="{StaticResource SectionHeader}" Margin="0" />
+                    </DockPanel>
                 </StackPanel>
 
                 <!-- Selection is mirrored by SelectionListSync, not by an IsSelected binding:
                      a container generated later would push its initial false into the model. -->
                 <view:ObjectListBox x:Name="ObjectList" Grid.Row="1" ItemsSource="{Binding Scene.Objects}"
                                     IsEnabled="{Binding NothingInHand}"
+                                    HorizontalContentAlignment="Stretch"
                                     SelectionMode="Extended">
                     <ListBox.ItemTemplate>
                         <DataTemplate>
-                            <TextBlock Text="{Binding Name}" Padding="2" />
+                            <DockPanel Background="Transparent">
+                                <Button DockPanel.Dock="Right" Style="{StaticResource RowIconButton}"
+                                        Command="{Binding DataContext.ToggleLockedCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                        CommandParameter="{Binding}" AutomationProperties.Name="Lock"
+                                        ToolTip="Lock: it stays in view but cannot be selected, so nothing can move or change it (L)">
+                                    <Path x:Name="LockIcon" Data="{StaticResource RowUnlocked}" Stroke="#FF33383F" StrokeThickness="1.3"
+                                          Fill="{x:Null}" Stretch="Uniform" Width="11" Height="11" Opacity="0.3" />
+                                </Button>
+                                <Button DockPanel.Dock="Right" Style="{StaticResource RowIconButton}"
+                                        Command="{Binding DataContext.ToggleHiddenCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                        CommandParameter="{Binding}" AutomationProperties.Name="Hide"
+                                        ToolTip="Hide: not drawn, not picked, and left out of Export and Drawing (H)">
+                                    <Path x:Name="EyeIcon" Data="{StaticResource RowShown}" Stroke="#FF33383F" StrokeThickness="1.3"
+                                          Fill="{x:Null}" Stretch="Uniform" Width="13" Height="11" Opacity="0.3" />
+                                </Button>
+                                <TextBlock x:Name="NameText" Text="{Binding Name}" Padding="2" TextTrimming="CharacterEllipsis" />
+                            </DockPanel>
+                            <DataTemplate.Triggers>
+                                <DataTrigger Binding="{Binding IsHidden}" Value="True">
+                                    <Setter TargetName="EyeIcon" Property="Data" Value="{StaticResource RowHidden}" />
+                                    <Setter TargetName="EyeIcon" Property="Opacity" Value="1" />
+                                    <Setter TargetName="NameText" Property="Foreground" Value="#FF9AA0A8" />
+                                    <Setter TargetName="NameText" Property="FontStyle" Value="Italic" />
+                                </DataTrigger>
+                                <DataTrigger Binding="{Binding IsLocked}" Value="True">
+                                    <Setter TargetName="LockIcon" Property="Data" Value="{StaticResource RowLocked}" />
+                                    <Setter TargetName="LockIcon" Property="Opacity" Value="1" />
+                                    <Setter TargetName="NameText" Property="Foreground" Value="#FF9AA0A8" />
+                                </DataTrigger>
+                            </DataTemplate.Triggers>
                         </DataTemplate>
                     </ListBox.ItemTemplate>
                 </view:ObjectListBox>
@@ -947,7 +1067,7 @@
                         <StackPanel Margin="0,2,0,8"
                                     Visibility="{Binding SplitWithConnectors, Converter={StaticResource BoolToVisibility}}">
                             <TextBlock Text="Connectors" FontWeight="SemiBold" Margin="0,0,0,4" />
-                            <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
+                            <WrapPanel Margin="0,0,0,6">
                                 <RadioButton Content="Separate pins" GroupName="ConnectorStyle" Margin="0,0,10,0"
                                              IsChecked="{Binding ConnectorsArePins, Mode=TwoWay}"
                                              ToolTip="Holes in both halves, and the pins made as parts of their own - printed lying down, so they are strong along their length. A broken pin is a reprint, not a lost half." />
@@ -957,7 +1077,7 @@
                                 <RadioButton Content="Brick studs" GroupName="ConnectorStyle"
                                              IsChecked="{Binding ConnectorsAreBricks, Mode=TwoWay}"
                                              ToolTip="Brick studs on the lower half and a shallow brick underside in the upper, on the 8 mm grid. The halves hold by grip, and each takes real bricks along the join. The grid repeats, so line the edges up by eye." />
-                            </StackPanel>
+                            </WrapPanel>
                             <StackPanel Orientation="Horizontal" Margin="0,0,0,6"
                                         Visibility="{Binding ConnectorsArePegs, Converter={StaticResource BoolToVisibility}}">
                                 <TextBlock Text="Peg shape" Style="{StaticResource FieldLabel}" Width="76" />
@@ -1343,7 +1463,7 @@
                                    Foreground="#FF3A4550" Margin="0,0,0,8" />
                         <StackPanel Margin="0,2,0,8">
                             <TextBlock Text="Connectors" FontWeight="SemiBold" Margin="0,0,0,4" />
-                            <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
+                            <WrapPanel Margin="0,0,0,6">
                                 <RadioButton Content="Separate pins" GroupName="ConnectStyle" Margin="0,0,10,0"
                                              IsChecked="{Binding ConnectorsArePins, Mode=TwoWay}"
                                              ToolTip="Holes in both halves, and the pins made as parts of their own - printed lying down, so they are strong along their length. A broken pin is a reprint, not a lost half." />
@@ -1353,7 +1473,7 @@
                                 <RadioButton Content="Brick studs" GroupName="ConnectStyle"
                                              IsChecked="{Binding ConnectorsAreBricks, Mode=TwoWay}"
                                              ToolTip="Brick studs on the lower half and a shallow brick underside in the upper, on the 8 mm grid. The halves hold by grip, and each takes real bricks along the join. The grid repeats, so line the edges up by eye." />
-                            </StackPanel>
+                            </WrapPanel>
                             <StackPanel Orientation="Horizontal" Margin="0,0,0,6"
                                         Visibility="{Binding ConnectorsArePegs, Converter={StaticResource BoolToVisibility}}">
                                 <TextBlock Text="Peg shape" Style="{StaticResource FieldLabel}" Width="76" />
@@ -1528,9 +1648,10 @@
                             ToolTip="Pick any colour" />
                 </StackPanel>
 
+                <StackPanel Grid.Row="8">
                 <!-- Grid settings: the printable area, and what is drawn on the plate. Not a tool - it
                      stands nothing down and can stay open while working. -->
-                <Border Grid.Row="8" Margin="0,10,0,0" Padding="8" Background="#FFEFF5FF"
+                <Border Margin="0,10,0,0" Padding="8" Background="#FFEFF5FF"
                         BorderBrush="#FFB8D2F0" BorderThickness="1" CornerRadius="3"
                         Visibility="{Binding IsGridPanelOpen, Converter={StaticResource BoolToVisibility}}">
                     <StackPanel>
@@ -1565,6 +1686,50 @@
                                 Command="{Binding CloseGridPanelCommand}" />
                     </StackPanel>
                 </Border>
+
+                <!-- Keyboard and mouse: listed from View/Shortcuts, which is what binds the keys. -->
+                <Border Margin="0,10,0,0" Padding="8" Background="#FFEFF5FF"
+                        BorderBrush="#FFB8D2F0" BorderThickness="1" CornerRadius="3"
+                        AutomationProperties.AutomationId="ShortcutsPanel"
+                        Visibility="{Binding IsShortcutsPanelOpen, Converter={StaticResource BoolToVisibility}}">
+                    <DockPanel>
+                        <DockPanel DockPanel.Dock="Top" Margin="0,0,0,6">
+                            <Button DockPanel.Dock="Right" Content="Close" Style="{StaticResource PanelButton}"
+                                    Command="{Binding CloseShortcutsPanelCommand}" />
+                            <TextBlock Text="Keyboard and mouse" FontWeight="SemiBold" VerticalAlignment="Center" />
+                        </DockPanel>
+                        <ScrollViewer MaxHeight="440" VerticalScrollBarVisibility="Auto" Focusable="False">
+                            <ItemsControl ItemsSource="{x:Static view:Shortcuts.Groups}" Focusable="False">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <StackPanel Margin="0,0,0,8">
+                                            <TextBlock Text="{Binding Name}" FontWeight="SemiBold" Foreground="#FF3A4550" Margin="0,0,0,3" />
+                                            <ItemsControl ItemsSource="{Binding Items}" Focusable="False">
+                                                <ItemsControl.ItemTemplate>
+                                                    <DataTemplate>
+                                                        <Grid Margin="0,1">
+                                                            <Grid.ColumnDefinitions>
+                                                                <ColumnDefinition Width="92" />
+                                                                <ColumnDefinition Width="*" />
+                                                            </Grid.ColumnDefinitions>
+                                                            <Border HorizontalAlignment="Left" VerticalAlignment="Top" Padding="4,0"
+                                                                    CornerRadius="2" Background="White" BorderBrush="#FFC8CCD2" BorderThickness="1">
+                                                                <TextBlock Text="{Binding Keys}" FontFamily="Consolas" FontSize="11" Foreground="#FF2C3037" />
+                                                            </Border>
+                                                            <TextBlock Grid.Column="1" Text="{Binding What}" TextWrapping="Wrap"
+                                                                       Foreground="#FF3A3F45" Margin="6,0,0,0" />
+                                                        </Grid>
+                                                    </DataTemplate>
+                                                </ItemsControl.ItemTemplate>
+                                            </ItemsControl>
+                                        </StackPanel>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </ScrollViewer>
+                    </DockPanel>
+                </Border>
+                </StackPanel>
 
                 <!-- Properties -->
                 <ScrollViewer Grid.Row="9" VerticalScrollBarVisibility="Auto" Margin="0,6,0,0"
@@ -2135,7 +2300,7 @@
 
             <TextBlock Margin="16" VerticalAlignment="Top" HorizontalAlignment="Left"
                        Foreground="#FF4A4F55" FontSize="13"
-                       Text="Insert a shape to begin. Left-drag orbits, right-drag pans, wheel zooms.">
+                       Text="Insert a shape to begin. Left-drag orbits, right-drag pans, wheel zooms. F1 lists every key.">
                 <TextBlock.Style>
                     <Style TargetType="TextBlock">
                         <Setter Property="Visibility" Value="Collapsed" />

@@ -3,6 +3,7 @@ using System.ComponentModel;
 using System.Numerics;
 using System.Windows;
 using System.Windows.Media;
+using System.Windows.Threading;
 using FastCraft3D.Geometry;
 using FastCraft3D.Geometry.Engraving;
 using FastCraft3D.Model;
@@ -47,6 +48,14 @@ public sealed class SceneRenderer : IDisposable
     private readonly Scene scene;
     private readonly Dictionary<SceneObject, MeshGeometryModel3D> visuals = new();
     private readonly Dictionary<SceneObject, LineGeometryModel3D> outlines = new();
+
+    /// <summary>The faces that overhang, drawn over each object while the overhang view is on.</summary>
+    private readonly Dictionary<SceneObject, MeshGeometryModel3D> overhangs = new();
+    private readonly HashSet<SceneObject> overhangsStale = new();
+    private readonly Dispatcher dispatcher = Dispatcher.CurrentDispatcher;
+    private bool overhangsQueued;
+    private bool showOverhangs;
+    private float overhangAngle = Overhangs.DefaultAngle;
 
     /// <summary>Stand-ins for the objects a split is being set up on: what stays, then what goes.</summary>
     private readonly Dictionary<SceneObject, List<MeshGeometryModel3D>> splitParts = new();
@@ -361,10 +370,79 @@ public sealed class SceneRenderer : IDisposable
     /// </summary>
     private void ShowOrHide(SceneObject o, MeshGeometryModel3D visual)
     {
-        bool draw = !splitParts.ContainsKey(o)
+        bool draw = !o.IsHidden
+                    && !splitParts.ContainsKey(o)
                     && (isolated is null || isolated.Contains(o));
 
         visual.Visibility = draw ? Visibility.Visible : Visibility.Collapsed;
+        if (overhangs.TryGetValue(o, out var shown)) shown.Visibility = visual.Visibility;
+    }
+
+    /// <summary>
+    /// Shows the faces that would need support in red, over everything on the plate, or takes them
+    /// away.
+    ///
+    /// Worked out in the background, a moment after whatever changed: a drag moves the object many
+    /// times a second, and turning a dense scan into world space for every one of them would make
+    /// the drag itself stutter. Several changes waiting are done once.
+    /// </summary>
+    public void ShowOverhangs(bool on, float angleDegrees)
+    {
+        showOverhangs = on;
+        overhangAngle = angleDegrees;
+
+        foreach (var o in visuals.Keys) MarkOverhangs(o);
+        if (!on) foreach (var o in overhangs.Keys.ToList()) RemoveOverhangs(o);
+    }
+
+    private void MarkOverhangs(SceneObject o)
+    {
+        overhangsStale.Add(o);
+        if (overhangsQueued) return;
+
+        overhangsQueued = true;
+        dispatcher.BeginInvoke(DispatcherPriority.Background, new Action(UpdateOverhangs));
+    }
+
+    private void UpdateOverhangs()
+    {
+        overhangsQueued = false;
+        var stale = overhangsStale.ToList();
+        overhangsStale.Clear();
+
+        foreach (var o in stale)
+        {
+            RemoveOverhangs(o);
+            if (!showOverhangs || !visuals.TryGetValue(o, out var visual)) continue;
+
+            var faces = Overhangs.Faces(o.ToWorldMesh(), overhangAngle);
+            if (faces.TriangleCount == 0) continue;
+
+            var shown = new MeshGeometryModel3D
+            {
+                Geometry = MeshConverter.ToGeometry(faces),
+                Material = new PhongMaterial
+                {
+                    DiffuseColor = new SharpDX.Color4(0.93f, 0.24f, 0.2f, 1f),
+                    AmbientColor = new SharpDX.Color4(0.45f, 0.1f, 0.08f, 1f),
+                    SpecularColor = new SharpDX.Color4(0, 0, 0, 1)
+                },
+                CullMode = SharpDX.Direct3D11.CullMode.Back,
+                DepthBias = -8,
+                IsHitTestVisible = false,
+                Visibility = visual.Visibility
+            };
+
+            overhangs[o] = shown;
+            root.Children.Add(shown);
+        }
+    }
+
+    private void RemoveOverhangs(SceneObject o)
+    {
+        if (!overhangs.Remove(o, out var shown)) return;
+        root.Children.Remove(shown);
+        shown.Dispose();
     }
 
     /// <summary>Puts the objects back the way they are drawn when no split is being set up.</summary>
@@ -581,12 +659,14 @@ public sealed class SceneRenderer : IDisposable
         ShowOrHide(o, visual);
         root.Children.Add(visual);
         o.PropertyChanged += OnObjectChanged;
+        if (showOverhangs) MarkOverhangs(o);
 
         UpdateOutline(o);
     }
 
     private void Detach(SceneObject o)
     {
+        RemoveOverhangs(o);
         Release(o);
         o.PropertyChanged -= OnObjectChanged;
         RemoveOutline(o);
@@ -614,12 +694,19 @@ public sealed class SceneRenderer : IDisposable
                     line.Transform = visual.Transform;
                 break;
 
+            case nameof(SceneObject.IsHidden):
+                ShowOrHide(o, visual);
+                break;
+
             case nameof(SceneObject.IsSelected):
             case nameof(SceneObject.Colour):
                 ApplyLook(o, visual);
                 UpdateOutline(o);
                 break;
         }
+
+        if (showOverhangs && e.PropertyName is nameof(SceneObject.Mesh) or nameof(SceneObject.Transform))
+            MarkOverhangs(o);
 
         if (!splitParts.ContainsKey(o)) return;
 

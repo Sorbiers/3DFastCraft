@@ -186,6 +186,8 @@ public static class SceneSerializer
         Origin = o.Origin?.ToString(),
         Pristine = o.IsPristine,
         PiecesTakeClearance = o.PiecesTakeClearance,
+        Hidden = o.IsHidden ? true : null,
+        Locked = o.IsLocked ? true : null,
         Vertices = Flatten(o.Mesh.Positions),
         Triangles = o.Mesh.Indices.ToArray()
     };
@@ -203,7 +205,9 @@ public static class SceneSerializer
             Colour = o.Colour is { Length: 3 } ? ToVector(o.Colour) : new Vector3(0.3f, 0.55f, 0.85f),
             Origin = origin,
             IsPristine = origin is not null && (o.Pristine ?? IsConvex(mesh)),
-            PiecesTakeClearance = o.PiecesTakeClearance
+            PiecesTakeClearance = o.PiecesTakeClearance,
+            IsHidden = o.Hidden == true,
+            IsLocked = o.Locked == true
         };
     }
 
@@ -302,6 +306,11 @@ public static class SceneSerializer
 
         /// <summary>A group every piece of which can be grown by a clearance.</summary>
         public bool PiecesTakeClearance { get; set; }
+
+        /// <summary>Written only when set, so a file with nothing hidden or locked reads as it did.</summary>
+        public bool? Hidden { get; set; }
+
+        public bool? Locked { get; set; }
 
         public float[]? Vertices { get; set; }
         public int[]? Triangles { get; set; }

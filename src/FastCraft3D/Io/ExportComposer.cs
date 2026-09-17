@@ -15,11 +15,11 @@ public static class ExportComposer
     /// <summary>What the given options will actually write out.</summary>
     public static List<SceneObject> Subjects(Scene scene, ExportOptions options)
     {
-        if (!options.SelectedOnly) return scene.Objects.ToList();
+        if (!options.SelectedOnly) return scene.Shown.ToList();
 
         var selection = scene.Selection;
         // Asking for the selection when there is none would silently export an empty file.
-        return selection.Count > 0 ? selection.ToList() : scene.Objects.ToList();
+        return selection.Count > 0 ? selection.ToList() : scene.Shown.ToList();
     }
 
     /// <summary>

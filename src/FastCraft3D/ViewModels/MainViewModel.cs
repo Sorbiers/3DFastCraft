@@ -113,6 +113,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
     private bool showZAxis;
     private bool showGridLabels;
     private bool isGridPanelOpen;
+    private bool isShortcutsPanelOpen;
     private float modelScale = 1f;
     private readonly EngraveState engrave = new();
     private Vector3 splitNormal = Vector3.UnitZ;
@@ -136,12 +137,15 @@ public sealed class MainViewModel : INotifyPropertyChanged
             IsDirty = true;
         };
         Scene.Objects.CollectionChanged += (_, _) => RefreshSelection();
+        Scene.Objects.CollectionChanged += (_, _) => RaiseHiddenAndLocked();
 
         InsertCommand = new RelayCommand(p => Insert(p));
         InsertStairCommand = RelayCommand.Simple(InsertStair);
         InsertThreadCommand = RelayCommand.Simple(InsertThread);
         InsertFitTestCommand = RelayCommand.Simple(InsertFitTest);
         InsertCustomCommand = RelayCommand.Simple(InsertCustom);
+        InsertTextCommand = RelayCommand.Simple(InsertText);
+        InsertHoleCommand = AsyncRelayCommand.Simple(InsertHole);
         InsertGearCommand = RelayCommand.Simple(InsertGear);
         DeleteCommand = RelayCommand.Simple(Delete, () => Scene.Selection.Count > 0);
         DuplicateCommand = new RelayCommand(p => Duplicate(offset: !Equals(p, "InPlace")),
@@ -151,6 +155,10 @@ public sealed class MainViewModel : INotifyPropertyChanged
         FitToBedCommand = RelayCommand.Simple(FitToBed, () => Scene.Selection.Count > 0);
         DistributeOnBedCommand = RelayCommand.Simple(DistributeOnBed, () => Scene.Selection.Count > 1);
         SelectAllCommand = RelayCommand.Simple(SelectAll, () => Scene.Objects.Count > 0);
+        ToggleHiddenCommand = new RelayCommand(p => { if (p is SceneObject o) SetHidden([o], !o.IsHidden); });
+        ToggleLockedCommand = new RelayCommand(p => { if (p is SceneObject o) SetLocked([o], !o.IsLocked); });
+        ShowAllCommand = RelayCommand.Simple(ShowAll, () => AnyHidden);
+        UnlockAllCommand = RelayCommand.Simple(UnlockAll, () => AnyLocked);
         InvertSelectionCommand = RelayCommand.Simple(InvertSelection, () => Scene.Objects.Count > 0);
         GroupCommand = RelayCommand.Simple(Group, () => Scene.Selection.Count > 1);
         UngroupCommand = RelayCommand.Simple(Ungroup, () => Scene.Selection.Count > 0);
@@ -214,6 +222,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
         VersionsCommand = RelayCommand.Simple(ShowVersions, () => projectPath is not null);
         NewCommand = RelayCommand.Simple(NewScene);
         CloseGridPanelCommand = RelayCommand.Simple(() => IsGridPanelOpen = false);
+        CloseShortcutsPanelCommand = RelayCommand.Simple(() => IsShortcutsPanelOpen = false);
         OpenCommand = RelayCommand.Simple(OpenProject);
         SaveCommand = RelayCommand.Simple(() => SaveProject(saveAs: false));
         SaveAsCommand = RelayCommand.Simple(() => SaveProject(saveAs: true));
@@ -226,6 +235,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
         PasteCommand = RelayCommand.Simple(Paste, () => clipboard.Count > 0);
         ImportCommand = RelayCommand.Simple(Import);
         ExportCommand = RelayCommand.Simple(Export, () => Scene.Objects.Count > 0);
+        PrintDrawingCommand = RelayCommand.Simple(PrintDrawing, () => Scene.Objects.Count > 0);
         SetColourCommand = new RelayCommand(SetColour, _ => Scene.Selection.Count > 0);
         PickColourCommand = RelayCommand.Simple(PickColour, () => Scene.Selection.Count > 0);
     }
@@ -240,6 +250,8 @@ public sealed class MainViewModel : INotifyPropertyChanged
     public System.Windows.Input.ICommand InsertThreadCommand { get; }
     public System.Windows.Input.ICommand InsertFitTestCommand { get; }
     public System.Windows.Input.ICommand InsertCustomCommand { get; }
+    public System.Windows.Input.ICommand InsertTextCommand { get; }
+    public System.Windows.Input.ICommand InsertHoleCommand { get; }
     public System.Windows.Input.ICommand InsertGearCommand { get; }
     public System.Windows.Input.ICommand DeleteCommand { get; }
     public System.Windows.Input.ICommand DuplicateCommand { get; }
@@ -248,6 +260,10 @@ public sealed class MainViewModel : INotifyPropertyChanged
     public System.Windows.Input.ICommand FitToBedCommand { get; }
     public System.Windows.Input.ICommand DistributeOnBedCommand { get; }
     public System.Windows.Input.ICommand SelectAllCommand { get; }
+    public System.Windows.Input.ICommand ToggleHiddenCommand { get; }
+    public System.Windows.Input.ICommand ToggleLockedCommand { get; }
+    public System.Windows.Input.ICommand ShowAllCommand { get; }
+    public System.Windows.Input.ICommand UnlockAllCommand { get; }
     public System.Windows.Input.ICommand InvertSelectionCommand { get; }
     public System.Windows.Input.ICommand GroupCommand { get; }
     public System.Windows.Input.ICommand UngroupCommand { get; }
@@ -298,6 +314,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
     public System.Windows.Input.ICommand VersionsCommand { get; }
     public System.Windows.Input.ICommand NewCommand { get; }
     public System.Windows.Input.ICommand CloseGridPanelCommand { get; }
+    public System.Windows.Input.ICommand CloseShortcutsPanelCommand { get; }
     public System.Windows.Input.ICommand OpenCommand { get; }
     public System.Windows.Input.ICommand SaveCommand { get; }
     public System.Windows.Input.ICommand SaveAsCommand { get; }
@@ -310,6 +327,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
     public System.Windows.Input.ICommand PasteCommand { get; }
     public System.Windows.Input.ICommand ImportCommand { get; }
     public System.Windows.Input.ICommand ExportCommand { get; }
+    public System.Windows.Input.ICommand PrintDrawingCommand { get; }
     public System.Windows.Input.ICommand SetColourCommand { get; }
     public System.Windows.Input.ICommand PickColourCommand { get; }
 
@@ -1272,6 +1290,65 @@ public sealed class MainViewModel : INotifyPropertyChanged
     /// Off by default. Sinking a part into the bed is a real way to flatten its underside, and
     /// moving is how it is done.
     /// </summary>
+    /// <summary>
+    /// The list of keys and drags, in the side bar. Like the grid settings it stands nothing down,
+    /// so it can stay open while the keys it lists are tried.
+    /// </summary>
+    public bool IsShortcutsPanelOpen
+    {
+        get => isShortcutsPanelOpen;
+        set => Set(ref isShortcutsPanelOpen, value);
+    }
+
+    /// <summary>How far one press of an arrow key moves the selection: the snap step, or a millimetre with snap off.</summary>
+    public float NudgeStep => snapStep > 0 ? (float)snapStep : 1f;
+
+    private List<SceneObject>? nudged;
+    private List<TransformState> nudgedBefore = [];
+
+    /// <summary>
+    /// Moves the selection by a step, as an arrow key does, holding it to the bed when moving
+    /// keeps to the bed.
+    ///
+    /// A held key repeats many times a second, and one undo step a press would take as many Ctrl+Z
+    /// to take back; so the steps pile up until <see cref="EndNudge"/> - the key coming up - and
+    /// are undone as one.
+    /// </summary>
+    public void Nudge(Vector3 by)
+    {
+        if (IsToolInHand) return;
+
+        var selection = Scene.Selection.ToList();
+        if (selection.Count == 0) return;
+
+        if (nudged is null || !nudged.SequenceEqual(selection))
+        {
+            EndNudge();
+            nudged = selection;
+            nudgedBefore = selection.Select(TransformState.Capture).ToList();
+        }
+
+        OnBed(moving: true, together: true, () =>
+        {
+            foreach (var o in selection) o.Position += by;
+        });
+
+        RaiseTransformFields();
+        RaiseGroup();
+    }
+
+    /// <summary>Puts the steps taken since the key went down on the undo list, as one.</summary>
+    public void EndNudge()
+    {
+        if (nudged is null) return;
+
+        if (TransformCommand.CreateIfChanged("Nudge", nudged, nudgedBefore) is { } command)
+            Undo.Execute(command);
+
+        nudged = null;
+        nudgedBefore = [];
+    }
+
     public bool KeepOnBedMove
     {
         get => keepOnBedMove;
@@ -2391,6 +2468,46 @@ public sealed class MainViewModel : INotifyPropertyChanged
     {
         get => showPlate;
         set { Set(ref showPlate, value); ViewChanged?.Invoke(); }
+    }
+
+    private bool showOverhangs;
+    private float overhangAngle = Overhangs.DefaultAngle;
+
+    /// <summary>
+    /// Faces that will need support, in red. Said in numbers on the status line as well, so a part
+    /// that has none says so rather than leaving you to look for red that is not there.
+    /// </summary>
+    public bool ShowOverhangs
+    {
+        get => showOverhangs;
+        set
+        {
+            Set(ref showOverhangs, value);
+            ViewChanged?.Invoke();
+            if (value) DescribeOverhangs();
+        }
+    }
+
+    /// <summary>How far from upright a face may lean before it counts, in degrees.</summary>
+    public float OverhangAngle
+    {
+        get => overhangAngle;
+        set
+        {
+            Set(ref overhangAngle, Math.Clamp(value, 10f, 80f));
+            ViewChanged?.Invoke();
+            if (showOverhangs) DescribeOverhangs();
+        }
+    }
+
+    public IReadOnlyList<float> OverhangAngles { get; } = [30f, 40f, 45f, 50f, 60f];
+
+    private void DescribeOverhangs()
+    {
+        double area = Scene.Shown.Sum(o => Overhangs.Area(o.ToWorldMesh(), overhangAngle));
+        Status = area < 1.0
+            ? $"No overhangs steeper than {overhangAngle:0} degrees - nothing needs support"
+            : $"Red: {area / 100.0:0.#} cm² steeper than {overhangAngle:0} degrees from upright, which will need support or a bridge";
     }
 
     /// <summary>
@@ -3669,6 +3786,17 @@ public sealed class MainViewModel : INotifyPropertyChanged
             return;
         }
 
+        if (dialog.GridResult is { } grid)
+        {
+            var placed = RepeatArray.MakeGrid(selection, grid, Namer());
+            if (placed.Count == 0) return;
+
+            Undo.Execute(new AddObjectsCommand("Repeat in a grid", placed));
+            RefreshSelection();
+            Status = $"Repeated in a {grid.Columns} x {grid.Rows}{(grid.Layers > 1 ? $" x {grid.Layers}" : "")} grid - {placed.Count} new object(s)";
+            return;
+        }
+
         if (dialog.Result is not { } settings) return;
 
         var copies = RepeatArray.Make(selection, settings, Namer());
@@ -4040,6 +4168,152 @@ public sealed class MainViewModel : INotifyPropertyChanged
         Status = $"Inserted a custom {shape.Kind.ToString().ToLowerInvariant()} - {built.TriangleCount:N0} triangles";
     }
 
+    private HoleOptions lastHole = new();
+    private float lastHoleX, lastHoleY;
+
+    /// <summary>
+    /// A screw hole or an insert pocket: cut straight into the top of the one part selected, or,
+    /// with nothing selected, made as a cutter to place and Subtract.
+    ///
+    /// The cut is refused rather than kept if the part comes back with holes in its surface - a
+    /// screw hole is not worth a model that no longer prints.
+    /// </summary>
+    private async Task InsertHole()
+    {
+        if (IsBusy) return;
+
+        var selection = Scene.Selection.ToList();
+        var target = selection.Count == 1 ? selection[0] : null;
+        SceneObject? shown = null;
+        var red = new Vector3(0.88f, 0.3f, 0.28f);
+
+        Mesh? Cutter(HoleOptions options, float x, float y, bool through)
+        {
+            if (target is null) return HoleCutter.Build(options, options.Depth);
+
+            var reach = target.WorldBounds;
+            var cutter = HoleCutter.Build(options, through ? reach.Size.Z + 1f : options.Depth);
+            return cutter is null ? null
+                : MeshTransform.Transformed(cutter, Matrix4x4.CreateTranslation(reach.Center.X + x, reach.Center.Y + y, reach.Max.Z));
+        }
+
+        void Standing(SceneObject o)
+        {
+            if (target is null) o.Position = new Vector3(0, 0, o.Position.Z - o.WorldBounds.Min.Z);
+        }
+
+        var dialog = new HoleDialog(lastHole, lastHoleX, lastHoleY, target?.Name, (options, x, y, through) =>
+        {
+            if (shown is not null) Scene.Objects.Remove(shown);
+            shown = null;
+            if (options is null) return true;
+
+            var mesh = Cutter(options, x, y, through);
+            if (mesh is null) return false;
+
+            shown = new SceneObject("Hole", mesh) { Colour = red }.Centred();
+            Standing(shown);
+            Scene.Objects.Add(shown);
+            return true;
+        });
+
+        bool accepted = dialog.ShowDialog() == true;
+        if (shown is not null) Scene.Objects.Remove(shown);
+        if (target is not null) { target.IsSelected = true; RefreshSelection(); }
+
+        if (!accepted || dialog.Result is not { } chosen) return;
+        lastHole = chosen;
+        lastHoleX = dialog.OffsetX;
+        lastHoleY = dialog.OffsetY;
+
+        var cutterMesh = Cutter(chosen, dialog.OffsetX, dialog.OffsetY, dialog.Through);
+        if (cutterMesh is null) return;
+
+        string what = chosen.Kind == HoleKind.Insert
+            ? $"{chosen.Size} insert pocket"
+            : $"{chosen.Size}{chosen.Head switch { HoleHead.Countersunk => " countersunk", HoleHead.Counterbored => " counterbored", _ => "" }} hole";
+
+        if (target is null)
+        {
+            var cutter = new SceneObject(Scene.UniqueName($"Cutter {what}"), cutterMesh) { Colour = red }.Centred();
+            Standing(cutter);
+            Undo.Execute(new AddObjectsCommand("Insert hole cutter", [cutter]));
+            RefreshSelection();
+            Status = $"Added a cutter for an {what} - put it where the hole goes, select the part then the cutter, and Subtract";
+            return;
+        }
+
+        var token = StartWork($"Cutting the {what}");
+        try
+        {
+            var world = target.ToWorldMesh();
+            var result = await Task.Run(() => MeshHealer.Heal(LocalCsg.Subtract(world, cutterMesh, token), token: token).Mesh);
+
+            if (result.TriangleCount == 0 || !result.CheckHealth().IsWatertight)
+            {
+                Status = $"The {what} would not cut cleanly into {target.Name} - nothing was changed";
+                return;
+            }
+
+            var cut = new SceneObject(target.Name, result) { Colour = target.Colour }.Centred();
+            Undo.Execute(new ReplaceObjectsCommand("Hole", [target], [cut]));
+            RefreshSelection();
+            Status = $"Cut an {what} into {target.Name}";
+        }
+        catch (Exception abort) when (WasAborted(abort))
+        {
+            Status = $"{busyTitle} aborted - nothing was changed";
+        }
+        catch (Exception ex)
+        {
+            Status = $"The hole could not be cut: {ex.Message}";
+        }
+        finally
+        {
+            EndWork();
+        }
+    }
+
+    /// <summary>What the lettering panel was last left at, so the next starts from it.</summary>
+    private TextOptions lastText = new();
+
+    /// <summary>
+    /// Lettering as an object of its own, from the panel: shown on the plate as it is typed, as a
+    /// custom shape is, and put down as one undo step, standing on the plate in the middle.
+    /// </summary>
+    private void InsertText()
+    {
+        var colour = NextAutomaticColour();
+        SceneObject? shown = null;
+
+        var dialog = new TextDialog(lastText, EmbossFonts, mesh =>
+        {
+            if (shown is not null) Scene.Objects.Remove(shown);
+            shown = null;
+            if (mesh is null) return;
+
+            shown = new SceneObject("Text", mesh) { Colour = colour }.Centred();
+            shown.Position = shown.Position with { Z = shown.Position.Z - shown.WorldBounds.Min.Z };
+            Scene.Objects.Add(shown);
+        });
+
+        bool accepted = dialog.ShowDialog() == true;
+        if (shown is not null) Scene.Objects.Remove(shown);
+
+        if (!accepted || dialog.Result is not { } chosen) return;
+        lastText = chosen;
+
+        var built = TextObject.Build(chosen);
+        if (built.TriangleCount == 0) return;
+
+        var o = new SceneObject(Scene.UniqueName(TextObject.NameFor(chosen)), built) { Colour = colour }.Centred();
+        o.Position = o.Position with { Z = o.Position.Z - o.WorldBounds.Min.Z };
+
+        Undo.Execute(new AddObjectsCommand("Insert text", [o]));
+        RefreshSelection();
+        Status = $"Inserted {o.Name} - {built.TriangleCount:N0} triangles";
+    }
+
     /// <summary>What the gear panel was last left at, so a second gear starts from the first.</summary>
     private GearOptions lastGear = new();
 
@@ -4212,6 +4486,65 @@ public sealed class MainViewModel : INotifyPropertyChanged
         Status = covers.X <= plateWidth + 0.01f && covers.Y <= plateDepth + 0.01f
             ? $"Distributed {selection.Count} objects {chosen:0.##} mm apart"
             : $"Distributed {selection.Count} objects {chosen:0.##} mm apart - they cover {covers.X:0} x {covers.Y:0} mm, more than the bed";
+    }
+
+    /// <summary>Whether anything is hidden, for the list's Show all.</summary>
+    public bool AnyHidden => Scene.Objects.Any(o => o.IsHidden);
+
+    /// <summary>Whether anything is locked, for the list's Unlock all.</summary>
+    public bool AnyLocked => Scene.Objects.Any(o => o.IsLocked);
+
+    public void HideSelection() => SetHidden(Scene.Selection.ToList(), true);
+
+    public void ShowAll() => SetHidden(Scene.Objects.Where(o => o.IsHidden).ToList(), false);
+
+    public void LockSelection() => SetLocked(Scene.Selection.ToList(), true);
+
+    public void UnlockAll() => SetLocked(Scene.Objects.Where(o => o.IsLocked).ToList(), false);
+
+    /// <summary>
+    /// Hides or shows objects. Not an undo step: it changes what is in view, not the model, and a
+    /// Ctrl+Z that brought back a hidden part instead of the last cut would be taking back the
+    /// wrong thing. The project is marked changed, since the file keeps it.
+    /// </summary>
+    private void SetHidden(IReadOnlyList<SceneObject> objects, bool hidden)
+    {
+        if (objects.Count == 0) return;
+
+        foreach (var o in objects) o.IsHidden = hidden;
+        AfterHidingOrLocking();
+
+        Status = hidden
+            ? $"Hid {Count(objects)} - Alt+H shows everything again"
+            : $"Showing {Count(objects)} again";
+    }
+
+    private void SetLocked(IReadOnlyList<SceneObject> objects, bool locked)
+    {
+        if (objects.Count == 0) return;
+
+        foreach (var o in objects) o.IsLocked = locked;
+        AfterHidingOrLocking();
+
+        Status = locked
+            ? $"Locked {Count(objects)} - nothing can select or change it until it is unlocked (Alt+L unlocks everything)"
+            : $"Unlocked {Count(objects)}";
+    }
+
+    private static string Count(IReadOnlyList<SceneObject> objects) =>
+        objects.Count == 1 ? objects[0].Name : $"{objects.Count} objects";
+
+    private void AfterHidingOrLocking()
+    {
+        IsDirty = true;
+        RaiseHiddenAndLocked();
+        RefreshSelection();
+    }
+
+    private void RaiseHiddenAndLocked()
+    {
+        Raise(nameof(AnyHidden));
+        Raise(nameof(AnyLocked));
     }
 
     private void SelectAll()
@@ -4842,7 +5175,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
     /// </summary>
     private async Task RebuildObjects()
     {
-        var targets = Scene.Selection.Count > 0 ? Scene.Selection.ToList() : Scene.Objects.ToList();
+        var targets = Scene.Selection.Count > 0 ? Scene.Selection.ToList() : Scene.Workable.ToList();
         if (targets.Count == 0) return;
 
         var dialog = new RebuildDialog(targets);
@@ -5045,7 +5378,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
     /// </summary>
     private async Task RepairObjects()
     {
-        var targets = (Scene.Selection.Count > 0 ? Scene.Selection.ToList() : Scene.Objects.ToList())
+        var targets = (Scene.Selection.Count > 0 ? Scene.Selection.ToList() : Scene.Workable.ToList())
             .Where(o => !o.Mesh.CheckHealth().IsWatertight)
             .ToList();
 
@@ -6160,6 +6493,26 @@ public sealed class MainViewModel : INotifyPropertyChanged
         projectPath is not null ? Path.GetFileNameWithoutExtension(projectPath)
         : openedFrom is not null ? Path.GetFileNameWithoutExtension(openedFrom)
         : $"model_{DateTime.Now:yyyyMMdd_HHmmss}";
+
+    /// <summary>
+    /// A three-view drawing of the selection, or of everything when nothing is selected - as Export
+    /// takes it - with its overall dimensions, in the unit the boxes are in.
+    /// </summary>
+    private void PrintDrawing()
+    {
+        var subjects = Scene.Selection.Count > 0 ? Scene.Selection.ToList() : Scene.Shown.ToList();
+        if (subjects.Count == 0) return;
+
+        string title = projectPath is not null || openedFrom is not null ? SuggestedName()
+            : subjects.Count == 1 ? subjects[0].Name
+            : "Untitled";
+
+        var window = new DrawingWindow(subjects.Select(o => o.ToWorldMesh()).ToList(), title, unit.Label, unit.Millimetres)
+        {
+            Owner = Application.Current?.MainWindow
+        };
+        window.ShowDialog();
+    }
 
     /// <summary>The project's folder, or empty to let Windows pick the last one used.</summary>
     private string ProjectFolder() => Path.GetDirectoryName(projectPath) ?? "";

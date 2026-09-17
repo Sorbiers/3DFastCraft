@@ -101,11 +101,58 @@ public sealed class SceneObject : INotifyPropertyChanged
         set
         {
             if (isSelected == value) return;
+
+            // Hidden and locked objects are out of reach, and this is the one place that has to
+            // know it: every way of selecting - a click, the list, Select all - comes through here,
+            // and anything that cannot be selected cannot be moved, cut or deleted by any tool.
+            if (value && !CanBeSelected) return;
+
             if (value) PickedAt = ++picks;
 
             Set(ref isSelected, value);
         }
     }
+
+    /// <summary>
+    /// Taken off the plate for now: not drawn, not picked, not selectable, and left out when a tool
+    /// works on everything - Export, Drawing, Repair, Rebuild. It is still in the project, and
+    /// saved with it. Hiding a selected object lets go of it.
+    /// </summary>
+    public bool IsHidden
+    {
+        get => isHidden;
+        set
+        {
+            if (isHidden == value) return;
+            if (value) IsSelected = false;
+
+            Set(ref isHidden, value);
+            Raise(nameof(CanBeSelected));
+        }
+    }
+
+    /// <summary>
+    /// Kept as it is: drawn, and in the way of a move that stops on contact, but it cannot be
+    /// selected, so nothing can move or change it until it is unlocked. Locking a selected object
+    /// lets go of it.
+    /// </summary>
+    public bool IsLocked
+    {
+        get => isLocked;
+        set
+        {
+            if (isLocked == value) return;
+            if (value) IsSelected = false;
+
+            Set(ref isLocked, value);
+            Raise(nameof(CanBeSelected));
+        }
+    }
+
+    public bool CanBeSelected => !isHidden && !isLocked;
+
+    private bool isHidden;
+    private bool isLocked;
 
     /// <summary>
     /// When this was last picked, for putting a selection back into the order it was made in.

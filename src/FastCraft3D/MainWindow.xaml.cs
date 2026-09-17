@@ -5,6 +5,7 @@ using System.IO;
 using System.Numerics;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using System.Windows.Media;
 using FastCraft3D.Geometry;
@@ -182,6 +183,9 @@ public partial class MainWindow : Window
         AddHandler(PreviewMouseWheelEvent, new MouseWheelEventHandler(OnFieldWheel), true);
 
         PreviewKeyDown += OnWindowKeyDown;
+        PreviewKeyUp += OnWindowKeyUp;
+        Deactivated += (_, _) => viewModel.EndNudge();
+        BindShortcuts();
 
         // The panel appears with nothing focused, so Tab would start from wherever the user
         // last was - behind it. Focusing Abort puts the only thing they can still do first.
@@ -337,9 +341,31 @@ public partial class MainWindow : Window
     }
 
     /// <summary>
-    /// Single-key mode shortcuts. Deliberately not Window.InputBindings: an unmodified key
-    /// binding there fires no matter what has focus, so typing an "s" into the name field
-    /// would silently switch tool instead of typing.
+    /// The keys that run a view-model command, bound from the table F1 lists them from, so the
+    /// list and the keys cannot come apart.
+    /// </summary>
+    private void BindShortcuts()
+    {
+        foreach (var shortcut in Shortcuts.Keyed.Where(s => s.Command is not null))
+        {
+            var command = (ICommand)typeof(MainViewModel).GetProperty(shortcut.Command!)!.GetValue(viewModel)!;
+
+            // Set property by property rather than through the constructor, which refuses a plain
+            // key such as Delete on its own.
+            InputBindings.Add(new KeyBinding
+            {
+                Command = command,
+                CommandParameter = shortcut.Parameter,
+                Key = shortcut.Key,
+                Modifiers = shortcut.Modifiers
+            });
+        }
+    }
+
+    /// <summary>
+    /// The keys the window answers itself - modes, nudges, views and F1. Deliberately not
+    /// Window.InputBindings: an unmodified key binding there fires no matter what has focus, so
+    /// typing an "s" into the name field would silently switch tool instead of typing.
     /// </summary>
     private void OnWindowKeyDown(object sender, KeyEventArgs e)
     {
@@ -352,20 +378,71 @@ public partial class MainWindow : Window
             return;
         }
 
-        if (Keyboard.Modifiers != ModifierKeys.None) return;
+        var action = Shortcuts.ActionFor(e.Key == Key.System ? e.SystemKey : e.Key, Keyboard.Modifiers);
+        if (action == KeyAction.None) return;
+
+        // The list is worth having whatever else is going on, a tool in hand included.
+        if (action == KeyAction.ShowShortcuts)
+        {
+            viewModel.IsShortcutsPanelOpen = !viewModel.IsShortcutsPanelOpen;
+            e.Handled = true;
+            return;
+        }
+
         if (Keyboard.FocusedElement is TextBox) return;
         if (viewModel.IsToolInHand) return; // the mode buttons are greyed out with the rest
+        if (Shortcuts.IsNudge(action) && FocusWantsArrows()) return;
 
-        switch (e.Key)
+        float step = viewModel.NudgeStep * (Keyboard.Modifiers.HasFlag(ModifierKeys.Shift) ? 10f : 1f);
+
+        switch (action)
         {
-            case Key.M: viewModel.GizmoMode = GizmoMode.Move; break;
-            case Key.R: viewModel.GizmoMode = GizmoMode.Rotate; break;
-            case Key.S: viewModel.GizmoMode = GizmoMode.Scale; break;
-            case Key.O: viewModel.ScaleOneSide = !viewModel.ScaleOneSide; break;
-            case Key.C when !IsControlDown: viewModel.StopOnContact = !viewModel.StopOnContact; break;
+            case KeyAction.Move: viewModel.GizmoMode = GizmoMode.Move; break;
+            case KeyAction.Rotate: viewModel.GizmoMode = GizmoMode.Rotate; break;
+            case KeyAction.Resize: viewModel.GizmoMode = GizmoMode.Scale; break;
+            case KeyAction.OneWayOnly: viewModel.ScaleOneSide = !viewModel.ScaleOneSide; break;
+            case KeyAction.StopOnContact: viewModel.StopOnContact = !viewModel.StopOnContact; break;
+            case KeyAction.NudgeLeft: viewModel.Nudge(new Vector3(-step, 0, 0)); break;
+            case KeyAction.NudgeRight: viewModel.Nudge(new Vector3(step, 0, 0)); break;
+            case KeyAction.NudgeBack: viewModel.Nudge(new Vector3(0, step, 0)); break;
+            case KeyAction.NudgeForward: viewModel.Nudge(new Vector3(0, -step, 0)); break;
+            case KeyAction.NudgeUp: viewModel.Nudge(new Vector3(0, 0, step)); break;
+            case KeyAction.NudgeDown: viewModel.Nudge(new Vector3(0, 0, -step)); break;
+            case KeyAction.ZoomToFit: ZoomExtents(); break;
+            case KeyAction.ViewTop: OnViewTop(this, e); break;
+            case KeyAction.ViewFront: OnViewFront(this, e); break;
+            case KeyAction.ViewRight: OnViewRight(this, e); break;
+            case KeyAction.ViewIsometric: OnViewIso(this, e); break;
+            case KeyAction.HideSelection: viewModel.HideSelection(); break;
+            case KeyAction.ShowAll: viewModel.ShowAll(); break;
+            case KeyAction.LockSelection: viewModel.LockSelection(); break;
+            case KeyAction.UnlockAll: viewModel.UnlockAll(); break;
             default: return;
         }
         e.Handled = true;
+    }
+
+    /// <summary>An arrow key coming up ends the nudge it was making, as one undo step.</summary>
+    private void OnWindowKeyUp(object sender, KeyEventArgs e)
+    {
+        if (e.Key is Key.Left or Key.Right or Key.Up or Key.Down or Key.PageUp or Key.PageDown)
+            viewModel.EndNudge();
+    }
+
+    /// <summary>
+    /// Whether the arrow keys already mean something where the focus is: moving through the object
+    /// list or a drop-down, along a slider, or through text. There they are left alone.
+    /// </summary>
+    private static bool FocusWantsArrows()
+    {
+        for (var at = Keyboard.FocusedElement as DependencyObject; at is not null;
+             at = at is Visual ? VisualTreeHelper.GetParent(at) : LogicalTreeHelper.GetParent(at))
+        {
+            if (at is TextBoxBase or ListBox or ComboBox or Slider) return true;
+            if (at is Window) break;
+        }
+
+        return false;
     }
 
     // --- Manipulator ------------------------------------------------------------------
@@ -689,7 +766,7 @@ public partial class MainWindow : Window
     private void OnViewportLeftDown(object sender, MouseButtonEventArgs e)
     {
         var screen = e.GetPosition(View);
-        var hit = FirstHit(screen);
+        var hit = FirstHit(screen, selectable: true);
         var target = renderer?.Resolve(hit?.ModelHit);
 
         pendingToggleOff = false;
@@ -962,13 +1039,17 @@ public partial class MainWindow : Window
     private static bool IsClick(Point release, Point press) =>
         Math.Abs(release.X - press.X) < ClickSlopPixels && Math.Abs(release.Y - press.Y) < ClickSlopPixels;
 
-    private HitTestResult? FirstHit(Point screen)
+    /// <param name="selectable">
+    /// Only an object that can be selected: a click to select goes straight through a locked one
+    /// to whatever is behind it. Measuring still lands on locked objects - they are there.
+    /// </param>
+    private HitTestResult? FirstHit(Point screen, bool selectable = false)
     {
         var hits = View.FindHits(screen);
         if (hits is null) return null;
 
         foreach (var hit in hits)
-            if (hit.IsValid && renderer?.Resolve(hit.ModelHit) is not null)
+            if (hit.IsValid && renderer?.Resolve(hit.ModelHit) is { } o && (!selectable || o.CanBeSelected))
                 return hit;
 
         return null;
@@ -1201,6 +1282,7 @@ public partial class MainWindow : Window
 
         renderer.Wireframe = viewModel.ShowWireframe;
         renderer.Xray = viewModel.ShowXray;
+        renderer.ShowOverhangs(viewModel.ShowOverhangs, viewModel.OverhangAngle);
 
         if (plateShown != PlateNow()) RebuildPlate();
 

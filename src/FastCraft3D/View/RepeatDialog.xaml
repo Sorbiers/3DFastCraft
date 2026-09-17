@@ -7,7 +7,7 @@
     <StackPanel>
         <TextBlock x:Name="SubjectText" TextWrapping="Wrap" Foreground="#FF3A4550" Margin="0,0,0,8" />
 
-        <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
+        <StackPanel x:Name="CountRow" Orientation="Horizontal" Margin="0,0,0,6">
             <TextBlock Text="Copies" Style="{DynamicResource FieldLabel}" Width="62"
                        ToolTip="How many, in addition to the original" />
             <TextBox x:Name="CountBox" Width="56" Style="{DynamicResource NumberBox}" Text="5"
@@ -16,13 +16,54 @@
 
         <!-- One panel rather than two commands: it is the same idea either way - make N copies,
              arranged - and only the fields below differ. -->
+        <!-- Short names, so the three fit across the side panel; the tooltips say the rest. -->
         <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
-            <RadioButton x:Name="LineMode" GroupName="Shape" Content="Along a line" IsChecked="True"
+            <RadioButton x:Name="LineMode" GroupName="Shape" Content="Line" IsChecked="True"
                          AutomationProperties.AutomationId="RepeatAlongLine"
+                         ToolTip="Along a line, each copy a step on from the last"
                          Checked="OnModeChanged" Margin="0,0,14,0" />
-            <RadioButton x:Name="RingMode" GroupName="Shape" Content="Round a circle"
+            <RadioButton x:Name="RingMode" GroupName="Shape" Content="Circle"
                          AutomationProperties.AutomationId="RepeatRoundCircle"
+                         ToolTip="Round a circle on the plate, with a rise per copy for a spiral"
+                         Checked="OnModeChanged" Margin="0,0,14,0" />
+            <RadioButton x:Name="GridMode" GroupName="Shape" Content="Grid"
+                         AutomationProperties.AutomationId="RepeatInGrid"
+                         ToolTip="In rows and columns, and layers if asked"
                          Checked="OnModeChanged" />
+        </StackPanel>
+
+        <StackPanel x:Name="GridPanel" Visibility="Collapsed">
+            <TextBlock Text="How many, the original counted" Foreground="#FF5A5F66" Margin="0,0,0,2" />
+            <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
+                <TextBlock Text="X" VerticalAlignment="Center" Foreground="#FF5A5F66" Width="12" />
+                <TextBox x:Name="ColumnsBox" Width="54" Style="{DynamicResource NumberBox}" Text="3"
+                         AutomationProperties.AutomationId="GridColumns" TextChanged="OnChanged" ToolTip="Columns, along X" />
+                <TextBlock Text="Y" VerticalAlignment="Center" Foreground="#FF5A5F66" Width="12" Margin="4,0,0,0" />
+                <TextBox x:Name="RowsBox" Width="54" Style="{DynamicResource NumberBox}" Text="3"
+                         AutomationProperties.AutomationId="GridRows" TextChanged="OnChanged" ToolTip="Rows, along Y" />
+                <TextBlock Text="Z" VerticalAlignment="Center" Foreground="#FF5A5F66" Width="12" Margin="4,0,0,0" />
+                <TextBox x:Name="LayersBox" Width="54" Style="{DynamicResource NumberBox}" Text="1"
+                         AutomationProperties.AutomationId="GridLayers" TextChanged="OnChanged" ToolTip="Layers, stacked up Z" />
+            </StackPanel>
+
+            <TextBlock Text="Spacing (mm)" Foreground="#FF5A5F66" Margin="0,0,0,2" />
+            <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
+                <TextBlock Text="X" VerticalAlignment="Center" Foreground="#FF5A5F66" Width="12" />
+                <TextBox x:Name="SpacingXBox" Width="54" Style="{DynamicResource NumberBox}" Text="5"
+                         AutomationProperties.AutomationId="GridSpacingX" TextChanged="OnChanged" />
+                <TextBlock Text="Y" VerticalAlignment="Center" Foreground="#FF5A5F66" Width="12" Margin="4,0,0,0" />
+                <TextBox x:Name="SpacingYBox" Width="54" Style="{DynamicResource NumberBox}" Text="5"
+                         AutomationProperties.AutomationId="GridSpacingY" TextChanged="OnChanged" />
+                <TextBlock Text="Z" VerticalAlignment="Center" Foreground="#FF5A5F66" Width="12" Margin="4,0,0,0" />
+                <TextBox x:Name="SpacingZBox" Width="54" Style="{DynamicResource NumberBox}" Text="5"
+                         AutomationProperties.AutomationId="GridSpacingZ" TextChanged="OnChanged" />
+            </StackPanel>
+            <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+                <RadioButton x:Name="GapsBox" GroupName="GridSpacing" Content="Gap between" IsChecked="True" Margin="0,0,14,0"
+                             Checked="OnChanged" ToolTip="The clear space between neighbours, whatever size they are: a plate of parts to print" />
+                <RadioButton x:Name="PitchBox" GroupName="GridSpacing" Content="Centre to centre"
+                             Checked="OnChanged" ToolTip="From the middle of one to the middle of the next: a pattern of holes or pegs" />
+            </StackPanel>
         </StackPanel>
 
         <StackPanel x:Name="LinePanel">
@@ -94,6 +135,7 @@
                       ToolTip="Each copy is turned by the angle it travelled, so it keeps the same face towards the centre - gear teeth, crenellations, the treads of a spiral stair. Untick for a bolt circle: a round hole does not care which way it points." />
         </StackPanel>
 
+        <StackPanel x:Name="GrowPanel">
         <TextBlock Text="Grow each copy by (mm)" Foreground="#FF5A5F66" Margin="0,0,0,2"
                    ToolTip="Each copy is this much larger than the one before it. A staircase is a step and a rise." />
         <StackPanel Orientation="Horizontal">
@@ -106,6 +148,7 @@
             <TextBlock Text="Z" VerticalAlignment="Center" Foreground="#FF5A5F66" Width="12" Margin="4,0,0,0" />
             <TextBox x:Name="GrowZBox" Width="54" Style="{DynamicResource NumberBox}" Text="0"
                      AutomationProperties.AutomationId="RepeatGrowZ" TextChanged="OnChanged" />
+        </StackPanel>
         </StackPanel>
 
         <Border Margin="0,8,0,0" Padding="8,6" CornerRadius="3"

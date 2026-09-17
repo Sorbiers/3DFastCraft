@@ -23,8 +23,11 @@ public partial class RepeatDialog : ToolPanel
     /// <summary>Set when Repeat was pressed along a line.</summary>
     public RepeatSettings? Result { get; private set; }
 
-    /// <summary>Set when Repeat was pressed round a circle. Only ever one of the two.</summary>
+    /// <summary>Set when Repeat was pressed round a circle. Only ever one of the three.</summary>
     public RingSettings? RingResult { get; private set; }
+
+    /// <summary>Set when Repeat was pressed in a grid.</summary>
+    public GridSettings? GridResult { get; private set; }
 
     /// <summary>
     /// Guards writing the computed angle into its own box: that raises TextChanged, which would
@@ -57,6 +60,8 @@ public partial class RepeatDialog : ToolPanel
 
     private bool RoundACircle => RingMode?.IsChecked == true;
 
+    private bool InAGrid => GridMode?.IsChecked == true;
+
     private void OnChanged(object sender, RoutedEventArgs e)
     {
         if (writingAngle) return;
@@ -66,10 +71,14 @@ public partial class RepeatDialog : ToolPanel
     private void OnModeChanged(object sender, RoutedEventArgs e)
     {
         // Checked fires while the window is still being built, before the panels exist.
-        if (LinePanel is null || RingPanel is null) return;
+        if (LinePanel is null || RingPanel is null || GridPanel is null || CountRow is null || GrowPanel is null) return;
 
-        LinePanel.Visibility = RoundACircle ? Visibility.Collapsed : Visibility.Visible;
+        // A grid counts its copies in its own three boxes, and does not grow them.
+        LinePanel.Visibility = !RoundACircle && !InAGrid ? Visibility.Visible : Visibility.Collapsed;
         RingPanel.Visibility = RoundACircle ? Visibility.Visible : Visibility.Collapsed;
+        GridPanel.Visibility = InAGrid ? Visibility.Visible : Visibility.Collapsed;
+        CountRow.Visibility = InAGrid ? Visibility.Collapsed : Visibility.Visible;
+        GrowPanel.Visibility = InAGrid ? Visibility.Collapsed : Visibility.Visible;
         Describe();
     }
 
@@ -77,7 +86,8 @@ public partial class RepeatDialog : ToolPanel
     {
         if (SummaryText is null) return;
 
-        if (RoundACircle) DescribeRing();
+        if (InAGrid) DescribeGrid();
+        else if (RoundACircle) DescribeRing();
         else DescribeLine();
     }
 
@@ -97,6 +107,52 @@ public partial class RepeatDialog : ToolPanel
             : $"reaching {span.X:0.##}, {span.Y:0.##}, {span.Z:0.##} mm from where it starts";
 
         SummaryText.Text = $"{made} new object(s), {reach}.{Grown(s.Grow, s.Copies)}";
+    }
+
+    private void DescribeGrid()
+    {
+        if (ReadGrid() is not { } g)
+        {
+            SummaryText.Text = "Type how many along X, Y and Z - whole numbers, 1 or more.";
+            return;
+        }
+
+        long stations = RepeatArray.GridStations(g);
+        if (stations - 1 > RepeatArray.MaximumCopies)
+        {
+            SummaryText.Text = $"{stations:N0} is too many - {RepeatArray.MaximumCopies + 1:N0} at most, the original included.";
+            return;
+        }
+
+        if (stations == 1)
+        {
+            SummaryText.Text = "One of each is just the original: nothing to make.";
+            return;
+        }
+
+        var size = BedPlacement.Reach(subjects).Size;
+        var pitch = g.Gaps ? size + g.Spacing : g.Spacing;
+        var covers = new Vector3(
+            size.X + pitch.X * (g.Columns - 1),
+            size.Y + pitch.Y * (g.Rows - 1),
+            size.Z + pitch.Z * (g.Layers - 1));
+
+        SummaryText.Text = $"{g.Columns} x {g.Rows}" + (g.Layers > 1 ? $" x {g.Layers}" : "")
+                           + $" - {(stations - 1) * subjects.Count} new object(s), covering about "
+                           + $"{covers.X:0.#} x {covers.Y:0.#}" + (g.Layers > 1 ? $" x {covers.Z:0.#}" : "") + " mm.";
+    }
+
+    private GridSettings? ReadGrid()
+    {
+        if (!Whole(ColumnsBox?.Text, out int columns) || !Whole(RowsBox?.Text, out int rows) || !Whole(LayersBox?.Text, out int layers))
+            return null;
+
+        return new GridSettings(columns, rows, layers,
+            new Vector3(Number(SpacingXBox?.Text), Number(SpacingYBox?.Text), Number(SpacingZBox?.Text)),
+            GapsBox?.IsChecked == true);
+
+        static bool Whole(string? text, out int value) =>
+            int.TryParse(text, NumberStyles.Integer, CultureInfo.CurrentCulture, out value) && value >= 1;
     }
 
     private void DescribeRing()
@@ -209,7 +265,12 @@ public partial class RepeatDialog : ToolPanel
 
     private void OnAccept(object sender, RoutedEventArgs e)
     {
-        if (RoundACircle)
+        if (InAGrid)
+        {
+            if (ReadGrid() is not { } grid || RepeatArray.GridStations(grid) is 1 or > RepeatArray.MaximumCopies + 1) return;
+            GridResult = grid;
+        }
+        else if (RoundACircle)
         {
             if (ReadRing() is not { } ring) return;
             RingResult = ring;

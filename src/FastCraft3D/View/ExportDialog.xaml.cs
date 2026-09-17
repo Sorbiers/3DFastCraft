@@ -22,7 +22,7 @@ public partial class ExportDialog : Window
         this.scene = scene;
         InitializeComponent();
 
-        int all = scene.Objects.Count;
+        int all = scene.Shown.Count;
         int selected = scene.Selection.Count;
 
         ScopeAll.Content = all == 1 ? "Everything on the plate - 1 object" : $"Everything on the plate - {all} objects";

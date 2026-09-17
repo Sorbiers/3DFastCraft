@@ -280,7 +280,7 @@ function Export-Stl($w, $path) {
   Add-Type -AssemblyName System.Windows.Forms
   Select-Tab $w "File" | Out-Null
   Start-Sleep -Milliseconds 400
-  Invoke-ByName $w "Export STL / OBJ..." | Out-Null
+  Invoke-ByName $w "Export STL / OBJ" | Out-Null
   Start-Sleep -Seconds 2
 
   & "F:\3DFastCraft\tools\ui\click.ps1" -X 791 -Y 596 | Out-Null
@@ -340,7 +340,7 @@ function Export-Part($w, $path) {
     Add-Type -AssemblyName System.Windows.Forms
     Select-Tab $w "File" | Out-Null
     Start-Sleep -Milliseconds 500
-    Invoke-ByName $w "Export STL / OBJ..." | Out-Null
+    Invoke-ByName $w "Export STL / OBJ" | Out-Null
     Start-Sleep -Seconds 2
 
     & "F:\3DFastCraft\tools\ui\click.ps1" -X 791 -Y 596 | Out-Null
@@ -411,7 +411,7 @@ function Invoke-DialogButton($dialog, $name) {
 # Inserts a flight of steps through the new tool, which builds it as one solid.
 function Add-Stair($w, [string]$name, [double]$rise, [double]$run, [double]$width, [int]$steps,
                    [double]$cx, [double]$cy, [double]$cz, [double]$rz) {
-  Invoke-Tool $w "Insert" "Stair..." | Out-Null
+  Invoke-Tool $w "Insert" "Stair" | Out-Null
   $d = Get-Dialog "Stair"
   Set-DialogField $d "StairRise" $rise
   Set-DialogField $d "StairRun" $run
@@ -430,7 +430,7 @@ function Add-Stair($w, [string]$name, [double]$rise, [double]$run, [double]$widt
 
 # Repeats the selection, which is how a row of dowels is made now.
 function Invoke-Repeat($w, [int]$copies, [double]$sx, [double]$sy, [double]$sz, [bool]$anchor = $false) {
-  Invoke-Tool $w "Object" "Repeat..." | Out-Null
+  Invoke-Tool $w "Object" "Repeat" | Out-Null
   $d = Get-Dialog "Repeat"
   Set-DialogField $d "RepeatCount" $copies
   Set-DialogField $d "RepeatStepX" $sx
@@ -463,7 +463,7 @@ function Import-Model($w, [string]$path) {
   $want = [System.IO.Path]::GetFileNameWithoutExtension($full)
   $before = @(Get-ObjectNames $w).Count
 
-  Invoke-Tool $w "Insert" "Import..." | Out-Null
+  Invoke-Tool $w "Insert" "Import" | Out-Null
   $d = Get-Dialog "Import model" 20
 
   $box = $d.FindFirst($TS::Descendants,

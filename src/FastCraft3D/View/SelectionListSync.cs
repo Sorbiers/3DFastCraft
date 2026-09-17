@@ -73,6 +73,10 @@ public sealed class SelectionListSync : IDisposable
         {
             syncing = false;
         }
+
+        // A hidden or locked row refuses to be selected; the list is put back to say so rather
+        // than showing it highlighted.
+        if (e.AddedItems.OfType<SceneObject>().Any(o => !o.IsSelected)) PushToList();
     }
 
     public void Dispose() => list.SelectionChanged -= OnListSelectionChanged;

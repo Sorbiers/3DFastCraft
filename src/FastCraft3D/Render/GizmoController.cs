@@ -668,7 +668,7 @@ public sealed class GizmoController
 
         var obstacles = new List<Mesh>();
         foreach (var o in scene.Objects)
-            if (!dragObjects.Contains(o))
+            if (!dragObjects.Contains(o) && !o.IsHidden)
                 obstacles.Add(o.ToWorldMesh());
 
         return MeshSweep.Distance(moving, obstacles, active!.Axis, direction);

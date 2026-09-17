@@ -16,6 +16,14 @@ public sealed class Scene
     public IReadOnlyList<SceneObject> Selection =>
         Objects.Where(o => o.IsSelected).ToList();
 
+    /// <summary>Everything not hidden: what "everything" means to Export and Drawing.</summary>
+    public IReadOnlyList<SceneObject> Shown =>
+        Objects.Where(o => !o.IsHidden).ToList();
+
+    /// <summary>Everything a tool may change when nothing is selected: neither hidden nor locked.</summary>
+    public IReadOnlyList<SceneObject> Workable =>
+        Objects.Where(o => o.CanBeSelected).ToList();
+
     /// <summary>
     /// The same objects in the order they were picked, oldest first.
     ///

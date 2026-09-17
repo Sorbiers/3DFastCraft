@@ -95,7 +95,7 @@ function Add-Planks($w, [string]$view, [double]$size, [double]$shape) {
     Start-Sleep -Seconds 1
 
     Select-Objects $w @($name) | Out-Null
-    Invoke-Tool $w "Edit" "Engrave..." | Out-Null
+    Invoke-Tool $w "Edit" "Engrave" | Out-Null
     Start-Sleep -Seconds 1
 
     $picked = $false

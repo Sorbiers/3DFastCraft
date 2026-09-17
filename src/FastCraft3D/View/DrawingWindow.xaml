@@ -1,0 +1,75 @@
+<Window x:Class="FastCraft3D.View.DrawingWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:view="clr-namespace:FastCraft3D.View"
+        Title="Blueprint" Width="1180" Height="800" MinWidth="760" MinHeight="520"
+        WindowStartupLocation="CenterOwner" ShowInTaskbar="False" Background="#FFF7F7F8">
+
+    <Window.Resources>
+        <Style x:Key="GroupHeader" TargetType="TextBlock">
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Foreground" Value="#FF33373D" />
+            <Setter Property="Margin" Value="0,14,0,6" />
+        </Style>
+        <Style TargetType="RadioButton">
+            <Setter Property="Margin" Value="2,3" />
+            <Setter Property="Foreground" Value="#FF33383F" />
+        </Style>
+        <Style TargetType="CheckBox">
+            <Setter Property="Margin" Value="2,3" />
+            <Setter Property="Foreground" Value="#FF33383F" />
+        </Style>
+    </Window.Resources>
+
+    <DockPanel>
+        <StackPanel DockPanel.Dock="Left" Width="240" Margin="18,10,12,14">
+            <TextBlock Text="Title" Style="{StaticResource GroupHeader}" />
+            <TextBox x:Name="TitleBox" Padding="3,2" TextChanged="OnChanged"
+                     AutomationProperties.AutomationId="DrawingTitle" />
+
+            <TextBlock Text="Paper" Style="{StaticResource GroupHeader}" />
+            <ComboBox x:Name="PaperBox" SelectionChanged="OnPaperChanged"
+                      AutomationProperties.AutomationId="DrawingPaper" />
+            <StackPanel Orientation="Horizontal" Margin="0,4,0,0">
+                <RadioButton x:Name="LandscapeBox" GroupName="Orientation" Content="Landscape" Margin="2,3,12,3" Checked="OnChanged" />
+                <RadioButton x:Name="PortraitBox" GroupName="Orientation" Content="Portrait" Checked="OnChanged" />
+            </StackPanel>
+
+            <TextBlock Text="Projection" Style="{StaticResource GroupHeader}" />
+            <RadioButton x:Name="FirstAngleBox" GroupName="Projection" Content="First angle (ISO)" Checked="OnChanged"
+                         ToolTip="Europe and most of the world: the view from above goes below the front, the view from the right to its left" />
+            <RadioButton x:Name="ThirdAngleBox" GroupName="Projection" Content="Third angle (ASME)" Checked="OnChanged"
+                         ToolTip="North America: the view from above goes above the front, the view from the right to its right" />
+
+            <TextBlock Text="Show" Style="{StaticResource GroupHeader}" />
+            <CheckBox x:Name="HiddenBox" Content="Hidden lines, dashed" Click="OnChanged" />
+            <CheckBox x:Name="DimensionsBox" Content="Overall dimensions" Click="OnChanged" />
+            <CheckBox x:Name="IsometricBox" Content="Isometric view" Click="OnChanged" />
+
+            <Border Margin="0,16,0,0" Padding="8,6" CornerRadius="3"
+                    Background="White" BorderBrush="#FFD5DEEA" BorderThickness="1">
+                <TextBlock x:Name="SummaryText" TextWrapping="Wrap" Foreground="#FF3A3F45" />
+            </Border>
+
+            <StackPanel Orientation="Horizontal" Margin="0,16,0,0">
+                <Button x:Name="PrintButton" Content="Print" Width="90" Height="28" Margin="0,0,8,0" Click="OnPrint"
+                        IsDefault="True" IsEnabled="False" AutomationProperties.AutomationId="DrawingPrint" />
+                <Button Content="Close" Width="90" Height="28" IsCancel="True" />
+            </StackPanel>
+            <TextBlock Text="For a PDF, print to Microsoft Print to PDF." TextWrapping="Wrap"
+                       Foreground="#FF7A8088" Margin="0,8,0,0" />
+        </StackPanel>
+
+        <Border Background="#FFD9DCE1">
+            <Grid>
+                <Viewbox Margin="24" Stretch="Uniform">
+                    <Border Background="White" BorderBrush="#FFB9BEC6" BorderThickness="1">
+                        <view:SheetHost x:Name="Sheet" />
+                    </Border>
+                </Viewbox>
+                <TextBlock x:Name="WorkingText" Text="Drawing the views..." HorizontalAlignment="Center"
+                           VerticalAlignment="Center" FontSize="15" Foreground="#FF3A3F45" />
+            </Grid>
+        </Border>
+    </DockPanel>
+</Window>

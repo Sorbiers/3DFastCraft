@@ -44,6 +44,17 @@ public readonly record struct RingSettings(
     bool FaceTheCentre,
     Vector3 Grow);
 
+/// <param name="Columns">How many along X, the original among them.</param>
+/// <param name="Rows">How many along Y.</param>
+/// <param name="Layers">How many up Z.</param>
+/// <param name="Spacing">From one to the next along each axis.</param>
+/// <param name="Gaps">
+/// Whether the spacing is the clear gap between neighbours rather than from the middle of one to
+/// the middle of the next. A gap is what a plate full of parts to print wants; centre to centre is
+/// what a pattern of holes wants.
+/// </param>
+public readonly record struct GridSettings(int Columns, int Rows, int Layers, Vector3 Spacing, bool Gaps);
+
 /// <param name="Copies">The new objects, in order round the circle.</param>
 /// <param name="Seats">
 /// Where each source has to sit for the ring to close, in the order they were given.
@@ -117,6 +128,46 @@ public static class RepeatArray
 
         return made;
     }
+
+    /// <summary>
+    /// Repeats the selection in rows and columns, and layers if asked, the original in the corner
+    /// nearest the origin and the rest stepping out along +X, +Y and +Z.
+    ///
+    /// The selection travels as one rigid group, as it does round a ring, so a part made of pieces
+    /// is repeated whole; and the copies come station by station, so the pieces of one copy stay
+    /// together in the object list.
+    /// </summary>
+    public static List<SceneObject> MakeGrid(
+        IReadOnlyList<SceneObject> sources, GridSettings settings, Func<string, string> name)
+    {
+        var made = new List<SceneObject>();
+        int columns = Math.Max(1, settings.Columns), rows = Math.Max(1, settings.Rows), layers = Math.Max(1, settings.Layers);
+        if (sources.Count == 0 || GridStations(settings) - 1 > MaximumCopies) return made;
+
+        var pitch = settings.Gaps ? BedPlacement.Reach(sources).Size + settings.Spacing : settings.Spacing;
+
+        for (int k = 0; k < layers; k++)
+            for (int j = 0; j < rows; j++)
+                for (int i = 0; i < columns; i++)
+                {
+                    if (i == 0 && j == 0 && k == 0) continue;
+
+                    var offset = new Vector3(i * pitch.X, j * pitch.Y, k * pitch.Z);
+                    foreach (var source in sources)
+                    {
+                        var copy = source.Clone();
+                        copy.Name = name(source.Name);
+                        copy.Position = source.Position + offset;
+                        made.Add(copy);
+                    }
+                }
+
+        return made;
+    }
+
+    /// <summary>How many places a grid has, the original's included.</summary>
+    public static long GridStations(GridSettings settings) =>
+        (long)Math.Max(1, settings.Columns) * Math.Max(1, settings.Rows) * Math.Max(1, settings.Layers);
 
     /// <summary>
     /// Repeats the selection round a circle on the build plate.

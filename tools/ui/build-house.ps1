@@ -38,7 +38,7 @@ function Add-Brick($w, [string]$view, [double]$size, [double]$line, [double]$dep
     Start-Sleep -Seconds 1
 
     Select-Objects $w @($name) | Out-Null
-    Invoke-Tool $w "Edit" "Engrave..." | Out-Null
+    Invoke-Tool $w "Edit" "Engrave" | Out-Null
     Start-Sleep -Seconds 1
 
     # The middle of a wall is where the front door is, so clicking the middle of the viewport
@@ -268,7 +268,7 @@ function Add-Roofing($w) {
         Start-Sleep -Seconds 1
 
         Select-Objects $w @($name) | Out-Null
-        Invoke-Tool $w "Edit" "Engrave..." | Out-Null
+        Invoke-Tool $w "Edit" "Engrave" | Out-Null
         Start-Sleep -Seconds 1
 
         & "F:\3DFastCraft\tools\ui\click.ps1" -X 560 -Y 520 | Out-Null
