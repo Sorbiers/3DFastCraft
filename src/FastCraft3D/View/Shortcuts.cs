@@ -37,9 +37,11 @@ public enum KeyAction
 /// <param name="Parameter">Handed to that command.</param>
 /// <param name="Action">What the window does with it instead, when there is no command.</param>
 /// <param name="Text">How to write it when it is not a key, or not only one.</param>
+/// <param name="Advanced">For a tool only Advanced mode shows: left off the Classic list, though the key still works.</param>
 public sealed record Shortcut(
     string Group, string What, Key Key = Key.None, ModifierKeys Modifiers = ModifierKeys.None,
-    string? Command = null, object? Parameter = null, KeyAction Action = KeyAction.None, string? Text = null)
+    string? Command = null, object? Parameter = null, KeyAction Action = KeyAction.None, string? Text = null,
+    bool Advanced = false)
 {
     /// <summary>The keys as they are written in the list: "Ctrl+Shift+S", "Del", "Page Up".</summary>
     public string Keys => Text ?? Shortcuts.Describe(Key, Modifiers);
@@ -68,14 +70,14 @@ public static class Shortcuts
         new("File", "Save as", Key.S, Ctrl | Shift, "SaveAsCommand"),
         new("File", "Import", Key.I, Ctrl, "ImportCommand"),
         new("File", "Export", Key.E, Ctrl, "ExportCommand"),
-        new("File", "Blueprint: three views with dimensions, to print", Key.P, Ctrl, "PrintDrawingCommand"),
+        new("File", "Blueprint: three views with dimensions, to print", Key.P, Ctrl, "PrintDrawingCommand", Advanced: true),
 
         new("Edit", "Undo", Key.Z, Ctrl, "UndoCommand"),
         new("Edit", "Redo", Key.Y, Ctrl, "RedoCommand"),
         new("Edit", "Copy", Key.C, Ctrl, "CopyCommand"),
         new("Edit", "Paste", Key.V, Ctrl, "PasteCommand"),
         new("Edit", "Duplicate beside", Key.D, Ctrl, "DuplicateCommand"),
-        new("Edit", "Duplicate in place", Key.D, Ctrl | Shift, "DuplicateCommand", "InPlace"),
+        new("Edit", "Duplicate in place", Key.D, Ctrl | Shift, "DuplicateCommand", "InPlace", Advanced: true),
         new("Edit", "Delete", Key.Delete, Command: "DeleteCommand"),
         new("Edit", "Select everything", Key.A, Ctrl, "SelectAllCommand"),
         new("Edit", "Select nothing", Key.A, Ctrl | Shift, "DeselectAllCommand"),
@@ -100,6 +102,10 @@ public static class Shortcuts
         new("Move, rotate, resize", "A nudge is the snap step, or 1 mm with snap off; Shift makes it ten", Text: "Shift"),
         new("Move, rotate, resize", "Put down the tool in hand", Key.Escape, Action: KeyAction.None, Text: "Esc"),
 
+        new("Sketching", "Close the outline being drawn", Text: "Enter", Advanced: true),
+        new("Sketching", "Take back the last point, or the last outline", Text: "Backspace", Advanced: true),
+        new("Sketching", "Drop the outline being drawn; again, leave the sketch", Text: "Esc", Advanced: true),
+
         new("Dragging a resize handle", "Keep proportions, the other way to the button", Text: "Ctrl"),
         new("Dragging a resize handle", "One way only, the other way to the button", Text: "Alt"),
         new("Dragging a resize handle", "Snap the size to whole millimetres", Text: "Shift"),
@@ -122,6 +128,10 @@ public static class Shortcuts
     /// <summary>The table under its headings, in the order it is written.</summary>
     public static IReadOnlyList<ShortcutGroup> Groups { get; } =
         All.GroupBy(s => s.Group).Select(g => new ShortcutGroup(g.Key, g.ToList())).ToList();
+
+    /// <summary>The same without the entries for tools only Advanced mode shows.</summary>
+    public static IReadOnlyList<ShortcutGroup> ClassicGroups { get; } =
+        All.Where(s => !s.Advanced).GroupBy(s => s.Group).Select(g => new ShortcutGroup(g.Key, g.ToList())).ToList();
 
     /// <summary>The entries a key press should run: those bound to a key, not the ones only described.</summary>
     public static IEnumerable<Shortcut> Keyed => All.Where(s => s.Key != Key.None && (s.Command is not null || s.Action != KeyAction.None));

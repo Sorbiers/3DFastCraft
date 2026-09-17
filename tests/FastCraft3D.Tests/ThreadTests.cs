@@ -56,6 +56,53 @@ public class ThreadTests
         AssertSound(Threads.Build(Metric(size, ThreadKind.Nut, body: body)));
 
     [Theory]
+    [InlineData("M3", 12f, NutBody.Hexagon)]
+    [InlineData("M8", 20f, NutBody.Hexagon)]
+    [InlineData("M20", 40f, NutBody.Hexagon)]
+    [InlineData("M8", 16f, NutBody.Round)]
+    public void ABoltComesOutAsOneSoundSolidStandingOnItsHead(string size, float length, NutBody body)
+    {
+        var metric = Threads.Metric.Single(m => m.Name == size);
+        var options = Metric(size, ThreadKind.Bolt, length, body: body) with { HeadHeight = metric.HeadHeight };
+        var bolt = Threads.Build(options);
+
+        AssertSound(bolt);
+
+        var bounds = bolt.ComputeBounds();
+        Assert.Equal(length + metric.HeadHeight, bounds.Size.Z, 2);
+        Assert.Equal(0f, bounds.Center.Z, 2);
+        Assert.Equal(metric.AcrossFlats, bounds.Size.Y, 2);
+
+        // The head is the bottom of it; above the head, nothing is wider than the thread.
+        float headTop = bounds.Min.Z + metric.HeadHeight;
+        Assert.True(bolt.Positions.Where(p => p.Z > headTop + 1e-3f).Max(Radius) <= options.RodOutside / 2f + 1e-3f);
+    }
+
+    /// <summary>
+    /// Turned over head down by half a turn, not mirrored: its thread still climbs anticlockwise,
+    /// as <see cref="TheThreadIsRightHanded"/> has it for a rod.
+    /// </summary>
+    [Fact]
+    public void ABoltsThreadIsRightHandedToo()
+    {
+        var bolt = Threads.Build(Metric("M8", ThreadKind.Bolt, 20f, clearance: 0f) with { HeadHeight = 5.3f });
+        var bounds = bolt.ComputeBounds();
+        float middle = (bounds.Min.Z + 5.3f + bounds.Max.Z) / 2f;
+        var crest = bolt.Positions
+            .Where(p => MathF.Abs(p.Z - middle) < 5f && MathF.Abs(Radius(p) - 4f) < 1e-3f)
+            .ToList();
+
+        // The one nearest the middle: turned over, the first vertex made is at the top of the
+        // window, and a quarter pitch above it is outside.
+        var start = crest.Where(p => p.X > 3.99f && MathF.Abs(p.Y) < 1e-3f).MinBy(p => MathF.Abs(p.Z - middle));
+
+        bool CrestAtY(float z) => crest.Any(p => p.Y > 3.99f && MathF.Abs(p.X) < 1e-3f && MathF.Abs(p.Z - z) < 1e-3f);
+
+        Assert.True(CrestAtY(start.Z + 1.25f / 4f), "the crest does not climb anticlockwise");
+        Assert.False(CrestAtY(start.Z - 1.25f / 4f), "the crest falls anticlockwise - a left-hand thread");
+    }
+
+    [Theory]
     [InlineData("M4", 10f)]
     [InlineData("M12", 25f)]
     public void AHoleCutterComesOutAsOneSoundSolid(string size, float length) =>

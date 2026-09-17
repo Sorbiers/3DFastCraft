@@ -5,7 +5,7 @@
                 Title="Thread">
 
     <StackPanel>
-        <TextBlock Text="A threaded rod, a nut, or a cutter to Subtract for a threaded hole. The preview is on the plate."
+        <TextBlock Text="A threaded rod, a bolt, a nut, or a cutter for a threaded hole. The preview is on the plate."
                    TextWrapping="Wrap" Foreground="#FF3A4550" Margin="0,0,0,8" />
 
         <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
@@ -13,6 +13,7 @@
             <ComboBox x:Name="KindBox" Width="120" SelectionChanged="OnSelectionChanged"
                       AutomationProperties.AutomationId="ThreadKind">
                 <ComboBoxItem Content="Threaded rod" />
+                <ComboBoxItem Content="Bolt" />
                 <ComboBoxItem Content="Nut" />
                 <ComboBoxItem Content="Hole cutter" />
             </ComboBox>
@@ -43,7 +44,7 @@
 
         <StackPanel Orientation="Horizontal">
             <TextBlock Text="Length" Style="{DynamicResource FieldLabel}" Width="80"
-                       ToolTip="Of a rod or a hole cutter, along Z" />
+                       ToolTip="Of a rod or a hole cutter, along Z; of a bolt, under its head" />
             <TextBox x:Name="LengthBox" Width="60" Style="{DynamicResource NumberBox}" TextChanged="OnChanged"
                      AutomationProperties.AutomationId="ThreadLength" />
             <TextBlock Text="mm" Foreground="#FF9AA0A8" VerticalAlignment="Center" />
@@ -58,7 +59,7 @@
         </StackPanel>
 
         <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
-            <TextBlock Text="Nut body" Style="{DynamicResource FieldLabel}" Width="80" />
+            <TextBlock x:Name="BodyLabel" Text="Nut body" Style="{DynamicResource FieldLabel}" Width="80" />
             <ComboBox x:Name="BodyBox" Width="120" SelectionChanged="OnSelectionChanged"
                       AutomationProperties.AutomationId="ThreadNutBody">
                 <ComboBoxItem Content="Hexagon" />
@@ -82,12 +83,23 @@
             <TextBlock Text="mm" Foreground="#FF9AA0A8" VerticalAlignment="Center" />
         </StackPanel>
 
+        <StackPanel Orientation="Horizontal">
+            <TextBlock Text="Head height" Style="{DynamicResource FieldLabel}" Width="80"
+                       ToolTip="Of a bolt's head, along Z" />
+            <TextBox x:Name="HeadHeightBox" Width="60" Style="{DynamicResource NumberBox}" TextChanged="OnChanged"
+                     AutomationProperties.AutomationId="ThreadHeadHeight" />
+            <TextBlock Text="mm" Foreground="#FF9AA0A8" VerticalAlignment="Center" />
+        </StackPanel>
+
         <Border Margin="0,8,0,0" Padding="8,6" CornerRadius="3"
                 Background="White" BorderBrush="#FFD5DEEA" BorderThickness="1">
             <TextBlock x:Name="SummaryText" TextWrapping="Wrap" Foreground="#FF3A3F45" />
         </Border>
 
         <StackPanel Orientation="Horizontal" Margin="0,10,0,0">
+            <Button x:Name="CutButton" Content="Cut" Style="{DynamicResource PanelButton}" Click="OnCut"
+                    AutomationProperties.Name="ThreadCut"
+                    ToolTip="Take the threaded hole out of the part now, where the cutter stands" />
             <Button x:Name="AddButton" Content="Add" Style="{DynamicResource PanelButton}" Click="OnAccept"
                     AutomationProperties.Name="ThreadAccept" />
             <Button Content="Cancel" Style="{DynamicResource PanelButton}" IsCancel="True" />

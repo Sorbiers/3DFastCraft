@@ -445,6 +445,77 @@ public sealed class SceneRenderer : IDisposable
         shown.Dispose();
     }
 
+    private GroupModel3D? sketchShown;
+
+    /// <summary>
+    /// Draws a sketch on the plate: the finished outlines in blue, what is being drawn in orange up
+    /// to the pointer, and a dot at each point placed and at the pointer. Lifted a hair off the
+    /// plate so the board does not cover it. Given no sketch, takes it away.
+    /// </summary>
+    public void ShowSketch(Geometry.Sketches.Sketch? sketch, Vector2? cursor, Geometry.Sketches.SketchTool tool)
+    {
+        if (sketchShown is not null)
+        {
+            root.Children.Remove(sketchShown);
+            sketchShown.Dispose();
+            sketchShown = null;
+        }
+
+        if (sketch is null) return;
+
+        const float lift = 0.06f;
+        static SharpDX.Vector3 On(Vector2 p) => new(p.X, p.Y, lift);
+
+        var group = new GroupModel3D();
+
+        if (sketch.Loops.Count > 0)
+        {
+            var done = new LineBuilder();
+            foreach (var loop in sketch.Loops)
+                for (int i = 0; i < loop.Count; i++)
+                    done.AddLine(On(loop[i]), On(loop[(i + 1) % loop.Count]));
+
+            group.Children.Add(new LineGeometryModel3D
+            {
+                Geometry = done.ToLineGeometry3D(),
+                Color = Color.FromRgb(0x1F, 0x6F, 0xD1),
+                Thickness = 2.2,
+                IsHitTestVisible = false
+            });
+        }
+
+        var pending = sketch.Pending(cursor, tool);
+        if (pending.Count > 0)
+        {
+            var lines = new LineBuilder();
+            foreach (var (a, b) in pending) lines.AddLine(On(a), On(b));
+
+            group.Children.Add(new LineGeometryModel3D
+            {
+                Geometry = lines.ToLineGeometry3D(),
+                Color = Color.FromRgb(0xE8, 0x76, 0x2C),
+                Thickness = 2.2,
+                IsHitTestVisible = false
+            });
+        }
+
+        var dots = sketch.Corners.Select(On).ToList();
+        if (cursor is { } c) dots.Add(On(c));
+        if (dots.Count > 0)
+        {
+            group.Children.Add(new PointGeometryModel3D
+            {
+                Geometry = new PointGeometry3D { Positions = new Vector3Collection(dots) },
+                Color = Color.FromRgb(0xE8, 0x76, 0x2C),
+                Size = new Size(7, 7),
+                IsHitTestVisible = false
+            });
+        }
+
+        root.Children.Add(group);
+        sketchShown = group;
+    }
+
     /// <summary>Puts the objects back the way they are drawn when no split is being set up.</summary>
     public void ClearSplit()
     {

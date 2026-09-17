@@ -25,6 +25,16 @@ public enum HoleHead
     Counterbored
 }
 
+/// <summary>How several holes are set out round the handles.</summary>
+public enum HolePattern
+{
+    /// <summary>In a line along the cutter's own X, centred on the handles.</summary>
+    Row,
+
+    /// <summary>Evenly round a circle centred on the handles: a bolt circle.</summary>
+    Circle
+}
+
 /// <param name="Name">M3 and so on.</param>
 /// <param name="Clearance">The hole a screw passes through, ISO 273 medium.</param>
 /// <param name="CountersunkHead">Across the head of a countersunk screw, ISO 10642.</param>
@@ -56,6 +66,17 @@ public sealed record HoleOptions
     /// them. Not added to an insert's pocket, which is meant to be tight.
     /// </summary>
     public float ExtraClearance { get; init; } = 0.2f;
+
+    /// <summary>How many holes, set out by <see cref="Pattern"/>.</summary>
+    public int Count { get; init; } = 1;
+
+    public HolePattern Pattern { get; init; } = HolePattern.Row;
+
+    /// <summary>Between the middles of neighbouring holes in a row.</summary>
+    public float Spacing { get; init; } = 20f;
+
+    /// <summary>Across the circle the holes' middles lie on.</summary>
+    public float CircleDiameter { get; init; } = 30f;
 }
 
 /// <summary>
@@ -107,10 +128,84 @@ public static class HoleCutter
     }
 
     /// <summary>
+    /// Where each hole's middle goes, in the cutter's own frame: across its X and Y, the handles at
+    /// the origin. A row along X centred on the handles, or a circle round them starting on +X.
+    /// </summary>
+    public static List<Vector2> Stations(HoleOptions o)
+    {
+        int count = Math.Clamp(o.Count, 1, 100);
+        if (count == 1) return [Vector2.Zero];
+
+        if (o.Pattern == HolePattern.Circle)
+        {
+            float radius = MathF.Max(o.CircleDiameter, 0f) / 2f;
+            return Enumerable.Range(0, count)
+                .Select(i => radius * new Vector2(MathF.Cos(MathF.Tau * i / count), MathF.Sin(MathF.Tau * i / count)))
+                .ToList();
+        }
+
+        float spacing = MathF.Max(o.Spacing, 0f);
+        return Enumerable.Range(0, count).Select(i => new Vector2((i - (count - 1) / 2f) * spacing, 0f)).ToList();
+    }
+
+    /// <summary>How wide a hole is at its widest: its head, its nut, or its insert's lead-in.</summary>
+    public static float Widest(HoleOptions o)
+    {
+        var size = SizeOf(o.Size);
+        float extra = MathF.Max(0f, o.ExtraClearance);
+        if (o.Kind == HoleKind.Insert) return size.InsertHole + 1f;
+
+        float widest = size.Clearance + extra;
+        if (o.Head == HoleHead.Countersunk) widest = size.CountersunkHead + extra;
+        if (o.Head == HoleHead.Counterbored) widest = size.CapHead + 1f + extra;
+        if (o.NutPocket) widest = MathF.Max(widest, 2f * (size.NutAcrossFlats + extra) / MathF.Sqrt(3f));
+        return widest;
+    }
+
+    /// <summary>
+    /// How far along a ray the last of a solid's surface is: where a hole drilled that way comes out
+    /// the far side. Null when the ray misses it.
+    /// </summary>
+    public static float? FarSide(Mesh world, Vector3 origin, Vector3 direction)
+    {
+        direction = Vector3.Normalize(direction);
+        float? far = null;
+
+        for (int t = 0; t + 2 < world.Indices.Count; t += 3)
+        {
+            var a = world.Positions[world.Indices[t]];
+            var b = world.Positions[world.Indices[t + 1]];
+            var c = world.Positions[world.Indices[t + 2]];
+
+            // Moller-Trumbore, both sides of the face counted.
+            var ab = b - a;
+            var ac = c - a;
+            var p = Vector3.Cross(direction, ac);
+            float det = Vector3.Dot(ab, p);
+            if (MathF.Abs(det) < 1e-9f) continue;
+
+            var s = origin - a;
+            float u = Vector3.Dot(s, p) / det;
+            if (u < -1e-5f || u > 1f + 1e-5f) continue;
+
+            var q = Vector3.Cross(s, ab);
+            float v = Vector3.Dot(direction, q) / det;
+            if (v < -1e-5f || u + v > 1f + 1e-5f) continue;
+
+            float along = Vector3.Dot(ac, q) / det;
+            if (along > 0f && (far is null || along > far)) far = along;
+        }
+
+        return far;
+    }
+
+    /// <summary>
     /// The cutter, its axis on Z, the surface it opens from at Z = 0 and the hole going down to
     /// <paramref name="depth"/> below it; or null when the nut pocket could not be joined on cleanly.
+    /// <paramref name="through"/>: the depth is where the far side of the part is, so the shaft goes
+    /// a little past it rather than ending in its surface, and a nut pocket sinks into that side.
     /// </summary>
-    public static Mesh? Build(HoleOptions o, float depth)
+    public static Mesh? Build(HoleOptions o, float depth, bool through = false)
     {
         var size = SizeOf(o.Size);
         float extra = MathF.Max(0f, float.IsFinite(o.ExtraClearance) ? o.ExtraClearance : 0f);
@@ -146,6 +241,9 @@ public static class HoleCutter
                     outline = [(shaft, Overshoot), (shaft, -depth)];
                     break;
             }
+
+            // Out through the far side, as it stands proud of the near one.
+            if (through) outline[^1] = (shaft, -depth - Overshoot);
         }
 
         var cutter = Lathe(outline, Sides);
@@ -196,6 +294,30 @@ public static class HoleCutter
         return mesh.Welded();
     }
 
+    /// <summary>How the holes are set out, and whether they run into each other, as lines for the panel.</summary>
+    public static List<string> DescribePattern(HoleOptions o)
+    {
+        var lines = new List<string>();
+        int count = Math.Clamp(o.Count, 1, 100);
+        if (count == 1) return lines;
+
+        var stations = Stations(o);
+        float nearest = float.MaxValue;
+        for (int i = 0; i < stations.Count; i++)
+            for (int j = i + 1; j < stations.Count; j++)
+                nearest = MathF.Min(nearest, Vector2.Distance(stations[i], stations[j]));
+
+        lines.Add(o.Pattern == HolePattern.Circle
+            ? $"{count} round a {F(o.CircleDiameter)} mm circle, {F(nearest)} mm apart."
+            : $"{count} in a row, {F(o.Spacing)} mm apart.");
+        if (nearest < Widest(o))
+            lines.Add($"They run into each other - at least {F(Widest(o))} mm apart keeps them separate.");
+
+        return lines;
+
+        static string F(float value) => value.ToString("0.##", CultureInfo.CurrentCulture);
+    }
+
     /// <summary>The sizes that go into a hole, as lines for the panel.</summary>
     public static List<string> Describe(HoleOptions o, float depth)
     {
@@ -210,7 +332,9 @@ public static class HoleCutter
             return lines;
         }
 
-        lines.Add($"{F(size.Clearance + extra)} mm hole, {F(depth)} mm deep.");
+        lines.Add(o.Count > 1
+            ? $"{F(size.Clearance + extra)} mm holes, {F(depth)} mm deep."
+            : $"{F(size.Clearance + extra)} mm hole, {F(depth)} mm deep.");
         if (o.Head == HoleHead.Countersunk)
             lines.Add($"Countersunk to {F(size.CountersunkHead + extra)} mm at 90 degrees, for an ISO 10642 head.");
         if (o.Head == HoleHead.Counterbored)

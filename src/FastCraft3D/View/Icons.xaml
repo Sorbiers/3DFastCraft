@@ -30,6 +30,7 @@
     <StreamGeometry x:Key="IconSubtract">M9,12 A6,6 0 1 1 8.9,12 Z M15,12 A6,6 0 1 1 14.9,12 Z</StreamGeometry>
     <StreamGeometry x:Key="IconIntersect">M9,12 A6,6 0 1 1 8.9,12 Z M15,12 A6,6 0 1 1 14.9,12 Z M12,6.7 A6,6 0 0 0 12,17.3 A6,6 0 0 0 12,6.7</StreamGeometry>
     <StreamGeometry x:Key="IconMerge">M9,12 A6,6 0 1 1 8.9,12 Z M15,12 A6,6 0 1 1 14.9,12 Z M12,6.7 L12,17.3</StreamGeometry>
+    <StreamGeometry x:Key="IconHull">M7,5 L17,5 A7,7 0 0 1 17,19 L7,19 A7,7 0 0 1 7,5 Z M7,9 A3,3 0 1 0 7.01,9 Z M17,9 A3,3 0 1 0 17.01,9 Z</StreamGeometry>
 
     <!-- Editing -->
     <StreamGeometry x:Key="IconSmooth">M3,16 C6,16 6,8 9,8 C12,8 12,16 15,16 C18,16 18,8 21,8 M3,20 L21,20</StreamGeometry>
@@ -54,6 +55,7 @@
     <StreamGeometry x:Key="IconGear">M19.4,9.1 L22.3,10.2 L22.3,13.8 L19.4,14.9 L19.3,15.2 L20.6,18.0 L18.0,20.6 L15.2,19.3 L14.9,19.4 L13.8,22.3 L10.2,22.3 L9.1,19.4 L8.8,19.3 L6.0,20.6 L3.4,18.0 L4.7,15.2 L4.6,14.9 L1.7,13.8 L1.7,10.2 L4.6,9.1 L4.7,8.8 L3.4,6.0 L6.0,3.4 L8.8,4.7 L9.1,4.6 L10.2,1.7 L13.8,1.7 L14.9,4.6 L15.2,4.7 L18.0,3.4 L20.6,6.0 L19.3,8.8 Z M15,12 A3,3 0 1 1 9,12 A3,3 0 1 1 15,12</StreamGeometry>
     <StreamGeometry x:Key="IconRepeat">M3,4 L9,4 L9,10 L3,10 Z M9,10 L15,10 L15,16 L9,16 Z M15,16 L21,16 L21,22 L15,22 Z</StreamGeometry>
     <StreamGeometry x:Key="IconAbout">M12,3 A9,9 0 1 1 11.9,3 Z M12,11 L12,17 M12,7 L12,8.2</StreamGeometry>
+    <StreamGeometry x:Key="IconSketchLine">M3,19 L8,7 L15,14 L21,5 M3,19 L3,19 M2,18 L4,20 M20,4 L22,6</StreamGeometry>
     <StreamGeometry x:Key="IconHole">M2,7 L8,7 L11,10 L11,21 M22,7 L16,7 L13,10 L13,21 M2,21 L22,21 M2,7 L2,21 M22,7 L22,21</StreamGeometry>
     <StreamGeometry x:Key="IconOverhang">M2,21 L22,21 M5,21 L5,5 L20,5 L20,11 L11,11 L11,21 M12,11 L14,8.5 M15,11 L17,8.5 M18,11 L20,8.5</StreamGeometry>
     <StreamGeometry x:Key="RowShown">M1,8 Q8,1 15,8 Q8,15 1,8 Z M8,6 A2,2 0 1 1 7.99,6 Z</StreamGeometry>

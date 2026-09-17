@@ -42,7 +42,7 @@
             </StackPanel>
             <CheckBox x:Name="ThroughBox" Content="All the way through" Margin="0,2,0,6" Click="OnClicked"
                       AutomationProperties.AutomationId="HoleThrough"
-                      ToolTip="As deep as the part is tall, and out of the bottom" />
+                      ToolTip="Long enough to go right through the part, whichever way the cutter points" />
 
             <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
                 <TextBlock Text="Clearance" Style="{DynamicResource FieldLabel}" Width="62"
@@ -53,27 +53,43 @@
             </StackPanel>
         </StackPanel>
 
-        <StackPanel x:Name="PlacePanel">
-            <TextBlock Text="Where, from the middle of the top" Foreground="#FF5A5F66" Margin="0,2,0,2" />
-            <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
-                <TextBlock Text="X" VerticalAlignment="Center" Foreground="#FF5A5F66" Width="12" />
-                <TextBox x:Name="OffsetXBox" Width="54" Style="{DynamicResource NumberBox}" Tag="number" TextChanged="OnChanged"
-                         AutomationProperties.AutomationId="HoleOffsetX" />
-                <TextBlock Text="Y" VerticalAlignment="Center" Foreground="#FF5A5F66" Width="12" Margin="6,0,0,0" />
-                <TextBox x:Name="OffsetYBox" Width="54" Style="{DynamicResource NumberBox}" Tag="number" TextChanged="OnChanged"
-                         AutomationProperties.AutomationId="HoleOffsetY" />
-                <TextBlock Text="mm" Foreground="#FF9AA0A8" VerticalAlignment="Center" />
-            </StackPanel>
+        <StackPanel Orientation="Horizontal" Margin="0,2,0,4">
+            <TextBlock Text="Holes" Style="{DynamicResource FieldLabel}" Width="62"
+                       ToolTip="How many, set out round the handles: moving or turning the cutter moves them all" />
+            <TextBox x:Name="CountBox" Width="44" Style="{DynamicResource NumberBox}" Tag="number" TextChanged="OnChanged"
+                     AutomationProperties.AutomationId="HoleCount" />
+            <RadioButton x:Name="RowBox" GroupName="HolePattern" Content="Row" Margin="10,0,10,0" VerticalAlignment="Center" Checked="OnChoice"
+                         AutomationProperties.AutomationId="HoleRow"
+                         ToolTip="In a line along the cutter's own X, centred on the handles" />
+            <RadioButton x:Name="CircleBox" GroupName="HolePattern" Content="Circle" VerticalAlignment="Center" Checked="OnChoice"
+                         AutomationProperties.AutomationId="HoleCircle"
+                         ToolTip="Evenly round a circle centred on the handles: a bolt circle" />
+        </StackPanel>
+        <StackPanel Orientation="Horizontal">
+            <TextBlock Text="Spacing" Style="{DynamicResource FieldLabel}" Width="62" ToolTip="From the middle of one hole to the next, in a row" />
+            <TextBox x:Name="SpacingBox" Width="60" Style="{DynamicResource NumberBox}" Tag="number" TextChanged="OnChanged"
+                     AutomationProperties.AutomationId="HoleSpacing" />
+            <TextBlock Text="mm" Foreground="#FF9AA0A8" VerticalAlignment="Center" />
+        </StackPanel>
+        <StackPanel Orientation="Horizontal">
+            <TextBlock Text="Circle" Style="{DynamicResource FieldLabel}" Width="62" ToolTip="Across the circle the holes' middles lie on" />
+            <TextBox x:Name="CircleDiameterBox" Width="60" Style="{DynamicResource NumberBox}" Tag="number" TextChanged="OnChanged"
+                     AutomationProperties.AutomationId="HoleCircleDiameter" />
+            <TextBlock Text="mm across" Foreground="#FF9AA0A8" VerticalAlignment="Center" />
         </StackPanel>
 
-        <Border Margin="0,4,0,0" Padding="8,6" CornerRadius="3"
+        <Border Margin="0,8,0,0" Padding="8,6" CornerRadius="3"
                 Background="White" BorderBrush="#FFD5DEEA" BorderThickness="1">
             <TextBlock x:Name="SummaryText" TextWrapping="Wrap" Foreground="#FF3A3F45" />
         </Border>
 
         <StackPanel Orientation="Horizontal" Margin="0,10,0,0">
             <Button x:Name="AcceptButton" Content="Cut" Style="{DynamicResource PanelButton}" Click="OnAccept"
-                    AutomationProperties.Name="HoleAccept" />
+                    AutomationProperties.Name="HoleAccept"
+                    ToolTip="Take the holes out of the part now, where the cutter stands" />
+            <Button x:Name="AddButton" Content="Add" Style="{DynamicResource PanelButton}" Click="OnAdd"
+                    AutomationProperties.Name="HoleAdd"
+                    ToolTip="Put the cutter on the plate where it stands, to Subtract later - from this part or another" />
             <Button Content="Cancel" Style="{DynamicResource PanelButton}" IsCancel="True" />
         </StackPanel>
     </StackPanel>

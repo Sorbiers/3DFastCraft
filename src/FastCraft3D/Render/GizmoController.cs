@@ -159,6 +159,13 @@ public sealed class GizmoController
     public bool KeepOnBedMove { get; set; }
 
     /// <summary>
+    /// Whether a finished drag goes on the undo list. Off while the handles are on a tool's
+    /// preview: the preview is gone when the panel closes, and an undo step moving it back would
+    /// be a step that does nothing - or moves nothing that is still there.
+    /// </summary>
+    public bool RecordsUndo { get; set; } = true;
+
+    /// <summary>
     /// Nothing resized goes below the bed, and what stood on the bed when the drag began stays
     /// standing on it, so it grows upward only.
     /// </summary>
@@ -624,7 +631,7 @@ public sealed class GizmoController
     {
         if (active is null) return;
 
-        if (dragChanged &&
+        if (dragChanged && RecordsUndo &&
             TransformCommand.CreateIfChanged(LabelFor(mode), dragObjects, dragBefore) is { } command)
         {
             undo.Execute(command);

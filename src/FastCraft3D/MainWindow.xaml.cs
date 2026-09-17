@@ -94,6 +94,13 @@ public partial class MainWindow : Window
 
         measure = new MeasureOverlay(MeasureLayer, new Viewport3DXProjector(View));
         viewModel.MeasureChanged += () => measure.Show(viewModel.MeasureFrom, viewModel.MeasureTo);
+        viewModel.SketchChanged += () => renderer?.ShowSketch(
+            viewModel.IsSketchMode ? viewModel.CurrentSketch : null, viewModel.SketchCursor, viewModel.CurrentSketchTool);
+        viewModel.LookFromTopRequested += top =>
+        {
+            if (top) OnViewTop(this, new RoutedEventArgs());
+            else OnViewIso(this, new RoutedEventArgs());
+        };
 
         viewModel.EngraveFaceChanged += ShowFacePreview;
         viewModel.RestingFacesChanged += () => renderer?.ShowRestingFaces(viewModel.RestingFaceList, viewModel.RestingHover);
@@ -327,6 +334,15 @@ public partial class MainWindow : Window
         if (!viewModel.IsToolInHand || e.Key is Key.Escape) return;
 
         bool typing = Keyboard.FocusedElement is TextBox;
+
+        // While sketching, Enter closes the outline and Backspace takes back a point.
+        if (viewModel.IsSketchMode && !typing && Keyboard.Modifiers == ModifierKeys.None && e.Key is Key.Enter or Key.Back)
+        {
+            if (e.Key == Key.Enter) viewModel.CloseSketch();
+            else viewModel.UndoSketch();
+            e.Handled = true;
+            return;
+        }
 
         if (Keyboard.Modifiers is ModifierKeys.Control)
         {
@@ -778,6 +794,28 @@ public partial class MainWindow : Window
         // a click that changed the selection would change what the tool is working on.
         if (viewModel.HasOpenPanel) return;
 
+        // Sketching: a click places a point on the plate and nothing else. The press is kept from
+        // the camera, so clicks do not turn the view; right-drag and the wheel still pan and zoom.
+        if (viewModel.IsSketchMode)
+        {
+            if (TryIntersectPlane(screen, 0f, out var onPlate))
+            {
+                if (viewModel.CurrentSketchTool == FastCraft3D.Geometry.Sketches.SketchTool.Freehand)
+                {
+                    // Held, so the stroke still ends if the pointer is let go off the viewport.
+                    viewModel.BeginSketchStroke(new Vector2(onPlate.X, onPlate.Y));
+                    View.CaptureMouse();
+                }
+                else
+                {
+                    viewModel.PlaceSketchPoint(new Vector2(onPlate.X, onPlate.Y), OnFirstSketchPoint(screen));
+                }
+            }
+
+            e.Handled = true;
+            return;
+        }
+
         if (viewModel.IsLayMode && SightLine(screen) is var (origin, direction)
             && viewModel.LayOnRestingFace(origin, direction))
         {
@@ -952,8 +990,19 @@ public partial class MainWindow : Window
         viewModel.RefreshSelection();
     }
 
+    /// <summary>Whether a click is on the first point of the line being sketched, which closes it.</summary>
+    private bool OnFirstSketchPoint(Point screen)
+    {
+        var chain = viewModel.CurrentSketch.Chain;
+        if (chain.Count < 2 || !new Viewport3DXProjector(View).TryProject(new Vector3(chain[0], 0f), out var first)) return false;
+        return (first - screen).Length <= 10;
+    }
+
     private void OnViewportMove(object sender, MouseEventArgs e)
     {
+        if (viewModel.IsSketchMode && TryIntersectPlane(e.GetPosition(View), 0f, out var onPlate))
+            viewModel.MoveSketchCursor(new Vector2(onPlate.X, onPlate.Y));
+
         if (viewModel.IsLayMode && e.LeftButton != MouseButtonState.Pressed
             && SightLine(e.GetPosition(View)) is var (origin, direction))
             viewModel.HoverRestingFace(origin, direction);
@@ -997,6 +1046,13 @@ public partial class MainWindow : Window
 
     private void OnViewportLeftUp(object sender, MouseButtonEventArgs e)
     {
+        if (viewModel.IsSketchMode)
+        {
+            if (View.IsMouseCaptured) View.ReleaseMouseCapture();
+            if (viewModel.CurrentSketch.IsDrawingStroke) viewModel.EndSketchStroke();
+            return;
+        }
+
         if (pendingClear)
         {
             pendingClear = false;
@@ -1092,7 +1148,9 @@ public partial class MainWindow : Window
 
     private void OnFieldGotFocus(object sender, RoutedEventArgs e)
     {
-        if (e.OriginalSource is not TextBox { Tag: "transform" }) return;
+        // A tool's preview is placed, not edited: it goes when the panel closes, and an undo step
+        // for it would only undo nothing.
+        if (e.OriginalSource is not TextBox { Tag: "transform" } || viewModel.PanelHandles) return;
         editObjects = viewModel.Scene.Selection.ToList();
         editBefore = editObjects.Select(TransformState.Capture).ToList();
     }
@@ -1351,11 +1409,17 @@ public partial class MainWindow : Window
 
         if (e.PropertyName is nameof(MainViewModel.IsToolRunning)
             or nameof(MainViewModel.IsEmbossMode)
-            or nameof(MainViewModel.IsEngraveMode))
+            or nameof(MainViewModel.IsEngraveMode)
+            or nameof(MainViewModel.PanelHandles))
         {
             // A tool that has taken the object over owns the handles on it, so the move and
-            // resize ones stand down rather than sitting underneath the placement ones.
-            if (gizmo is not null) gizmo.Enabled = !viewModel.IsToolRunning;
+            // resize ones stand down rather than sitting underneath the placement ones - unless the
+            // tool hands them to its preview, to be put where it is wanted.
+            if (gizmo is not null)
+            {
+                gizmo.Enabled = !viewModel.IsToolRunning || viewModel.PanelHandles;
+                gizmo.RecordsUndo = !viewModel.PanelHandles;
+            }
             RefreshPlacementGizmo();
         }
 

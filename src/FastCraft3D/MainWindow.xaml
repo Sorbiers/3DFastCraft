@@ -237,6 +237,16 @@
             <Setter Property="Margin" Value="0,10,0,4" />
         </Style>
 
+        <!-- Folded away when there is not one object selected: its DataContext is then null. -->
+        <Style x:Key="OneObjectOnly" TargetType="StackPanel">
+            <Setter Property="Visibility" Value="Visible" />
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding}" Value="{x:Null}">
+                    <Setter Property="Visibility" Value="Collapsed" />
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
+
         <BooleanToVisibilityConverter x:Key="BoolToVisibility" />
         <view:ColourToBrushConverter x:Key="ColourToBrush" />
         <view:OutlinesToGeometryConverter x:Key="OutlinesToGeometry" />
@@ -446,7 +456,8 @@
     <DockPanel>
 
         <!-- Ribbon -->
-        <!-- Standing down while a tool has the object: see MainViewModel.IsToolInHand. -->
+        <!-- Standing down while a tool has the object: see MainViewModel.IsToolInHand. Buttons
+             bound to IsAdvancedMode are the ones 3D Builder never had, left out in Classic. -->
         <TabControl DockPanel.Dock="Top" Background="#FFFAFAFB" BorderThickness="0,0,0,1"
                     IsEnabled="{Binding NothingInHand}"
                     BorderBrush="#FFD8DBE0" Padding="6">
@@ -486,28 +497,31 @@
                     <Button Style="{StaticResource ToolButton}" Content="Tetrahedron" Tag="{StaticResource IconTetrahedron}"
                             Command="{Binding InsertCommand}" CommandParameter="Tetrahedron" />
                     <Separator Margin="8,0" />
-                    <Button Style="{StaticResource ToolButton}" Content="Custom" Tag="{StaticResource IconCustom}"
+                    <Button Style="{StaticResource ToolButton}" Content="Custom" Visibility="{Binding IsAdvancedMode, Converter={StaticResource BoolToVisibility}}" Tag="{StaticResource IconCustom}"
                             Command="{Binding InsertCustomCommand}" MinWidth="70"
                             ToolTip="A cube, cylinder, cone, sphere or torus with its size, segments and roundness chosen before it is made - more segments for a smoother shape" />
                     <Button Style="{StaticResource ToolButton}" Content="Text" Tag="{StaticResource IconText3D}"
                             Command="{Binding InsertTextCommand}" MinWidth="58"
                             ToolTip="Lettering as an object of its own - a sign, a name tag, a keychain - in any installed font, lying on the plate or standing up. To put letters on a face that is already there, use Emboss or Engrave." />
+                    <Button Style="{StaticResource ToolButton}" Content="Sketch" Visibility="{Binding IsAdvancedMode, Converter={StaticResource BoolToVisibility}}" Tag="{StaticResource IconSketchLine}"
+                            Command="{Binding BeginSketchCommand}" MinWidth="64"
+                            ToolTip="Draw an outline on the plate - lines, arcs, smooth curves, freehand, rectangles, circles - and extrude or revolve it into a solid. Seen from above; Escape or Done when finished." />
                     <Button Style="{StaticResource ToolButton}" Content="Import" Tag="{StaticResource IconImport}"
                             Command="{Binding ImportCommand}" ToolTip="Bring in an STL, an OBJ, or another 3DFastCraft project - its objects join what is already on the plate (Ctrl+I)" />
-                    <Separator Margin="8,0" />
-                    <Button Style="{StaticResource ToolButton}" Content="Fit test" Tag="{StaticResource IconFitTest}"
+                    <Separator Margin="8,0" Visibility="{Binding IsAdvancedMode, Converter={StaticResource BoolToVisibility}}" />
+                    <Button Style="{StaticResource ToolButton}" Content="Fit test" Visibility="{Binding IsAdvancedMode, Converter={StaticResource BoolToVisibility}}" Tag="{StaticResource IconFitTest}"
                             Command="{Binding InsertFitTestCommand}" MinWidth="64"
                             ToolTip="Four small 2x2 brick plates at Fit -0.2, -0.1, 0 and +0.1 mm, marked with one to four notches, each with studs on top and the underside below. Print them in your filament and press each onto real bricks. Without real bricks, stack one plate on another: the pair grips like the sum of their two Fits. To test two printed halves exactly as Split with connectors makes them - the same Fit on both - print the set twice and try each plate on its twin. Type the Fit that holds firmly but still comes apart by hand." />
-                    <Button Style="{StaticResource ToolButton}" Content="Hole" Tag="{StaticResource IconHole}"
+                    <Button Style="{StaticResource ToolButton}" Content="Hole" Visibility="{Binding IsAdvancedMode, Converter={StaticResource BoolToVisibility}}" Tag="{StaticResource IconHole}"
                             Command="{Binding InsertHoleCommand}" MinWidth="58"
                             ToolTip="A screw hole - plain, countersunk or counterbored, with a nut pocket if asked - or a heat-set insert pocket, M2 to M8. Cut into the top of the one part selected, or made as a cutter to place and Subtract." />
-                    <Button Style="{StaticResource ToolButton}" Content="Thread" Tag="{StaticResource IconThread}"
+                    <Button Style="{StaticResource ToolButton}" Content="Thread" Visibility="{Binding IsAdvancedMode, Converter={StaticResource BoolToVisibility}}" Tag="{StaticResource IconThread}"
                             Command="{Binding InsertThreadCommand}" MinWidth="70"
                             ToolTip="A threaded rod, a nut, or a cutter to Subtract for a threaded hole: ISO metric M3 to M20 or any diameter and pitch, with a clearance so a printed rod and nut screw together" />
-                    <Button Style="{StaticResource ToolButton}" Content="Stair" Tag="{StaticResource IconStair}"
+                    <Button Style="{StaticResource ToolButton}" Content="Stair" Visibility="{Binding IsAdvancedMode, Converter={StaticResource BoolToVisibility}}" Tag="{StaticResource IconStair}"
                             Command="{Binding InsertStairCommand}" MinWidth="70"
                             ToolTip="A straight flight, built as one solid, with the riser and going reported in real units" />
-                    <Button Style="{StaticResource ToolButton}" Content="Gear" Tag="{StaticResource IconGear}"
+                    <Button Style="{StaticResource ToolButton}" Content="Gear" Visibility="{Binding IsAdvancedMode, Converter={StaticResource BoolToVisibility}}" Tag="{StaticResource IconGear}"
                             Command="{Binding InsertGearCommand}" MinWidth="64"
                             ToolTip="An involute gear, ring gear or rack - straight, helical or herringbone - with a bore, a hub and a set-screw hole, and a partner made already in mesh with it" />
                 </WrapPanel>
@@ -527,6 +541,9 @@
                     <Button Style="{StaticResource ToolButton}" Content="Merge" Tag="{StaticResource IconMerge}"
                             Command="{Binding BooleanCommand}" CommandParameter="Union"
                             ToolTip="Fuse the selection into one solid. Needs two or more objects selected." />
+                    <Button Style="{StaticResource ToolButton}" Content="Hull" Visibility="{Binding IsAdvancedMode, Converter={StaticResource BoolToVisibility}}" Tag="{StaticResource IconHull}"
+                            Command="{Binding HullCommand}"
+                            ToolTip="Wrap the selection in one skin, as cling film pulled tight round it: two cylinders make a slot, a row of spheres a rounded bar. Replaces what was selected. Needs something selected." />
 
                     <Button Style="{StaticResource ToolButton}" Content="Split" Tag="{StaticResource IconSplit}"
                             Command="{Binding BeginSplitCommand}"
@@ -535,10 +552,10 @@
                     <Button Style="{StaticResource ToolButton}" Content="Duplicate" Tag="{StaticResource IconDuplicate}"
                             Command="{Binding DuplicateCommand}"
                             ToolTip="Copy the selection and set it beside the original (Ctrl+D)" />
-                    <Button Style="{StaticResource ToolButton}" Content="In place" Tag="{StaticResource IconDuplicate}"
+                    <Button Style="{StaticResource ToolButton}" Content="In place" Visibility="{Binding IsAdvancedMode, Converter={StaticResource BoolToVisibility}}" Tag="{StaticResource IconDuplicate}"
                             Command="{Binding DuplicateCommand}" CommandParameter="InPlace" MinWidth="64"
                             ToolTip="Copy the selection without moving it - what you want before a boolean or a mirror (Ctrl+Shift+D)" />
-                    <Button Style="{StaticResource ToolButton}" Content="Repeat" Tag="{StaticResource IconRepeat}"
+                    <Button Style="{StaticResource ToolButton}" Content="Repeat" Visibility="{Binding IsAdvancedMode, Converter={StaticResource BoolToVisibility}}" Tag="{StaticResource IconRepeat}"
                             Command="{Binding RepeatCommand}" MinWidth="76"
                             ToolTip="Repeat the selection along a line or round a circle, growing as it goes - a flight of steps, a row of dowels, a ring of pins, a spiral stair" />
                     <Button Style="{StaticResource ToolButton}" Content="Delete" Tag="{StaticResource IconDelete}"
@@ -556,18 +573,18 @@
                     <Button Style="{StaticResource ToolButton}" Content="Drop to plate" Tag="{StaticResource IconDropToPlate}"
                             Command="{Binding AlignToPlateCommand}" MinWidth="90"
                             ToolTip="Set the selection down on z = 0, so it is standing on the bed rather than floating over it" />
-                    <Button Style="{StaticResource ToolButton}" Content="Lay on face" Tag="{StaticResource IconLayOnFace}"
+                    <Button Style="{StaticResource ToolButton}" Content="Lay on face" Visibility="{Binding IsAdvancedMode, Converter={StaticResource BoolToVisibility}}" Tag="{StaticResource IconLayOnFace}"
                             Command="{Binding BeginLayCommand}" MinWidth="86"
                             ToolTip="Pick a face and the object is tipped over to stand on it - the flat side down, for printing. Needs exactly one object selected." />
-                    <Button Style="{StaticResource ToolButton}" Content="Align to" Tag="{StaticResource IconAlignCentre}"
+                    <Button Style="{StaticResource ToolButton}" Content="Align to" Visibility="{Binding IsAdvancedMode, Converter={StaticResource BoolToVisibility}}" Tag="{StaticResource IconAlignCentre}"
                             Command="{Binding AlignToSelectionCommand}" MinWidth="72"
                             ToolTip="Move the first object you picked so its bounding box is centred on the second's. Two objects: the first moves, the second stays. Nothing is rotated or resized. Needs exactly two objects selected." />
-                    <Separator Margin="8,0" />
-                    <Button Style="{StaticResource ToolButton}" Content="Fit" Tag="{StaticResource IconFitBed}"
+                    <Separator Margin="8,0" Visibility="{Binding IsAdvancedMode, Converter={StaticResource BoolToVisibility}}" />
+                    <Button Style="{StaticResource ToolButton}" Content="Fit" Visibility="{Binding IsAdvancedMode, Converter={StaticResource BoolToVisibility}}" Tag="{StaticResource IconFitBed}"
                             Command="{Binding FitToBedCommand}" MinWidth="58"
                             AutomationProperties.Name="Fit to bed"
                             ToolTip="Shrink the selection to fit the printable area, 20 mm clear of the edge, and stand it in the middle of the bed. Only shrinks what is too big - nothing is ever made bigger. The size and height come from View, Grid." />
-                    <Button Style="{StaticResource ToolButton}" Content="Distribute" Tag="{StaticResource IconArrangeBed}"
+                    <Button Style="{StaticResource ToolButton}" Content="Distribute" Visibility="{Binding IsAdvancedMode, Converter={StaticResource BoolToVisibility}}" Tag="{StaticResource IconArrangeBed}"
                             Command="{Binding DistributeOnBedCommand}" MinWidth="72"
                             AutomationProperties.Name="Distribute on bed"
                             ToolTip="Set the selected objects out in rows across the bed, a gap you choose apart, standing on it. Needs two or more objects selected." />
@@ -578,52 +595,52 @@
                             Command="{Binding MirrorCommand}" CommandParameter="Y" />
                     <Button Style="{StaticResource ToolButton}" Content="Mirror Z" Tag="{StaticResource IconMirror}"
                             Command="{Binding MirrorCommand}" CommandParameter="Z" />
-                    <Separator Margin="8,0" />
-                    <TextBlock Text="X" VerticalAlignment="Center" FontWeight="SemiBold"
+                    <Separator Visibility="{Binding IsAdvancedMode, Converter={StaticResource BoolToVisibility}}" Margin="8,0" />
+                    <TextBlock Visibility="{Binding IsAdvancedMode, Converter={StaticResource BoolToVisibility}}" Text="X" VerticalAlignment="Center" FontWeight="SemiBold"
                                Foreground="#FF5A5F66" Margin="10,0,4,0" />
-                    <Button Style="{StaticResource ToolButton}" Content="Left" Tag="{StaticResource IconAlignMin}"
+                    <Button Visibility="{Binding IsAdvancedMode, Converter={StaticResource BoolToVisibility}}" Style="{StaticResource ToolButton}" Content="Left" Tag="{StaticResource IconAlignMin}"
                             Command="{Binding AlignCommand}" CommandParameter="X:Minimum" MinWidth="58"
                             ToolTip="Needs two or more objects selected." />
-                    <Button Style="{StaticResource ToolButton}" Content="Centre" Tag="{StaticResource IconAlignCentre}"
+                    <Button Visibility="{Binding IsAdvancedMode, Converter={StaticResource BoolToVisibility}}" Style="{StaticResource ToolButton}" Content="Centre" Tag="{StaticResource IconAlignCentre}"
                             Command="{Binding AlignCommand}" CommandParameter="X:Centre" MinWidth="58"
                             ToolTip="Needs two or more objects selected." />
-                    <Button Style="{StaticResource ToolButton}" Content="Right" Tag="{StaticResource IconAlignMax}"
+                    <Button Visibility="{Binding IsAdvancedMode, Converter={StaticResource BoolToVisibility}}" Style="{StaticResource ToolButton}" Content="Right" Tag="{StaticResource IconAlignMax}"
                             Command="{Binding AlignCommand}" CommandParameter="X:Maximum" MinWidth="58"
                             ToolTip="Needs two or more objects selected." />
-                    <Button Style="{StaticResource ToolButton}" Content="Spread" Tag="{StaticResource IconDistribute}"
+                    <Button Visibility="{Binding IsAdvancedMode, Converter={StaticResource BoolToVisibility}}" Style="{StaticResource ToolButton}" Content="Spread" Tag="{StaticResource IconDistribute}"
                             Command="{Binding AlignCommand}" CommandParameter="X:Distribute" MinWidth="58"
                             ToolTip="Even out the gaps along X, keeping the two outermost objects where they are. Needs two or more objects selected." />
-                    <Separator Margin="6,0" />
-                    <TextBlock Text="Y" VerticalAlignment="Center" FontWeight="SemiBold"
+                    <Separator Visibility="{Binding IsAdvancedMode, Converter={StaticResource BoolToVisibility}}" Margin="6,0" />
+                    <TextBlock Visibility="{Binding IsAdvancedMode, Converter={StaticResource BoolToVisibility}}" Text="Y" VerticalAlignment="Center" FontWeight="SemiBold"
                                Foreground="#FF5A5F66" Margin="10,0,4,0" />
-                    <Button Style="{StaticResource ToolButton}" Content="Front" Tag="{StaticResource IconAlignMin}"
+                    <Button Visibility="{Binding IsAdvancedMode, Converter={StaticResource BoolToVisibility}}" Style="{StaticResource ToolButton}" Content="Front" Tag="{StaticResource IconAlignMin}"
                             Command="{Binding AlignCommand}" CommandParameter="Y:Minimum" MinWidth="58"
                             ToolTip="Needs two or more objects selected." />
-                    <Button Style="{StaticResource ToolButton}" Content="Centre" Tag="{StaticResource IconAlignCentre}"
+                    <Button Visibility="{Binding IsAdvancedMode, Converter={StaticResource BoolToVisibility}}" Style="{StaticResource ToolButton}" Content="Centre" Tag="{StaticResource IconAlignCentre}"
                             Command="{Binding AlignCommand}" CommandParameter="Y:Centre" MinWidth="58"
                             ToolTip="Needs two or more objects selected." />
-                    <Button Style="{StaticResource ToolButton}" Content="Back" Tag="{StaticResource IconAlignMax}"
+                    <Button Visibility="{Binding IsAdvancedMode, Converter={StaticResource BoolToVisibility}}" Style="{StaticResource ToolButton}" Content="Back" Tag="{StaticResource IconAlignMax}"
                             Command="{Binding AlignCommand}" CommandParameter="Y:Maximum" MinWidth="58"
                             ToolTip="Needs two or more objects selected." />
-                    <Button Style="{StaticResource ToolButton}" Content="Spread" Tag="{StaticResource IconDistribute}"
+                    <Button Visibility="{Binding IsAdvancedMode, Converter={StaticResource BoolToVisibility}}" Style="{StaticResource ToolButton}" Content="Spread" Tag="{StaticResource IconDistribute}"
                             Command="{Binding AlignCommand}" CommandParameter="Y:Distribute" MinWidth="58"
                             ToolTip="Even out the gaps along Y, keeping the two outermost objects where they are. Needs two or more objects selected." />
-                    <Separator Margin="6,0" />
-                    <TextBlock Text="Z" VerticalAlignment="Center" FontWeight="SemiBold"
+                    <Separator Visibility="{Binding IsAdvancedMode, Converter={StaticResource BoolToVisibility}}" Margin="6,0" />
+                    <TextBlock Visibility="{Binding IsAdvancedMode, Converter={StaticResource BoolToVisibility}}" Text="Z" VerticalAlignment="Center" FontWeight="SemiBold"
                                Foreground="#FF5A5F66" Margin="10,0,4,0" />
-                    <Button Style="{StaticResource ToolButton}" Content="Bottom" Tag="{StaticResource IconAlignMin}"
+                    <Button Visibility="{Binding IsAdvancedMode, Converter={StaticResource BoolToVisibility}}" Style="{StaticResource ToolButton}" Content="Bottom" Tag="{StaticResource IconAlignMin}"
                             Command="{Binding AlignCommand}" CommandParameter="Z:Minimum" MinWidth="58"
                             ToolTip="Needs two or more objects selected." />
-                    <Button Style="{StaticResource ToolButton}" Content="Centre" Tag="{StaticResource IconAlignCentre}"
+                    <Button Visibility="{Binding IsAdvancedMode, Converter={StaticResource BoolToVisibility}}" Style="{StaticResource ToolButton}" Content="Centre" Tag="{StaticResource IconAlignCentre}"
                             Command="{Binding AlignCommand}" CommandParameter="Z:Centre" MinWidth="58"
                             ToolTip="Needs two or more objects selected." />
-                    <Button Style="{StaticResource ToolButton}" Content="Top" Tag="{StaticResource IconAlignMax}"
+                    <Button Visibility="{Binding IsAdvancedMode, Converter={StaticResource BoolToVisibility}}" Style="{StaticResource ToolButton}" Content="Top" Tag="{StaticResource IconAlignMax}"
                             Command="{Binding AlignCommand}" CommandParameter="Z:Maximum" MinWidth="58"
                             ToolTip="Needs two or more objects selected." />
-                    <Button Style="{StaticResource ToolButton}" Content="Spread" Tag="{StaticResource IconDistribute}"
+                    <Button Visibility="{Binding IsAdvancedMode, Converter={StaticResource BoolToVisibility}}" Style="{StaticResource ToolButton}" Content="Spread" Tag="{StaticResource IconDistribute}"
                             Command="{Binding AlignCommand}" CommandParameter="Z:Distribute" MinWidth="58"
                             ToolTip="Even out the gaps along Z, keeping the two outermost objects where they are. Needs two or more objects selected." />
-                    <Separator Margin="6,0" />
+                    <Separator Visibility="{Binding IsAdvancedMode, Converter={StaticResource BoolToVisibility}}" Margin="6,0" />
                 </WrapPanel>
             </TabItem>
 
@@ -639,14 +656,14 @@
                     <Button Style="{StaticResource ToolButton}" Content="Smooth" Tag="{StaticResource IconSmooth}"
                             Command="{Binding SmoothCommand}"
                             ToolTip="Round the facets off, with the result shown as you set it" />
-                    <Button Style="{StaticResource ToolButton}" Content="Round" Tag="{StaticResource IconRound}"
+                    <Button Style="{StaticResource ToolButton}" Content="Round" Visibility="{Binding IsAdvancedMode, Converter={StaticResource BoolToVisibility}}" Tag="{StaticResource IconRound}"
                             Command="{Binding RoundCommand}" MinWidth="82"
                             ToolTip="Round the edges of a cube or cylinder. Only shapes still described by their parameters can be rounded. Needs a cube or cylinder that has not been cut or reshaped since it was inserted." />
                     <Separator Margin="8,0" />
                     <Button Style="{StaticResource ToolButton}" Content="Simplify" Tag="{StaticResource IconSimplify}"
                             Command="{Binding SimplifyCommand}" MinWidth="82"
                             ToolTip="Cut the triangle count down while keeping the shape. The natural partner to Rebuild." />
-                    <Button Style="{StaticResource ToolButton}" Content="Hollow" Tag="{StaticResource IconHollow}"
+                    <Button Style="{StaticResource ToolButton}" Content="Hollow" Visibility="{Binding IsAdvancedMode, Converter={StaticResource BoolToVisibility}}" Tag="{StaticResource IconHollow}"
                             Command="{Binding HollowCommand}" MinWidth="78"
                             ToolTip="Turn a solid into a shell of a chosen wall thickness, to save material" />
                     <Separator Margin="8,0" />
@@ -664,40 +681,40 @@
                  the things that move objects, and it moves nothing at all. -->
             <TabItem Header="Tools">
                 <WrapPanel Margin="4">
-                    <Button Style="{StaticResource ToolButton}" Content="Mould" Tag="{StaticResource IconHollow}"
+                    <Button Style="{StaticResource ToolButton}" Content="Mould" Visibility="{Binding IsAdvancedMode, Converter={StaticResource BoolToVisibility}}" Tag="{StaticResource IconHollow}"
                             Command="{Binding MouldCommand}" MinWidth="76"
                             ToolTip="Make a mould of the selection to pour silicone into: a block with the model taken out of it, cut so the cast part comes out, with a pour hole and air vents. Select one object. Needs exactly one object selected." />
-                    <Separator Margin="8,0" />
+                    <Separator Margin="8,0" Visibility="{Binding IsAdvancedMode, Converter={StaticResource BoolToVisibility}}" />
                     <Button Style="{StaticResource ToolButton}" Content="Repair" Tag="{StaticResource IconRepair}"
                             Command="{Binding RepairCommand}"
                             ToolTip="Mend objects that would not print: fill holes, drop slivers, turn faces the right way round" />
-                    <Button Style="{StaticResource ToolButton}" Content="Rebuild" Tag="{StaticResource IconRebuild}"
+                    <Button Style="{StaticResource ToolButton}" Content="Rebuild" Visibility="{Binding IsAdvancedMode, Converter={StaticResource BoolToVisibility}}" Tag="{StaticResource IconRebuild}"
                             Command="{Binding RebuildCommand}" MinWidth="82"
                             ToolTip="Rebuild the surface from scratch. Mends anything, including a model that passes through itself - at the cost of fine detail." />
                     <Separator Margin="8,0" />
-                    <Button Style="{StaticResource ToolButton}" Content="Twist" Tag="{StaticResource IconTwist}"
+                    <Button Style="{StaticResource ToolButton}" Content="Twist" Visibility="{Binding IsAdvancedMode, Converter={StaticResource BoolToVisibility}}" Tag="{StaticResource IconTwist}"
                             Command="{Binding TwistCommand}" MinWidth="70"
                             ToolTip="Turn a shape about its upright axis by more the higher up it goes - twisted columns, vases and spirals. The bottom stays put." />
-                    <Button Style="{StaticResource ToolButton}" Content="Taper" Tag="{StaticResource IconTaper}"
+                    <Button Style="{StaticResource ToolButton}" Content="Taper" Visibility="{Binding IsAdvancedMode, Converter={StaticResource BoolToVisibility}}" Tag="{StaticResource IconTaper}"
                             Command="{Binding TaperCommand}" MinWidth="70"
                             ToolTip="Narrow or widen a shape towards the top - tapered columns, spires, flared vases. The bottom keeps its size." />
-                    <Button Style="{StaticResource ToolButton}" Content="Bend" Tag="{StaticResource IconBend}"
+                    <Button Style="{StaticResource ToolButton}" Content="Bend" Visibility="{Binding IsAdvancedMode, Converter={StaticResource BoolToVisibility}}" Tag="{StaticResource IconBend}"
                             Command="{Binding BendCommand}" MinWidth="70"
                             ToolTip="Curve a shape over as if round a pipe, towards X or Y - arches, horns, hooks. The bottom stays put." />
                     <Button Style="{StaticResource ToolButton}" Content="Extrude down" Tag="{StaticResource IconExtrudeDown}"
                             Command="{Binding BeginExtrudeCommand}" MinWidth="90"
                             ToolTip="Cut the model at a height and carry its outline straight down to a flat base on the plate. For a scan with a ragged bottom, a relief that is only a skin, or a part tilted off its feet." />
-                    <Button Style="{StaticResource ToolButton}" Content="Split with connectors" Tag="{StaticResource IconSplitConnectors}"
+                    <Button Style="{StaticResource ToolButton}" Content="Split with connectors" Visibility="{Binding IsAdvancedMode, Converter={StaticResource BoolToVisibility}}" Tag="{StaticResource IconSplitConnectors}"
                             Command="{Binding BeginSplitWithConnectorsCommand}" MinWidth="120"
                             ToolTip="Cut a model too big for the plate into two halves that go back together one way only: round pins in holes on both halves, or pegs on one half and sockets in the other." />
-                    <Button Style="{StaticResource ToolButton}" Content="Connect objects" Tag="{StaticResource IconConnect}"
+                    <Button Style="{StaticResource ToolButton}" Content="Connect objects" Visibility="{Binding IsAdvancedMode, Converter={StaticResource BoolToVisibility}}" Tag="{StaticResource IconConnect}"
                             Command="{Binding BeginConnectCommand}" MinWidth="100"
                             ToolTip="Pins or pegs through the face two parts rest against each other on - a floor on its basement, two blocks side by side - so they go together one way only. Select the two parts. Needs exactly two objects selected." />
                     <Separator Margin="8,0" />
                     <Button Style="{StaticResource ToolButton}" Content="Measure" Tag="{StaticResource IconMeasure}"
                             Command="{Binding BeginMeasureCommand}"
                             ToolTip="Click two points to measure between them, then drag either end to move it" />
-                    <Button Style="{StaticResource ToolButton}" Content="Fit check" Tag="{StaticResource IconMeasure}"
+                    <Button Style="{StaticResource ToolButton}" Content="Fit check" Visibility="{Binding IsAdvancedMode, Converter={StaticResource BoolToVisibility}}" Tag="{StaticResource IconMeasure}"
                             Command="{Binding FitCheckCommand}" MinWidth="72"
                             ToolTip="Measures two parts against each other without changing either: how far they overlap, or how big the gap is. A pin with no hole and a frame too big for its opening both look right on screen. Needs exactly two objects selected." />
                 </WrapPanel>
@@ -740,7 +757,7 @@
                     <Button Style="{StaticResource ToolButton}" Content="Export STL / OBJ" Tag="{StaticResource IconExport}"
                             Command="{Binding ExportCommand}" MinWidth="140"
                             ToolTip="Export the selection, or everything when nothing is selected (Ctrl+E)" />
-                    <Button Style="{StaticResource ToolButton}" Content="Blueprint" Tag="{StaticResource IconDrawing}"
+                    <Button Style="{StaticResource ToolButton}" Content="Blueprint" Visibility="{Binding IsAdvancedMode, Converter={StaticResource BoolToVisibility}}" Tag="{StaticResource IconDrawing}"
                             Command="{Binding PrintDrawingCommand}" MinWidth="70"
                             AutomationProperties.Name="Blueprint"
                             ToolTip="A blueprint: front, top and right views, and an isometric, with the overall dimensions - to print, or save as a PDF. The selection, or everything when nothing is selected (Ctrl+P)" />
@@ -774,7 +791,7 @@
                     <ToggleButton Style="{StaticResource ToolToggle}" Content="Plate" Tag="{StaticResource IconPlate}"
                                   IsChecked="{Binding ShowPlate}"
                                   ToolTip="Show or hide the build plate" />
-                    <ToggleButton Style="{StaticResource ToolToggle}" Content="Overhangs" Tag="{StaticResource IconOverhang}"
+                    <ToggleButton Style="{StaticResource ToolToggle}" Content="Overhangs" Visibility="{Binding IsAdvancedMode, Converter={StaticResource BoolToVisibility}}" Tag="{StaticResource IconOverhang}"
                                   IsChecked="{Binding ShowOverhangs, Mode=TwoWay}" MinWidth="76"
                                   AutomationProperties.Name="Overhangs"
                                   ToolTip="Faces that lean further from upright than the angle beside it, in red - what the slicer will want to support. Faces flat on the bed are left out: the bed holds them up." />
@@ -993,6 +1010,13 @@
                                     <Path x:Name="EyeIcon" Data="{StaticResource RowShown}" Stroke="#FF33383F" StrokeThickness="1.3"
                                           Fill="{x:Null}" Stretch="Uniform" Width="13" Height="11" Opacity="0.3" />
                                 </Button>
+                                <Button x:Name="ColourDot" DockPanel.Dock="Left" Style="{StaticResource RowIconButton}" Margin="0,0,2,0"
+                                        Command="{Binding DataContext.PickObjectColourCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                        CommandParameter="{Binding}" AutomationProperties.Name="Colour"
+                                        ToolTip="Colour: pick one for this object, or for the whole selection when it is part of it">
+                                    <Ellipse x:Name="ColourBubble" Width="11" Height="11" Stroke="#40000000" StrokeThickness="1"
+                                             Fill="{Binding Colour, Converter={StaticResource ColourToBrush}}" />
+                                </Button>
                                 <TextBlock x:Name="NameText" Text="{Binding Name}" Padding="2" TextTrimming="CharacterEllipsis" />
                             </DockPanel>
                             <DataTemplate.Triggers>
@@ -1001,11 +1025,15 @@
                                     <Setter TargetName="EyeIcon" Property="Opacity" Value="1" />
                                     <Setter TargetName="NameText" Property="Foreground" Value="#FF9AA0A8" />
                                     <Setter TargetName="NameText" Property="FontStyle" Value="Italic" />
+                                    <Setter TargetName="ColourBubble" Property="Opacity" Value="0.45" />
                                 </DataTrigger>
                                 <DataTrigger Binding="{Binding IsLocked}" Value="True">
                                     <Setter TargetName="LockIcon" Property="Data" Value="{StaticResource RowLocked}" />
                                     <Setter TargetName="LockIcon" Property="Opacity" Value="1" />
                                     <Setter TargetName="NameText" Property="Foreground" Value="#FF9AA0A8" />
+                                    <Setter TargetName="ColourDot" Property="IsEnabled" Value="False" />
+                                    <Setter TargetName="ColourDot" Property="Cursor" Value="Arrow" />
+                                    <Setter TargetName="ColourBubble" Property="Opacity" Value="0.45" />
                                 </DataTrigger>
                             </DataTemplate.Triggers>
                         </DataTemplate>
@@ -1162,6 +1190,110 @@
                             <Button Content="Split" Style="{StaticResource PanelButton}" Command="{Binding ApplySplitCommand}" />
                             <Button Content="Cancel" Style="{StaticResource PanelButton}" Command="{Binding CancelSplitCommand}" />
                         </StackPanel>
+                    </StackPanel>
+                </Border>
+
+                <!-- Sketch panel, shown only while sketching. Shares a row with Measure: the two are
+                     never out at once. -->
+                <Border Grid.Row="3" Margin="0,10,0,0" Padding="8" Background="#FFEFF5FF"
+                        BorderBrush="#FFB8D2F0" BorderThickness="1" CornerRadius="3"
+                        AutomationProperties.AutomationId="SketchPanel"
+                        Visibility="{Binding IsSketchMode, Converter={StaticResource BoolToVisibility}}">
+                    <StackPanel>
+                        <TextBlock Text="Sketch" FontWeight="SemiBold" Margin="0,0,0,6" />
+                        <WrapPanel Margin="0,0,0,6">
+                            <RadioButton Content="Line" GroupName="SketchTool" Margin="0,0,12,4"
+                                         IsChecked="{Binding SketchLine, Mode=TwoWay}"
+                                         ToolTip="Straight lines, point after point" />
+                            <RadioButton Content="Arc" GroupName="SketchTool" Margin="0,0,12,4"
+                                         IsChecked="{Binding SketchArc, Mode=TwoWay}"
+                                         ToolTip="On from the last point: click where it ends, then move to bend it and click. Lines and arcs join into one outline." />
+                            <RadioButton Content="Curve" GroupName="SketchTool" Margin="0,0,12,4"
+                                         IsChecked="{Binding SketchCurve, Mode=TwoWay}"
+                                         ToolTip="A smooth closed curve through the points clicked" />
+                            <RadioButton Content="Freehand" GroupName="SketchTool" Margin="0,0,12,4"
+                                         IsChecked="{Binding SketchFreehand, Mode=TwoWay}"
+                                         ToolTip="Press and drag round the shape; let go to close it" />
+                            <RadioButton Content="Rectangle" GroupName="SketchTool" Margin="0,0,12,4"
+                                         IsChecked="{Binding SketchRectangle, Mode=TwoWay}" />
+                            <RadioButton Content="Circle" GroupName="SketchTool" Margin="0,0,12,4"
+                                         IsChecked="{Binding SketchCircle, Mode=TwoWay}" />
+                        </WrapPanel>
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
+                            <TextBlock Text="Snap" Style="{StaticResource FieldLabel}" Width="62"
+                                       ToolTip="Points land on a grid this fine" />
+                            <ComboBox Width="80" SelectedIndex="{Binding SketchSnapIndex, Mode=TwoWay}"
+                                      AutomationProperties.AutomationId="SketchSnap">
+                                <ComboBoxItem Content="Off" />
+                                <ComboBoxItem Content="0.5 mm" />
+                                <ComboBoxItem Content="1 mm" />
+                                <ComboBoxItem Content="5 mm" />
+                            </ComboBox>
+                        </StackPanel>
+                        <TextBlock Text="{Binding SketchMessage}" TextWrapping="Wrap" Foreground="#FF3A4550" Margin="0,0,0,4" />
+                        <TextBlock Text="{Binding SketchReadout}" TextWrapping="Wrap" Foreground="#FF5A5F66" Margin="0,0,0,6" />
+                        <WrapPanel Margin="0,0,0,10">
+                            <Button Content="Close" Style="{StaticResource PanelButton}" Command="{Binding SketchCloseCommand}"
+                                    ToolTip="Close the line being drawn into an outline (Enter)" />
+                            <Button Content="Undo" Style="{StaticResource PanelButton}" Command="{Binding SketchUndoCommand}"
+                                    ToolTip="Take back the last point, or the last outline (Backspace)" />
+                            <Button Content="Clear" Style="{StaticResource PanelButton}" Command="{Binding SketchClearCommand}"
+                                    ToolTip="Throw the sketch away" />
+                        </WrapPanel>
+
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
+                            <Button Content="Load SVG" Style="{StaticResource PanelButton}" Command="{Binding SketchLoadDrawingCommand}"
+                                    AutomationProperties.AutomationId="SketchLoadSvg"
+                                    ToolTip="Bring the filled shapes of an SVG drawing into the sketch, as wide as set here, its lower left corner on the origin - to extrude, revolve, or draw beside. Turn text into paths in the drawing program first." />
+                            <TextBlock Text="Width" Style="{StaticResource FieldLabel}" Margin="4,0,6,0"
+                                       ToolTip="How wide the drawing comes in: a drawing's own units are not worth trusting" />
+                            <TextBox Width="52" Style="{StaticResource NumberBox}" Tag="number"
+                                     AutomationProperties.AutomationId="SketchDrawingWidth"
+                                     Text="{Binding SketchDrawingWidth, StringFormat=0.##, UpdateSourceTrigger=LostFocus}" />
+                            <TextBlock Text="mm" Foreground="#FF9AA0A8" VerticalAlignment="Center" />
+                        </StackPanel>
+
+                        <TextBlock Text="Extrude" FontWeight="SemiBold" Margin="0,0,0,4" />
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
+                            <TextBlock Text="Height" Style="{StaticResource FieldLabel}" Width="62" />
+                            <TextBox Width="60" Style="{StaticResource NumberBox}" Tag="number"
+                                     AutomationProperties.AutomationId="SketchHeight"
+                                     Text="{Binding SketchHeight, StringFormat=0.##, UpdateSourceTrigger=LostFocus}" />
+                            <TextBlock Text="mm" Foreground="#FF9AA0A8" VerticalAlignment="Center" Margin="0,0,8,0" />
+                            <Button Content="Extrude" Style="{StaticResource PanelButton}" Command="{Binding SketchExtrudeCommand}" />
+                        </StackPanel>
+
+                        <TextBlock Text="Revolve" FontWeight="SemiBold" Margin="0,0,0,4" />
+                        <TextBlock Text="Draw half the outline, to one side of the axis: it is turned round the axis to make the rest."
+                                   TextWrapping="Wrap" Foreground="#FF7A8088" Margin="0,0,0,4" />
+                        <WrapPanel Margin="0,0,0,4">
+                            <RadioButton Content="About Y (stands up)" GroupName="RevolveAxis" Margin="0,0,12,0"
+                                         IsChecked="{Binding RevolveAboutY, Mode=TwoWay}"
+                                         ToolTip="Turned about the green Y axis, the sketch's Y becomes the height: draw to the right of the axis" />
+                            <RadioButton Content="About X (lies along X)" GroupName="RevolveAxis"
+                                         IsChecked="{Binding RevolveAboutX, Mode=TwoWay}"
+                                         ToolTip="Turned about the red X axis: draw on the far side of the axis" />
+                        </WrapPanel>
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
+                            <TextBlock Text="Angle" Style="{StaticResource FieldLabel}" Width="62" ToolTip="360 for all the way round" />
+                            <TextBox Width="60" Style="{StaticResource NumberBox}" Tag="number"
+                                     AutomationProperties.AutomationId="RevolveAngle"
+                                     Text="{Binding RevolveAngle, StringFormat=0.#, UpdateSourceTrigger=LostFocus}" />
+                            <TextBlock Text="degrees" Foreground="#FF9AA0A8" VerticalAlignment="Center" />
+                        </StackPanel>
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
+                            <TextBlock Text="Segments" Style="{StaticResource FieldLabel}" Width="62"
+                                       ToolTip="How many flat sides make a full turn: more is smoother, and heavier to cut into" />
+                            <TextBox Width="60" Style="{StaticResource NumberBox}" Tag="number"
+                                     AutomationProperties.AutomationId="RevolveSegments"
+                                     Text="{Binding RevolveSegments, UpdateSourceTrigger=LostFocus}" />
+                        </StackPanel>
+                        <Button Content="Revolve" Style="{StaticResource PanelButton}" HorizontalAlignment="Left"
+                                Command="{Binding SketchRevolveCommand}" Margin="0,0,0,12" />
+
+                        <Button Content="Done" Style="{StaticResource PanelButton}" HorizontalAlignment="Left"
+                                Command="{Binding DoneSketchCommand}"
+                                ToolTip="Leave the sketch. It is kept, to extrude or revolve again later." />
                     </StackPanel>
                 </Border>
 
@@ -1623,31 +1755,6 @@
                     </StackPanel>
                 </Border>
 
-                <StackPanel Grid.Row="7" IsEnabled="{Binding NothingInHand}"
-                            Visibility="{Binding HasAnySelection, Converter={StaticResource BoolToVisibility}}">
-                    <TextBlock Text="Colour" Style="{StaticResource SectionHeader}" />
-                    <ItemsControl ItemsSource="{Binding Swatches}">
-                        <ItemsControl.ItemsPanel>
-                            <ItemsPanelTemplate>
-                                <UniformGrid Columns="8" />
-                            </ItemsPanelTemplate>
-                        </ItemsControl.ItemsPanel>
-                        <ItemsControl.ItemTemplate>
-                            <DataTemplate>
-                                <Button Style="{StaticResource SwatchButton}"
-                                        Background="{Binding Colour, Converter={StaticResource ColourToBrush}}"
-                                        ToolTip="{Binding Name}"
-                                        CommandParameter="{Binding Colour}"
-                                        Command="{Binding DataContext.SetColourCommand,
-                                                          RelativeSource={RelativeSource AncestorType=Window}}" />
-                            </DataTemplate>
-                        </ItemsControl.ItemTemplate>
-                    </ItemsControl>
-                    <Button Content="Custom..." Command="{Binding PickColourCommand}"
-                            HorizontalAlignment="Left" Padding="10,3" Margin="1,6,0,0"
-                            ToolTip="Pick any colour" />
-                </StackPanel>
-
                 <StackPanel Grid.Row="8">
                 <!-- Grid settings: the printable area, and what is drawn on the plate. Not a tool - it
                      stands nothing down and can stay open while working. -->
@@ -1699,7 +1806,7 @@
                             <TextBlock Text="Keyboard and mouse" FontWeight="SemiBold" VerticalAlignment="Center" />
                         </DockPanel>
                         <ScrollViewer MaxHeight="440" VerticalScrollBarVisibility="Auto" Focusable="False">
-                            <ItemsControl ItemsSource="{x:Static view:Shortcuts.Groups}" Focusable="False">
+                            <ItemsControl ItemsSource="{Binding ShortcutGroups}" Focusable="False">
                                 <ItemsControl.ItemTemplate>
                                     <DataTemplate>
                                         <StackPanel Margin="0,0,0,8">
@@ -1731,102 +1838,123 @@
                 </Border>
                 </StackPanel>
 
-                <!-- Properties -->
+                <!-- The selection: its name, then how it looks and where it is, under Properties so
+                     they fold away when the objects list wants the room. Colour is for any
+                     selection; the numbers only for one object. -->
                 <ScrollViewer Grid.Row="9" VerticalScrollBarVisibility="Auto" Margin="0,6,0,0"
-                              Visibility="{Binding DataContext.PropertiesVisible,
-                                           RelativeSource={RelativeSource AncestorType=Window},
-                                           Converter={StaticResource BoolToVisibility}}"
-                              IsEnabled="{Binding NothingInHand,
-                                          RelativeSource={RelativeSource AncestorType=Window}}"
-                              DataContext="{Binding Selected}">
-                    <StackPanel>
-                        <StackPanel.Style>
-                            <Style TargetType="StackPanel">
-                                <Setter Property="Visibility" Value="Visible" />
-                                <Style.Triggers>
-                                    <DataTrigger Binding="{Binding}" Value="{x:Null}">
-                                        <Setter Property="Visibility" Value="Collapsed" />
-                                    </DataTrigger>
-                                </Style.Triggers>
-                            </Style>
-                        </StackPanel.Style>
+                              Visibility="{Binding PropertiesVisible, Converter={StaticResource BoolToVisibility}}"
+                              IsEnabled="{Binding NothingInHand}">
+                    <StackPanel Visibility="{Binding HasAnySelection, Converter={StaticResource BoolToVisibility}}">
+                        <StackPanel DataContext="{Binding Selected}" Style="{StaticResource OneObjectOnly}">
+                            <TextBlock Text="Name" Style="{StaticResource SectionHeader}" />
+                            <TextBox AutomationProperties.AutomationId="ObjectName" Text="{Binding Name, UpdateSourceTrigger=LostFocus}" Padding="4,3" />
+                        </StackPanel>
 
-                        <TextBlock Text="Name" Style="{StaticResource SectionHeader}" />
-                        <TextBox AutomationProperties.AutomationId="ObjectName" Text="{Binding Name, UpdateSourceTrigger=LostFocus}" Padding="4,3" />
+                        <Expander Margin="0,10,0,0" IsExpanded="{Binding ShowProperties, Mode=TwoWay}"
+                                  AutomationProperties.AutomationId="PropertiesSection">
+                            <Expander.Header>
+                                <TextBlock Text="Properties" FontWeight="SemiBold" Foreground="#FF33373D" />
+                            </Expander.Header>
+                            <StackPanel>
+                                <TextBlock Text="Colour" Style="{StaticResource SectionHeader}" Margin="0,6,0,4" />
+                                <ItemsControl ItemsSource="{Binding Swatches}">
+                                    <ItemsControl.ItemsPanel>
+                                        <ItemsPanelTemplate>
+                                            <UniformGrid Columns="8" />
+                                        </ItemsPanelTemplate>
+                                    </ItemsControl.ItemsPanel>
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <Button Style="{StaticResource SwatchButton}"
+                                                    Background="{Binding Colour, Converter={StaticResource ColourToBrush}}"
+                                                    ToolTip="{Binding Name}"
+                                                    CommandParameter="{Binding Colour}"
+                                                    Command="{Binding DataContext.SetColourCommand,
+                                                                      RelativeSource={RelativeSource AncestorType=Window}}" />
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                                <Button Content="Custom..." Command="{Binding PickColourCommand}"
+                                        HorizontalAlignment="Left" Padding="10,3" Margin="1,6,0,0"
+                                        ToolTip="Pick any colour" />
 
-                        <TextBlock Text="{Binding DataContext.UnitLabel, RelativeSource={RelativeSource AncestorType=Window}, StringFormat='Position ({0})'}" Style="{StaticResource SectionHeader}" />
-                        <Grid>
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="Auto" />
-                                <ColumnDefinition Width="*" />
-                                <ColumnDefinition Width="Auto" />
-                                <ColumnDefinition Width="*" />
-                                <ColumnDefinition Width="Auto" />
-                                <ColumnDefinition Width="*" />
-                            </Grid.ColumnDefinitions>
-                            <TextBlock Text="X" Style="{StaticResource FieldLabel}" />
-                            <TextBox AutomationProperties.AutomationId="PositionX" Grid.Column="1" Style="{StaticResource NumberBox}" Tag="transform"
-                                     Text="{Binding DataContext.ObjectPositionX, RelativeSource={RelativeSource AncestorType=Window}, StringFormat=0.####, UpdateSourceTrigger=LostFocus}" />
-                            <TextBlock Grid.Column="2" Text="Y" Style="{StaticResource FieldLabel}" />
-                            <TextBox AutomationProperties.AutomationId="PositionY" Grid.Column="3" Style="{StaticResource NumberBox}" Tag="transform"
-                                     Text="{Binding DataContext.ObjectPositionY, RelativeSource={RelativeSource AncestorType=Window}, StringFormat=0.####, UpdateSourceTrigger=LostFocus}" />
-                            <TextBlock Grid.Column="4" Text="Z" Style="{StaticResource FieldLabel}" />
-                            <TextBox AutomationProperties.AutomationId="PositionZ" Grid.Column="5" Style="{StaticResource NumberBox}" Tag="transform"
-                                     Text="{Binding DataContext.ObjectPositionZ, RelativeSource={RelativeSource AncestorType=Window}, StringFormat=0.####, UpdateSourceTrigger=LostFocus}" />
-                        </Grid>
+                                <StackPanel DataContext="{Binding Selected}" Style="{StaticResource OneObjectOnly}">
+                                    <TextBlock Text="{Binding DataContext.UnitLabel, RelativeSource={RelativeSource AncestorType=Window}, StringFormat='Position ({0})'}" Style="{StaticResource SectionHeader}" />
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="Auto" />
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                            <ColumnDefinition Width="*" />
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Text="X" Style="{StaticResource FieldLabel}" />
+                                        <TextBox AutomationProperties.AutomationId="PositionX" Grid.Column="1" Style="{StaticResource NumberBox}" Tag="transform"
+                                                 Text="{Binding DataContext.ObjectPositionX, RelativeSource={RelativeSource AncestorType=Window}, StringFormat=0.####, UpdateSourceTrigger=LostFocus}" />
+                                        <TextBlock Grid.Column="2" Text="Y" Style="{StaticResource FieldLabel}" />
+                                        <TextBox AutomationProperties.AutomationId="PositionY" Grid.Column="3" Style="{StaticResource NumberBox}" Tag="transform"
+                                                 Text="{Binding DataContext.ObjectPositionY, RelativeSource={RelativeSource AncestorType=Window}, StringFormat=0.####, UpdateSourceTrigger=LostFocus}" />
+                                        <TextBlock Grid.Column="4" Text="Z" Style="{StaticResource FieldLabel}" />
+                                        <TextBox AutomationProperties.AutomationId="PositionZ" Grid.Column="5" Style="{StaticResource NumberBox}" Tag="transform"
+                                                 Text="{Binding DataContext.ObjectPositionZ, RelativeSource={RelativeSource AncestorType=Window}, StringFormat=0.####, UpdateSourceTrigger=LostFocus}" />
+                                    </Grid>
 
-                        <TextBlock Text="{Binding DataContext.UnitLabel, RelativeSource={RelativeSource AncestorType=Window}, StringFormat='Size ({0})'}" Style="{StaticResource SectionHeader}" />
-                        <TextBlock Text="{Binding RealSize}" Foreground="#FF6B7480" FontSize="11"
-                                   Margin="0,0,0,2" />
-                        <Grid>
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="Auto" />
-                                <ColumnDefinition Width="*" />
-                                <ColumnDefinition Width="Auto" />
-                                <ColumnDefinition Width="*" />
-                                <ColumnDefinition Width="Auto" />
-                                <ColumnDefinition Width="*" />
-                            </Grid.ColumnDefinitions>
-                            <!-- W, D, H rather than X, Y, Z: these are dimensions, not
-                                 coordinates, and for a single object they are its own extents -
-                                 SizeX is the local size, so it does not change when the part is
-                                 turned. In a Z-up scene the axes read across as width, depth,
-                                 height, so the letters keep the same order as the boxes beside
-                                 them and as the gizmo handles. -->
-                            <TextBlock Text="W" Style="{StaticResource FieldLabel}"
-                                       ToolTip="Width - along X" />
-                            <TextBox AutomationProperties.AutomationId="SizeX" Grid.Column="1" Style="{StaticResource NumberBox}" Tag="transform"
-                                     Text="{Binding DataContext.ObjectSizeX, RelativeSource={RelativeSource AncestorType=Window}, StringFormat=0.####, UpdateSourceTrigger=LostFocus}" />
-                            <TextBlock Grid.Column="2" Text="D" Style="{StaticResource FieldLabel}"
-                                       ToolTip="Depth - along Y" />
-                            <TextBox AutomationProperties.AutomationId="SizeY" Grid.Column="3" Style="{StaticResource NumberBox}" Tag="transform"
-                                     Text="{Binding DataContext.ObjectSizeY, RelativeSource={RelativeSource AncestorType=Window}, StringFormat=0.####, UpdateSourceTrigger=LostFocus}" />
-                            <TextBlock Grid.Column="4" Text="H" Style="{StaticResource FieldLabel}"
-                                       ToolTip="Height - along Z" />
-                            <TextBox AutomationProperties.AutomationId="SizeZ" Grid.Column="5" Style="{StaticResource NumberBox}" Tag="transform"
-                                     Text="{Binding DataContext.ObjectSizeZ, RelativeSource={RelativeSource AncestorType=Window}, StringFormat=0.####, UpdateSourceTrigger=LostFocus}" />
-                        </Grid>
+                                    <TextBlock Text="{Binding DataContext.UnitLabel, RelativeSource={RelativeSource AncestorType=Window}, StringFormat='Size ({0})'}" Style="{StaticResource SectionHeader}" />
+                                    <TextBlock Text="{Binding RealSize}" Foreground="#FF6B7480" FontSize="11"
+                                               Margin="0,0,0,2" />
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="Auto" />
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                            <ColumnDefinition Width="*" />
+                                        </Grid.ColumnDefinitions>
+                                        <!-- W, D, H rather than X, Y, Z: these are dimensions, not
+                                             coordinates, and for a single object they are its own extents -
+                                             SizeX is the local size, so it does not change when the part is
+                                             turned. In a Z-up scene the axes read across as width, depth,
+                                             height, so the letters keep the same order as the boxes beside
+                                             them and as the gizmo handles. -->
+                                        <TextBlock Text="W" Style="{StaticResource FieldLabel}"
+                                                   ToolTip="Width - along X" />
+                                        <TextBox AutomationProperties.AutomationId="SizeX" Grid.Column="1" Style="{StaticResource NumberBox}" Tag="transform"
+                                                 Text="{Binding DataContext.ObjectSizeX, RelativeSource={RelativeSource AncestorType=Window}, StringFormat=0.####, UpdateSourceTrigger=LostFocus}" />
+                                        <TextBlock Grid.Column="2" Text="D" Style="{StaticResource FieldLabel}"
+                                                   ToolTip="Depth - along Y" />
+                                        <TextBox AutomationProperties.AutomationId="SizeY" Grid.Column="3" Style="{StaticResource NumberBox}" Tag="transform"
+                                                 Text="{Binding DataContext.ObjectSizeY, RelativeSource={RelativeSource AncestorType=Window}, StringFormat=0.####, UpdateSourceTrigger=LostFocus}" />
+                                        <TextBlock Grid.Column="4" Text="H" Style="{StaticResource FieldLabel}"
+                                                   ToolTip="Height - along Z" />
+                                        <TextBox AutomationProperties.AutomationId="SizeZ" Grid.Column="5" Style="{StaticResource NumberBox}" Tag="transform"
+                                                 Text="{Binding DataContext.ObjectSizeZ, RelativeSource={RelativeSource AncestorType=Window}, StringFormat=0.####, UpdateSourceTrigger=LostFocus}" />
+                                    </Grid>
 
-                        <TextBlock Text="Rotation (degrees)" Style="{StaticResource SectionHeader}" />
-                        <Grid>
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="Auto" />
-                                <ColumnDefinition Width="*" />
-                                <ColumnDefinition Width="Auto" />
-                                <ColumnDefinition Width="*" />
-                                <ColumnDefinition Width="Auto" />
-                                <ColumnDefinition Width="*" />
-                            </Grid.ColumnDefinitions>
-                            <TextBlock Text="X" Style="{StaticResource FieldLabel}" />
-                            <TextBox AutomationProperties.AutomationId="RotationX" Grid.Column="1" Style="{StaticResource NumberBox}" Tag="transform"
-                                     Text="{Binding RotationX, StringFormat=N1, UpdateSourceTrigger=LostFocus}" />
-                            <TextBlock Grid.Column="2" Text="Y" Style="{StaticResource FieldLabel}" />
-                            <TextBox AutomationProperties.AutomationId="RotationY" Grid.Column="3" Style="{StaticResource NumberBox}" Tag="transform"
-                                     Text="{Binding RotationY, StringFormat=N1, UpdateSourceTrigger=LostFocus}" />
-                            <TextBlock Grid.Column="4" Text="Z" Style="{StaticResource FieldLabel}" />
-                            <TextBox AutomationProperties.AutomationId="RotationZ" Grid.Column="5" Style="{StaticResource NumberBox}" Tag="transform"
-                                     Text="{Binding RotationZ, StringFormat=N1, UpdateSourceTrigger=LostFocus}" />
-                        </Grid>
+                                    <TextBlock Text="Rotation (degrees)" Style="{StaticResource SectionHeader}" />
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="Auto" />
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                            <ColumnDefinition Width="*" />
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Text="X" Style="{StaticResource FieldLabel}" />
+                                        <TextBox AutomationProperties.AutomationId="RotationX" Grid.Column="1" Style="{StaticResource NumberBox}" Tag="transform"
+                                                 Text="{Binding RotationX, StringFormat=N1, UpdateSourceTrigger=LostFocus}" />
+                                        <TextBlock Grid.Column="2" Text="Y" Style="{StaticResource FieldLabel}" />
+                                        <TextBox AutomationProperties.AutomationId="RotationY" Grid.Column="3" Style="{StaticResource NumberBox}" Tag="transform"
+                                                 Text="{Binding RotationY, StringFormat=N1, UpdateSourceTrigger=LostFocus}" />
+                                        <TextBlock Grid.Column="4" Text="Z" Style="{StaticResource FieldLabel}" />
+                                        <TextBox AutomationProperties.AutomationId="RotationZ" Grid.Column="5" Style="{StaticResource NumberBox}" Tag="transform"
+                                                 Text="{Binding RotationZ, StringFormat=N1, UpdateSourceTrigger=LostFocus}" />
+                                    </Grid>
+                                </StackPanel>
+                            </StackPanel>
+                        </Expander>
                     </StackPanel>
                 </ScrollViewer>
 
@@ -2026,6 +2154,7 @@
                     </ToggleButton>
                     <ToggleButton Style="{StaticResource ModeButton}" ToolTip="Resize (S). While dragging a handle: Ctrl flips Keep proportions, Alt flips One way only, Shift snaps the size to whole millimetres."
                                   AutomationProperties.Name="Resize"
+                                  Visibility="{Binding ResizeOffered, Converter={StaticResource BoolToVisibility}}"
                                   IsChecked="{Binding IsScaleMode, Mode=TwoWay}">
                         <Path Data="M2,2 L18,2 L18,18 L2,18 Z M2,2 L2,7 M2,2 L7,2 M18,18 L13,18 M18,18 L18,13"
                               Stroke="#FF33383F" StrokeThickness="1.8" Fill="{x:Null}"
@@ -2314,6 +2443,25 @@
             </TextBlock>
         </Grid>
     </DockPanel>
+
+    <!-- Classic or Advanced: which tools the ribbon shows. At the right of the tab headers, where
+         PrusaSlicer keeps its own switch, and outside the ribbon so a tool in hand does not grey it
+         out. Not focusable, so a letter typed afterwards reaches the window's keys rather than
+         picking a mode by its first letter. -->
+    <ComboBox HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,3,10,0" MinWidth="150"
+              Focusable="False"
+              ItemsSource="{Binding UiModes}" SelectedItem="{Binding UiMode, Mode=TwoWay}"
+              AutomationProperties.AutomationId="UiMode"
+              ToolTip="Classic shows the tools 3D Builder had. Advanced shows every tool - sketches, holes, threads, gears, blueprints and more. Keys work the same in both.">
+        <ComboBox.ItemTemplate>
+            <DataTemplate>
+                <StackPanel Orientation="Horizontal" ToolTip="{Binding Hint}">
+                    <Ellipse Width="10" Height="10" Fill="{Binding Colour}" Margin="0,0,7,0" VerticalAlignment="Center" />
+                    <TextBlock Text="{Binding Name}" VerticalAlignment="Center" />
+                </StackPanel>
+            </DataTemplate>
+        </ComboBox.ItemTemplate>
+    </ComboBox>
 
     <!-- Over everything while a long operation runs.
          A filled Border takes every mouse event that would have reached the ribbon or the

@@ -100,13 +100,49 @@ public class HoleAndOverhangTests
         Assert.True(drilled.ComputeSignedVolume() < block.ComputeSignedVolume() - 100, "hardly anything was taken out");
     }
 
+    [Fact]
+    public void ARowIsCentredOnTheHandlesAndACircleStartsOnX()
+    {
+        var row = HoleCutter.Stations(new HoleOptions { Count = 3, Pattern = HolePattern.Row, Spacing = 10f });
+        var circle = HoleCutter.Stations(new HoleOptions { Count = 4, Pattern = HolePattern.Circle, CircleDiameter = 30f });
+
+        Assert.Equal([new Vector2(-10, 0), Vector2.Zero, new Vector2(10, 0)], row);
+        Assert.Equal(4, circle.Count);
+        Assert.Equal(15f, circle[0].X, 3);
+        Assert.Equal(15f, circle[1].Y, 3);
+        Assert.Single(HoleCutter.Stations(new HoleOptions { Count = 1, Pattern = HolePattern.Circle }));
+    }
+
+    [Fact]
+    public void TheFarSideIsWhereARayLeavesThePart()
+    {
+        var box = Primitives.Box(20, 20, 20);
+
+        Assert.Equal(21f, HoleCutter.FarSide(box, new Vector3(0, 0, 11), -Vector3.UnitZ)!.Value, 3);
+        Assert.Null(HoleCutter.FarSide(box, new Vector3(30, 0, 11), -Vector3.UnitZ));
+    }
+
+    [Fact]
+    public void AHoleAllTheWayThroughGoesJustPastTheFarSide()
+    {
+        var options = new HoleOptions { Size = "M3", Head = HoleHead.Plain, NutPocket = true };
+        var cutter = HoleCutter.Build(options, 20f, through: true)!;
+
+        Closed(cutter);
+        Assert.Equal(-20f - HoleCutter.Overshoot, cutter.ComputeBounds().Min.Z, 3);
+
+        // The nut sits in the far face, its pocket reaching up from it.
+        float corners = cutter.Positions.Where(p => p.Z < -19f).Max(p => new Vector2(p.X, p.Y).Length());
+        Assert.True(corners > 3f, "no nut pocket at the far side");
+    }
+
     [Theory]
     [InlineData(true)]
     [InlineData(false)]
     public void TheHolePanelOpensForAPartOrForACutter(bool intoAPart) => RunSta(() =>
     {
         int previews = 0;
-        var dialog = new HoleDialog(new HoleOptions(), 0f, 0f, intoAPart ? "Block" : null, (options, _, _, _) =>
+        var dialog = new HoleDialog(new HoleOptions(), intoAPart ? "Block" : null, (options, _) =>
         {
             if (options is not null) previews++;
             return true;

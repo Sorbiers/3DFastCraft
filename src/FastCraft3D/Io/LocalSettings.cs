@@ -10,9 +10,16 @@ namespace FastCraft3D.Io;
 /// <param name="ShowAxes">The X and Y lines across the plate.</param>
 /// <param name="ShowZAxis">The upright line, as tall as the printable height.</param>
 /// <param name="ShowGridLabels">Distances written along the positive X and Y axes.</param>
+/// <param name="FoldProperties">
+/// Whether the side panel's Properties section is folded away. Stored that way round because a
+/// file from before it has none, and the reader fills a missing flag with false rather than with
+/// the default written here - the section has to come back open.
+/// </param>
+/// <param name="ClassicMode">Only the tools 3D Builder had on the ribbon. Advanced, the default, when missing.</param>
 public readonly record struct RememberedSettings(
     float PlateWidth, float PlateDepth, float PlateHeight, string Unit,
-    bool ShowAxes = true, bool ShowZAxis = false, bool ShowGridLabels = false);
+    bool ShowAxes = true, bool ShowZAxis = false, bool ShowGridLabels = false, bool FoldProperties = false,
+    bool ClassicMode = false);
 
 /// <summary>
 /// The printable area, the unit and how the grid is drawn, as last used, remembered between sessions.

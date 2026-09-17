@@ -16,13 +16,16 @@ public partial class ThreadDialog : ToolPanel
 {
     private const string CustomSize = "Custom";
 
-    private readonly Action<Mesh?> preview;
+    private readonly Action<ThreadOptions?, Mesh?> preview;
+    private readonly string? target;
     private bool loading;
 
-    /// <param name="preview">Shows a mesh on the plate, or takes the preview away when given null.</param>
-    public ThreadDialog(ThreadOptions start, Action<Mesh?> preview)
+    /// <param name="target">The part selected, which a hole cutter can be cut into; or null.</param>
+    /// <param name="preview">Shows what the numbers make, or takes the preview away when given nulls.</param>
+    public ThreadDialog(ThreadOptions start, string? target, Action<ThreadOptions?, Mesh?> preview)
     {
         this.preview = preview;
+        this.target = target;
         InitializeComponent();
 
         loading = true;
@@ -38,6 +41,7 @@ public partial class ThreadDialog : ToolPanel
         ClearanceBox.Text = Format(start.Clearance);
         AcrossBox.Text = Format(start.AcrossFlats);
         HeightBox.Text = Format(start.NutHeight);
+        HeadHeightBox.Text = Format(start.HeadHeight > 0f ? start.HeadHeight : ThreadOptions.Default.HeadHeight);
         loading = false;
 
         Refresh();
@@ -45,6 +49,9 @@ public partial class ThreadDialog : ToolPanel
 
     /// <summary>Null until the user adds the part.</summary>
     public ThreadOptions? Result { get; private set; }
+
+    /// <summary>Whether Cut was pressed: the hole cutter goes into the part rather than onto the plate.</summary>
+    public bool Cuts { get; private set; }
 
     private static string Format(float value) => value.ToString("0.###", CultureInfo.CurrentCulture);
 
@@ -61,7 +68,10 @@ public partial class ThreadDialog : ToolPanel
             Number(ClearanceBox, fallback.Clearance),
             (NutBody)Math.Max(0, BodyBox.SelectedIndex),
             Number(AcrossBox, fallback.AcrossFlats),
-            Number(HeightBox, fallback.NutHeight));
+            Number(HeightBox, fallback.NutHeight))
+        {
+            HeadHeight = Number(HeadHeightBox, fallback.HeadHeight)
+        };
 
         static float Number(TextBox box, float otherwise) =>
             float.TryParse(box.Text, NumberStyles.Float, CultureInfo.CurrentCulture, out float v) && float.IsFinite(v)
@@ -76,27 +86,37 @@ public partial class ThreadDialog : ToolPanel
         var asked = Read();
         var sane = asked.Sane();
         bool nut = asked.Kind == ThreadKind.Nut;
+        bool bolt = asked.Kind == ThreadKind.Bolt;
+        bool cutsIn = target is not null && asked.Kind == ThreadKind.HoleCutter;
 
         DiameterBox.IsEnabled = PitchBox.IsEnabled = SizeBox.SelectedItem as string == CustomSize;
         LengthBox.IsEnabled = !nut;
-        BodyBox.IsEnabled = AcrossBox.IsEnabled = HeightBox.IsEnabled = nut;
+        BodyBox.IsEnabled = AcrossBox.IsEnabled = nut || bolt;
+        HeightBox.IsEnabled = nut;
+        HeadHeightBox.IsEnabled = bolt;
+        BodyLabel.Text = bolt ? "Head" : "Nut body";
         AcrossLabel.Text = asked.Body == NutBody.Round ? "Outside" : "Across flats";
+        CutButton.Visibility = cutsIn ? Visibility.Visible : Visibility.Collapsed;
 
         var mesh = Threads.Build(sane);
-        preview(mesh);
+        preview(sane, mesh);
 
         // Built directly rather than cut, so it should always close; if some number finds a way
         // it does not, say so rather than add it.
         bool sound = mesh.CheckHealth().IsWatertight;
-        AddButton.IsEnabled = sound;
+        AddButton.IsEnabled = CutButton.IsEnabled = sound;
 
         var notes = new List<string>();
 
         notes.Add(sane.Kind switch
         {
             ThreadKind.Rod => $"{sane.RodOutside:0.##} mm over the crests, {sane.RodCore:0.##} mm at the core.",
+            ThreadKind.Bolt => $"{sane.RodOutside:0.##} mm over the crests, {sane.RodCore:0.##} mm at the core, under a "
+                               + $"{sane.AcrossFlats:0.##} mm head {sane.HeadHeight:0.##} mm tall. It stands on its head, as it prints best.",
             ThreadKind.Nut => $"{sane.NutBore:0.##} mm through the crests of the thread, "
                               + $"{sane.AcrossFlats / 2f - sane.Diameter / 2f - sane.Clearance / 4f:0.##} mm of wall at the thinnest.",
+            _ when cutsIn => $"Cuts a hole {sane.NutBore:0.##} mm through the crests. It starts in the top of {target}, "
+                             + "just past the surface: move it where the hole goes and Cut, or Add it to Subtract later.",
             _ => $"Cuts a hole {sane.NutBore:0.##} mm through the crests. Stand it where the hole goes, "
                  + "running a little past the surface, and Subtract it from the part."
         });
@@ -107,7 +127,7 @@ public partial class ThreadDialog : ToolPanel
             notes.Add(asked.Pitch > sane.Pitch
                 ? $"The pitch is held to {sane.Pitch:0.##} mm, the coarsest a {sane.Diameter:0.##} mm thread takes."
                 : $"The pitch is held to {sane.Pitch:0.##} mm.");
-        if (nut && asked.AcrossFlats < sane.AcrossFlats - 1e-3f)
+        if ((nut || bolt) && asked.AcrossFlats < sane.AcrossFlats - 1e-3f)
             notes.Add($"Widened to {sane.AcrossFlats:0.##} mm to leave a {ThreadOptions.MinimumWall:0.#} mm wall round the thread.");
         if (MathF.Abs(asked.Clearance - sane.Clearance) > 1e-3f)
             notes.Add($"The clearance is held to {sane.Clearance:0.##} mm.");
@@ -141,6 +161,7 @@ public partial class ThreadDialog : ToolPanel
             PitchBox.Text = Format(size.Pitch);
             AcrossBox.Text = Format(size.AcrossFlats);
             HeightBox.Text = Format(size.NutHeight);
+            HeadHeightBox.Text = Format(size.HeadHeight);
             loading = false;
         }
 
@@ -149,12 +170,19 @@ public partial class ThreadDialog : ToolPanel
 
     protected override void OnClosed(EventArgs e)
     {
-        preview(null);
+        preview(null, null);
         base.OnClosed(e);
     }
 
     private void OnAccept(object sender, RoutedEventArgs e)
     {
+        Result = Read().Sane();
+        DialogResult = true;
+    }
+
+    private void OnCut(object sender, RoutedEventArgs e)
+    {
+        Cuts = true;
         Result = Read().Sane();
         DialogResult = true;
     }

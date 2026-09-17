@@ -8,6 +8,7 @@ using FastCraft3D.Geometry;
 using FastCraft3D.Geometry.Csg;
 using FastCraft3D.Geometry.Engraving;
 using FastCraft3D.Geometry.Moulding;
+using FastCraft3D.Geometry.Sketches;
 using FastCraft3D.Io;
 using FastCraft3D.Model;
 using FastCraft3D.Model.Commands;
@@ -112,6 +113,8 @@ public sealed class MainViewModel : INotifyPropertyChanged
     private bool showAxes = true;
     private bool showZAxis;
     private bool showGridLabels;
+    private bool showProperties = true;
+    private bool isAdvancedMode = true;
     private bool isGridPanelOpen;
     private bool isShortcutsPanelOpen;
     private float modelScale = 1f;
@@ -141,11 +144,20 @@ public sealed class MainViewModel : INotifyPropertyChanged
 
         InsertCommand = new RelayCommand(p => Insert(p));
         InsertStairCommand = RelayCommand.Simple(InsertStair);
-        InsertThreadCommand = RelayCommand.Simple(InsertThread);
+        InsertThreadCommand = AsyncRelayCommand.Simple(InsertThread);
         InsertFitTestCommand = RelayCommand.Simple(InsertFitTest);
         InsertCustomCommand = RelayCommand.Simple(InsertCustom);
         InsertTextCommand = RelayCommand.Simple(InsertText);
         InsertHoleCommand = AsyncRelayCommand.Simple(InsertHole);
+        HullCommand = RelayCommand.Simple(HullSelection, () => Scene.Selection.Count > 0);
+        BeginSketchCommand = new RelayCommand(p => BeginSketch(Enum.TryParse<SketchTool>(p as string, out var tool) ? tool : SketchTool.Line));
+        SketchCloseCommand = RelayCommand.Simple(() => SayOfSketch(sketch.Close()), () => sketch.Chain.Count >= 3);
+        SketchUndoCommand = RelayCommand.Simple(() => SayOfSketch(sketch.Undo()), () => !sketch.IsEmpty);
+        SketchClearCommand = RelayCommand.Simple(() => { sketch.Clear(); SayOfSketch("Cleared. Start a new outline."); }, () => !sketch.IsEmpty);
+        SketchLoadDrawingCommand = RelayCommand.Simple(PickSketchDrawing);
+        SketchExtrudeCommand = RelayCommand.Simple(ExtrudeSketch, () => sketch.Loops.Count > 0);
+        SketchRevolveCommand = RelayCommand.Simple(RevolveSketch, () => sketch.Loops.Count > 0);
+        DoneSketchCommand = RelayCommand.Simple(() => IsSketchMode = false);
         InsertGearCommand = RelayCommand.Simple(InsertGear);
         DeleteCommand = RelayCommand.Simple(Delete, () => Scene.Selection.Count > 0);
         DuplicateCommand = new RelayCommand(p => Duplicate(offset: !Equals(p, "InPlace")),
@@ -157,6 +169,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
         SelectAllCommand = RelayCommand.Simple(SelectAll, () => Scene.Objects.Count > 0);
         ToggleHiddenCommand = new RelayCommand(p => { if (p is SceneObject o) SetHidden([o], !o.IsHidden); });
         ToggleLockedCommand = new RelayCommand(p => { if (p is SceneObject o) SetLocked([o], !o.IsLocked); });
+        PickObjectColourCommand = new RelayCommand(p => { if (p is SceneObject o) PickColourFor(o); });
         ShowAllCommand = RelayCommand.Simple(ShowAll, () => AnyHidden);
         UnlockAllCommand = RelayCommand.Simple(UnlockAll, () => AnyLocked);
         InvertSelectionCommand = RelayCommand.Simple(InvertSelection, () => Scene.Objects.Count > 0);
@@ -252,6 +265,15 @@ public sealed class MainViewModel : INotifyPropertyChanged
     public System.Windows.Input.ICommand InsertCustomCommand { get; }
     public System.Windows.Input.ICommand InsertTextCommand { get; }
     public System.Windows.Input.ICommand InsertHoleCommand { get; }
+    public System.Windows.Input.ICommand HullCommand { get; }
+    public System.Windows.Input.ICommand BeginSketchCommand { get; }
+    public System.Windows.Input.ICommand SketchCloseCommand { get; }
+    public System.Windows.Input.ICommand SketchUndoCommand { get; }
+    public System.Windows.Input.ICommand SketchClearCommand { get; }
+    public System.Windows.Input.ICommand SketchLoadDrawingCommand { get; }
+    public System.Windows.Input.ICommand SketchExtrudeCommand { get; }
+    public System.Windows.Input.ICommand SketchRevolveCommand { get; }
+    public System.Windows.Input.ICommand DoneSketchCommand { get; }
     public System.Windows.Input.ICommand InsertGearCommand { get; }
     public System.Windows.Input.ICommand DeleteCommand { get; }
     public System.Windows.Input.ICommand DuplicateCommand { get; }
@@ -262,6 +284,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
     public System.Windows.Input.ICommand SelectAllCommand { get; }
     public System.Windows.Input.ICommand ToggleHiddenCommand { get; }
     public System.Windows.Input.ICommand ToggleLockedCommand { get; }
+    public System.Windows.Input.ICommand PickObjectColourCommand { get; }
     public System.Windows.Input.ICommand ShowAllCommand { get; }
     public System.Windows.Input.ICommand UnlockAllCommand { get; }
     public System.Windows.Input.ICommand InvertSelectionCommand { get; }
@@ -803,7 +826,10 @@ public sealed class MainViewModel : INotifyPropertyChanged
     /// the handles it drives - leaving it up would offer a resize that the tool's own handles
     /// are sitting on top of.
     /// </summary>
-    public bool ShowManipulatorBar => HasAnySelection && !IsToolRunning;
+    public bool ShowManipulatorBar => HasAnySelection && (!IsToolRunning || panelHandles);
+
+    /// <summary>Resize is offered except on a tool's preview, which is the size its numbers say.</summary>
+    public bool ResizeOffered => !panelHandles;
 
     public string Status
     {
@@ -1162,7 +1188,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
         get => gizmoMode;
         set
         {
-            if (gizmoMode == value) return;
+            if (gizmoMode == value || (value == GizmoMode.Scale && panelHandles)) return;
             gizmoMode = value;
             Raise(nameof(GizmoMode));
             Raise(nameof(IsMoveMode));
@@ -1421,7 +1447,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
     /// strip that goes with them, stand down while one of them is running rather than sitting
     /// underneath and leaving it to the pointer to decide which was meant.
     /// </summary>
-    public bool IsToolRunning => isSplitMode || isEngraveMode || isEmbossMode || isLayMode || isExtrudeMode || isConnectMode
+    public bool IsToolRunning => isSplitMode || isEngraveMode || isEmbossMode || isLayMode || isExtrudeMode || isConnectMode || isSketchMode
                                  || openPanel is not null;
 
     /// <summary>
@@ -2565,6 +2591,58 @@ public sealed class MainViewModel : INotifyPropertyChanged
         set => SetGrid(ref showGridLabels, value);
     }
 
+    /// <summary>
+    /// Advanced shows every tool; Classic only the ones 3D Builder had, for anyone who came to carry
+    /// on where it left off and finds the rest in the way. Only ribbon buttons are hidden - never a
+    /// tool's own settings - and every key works the same in both, so neither a project nor a habit
+    /// depends on the mode. The viewer's own, like the grid: remembered, not saved with a project.
+    /// </summary>
+    public bool IsAdvancedMode
+    {
+        get => isAdvancedMode;
+        set
+        {
+            if (isAdvancedMode == value) return;
+            Set(ref isAdvancedMode, value);
+            Raise(nameof(UiMode));
+            Raise(nameof(ShortcutGroups));
+
+            // Otherwise the red stays drawn over the model with no button left to turn it off.
+            if (!value && ShowOverhangs) ShowOverhangs = false;
+            SettingsChanged?.Invoke();
+        }
+    }
+
+    public IReadOnlyList<UiModeChoice> UiModes { get; } =
+    [
+        new(false, "Classic mode", "#FF3FA34D", "The tools 3D Builder had"),
+        new(true, "Advanced mode", "#FFD9482B", "Every tool")
+    ];
+
+    public UiModeChoice UiMode
+    {
+        get => UiModes[isAdvancedMode ? 1 : 0];
+        set { if (value is not null) IsAdvancedMode = value.Advanced; }
+    }
+
+    /// <summary>What F1 lists: in Classic, not the keys of tools it does not show - though they still work.</summary>
+    public IReadOnlyList<ShortcutGroup> ShortcutGroups => isAdvancedMode ? Shortcuts.Groups : Shortcuts.ClassicGroups;
+
+    /// <summary>
+    /// Whether the selection's colour, position, size and rotation are open in the side panel.
+    /// The viewer's own, like the grid: remembered, but not a change to the project.
+    /// </summary>
+    public bool ShowProperties
+    {
+        get => showProperties;
+        set
+        {
+            if (showProperties == value) return;
+            Set(ref showProperties, value);
+            SettingsChanged?.Invoke();
+        }
+    }
+
     /// <summary>How the grid is drawn is the viewer's own, not the project's: remembered, but not a change to save.</summary>
     private void SetGrid(ref bool field, bool value, [System.Runtime.CompilerServices.CallerMemberName] string? property = null)
     {
@@ -2635,10 +2713,12 @@ public sealed class MainViewModel : INotifyPropertyChanged
         ShowAxes = settings.ShowAxes;
         ShowZAxis = settings.ShowZAxis;
         ShowGridLabels = settings.ShowGridLabels;
+        ShowProperties = !settings.FoldProperties;
+        IsAdvancedMode = !settings.ClassicMode;
     }
 
     public RememberedSettings Remembered =>
-        new(plateWidth, plateDepth, plateHeight, unit.Label, showAxes, showZAxis, showGridLabels);
+        new(plateWidth, plateDepth, plateHeight, unit.Label, showAxes, showZAxis, showGridLabels, !showProperties, !isAdvancedMode);
 
     private void SettingChanged()
     {
@@ -3575,7 +3655,18 @@ public sealed class MainViewModel : INotifyPropertyChanged
     /// </summary>
     public bool CancelActiveTool()
     {
+        // In a sketch the first Escape drops the outline half drawn, as it would in any drawing
+        // program; the next leaves the sketch.
+        if (openPanel is null && isSketchMode && sketch.IsDrawing)
+        {
+            sketch.DropChain();
+            SketchMessage = "Dropped the outline being drawn. Escape again leaves the sketch.";
+            RaiseSketch();
+            return true;
+        }
+
         if (openPanel is not null) openPanel.DialogResult = false;
+        else if (IsSketchMode) IsSketchMode = false;
         else if (IsExtrudeMode) IsExtrudeMode = false;
         else if (IsConnectMode) IsConnectMode = false;
         else if (IsSplitMode) IsSplitMode = false;
@@ -4029,52 +4120,158 @@ public sealed class MainViewModel : INotifyPropertyChanged
     private ThreadOptions lastThread = ThreadOptions.Default;
 
     /// <summary>
-    /// Inserts a threaded rod, a nut, or a cutter for a threaded hole, shown on the plate while its
-    /// size is chosen - the same preview as Custom, added and taken away outside the undo history.
+    /// Inserts a threaded rod, a bolt, a nut, or a cutter for a threaded hole, shown on the plate while
+    /// its size is chosen - the same preview as Custom, added and taken away outside the undo history.
+    ///
+    /// With one part selected, a hole cutter starts sunk into the middle of its top, and Cut takes
+    /// the threaded hole out of the part where the cutter was left. The cut is refused rather than
+    /// kept if the part comes back with holes in its surface.
     /// </summary>
-    private void InsertThread()
+    private async Task InsertThread()
     {
+        if (IsBusy) return;
+
+        var selection = Scene.Selection.ToList();
+        var target = selection.Count == 1 ? selection[0] : null;
         var colour = NextAutomaticColour();
         SceneObject? shown = null;
+        ThreadKind? shownKind = null;
 
-        var dialog = new ThreadDialog(lastThread, mesh =>
+        // Read as the preview is taken away, which the panel does as it closes: see InsertHole.
+        TransformState? place = null;
+
+        void OnThePlate(SceneObject o)
         {
-            if (mesh is null)
+            o.Rotation = Vector3.Zero;
+            o.Position = new Vector3(0, 0, o.Mesh.ComputeBounds().Size.Z / 2f);
+        }
+
+        // Upright in the middle of the part's top, its top end a little proud of the surface so the
+        // hole opens cleanly rather than leaving a skin.
+        void IntoTheTarget(SceneObject o)
+        {
+            var part = target!.WorldBounds;
+            o.Rotation = Vector3.Zero;
+            o.Position = new Vector3(part.Center.X, part.Center.Y, part.Max.Z + HoleCutter.Overshoot - o.Mesh.ComputeBounds().Max.Z);
+        }
+
+        var dialog = new ThreadDialog(lastThread, target?.Name, (options, mesh) =>
+        {
+            if (mesh is null || options is not { } asked)
             {
-                if (shown is not null) Scene.Objects.Remove(shown);
+                if (shown is not null)
+                {
+                    place = TransformState.Capture(shown);
+                    Scene.Objects.Remove(shown);
+                }
+
                 shown = null;
                 return;
             }
 
-            float lift = mesh.ComputeBounds().Size.Z / 2f;
+            bool cutter = asked.Kind == ThreadKind.HoleCutter;
+
             if (shown is null)
             {
-                shown = new SceneObject("Thread", mesh) { Colour = colour, Position = new Vector3(0, 0, lift) };
+                shown = new SceneObject("Thread", mesh) { Colour = colour };
+                if (cutter && target is not null) IntoTheTarget(shown);
+                else OnThePlate(shown);
                 Scene.Objects.Add(shown);
+                HoldPreview(shown);
+            }
+            else if (target is not null && shownKind != asked.Kind && (cutter || shownKind == ThreadKind.HoleCutter))
+            {
+                // A cutter goes into the part it is for, and anything else comes back out of it.
+                shown.Mesh = mesh;
+                if (cutter) IntoTheTarget(shown);
+                else OnThePlate(shown);
+            }
+            else if (cutter)
+            {
+                // A cutter is rebuilt with its top end - the hole's mouth - kept where it was, along
+                // its own axis, so a longer one goes deeper into the part however it has been turned.
+                float mouth = shown.Mesh.ComputeBounds().Max.Z;
+                shown.Mesh = mesh;
+                float moved = mouth - mesh.ComputeBounds().Max.Z;
+                shown.Position += Vector3.TransformNormal(new Vector3(0, 0, moved), MeshTransform.Rotation(shown.Rotation));
             }
             else
             {
+                // Rebuilt where it stands, its lowest point kept where it was: a longer rod grows
+                // up from where it has been put rather than into the plate or off wherever it went.
+                float low = shown.WorldBounds.Min.Z;
                 shown.Mesh = mesh;
-                shown.Position = new Vector3(0, 0, lift);
+                shown.PositionZ += low - shown.WorldBounds.Min.Z;
             }
+
+            shownKind = asked.Kind;
         });
 
         bool accepted = dialog.ShowDialog() == true && dialog.Result is not null;
-        if (shown is not null) Scene.Objects.Remove(shown);
 
-        if (!accepted || dialog.Result is not { } thread) return;
+        if (shown is not null)
+        {
+            place = TransformState.Capture(shown);
+            Scene.Objects.Remove(shown);
+        }
+
+        ReleasePreview();
+
+        if (!accepted || dialog.Result is not { } thread)
+        {
+            Scene.SelectOnly(target);
+            RefreshSelection();
+            return;
+        }
+
         lastThread = thread;
 
         var built = Threads.Build(thread);
-        var o = new SceneObject(Scene.UniqueName(thread.Name), built)
-        {
-            Colour = colour,
-            Position = new Vector3(0, 0, built.ComputeBounds().Size.Z / 2f)
-        };
+        var o = new SceneObject(Scene.UniqueName(thread.Name), built) { Colour = colour };
+        if (place is { } where) where.ApplyTo(o);
+        else OnThePlate(o);
 
-        Undo.Execute(new AddObjectsCommand($"Insert {thread.Name}", [o]));
+        if (!dialog.Cuts || target is null)
+        {
+            Undo.Execute(new AddObjectsCommand($"Insert {thread.Name}", [o]));
+            RefreshSelection();
+            Status = $"Inserted the {thread.Name} - {built.TriangleCount:N0} triangles";
+            return;
+        }
+
+        Scene.SelectOnly(target);
         RefreshSelection();
-        Status = $"Inserted the {thread.Name} - {built.TriangleCount:N0} triangles";
+
+        var token = StartWork($"Cutting the {thread.SizeName} thread");
+        try
+        {
+            var world = target.ToWorldMesh();
+            var cutterWorld = o.ToWorldMesh();
+            var result = await Task.Run(() => MeshHealer.Heal(LocalCsg.Subtract(world, cutterWorld, token), token: token).Mesh);
+
+            if (result.TriangleCount == 0 || !result.CheckHealth().IsWatertight)
+            {
+                Status = $"The {thread.SizeName} thread would not cut cleanly into {target.Name} - nothing was changed";
+                return;
+            }
+
+            var cut = new SceneObject(target.Name, result) { Colour = target.Colour }.Centred();
+            Undo.Execute(new ReplaceObjectsCommand("Threaded hole", [target], [cut]));
+            RefreshSelection();
+            Status = $"Cut the {thread.SizeName} threaded hole into {target.Name}";
+        }
+        catch (Exception abort) when (WasAborted(abort))
+        {
+            Status = $"{busyTitle} aborted - nothing was changed";
+        }
+        catch (Exception ex)
+        {
+            Status = $"The thread could not be cut: {ex.Message}";
+        }
+        finally
+        {
+            EndWork();
+        }
     }
 
     /// <summary>
@@ -4168,15 +4365,308 @@ public sealed class MainViewModel : INotifyPropertyChanged
         Status = $"Inserted a custom {shape.Kind.ToString().ToLowerInvariant()} - {built.TriangleCount:N0} triangles";
     }
 
-    private HoleOptions lastHole = new();
-    private float lastHoleX, lastHoleY;
+    // --- Sketch ----------------------------------------------------------------------
+
+    private readonly Sketch sketch = new();
+    private bool isSketchMode;
+    private SketchTool sketchTool = SketchTool.Line;
+    private Vector2? sketchCursor;
+    private int sketchSnapIndex = 2;
+    private string sketchMessage = "";
+    private string sketchReadout = "";
+    private float sketchHeight = 10f;
+    private float sketchDrawingWidth = 50f;
+    private bool revolveAboutY = true;
+    private float revolveAngle = 360f;
+    private int revolveSegments = 64;
+
+    /// <summary>Raised when the sketch or the pointer over it changes, so the plate can draw it.</summary>
+    public event Action? SketchChanged;
+
+    /// <summary>Asks the window to look from the top, or back at the isometric view.</summary>
+    public event Action<bool>? LookFromTopRequested;
+
+    /// <summary>The outlines being drawn, and the one in progress. Kept when the sketch is left, for another go.</summary>
+    public Sketch CurrentSketch => sketch;
+
+    public Vector2? SketchCursor => sketchCursor;
 
     /// <summary>
-    /// A screw hole or an insert pocket: cut straight into the top of the one part selected, or,
-    /// with nothing selected, made as a cutter to place and Subtract.
+    /// Drawing outlines on the plate. Looked at from above, a click places a point instead of
+    /// selecting, and the handles stand down; the sketch itself is kept when it is left, so an
+    /// outline can be extruded one way and turned another.
+    /// </summary>
+    public bool IsSketchMode
+    {
+        get => isSketchMode;
+        set
+        {
+            if (isSketchMode == value) return;
+
+            Set(ref isSketchMode, value);
+            if (!value)
+            {
+                sketch.Chain.Clear();
+                sketchCursor = null;
+            }
+
+            Raise(nameof(IsToolRunning));
+            RaiseToolInHand();
+            Raise(nameof(ShowManipulatorBar));
+            RaiseSketch();
+        }
+    }
+
+    public SketchTool CurrentSketchTool => sketchTool;
+
+    public bool SketchLine { get => sketchTool == SketchTool.Line; set { if (value) SetSketchTool(SketchTool.Line); } }
+    public bool SketchRectangle { get => sketchTool == SketchTool.Rectangle; set { if (value) SetSketchTool(SketchTool.Rectangle); } }
+    public bool SketchCircle { get => sketchTool == SketchTool.Circle; set { if (value) SetSketchTool(SketchTool.Circle); } }
+    public bool SketchArc { get => sketchTool == SketchTool.Arc; set { if (value) SetSketchTool(SketchTool.Arc); } }
+    public bool SketchCurve { get => sketchTool == SketchTool.Curve; set { if (value) SetSketchTool(SketchTool.Curve); } }
+    public bool SketchFreehand { get => sketchTool == SketchTool.Freehand; set { if (value) SetSketchTool(SketchTool.Freehand); } }
+
+    private void SetSketchTool(SketchTool tool)
+    {
+        bool dropped = sketchTool != tool && sketch.Retool(sketchTool, tool);
+        sketchTool = tool;
+        Raise(nameof(SketchLine));
+        Raise(nameof(SketchRectangle));
+        Raise(nameof(SketchCircle));
+        Raise(nameof(SketchArc));
+        Raise(nameof(SketchCurve));
+        Raise(nameof(SketchFreehand));
+
+        string how = tool switch
+        {
+            SketchTool.Rectangle => "Click one corner, then the opposite corner.",
+            SketchTool.Circle => "Click the middle, then a point on the edge.",
+            SketchTool.Arc => sketch.IsDrawing
+                ? "Click where the arc ends, then move to bend it and click again."
+                : "Click where the arc starts and where it ends, then move to bend it and click again. Arcs and lines join into one outline.",
+            SketchTool.Curve => "Click the points a smooth curve passes through. Click the first point again, or press Enter, to close it.",
+            SketchTool.Freehand => "Press and drag to draw round the shape; let go to close it.",
+            _ => "Click to place points. Click the first point again, or press Enter, to close the outline."
+        };
+        SayOfSketch(dropped ? "Dropped the outline being drawn. " + how : how);
+    }
+
+    /// <summary>The grid points are placed on: off, half a millimetre, one or five.</summary>
+    public int SketchSnapIndex
+    {
+        get => sketchSnapIndex;
+        set => Set(ref sketchSnapIndex, Math.Clamp(value, 0, 3));
+    }
+
+    private float SketchSnap => sketchSnapIndex switch { 1 => 0.5f, 2 => 1f, 3 => 5f, _ => 0f };
+
+    public string SketchMessage
+    {
+        get => sketchMessage;
+        private set => Set(ref sketchMessage, value);
+    }
+
+    public string SketchReadout
+    {
+        get => sketchReadout;
+        private set => Set(ref sketchReadout, value);
+    }
+
+    public float SketchHeight
+    {
+        get => sketchHeight;
+        set { if (float.IsFinite(value)) Set(ref sketchHeight, Math.Clamp(value, 0.1f, 2000f)); }
+    }
+
+    /// <summary>How wide a drawing loaded into the sketch comes in, since its own units are not worth trusting.</summary>
+    public float SketchDrawingWidth
+    {
+        get => sketchDrawingWidth;
+        set { if (float.IsFinite(value)) Set(ref sketchDrawingWidth, Math.Clamp(value, SvgImport.MinimumSize, 2000f)); }
+    }
+
+    public bool RevolveAboutY { get => revolveAboutY; set { Set(ref revolveAboutY, value); Raise(nameof(RevolveAboutX)); } }
+    public bool RevolveAboutX { get => !revolveAboutY; set { Set(ref revolveAboutY, !value); Raise(nameof(RevolveAboutY)); } }
+
+    public float RevolveAngle
+    {
+        get => revolveAngle;
+        set { if (float.IsFinite(value)) Set(ref revolveAngle, Math.Clamp(value, 1f, 360f)); }
+    }
+
+    public int RevolveSegments
+    {
+        get => revolveSegments;
+        set => Set(ref revolveSegments, Math.Clamp(value, 8, 256));
+    }
+
+    private void BeginSketch(SketchTool tool)
+    {
+        IsSketchMode = true;
+        SetSketchTool(tool);
+        LookFromTopRequested?.Invoke(true);
+        Status = "Sketching on the plate - Escape or Done when finished";
+    }
+
+    private Vector2 Snapped(Vector2 point)
+    {
+        // A hand-drawn line snapped to a grid comes out as steps.
+        float step = sketchTool == SketchTool.Freehand ? 0f : SketchSnap;
+        return step > 0f ? new Vector2(MathF.Round(point.X / step) * step, MathF.Round(point.Y / step) * step) : point;
+    }
+
+    /// <summary>A click on the plate while sketching. <paramref name="onFirst"/>: it landed on the first point of the line.</summary>
+    public void PlaceSketchPoint(Vector2 onPlate, bool onFirst) =>
+        SayOfSketch(sketch.Place(Snapped(onPlate), sketchTool, onFirst));
+
+    public void MoveSketchCursor(Vector2 onPlate)
+    {
+        if (sketch.IsDrawingStroke) sketch.ExtendStroke(onPlate);
+        sketchCursor = Snapped(onPlate);
+        SketchReadout = sketch.Readout(sketchCursor.Value, sketchTool);
+        SketchChanged?.Invoke();
+    }
+
+    public void CloseSketch() => SayOfSketch(sketch.Close());
+
+    private void PickSketchDrawing()
+    {
+        var dialog = new OpenFileDialog
+        {
+            Filter = "Drawing (*.svg)|*.svg|All files (*.*)|*.*",
+            Title = "Load a drawing into the sketch"
+        };
+        if (dialog.ShowDialog() == true) LoadSketchDrawing(dialog.FileName);
+    }
+
+    /// <summary>
+    /// The filled shapes of an SVG drawing as sketch outlines, as wide as <see cref="SketchDrawingWidth"/>.
     ///
-    /// The cut is refused rather than kept if the part comes back with holes in its surface - a
-    /// screw hole is not worth a model that no longer prints.
+    /// Read by the same reader Import and Emboss use, so the same things are left out: strokes, and
+    /// text not turned to paths. Its lower left corner goes on the origin, which puts the whole
+    /// drawing on the side of both axes a Revolve needs - centred, as Import puts a drawing, it
+    /// would reach across both and could only be extruded. Shapes that overlap cannot be outlines
+    /// of one sketch, so they are left out and counted rather than refusing the drawing.
+    /// </summary>
+    public void LoadSketchDrawing(string file)
+    {
+        string name = Path.GetFileName(file);
+        List<TextShape> shapes;
+
+        try
+        {
+            float aspect = SvgImport.Aspect(SvgImport.Outlines(file));
+            if (aspect <= 0f)
+            {
+                SayOfSketch($"{name} has no filled shape in it - lines on their own have no area.");
+                return;
+            }
+
+            shapes = SvgOutlines.Read(file, sketchDrawingWidth / aspect);
+        }
+        catch (Exception ex)
+        {
+            SayOfSketch($"Could not read {name}: {ex.Message}");
+            return;
+        }
+
+        var loops = shapes.SelectMany(s => s.Holes.Prepend(s.Outline)).ToList();
+        if (loops.Count == 0)
+        {
+            SayOfSketch($"{name} has no filled shape in it - lines on their own have no area.");
+            return;
+        }
+
+        var corner = loops.SelectMany(l => l).Aggregate(new Vector2(float.MaxValue), Vector2.Min);
+        var placed = loops.Select(l => (IReadOnlyList<Vector2>)l.Select(p => p - corner).ToList());
+
+        var (added, leftOut) = sketch.AddOutlines(placed, 0.02f);
+        SayOfSketch(added == 0
+            ? $"Nothing from {name} could be used: every shape crosses itself or another."
+            : $"Loaded {added} outline(s) from {name}, {sketchDrawingWidth:0.##} mm wide, its corner on the origin"
+              + (leftOut > 0 ? $". {leftOut} left out for crossing another shape or itself - join overlapping shapes in the drawing program first." : ".")
+              + " Undo takes it back.");
+        Status = $"Loaded {name} into the sketch";
+    }
+
+    /// <summary>The pointer pressed on the plate with Freehand.</summary>
+    public void BeginSketchStroke(Vector2 onPlate)
+    {
+        sketch.BeginStroke(onPlate);
+        SayOfSketch("Drawing - let go to close the outline.");
+    }
+
+    /// <summary>The pointer let go: the stroke closes into an outline.</summary>
+    public void EndSketchStroke() => SayOfSketch(sketch.EndStroke());
+
+    public void UndoSketch() => SayOfSketch(sketch.Undo());
+
+    private void SayOfSketch(string message)
+    {
+        SketchMessage = message;
+        RaiseSketch();
+    }
+
+    private void RaiseSketch()
+    {
+        Raise(nameof(CurrentSketch));
+        SketchChanged?.Invoke();
+        System.Windows.Input.CommandManager.InvalidateRequerySuggested();
+    }
+
+    private void ExtrudeSketch()
+    {
+        var solid = SketchSolids.Extrude(sketch, sketchHeight);
+        if (solid.TriangleCount == 0)
+        {
+            SayOfSketch("Nothing to extrude - draw a closed outline first.");
+            return;
+        }
+
+        PutSketchSolid(solid, "Extrusion", $"Extruded {sketch.Loops.Count} outline(s) {sketchHeight:0.##} mm");
+    }
+
+    private void RevolveSketch()
+    {
+        var solid = SketchSolids.Revolve(sketch, revolveAboutY ? RevolveAxis.Y : RevolveAxis.X, revolveAngle, revolveSegments, out string? why);
+        if (solid is null)
+        {
+            SayOfSketch(why ?? "It cannot be revolved.");
+            Status = why ?? "It cannot be revolved";
+            return;
+        }
+
+        PutSketchSolid(solid, "Revolved", $"Revolved {revolveAngle:0.#} degrees about the {(revolveAboutY ? "Y" : "X")} axis");
+    }
+
+    /// <summary>
+    /// The solid made from the sketch, put where it was drawn and standing on the plate, as one undo
+    /// step; then out of the sketch and round to a view that shows it in three dimensions.
+    /// </summary>
+    private void PutSketchSolid(Mesh solid, string name, string said)
+    {
+        var o = new SceneObject(Scene.UniqueName(name), solid) { Colour = NextAutomaticColour() }.Centred();
+        o.Position = o.Position with { Z = o.Position.Z - o.WorldBounds.Min.Z };
+
+        IsSketchMode = false;
+        Undo.Execute(new AddObjectsCommand(said, [o]));
+        RefreshSelection();
+        LookFromTopRequested?.Invoke(false);
+        Status = $"{said} - the sketch is kept, for another go";
+    }
+
+    private HoleOptions lastHole = new();
+
+    /// <summary>
+    /// Screw holes or insert pockets: one, a row or a bolt circle, cut into the one part selected or
+    /// added as a cutter to place and Subtract.
+    ///
+    /// The red cutter has the handles while the panel is open. It starts at the middle of the part's
+    /// top, pointing down; moved and turned, the holes go wherever it is put - into a side, at an
+    /// angle - and are cut where it stands. All the way through, each hole is as long as the part is
+    /// deep along that hole, found by casting down its axis, so a nut pocket lands in the far face
+    /// rather than somewhere past it. The cut is refused rather than kept if the part comes back with
+    /// holes in its surface.
     /// </summary>
     private async Task InsertHole()
     {
@@ -4184,81 +4674,173 @@ public sealed class MainViewModel : INotifyPropertyChanged
 
         var selection = Scene.Selection.ToList();
         var target = selection.Count == 1 ? selection[0] : null;
-        SceneObject? shown = null;
+        var targetWorld = target?.ToWorldMesh();
         var red = new Vector3(0.88f, 0.3f, 0.28f);
 
-        Mesh? Cutter(HoleOptions options, float x, float y, bool through)
-        {
-            if (target is null) return HoleCutter.Build(options, options.Depth);
+        SceneObject? shown = null;
+        HoleOptions showing = lastHole;
+        bool showingThrough = false;
+        bool rebuildQueued = false;
 
-            var reach = target.WorldBounds;
-            var cutter = HoleCutter.Build(options, through ? reach.Size.Z + 1f : options.Depth);
-            return cutter is null ? null
-                : MeshTransform.Transformed(cutter, Matrix4x4.CreateTranslation(reach.Center.X + x, reach.Center.Y + y, reach.Max.Z));
+        // Where the cutter was left and what it was, read as the preview is taken away. The panel
+        // takes it away as it closes - before the button's answer comes back here - so it has to be
+        // read then: read afterwards, there was no cutter left to read, and Cut quietly did nothing.
+        TransformState? place = null;
+
+        // Each hole's cutter in the preview's own frame, the handles at its origin.
+        List<Mesh>? Cutters(HoleOptions options, bool through, TransformState at)
+        {
+            var turn = MeshTransform.Rotation(at.Rotation);
+            var down = Vector3.Normalize(Vector3.TransformNormal(-Vector3.UnitZ, turn));
+            var cutters = new List<Mesh>();
+
+            foreach (var station in HoleCutter.Stations(options))
+            {
+                float depth = options.Depth;
+                bool comesOut = false;
+                if (through && targetWorld is not null)
+                {
+                    // Cast from a little above the mouth, so a hole starting on the surface still
+                    // sees it; where the ray misses the part, the depth typed stands.
+                    var mouth = at.Position + Vector3.TransformNormal(new Vector3(station, 0f), turn);
+                    if (HoleCutter.FarSide(targetWorld, mouth - down * 1f, down) is { } far && far > 1f)
+                    {
+                        depth = far - 1f;
+                        comesOut = true;
+                    }
+                }
+
+                if (HoleCutter.Build(options, depth, comesOut) is not { } one) return null;
+                cutters.Add(MeshTransform.Transformed(one, Matrix4x4.CreateTranslation(station.X, station.Y, 0f)));
+            }
+
+            return cutters;
         }
 
-        void Standing(SceneObject o)
+        void Rebuild()
         {
-            if (target is null) o.Position = new Vector3(0, 0, o.Position.Z - o.WorldBounds.Min.Z);
+            rebuildQueued = false;
+            if (shown is null) return;
+            if (Cutters(showing, showingThrough, TransformState.Capture(shown)) is { } cutters)
+                shown.Mesh = Mesh.Combine(cutters);
         }
 
-        var dialog = new HoleDialog(lastHole, lastHoleX, lastHoleY, target?.Name, (options, x, y, through) =>
+        var dialog = new HoleDialog(lastHole, target?.Name, (options, through) =>
         {
-            if (shown is not null) Scene.Objects.Remove(shown);
-            shown = null;
-            if (options is null) return true;
+            if (options is null)
+            {
+                if (shown is not null)
+                {
+                    place = TransformState.Capture(shown);
+                    Scene.Objects.Remove(shown);
+                }
 
-            var mesh = Cutter(options, x, y, through);
-            if (mesh is null) return false;
+                shown = null;
+                return true;
+            }
 
-            shown = new SceneObject("Hole", mesh) { Colour = red }.Centred();
-            Standing(shown);
-            Scene.Objects.Add(shown);
+            showing = options;
+            showingThrough = through;
+
+            var at = shown is not null
+                ? TransformState.Capture(shown)
+                : new TransformState(
+                    targetWorld is not null
+                        ? new Vector3(target!.WorldBounds.Center.X, target.WorldBounds.Center.Y, target.WorldBounds.Max.Z)
+                        : Vector3.Zero,
+                    Vector3.Zero, Vector3.One);
+
+            if (Cutters(options, through, at) is not { } cutters) return false;
+            var mesh = Mesh.Combine(cutters);
+
+            if (shown is null)
+            {
+                if (targetWorld is null) at = at with { Position = new Vector3(0, 0, -mesh.ComputeBounds().Min.Z) };
+                shown = new SceneObject("Hole", mesh) { Colour = red };
+                at.ApplyTo(shown);
+                Scene.Objects.Add(shown);
+                HoldPreview(shown);
+
+                // Through a part, how long each hole has to be depends on where it is and which
+                // way it points, so a move or a turn builds the cutter again - once the drag has
+                // stopped asking, rather than on every step of it.
+                shown.PropertyChanged += (_, e) =>
+                {
+                    if (e.PropertyName != nameof(SceneObject.Transform) || !showingThrough || targetWorld is null || rebuildQueued) return;
+                    rebuildQueued = true;
+                    System.Windows.Threading.Dispatcher.CurrentDispatcher.BeginInvoke(
+                        System.Windows.Threading.DispatcherPriority.Background, new Action(Rebuild));
+                };
+            }
+            else
+            {
+                shown.Mesh = mesh;
+            }
+
             return true;
         });
 
         bool accepted = dialog.ShowDialog() == true;
-        if (shown is not null) Scene.Objects.Remove(shown);
-        if (target is not null) { target.IsSelected = true; RefreshSelection(); }
 
-        if (!accepted || dialog.Result is not { } chosen) return;
+        if (shown is not null)
+        {
+            place = TransformState.Capture(shown);
+            Scene.Objects.Remove(shown);
+        }
+
+        ReleasePreview();
+        Scene.SelectOnly(target);
+        RefreshSelection();
+
+        if (!accepted || dialog.Result is not { } chosen || place is not { } where) return;
         lastHole = chosen;
-        lastHoleX = dialog.OffsetX;
-        lastHoleY = dialog.OffsetY;
 
-        var cutterMesh = Cutter(chosen, dialog.OffsetX, dialog.OffsetY, dialog.Through);
-        if (cutterMesh is null) return;
+        if (Cutters(chosen, dialog.Through, where) is not { } made) return;
+        var frame = MeshTransform.Compose(where.Position, where.Rotation, where.Scale);
 
-        string what = chosen.Kind == HoleKind.Insert
+        string one = chosen.Kind == HoleKind.Insert
             ? $"{chosen.Size} insert pocket"
             : $"{chosen.Size}{chosen.Head switch { HoleHead.Countersunk => " countersunk", HoleHead.Counterbored => " counterbored", _ => "" }} hole";
+        string what = made.Count == 1 ? $"an {one}" : $"{made.Count} {one}s";
 
-        if (target is null)
+        if (target is null || dialog.AddsCutter)
         {
-            var cutter = new SceneObject(Scene.UniqueName($"Cutter {what}"), cutterMesh) { Colour = red }.Centred();
-            Standing(cutter);
+            // One object however many holes, joined where they meet, so Subtract takes them all at once.
+            var local = made.Count == 1 ? made[0] : ManifoldCsg.UnionAll(made) ?? Mesh.Combine(made);
+            var cutter = new SceneObject(Scene.UniqueName(made.Count == 1 ? $"Cutter {one}" : $"Cutter {made.Count} x {one}"), local) { Colour = red };
+            where.ApplyTo(cutter);
+            cutter.Centred();
+
             Undo.Execute(new AddObjectsCommand("Insert hole cutter", [cutter]));
             RefreshSelection();
-            Status = $"Added a cutter for an {what} - put it where the hole goes, select the part then the cutter, and Subtract";
+            Status = $"Added the cutter for {what} - select the part, then the cutter, and Subtract";
             return;
         }
 
-        var token = StartWork($"Cutting the {what}");
+        var token = StartWork(made.Count == 1 ? $"Cutting {what}" : $"Cutting {what}");
         try
         {
-            var world = target.ToWorldMesh();
-            var result = await Task.Run(() => MeshHealer.Heal(LocalCsg.Subtract(world, cutterMesh, token), token: token).Mesh);
+            var world = targetWorld!;
+            var cutters = made.Select(m => MeshTransform.Transformed(m, frame)).ToList();
+            var result = await Task.Run(() =>
+            {
+                // One at a time, each locally: a hole touches a little of the part, and cutting
+                // each where it is costs what the hole costs rather than what the part does.
+                var part = world;
+                foreach (var cutter in cutters) part = LocalCsg.Subtract(part, cutter, token);
+                return MeshHealer.Heal(part, token: token).Mesh;
+            });
 
             if (result.TriangleCount == 0 || !result.CheckHealth().IsWatertight)
             {
-                Status = $"The {what} would not cut cleanly into {target.Name} - nothing was changed";
+                Status = $"The holes would not cut cleanly into {target.Name} - nothing was changed";
                 return;
             }
 
             var cut = new SceneObject(target.Name, result) { Colour = target.Colour }.Centred();
-            Undo.Execute(new ReplaceObjectsCommand("Hole", [target], [cut]));
+            Undo.Execute(new ReplaceObjectsCommand(made.Count == 1 ? "Hole" : "Holes", [target], [cut]));
             RefreshSelection();
-            Status = $"Cut an {what} into {target.Name}";
+            Status = $"Cut {what} into {target.Name}";
         }
         catch (Exception abort) when (WasAborted(abort))
         {
@@ -4266,12 +4848,85 @@ public sealed class MainViewModel : INotifyPropertyChanged
         }
         catch (Exception ex)
         {
-            Status = $"The hole could not be cut: {ex.Message}";
+            Status = $"The holes could not be cut: {ex.Message}";
         }
         finally
         {
             EndWork();
         }
+    }
+
+    private bool panelHandles;
+    private GizmoMode modeBeforeHandles;
+
+    /// <summary>
+    /// Whether the handles are on a tool's preview while its panel is open: Thread and Hole let
+    /// what they are making be moved and turned into place before it is made. Resizing stays off -
+    /// a thread or a hole is the size its numbers say.
+    /// </summary>
+    public bool PanelHandles => panelHandles;
+
+    /// <summary>Selects a tool's preview and gives it the move and rotate handles.</summary>
+    private void HoldPreview(SceneObject preview)
+    {
+        Scene.SelectOnly(preview);
+
+        if (!panelHandles)
+        {
+            modeBeforeHandles = GizmoMode;
+            if (GizmoMode == GizmoMode.Scale) GizmoMode = GizmoMode.Move;
+            panelHandles = true;
+            Raise(nameof(PanelHandles));
+            Raise(nameof(ResizeOffered));
+            Raise(nameof(ShowManipulatorBar));
+        }
+
+        RefreshSelection();
+    }
+
+    private void ReleasePreview()
+    {
+        if (!panelHandles) return;
+
+        panelHandles = false;
+        Raise(nameof(PanelHandles));
+        Raise(nameof(ResizeOffered));
+        Raise(nameof(ShowManipulatorBar));
+        GizmoMode = modeBeforeHandles;
+    }
+
+    /// <summary>
+    /// Wraps the selection in one skin, as cling film pulled tight round it would: two cylinders
+    /// become a slot, a row of spheres a rounded bar, and one hollow part the solid it fits inside.
+    /// The pieces are replaced by it, as Merge replaces them, in one undo step.
+    /// </summary>
+    private void HullSelection()
+    {
+        var selection = Scene.Selection.ToList();
+        if (selection.Count == 0) return;
+
+        var points = selection.SelectMany(o => o.ToWorldMesh().Positions).Distinct().ToList();
+        var triangles = ConvexHull.Build(points);
+        if (triangles.Count == 0)
+        {
+            Status = "The selection is flat - there is nothing to wrap";
+            return;
+        }
+
+        var mesh = new Mesh();
+        foreach (var (a, b, c) in triangles) mesh.AddTriangle(points[a], points[b], points[c]);
+        mesh = mesh.Welded();
+
+        if (!mesh.CheckHealth().IsWatertight)
+        {
+            Status = "The hull would not close - nothing was changed";
+            return;
+        }
+
+        var hull = new SceneObject(Scene.UniqueName("Hull"), mesh) { Colour = selection[0].Colour }.Centred();
+        Undo.Execute(new ReplaceObjectsCommand("Hull", selection, [hull]));
+        RefreshSelection();
+        Status = $"Wrapped {(selection.Count == 1 ? selection[0].Name : $"{selection.Count} objects")} in a hull - {mesh.TriangleCount:N0} triangles";
     }
 
     /// <summary>What the lettering panel was last left at, so the next starts from it.</summary>
@@ -4612,9 +5267,25 @@ public sealed class MainViewModel : INotifyPropertyChanged
         ApplyColour(picked);
     }
 
-    private void ApplyColour(Vector3 colour)
+    /// <summary>
+    /// The colour dot in the objects list. It paints the object it is on, or the whole selection
+    /// when that object is part of it - as a swatch would - and leaves the selection as it was, so
+    /// a part can be recoloured without losing what is selected. A locked part keeps its colour.
+    /// </summary>
+    private void PickColourFor(SceneObject o)
     {
-        var selection = Scene.Selection.ToList();
+        if (o.IsLocked) return;
+
+        var targets = o.IsSelected ? Scene.Selection.ToList() : [o];
+        var dialog = new ColourDialog(o.Colour) { Owner = Application.Current?.MainWindow };
+        if (dialog.ShowDialog() != true || dialog.Result is not { } picked) return;
+
+        ApplyColour(picked, targets);
+    }
+
+    private void ApplyColour(Vector3 colour, List<SceneObject>? targets = null)
+    {
+        var selection = targets ?? Scene.Selection.ToList();
         if (selection.Count == 0) return;
 
         string hex = Palette.ToHex(colour);

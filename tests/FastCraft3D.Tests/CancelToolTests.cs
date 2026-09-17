@@ -13,6 +13,7 @@ namespace FastCraft3D.Tests;
 /// reaches for first. Kept in one place rather than wired up per tool, which is how the seventh
 /// one would have been missed.
 /// </summary>
+[Collection("Tool panels")]
 public class CancelToolTests
 {
     private static void WithModel(Action<MainViewModel> body)

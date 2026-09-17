@@ -7,6 +7,9 @@ public enum ThreadKind
     /// <summary>A threaded rod: the outside thread of a bolt without its head.</summary>
     Rod,
 
+    /// <summary>A threaded rod with a head on one end, made standing on its head.</summary>
+    Bolt,
+
     /// <summary>A nut: a hexagon or a round body with the inside thread through it.</summary>
     Nut,
 
@@ -24,15 +27,16 @@ public enum NutBody
 /// <param name="Pitch">The ISO coarse pitch.</param>
 /// <param name="AcrossFlats">The spanner size of an ISO 4032 nut.</param>
 /// <param name="NutHeight">The height of an ISO 4032 nut.</param>
-public readonly record struct MetricSize(string Name, float Diameter, float Pitch, float AcrossFlats, float NutHeight);
+/// <param name="HeadHeight">The height of an ISO 4017 hexagon bolt's head, which is as wide as the nut.</param>
+public readonly record struct MetricSize(string Name, float Diameter, float Pitch, float AcrossFlats, float NutHeight, float HeadHeight);
 
 /// <param name="Diameter">The nominal major diameter - 8 for M8. The clearance is taken off it, not added to it.</param>
-/// <param name="Length">Along Z, for a rod or a hole cutter.</param>
+/// <param name="Length">Along Z, for a rod or a hole cutter; under the head, for a bolt.</param>
 /// <param name="Clearance">
 /// The gap on the diameter between a rod and a nut of the same size. Half of it comes off the rod
 /// and half goes on the nut, so either part also screws onto a bought one of the same size.
 /// </param>
-/// <param name="AcrossFlats">For a hexagon nut the spanner size; for a round one its outside diameter.</param>
+/// <param name="AcrossFlats">For a hexagon nut or bolt head the spanner size; for a round one its outside diameter.</param>
 /// <param name="NutHeight">Along Z, for a nut.</param>
 public readonly record struct ThreadOptions(
     ThreadKind Kind, float Diameter, float Pitch, float Length, float Clearance,
@@ -53,7 +57,13 @@ public readonly record struct ThreadOptions(
     /// diameter and no pitch. M8, since it is about the smallest size that prints well on filament.
     /// </summary>
     public static ThreadOptions Default =>
-        new(ThreadKind.Rod, 8f, 1.25f, 20f, 0.2f, NutBody.Hexagon, 13f, 6.8f);
+        new(ThreadKind.Rod, 8f, 1.25f, 20f, 0.2f, NutBody.Hexagon, 13f, 6.8f) { HeadHeight = 5.3f };
+
+    /// <summary>
+    /// How tall a bolt's head is. Not one of the positional numbers, so a thread written out before
+    /// bolts were has none, and <see cref="Sane"/> gives it the usual two thirds of the diameter.
+    /// </summary>
+    public float HeadHeight { get; init; }
 
     /// <summary>
     /// The coarsest pitch a diameter takes. Much coarser and the teeth are cut so deep that the
@@ -64,7 +74,16 @@ public readonly record struct ThreadOptions(
     /// <summary>How deep the thread is cut: five eighths of the fundamental triangle, as ISO 68-1 has it.</summary>
     public float Depth => Threads.DepthPerPitch * Pitch;
 
-    public float Height => Kind == ThreadKind.Nut ? NutHeight : Length;
+    /// <summary>How long the threaded part is along Z.</summary>
+    public float ThreadLength => Kind == ThreadKind.Nut ? NutHeight : Length;
+
+    /// <summary>The whole part along Z, head and all.</summary>
+    public float Height => Kind switch
+    {
+        ThreadKind.Nut => NutHeight,
+        ThreadKind.Bolt => Length + HeadHeight,
+        _ => Length
+    };
 
     public float MinimumAcrossFlats => Diameter + Clearance / 2f + 2f * MinimumWall;
 
@@ -89,6 +108,7 @@ public readonly record struct ThreadOptions(
     public string Name => Kind switch
     {
         ThreadKind.Rod => $"{SizeName} rod",
+        ThreadKind.Bolt => $"{SizeName} x {Length:0.##} bolt",
         ThreadKind.Nut => $"{SizeName} nut",
         _ => $"{SizeName} thread cutter"
     };
@@ -104,6 +124,7 @@ public readonly record struct ThreadOptions(
             Pitch = Math.Clamp(Finite(Pitch, 1f), MinimumPitch, diameter / 3f),
             Length = Math.Clamp(Finite(Length, 20f), MinimumLength, MaximumLength),
             NutHeight = Math.Clamp(Finite(NutHeight, 5f), MinimumLength, MaximumLength),
+            HeadHeight = Math.Clamp(HeadHeight > 0f ? Finite(HeadHeight, 0.65f * diameter) : 0.65f * diameter, MinimumLength, MaximumLength),
             Clearance = Math.Clamp(Finite(Clearance, 0.2f), 0f, MaximumClearance)
         };
 
@@ -142,15 +163,15 @@ public static class Threads
     /// <summary>ISO 261 coarse pitches, with ISO 4032 nut sizes.</summary>
     public static readonly MetricSize[] Metric =
     [
-        new("M3", 3f, 0.5f, 5.5f, 2.4f),
-        new("M4", 4f, 0.7f, 7f, 3.2f),
-        new("M5", 5f, 0.8f, 8f, 4.7f),
-        new("M6", 6f, 1f, 10f, 5.2f),
-        new("M8", 8f, 1.25f, 13f, 6.8f),
-        new("M10", 10f, 1.5f, 16f, 8.4f),
-        new("M12", 12f, 1.75f, 18f, 10.8f),
-        new("M16", 16f, 2f, 24f, 14.8f),
-        new("M20", 20f, 2.5f, 30f, 18f)
+        new("M3", 3f, 0.5f, 5.5f, 2.4f, 2f),
+        new("M4", 4f, 0.7f, 7f, 3.2f, 2.8f),
+        new("M5", 5f, 0.8f, 8f, 4.7f, 3.5f),
+        new("M6", 6f, 1f, 10f, 5.2f, 4f),
+        new("M8", 8f, 1.25f, 13f, 6.8f, 5.3f),
+        new("M10", 10f, 1.5f, 16f, 8.4f, 6.4f),
+        new("M12", 12f, 1.75f, 18f, 10.8f, 7.5f),
+        new("M16", 16f, 2f, 24f, 14.8f, 10f),
+        new("M20", 20f, 2.5f, 30f, 18f, 12.5f)
     ];
 
     /// <summary>The metric size with this diameter and pitch, if there is one.</summary>
@@ -163,7 +184,7 @@ public static class Threads
         return null;
     }
 
-    /// <summary>The part, centred on its own origin with its axis along Z.</summary>
+    /// <summary>The part, centred on its own origin with its axis along Z. A bolt has its head down.</summary>
     public static Mesh Build(ThreadOptions options)
     {
         var o = options.Sane();
@@ -172,21 +193,35 @@ public static class Threads
         double pitch = o.Pitch;
         double depth = DepthPerPitch * pitch;
         double gap = o.Clearance / 4.0;
-        double height = o.Height;
+        double height = o.ThreadLength;
         int segments = Segments(radius);
 
         // Lead in over a pitch, or less on a part too short to spare it at both ends.
         double lead = Math.Min(pitch, height / 3.0);
         double Fade(double z) => Math.Clamp(Math.Min(z, height - z) / lead, 0.0, 1.0);
 
-        if (o.Kind == ThreadKind.Rod)
+        if (o.Kind is ThreadKind.Rod or ThreadKind.Bolt)
         {
             var rod = new HelicalSurface(pitch, height, lead, segments,
                 (t, z) => radius - gap - depth + depth * (1.0 - Share(t)) * Fade(z));
             rod.Build(outward: true);
             rod.Disc(top: false);
-            rod.Disc(top: true);
-            return rod.ToMesh();
+
+            if (o.Kind == ThreadKind.Rod)
+            {
+                rod.Disc(top: true);
+                return rod.ToMesh();
+            }
+
+            // The head is built on the thread's top end, whose lead-in has already brought it to the
+            // core, so the head's underside meets it as a nut's face meets its hole. Then the bolt is
+            // turned over, head down, as it prints: half a turn about X rather than a mirror, which
+            // would make the thread left-handed. Written out, since a rotation matrix's sine of pi
+            // leaves every vertex a hair off where it was.
+            rod.Head(o.Body, o.AcrossFlats / 2.0, o.HeadHeight);
+            var upright = rod.ToMesh();
+            float middle = o.HeadHeight / 2f;
+            return new Mesh(upright.Positions.Select(p => new Vector3(p.X, -p.Y, middle - p.Z)), upright.Indices);
         }
 
         // A faceted hole is smaller than the round one it stands for: its flats cut inside the circle
@@ -492,33 +527,60 @@ public static class Threads
         /// <param name="halfWidth">Half the width across the flats, or the radius of a round body.</param>
         public void Body(NutBody body, double halfWidth)
         {
-            var below = new int[segments];
-            var above = new int[segments];
+            var below = Outline(body, halfWidth, 0);
+            var above = Outline(body, halfWidth, height);
+
+            Walls(below, above);
+            Face(Ring(false), below, bottomColumns, top: false);
+            Face(Ring(true), above, topColumns, top: true);
+        }
+
+        /// <summary>
+        /// A bolt's head on the top end of a rod: its underside from the thread out to the outside,
+        /// the same face a nut has round its hole, then its walls and a flat top.
+        /// </summary>
+        public void Head(NutBody body, double halfWidth, double headHeight)
+        {
+            var below = Outline(body, halfWidth, height);
+            var above = Outline(body, halfWidth, height + headHeight);
+
+            Walls(below, above);
+            Face(Ring(true), below, topColumns, top: false);
+
+            int middle = Vertex(0, 0, height + headHeight);
+            for (int i = 0; i < segments; i++) Triangle(middle, above[i], above[(i + 1) % segments]);
+        }
+
+        /// <summary>
+        /// A hexagon or a circle with a corner on every column. Corners at every sixth of a turn, so
+        /// the flats face the quarters and the width along Y is the width across the flats.
+        /// </summary>
+        private int[] Outline(NutBody body, double halfWidth, double z)
+        {
+            var ring = new int[segments];
             int perSide = segments / 6;
 
             for (int i = 0; i < segments; i++)
             {
                 double theta = Math.Tau * i / segments;
-
-                // Corners at every sixth of a turn, so the flats face the quarters and the width
-                // along Y is the width across the flats.
                 double r = body == NutBody.Round
                     ? halfWidth
                     : halfWidth / Math.Cos(Math.Tau * (i % perSide) / segments - Math.PI / 6);
 
-                below[i] = Vertex(r * Math.Cos(theta), r * Math.Sin(theta), 0);
-                above[i] = Vertex(r * Math.Cos(theta), r * Math.Sin(theta), height);
+                ring[i] = Vertex(r * Math.Cos(theta), r * Math.Sin(theta), z);
             }
 
+            return ring;
+        }
+
+        private void Walls(int[] below, int[] above)
+        {
             for (int i = 0; i < segments; i++)
             {
                 int n = (i + 1) % segments;
                 Triangle(below[i], below[n], above[n]);
                 Triangle(below[i], above[n], above[i]);
             }
-
-            Face(Ring(false), below, bottomColumns, top: false);
-            Face(Ring(true), above, topColumns, top: true);
         }
 
         private void Face(List<(double Theta, int Id, int Sector)> ring, int[] outside, int[] columns, bool top)

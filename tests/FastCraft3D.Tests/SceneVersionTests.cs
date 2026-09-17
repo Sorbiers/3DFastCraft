@@ -105,6 +105,18 @@ public class SceneVersionTests : IDisposable
     }
 
     [Fact]
+    public void SettingsSavedBeforePropertiesCouldFoldLeaveThemOpen()
+    {
+        string store = File_("older-settings.json");
+        File.WriteAllText(store, """{"PlateWidth":200,"PlateDepth":200,"PlateHeight":200,"Unit":"mm","ShowAxes":true}""");
+
+        Assert.False(LocalSettings.Load(store)!.Value.FoldProperties);
+
+        LocalSettings.Save(new RememberedSettings(200f, 200f, 200f, "mm", FoldProperties: true), store);
+        Assert.True(LocalSettings.Load(store)!.Value.FoldProperties);
+    }
+
+    [Fact]
     public void AFreshFileHasNoVersions()
     {
         string path = File_("plain.3dfc");
