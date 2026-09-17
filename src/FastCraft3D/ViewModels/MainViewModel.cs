@@ -139,6 +139,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
 
         InsertCommand = new RelayCommand(p => Insert(p));
         InsertStairCommand = RelayCommand.Simple(InsertStair);
+        InsertThreadCommand = RelayCommand.Simple(InsertThread);
         InsertFitTestCommand = RelayCommand.Simple(InsertFitTest);
         InsertCustomCommand = RelayCommand.Simple(InsertCustom);
         InsertGearCommand = RelayCommand.Simple(InsertGear);
@@ -236,6 +237,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
 
     public System.Windows.Input.ICommand InsertCommand { get; }
     public System.Windows.Input.ICommand InsertStairCommand { get; }
+    public System.Windows.Input.ICommand InsertThreadCommand { get; }
     public System.Windows.Input.ICommand InsertFitTestCommand { get; }
     public System.Windows.Input.ICommand InsertCustomCommand { get; }
     public System.Windows.Input.ICommand InsertGearCommand { get; }
@@ -3893,6 +3895,58 @@ public sealed class MainViewModel : INotifyPropertyChanged
         var check = StairBuilder.Measure(s.Rise, s.Run, s.Steps, modelScale);
         Status = $"Inserted a flight of {s.Steps} - {check.RiserMm:0.#} mm risers on "
                + $"{check.GoingMm:0.#} mm treads{(check.IsClimbable ? "" : ", which is steep")}";
+    }
+
+    /// <summary>The last thread added, so a nut made after its rod starts at the same size.</summary>
+    private ThreadOptions lastThread = ThreadOptions.Default;
+
+    /// <summary>
+    /// Inserts a threaded rod, a nut, or a cutter for a threaded hole, shown on the plate while its
+    /// size is chosen - the same preview as Custom, added and taken away outside the undo history.
+    /// </summary>
+    private void InsertThread()
+    {
+        var colour = NextAutomaticColour();
+        SceneObject? shown = null;
+
+        var dialog = new ThreadDialog(lastThread, mesh =>
+        {
+            if (mesh is null)
+            {
+                if (shown is not null) Scene.Objects.Remove(shown);
+                shown = null;
+                return;
+            }
+
+            float lift = mesh.ComputeBounds().Size.Z / 2f;
+            if (shown is null)
+            {
+                shown = new SceneObject("Thread", mesh) { Colour = colour, Position = new Vector3(0, 0, lift) };
+                Scene.Objects.Add(shown);
+            }
+            else
+            {
+                shown.Mesh = mesh;
+                shown.Position = new Vector3(0, 0, lift);
+            }
+        });
+
+        bool accepted = dialog.ShowDialog() == true && dialog.Result is not null;
+        if (shown is not null) Scene.Objects.Remove(shown);
+
+        if (!accepted || dialog.Result is not { } thread) return;
+        lastThread = thread;
+
+        var built = Threads.Build(thread);
+        var o = new SceneObject(Scene.UniqueName(thread.Name), built)
+        {
+            Colour = colour,
+            Position = new Vector3(0, 0, built.ComputeBounds().Size.Z / 2f)
+        };
+
+        Undo.Execute(new AddObjectsCommand($"Insert {thread.Name}", [o]));
+        RefreshSelection();
+        Status = $"Inserted the {thread.Name} - {built.TriangleCount:N0} triangles";
     }
 
     /// <summary>

@@ -1,0 +1,96 @@
+<view:ToolPanel x:Class="FastCraft3D.View.ThreadDialog"
+                xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                xmlns:view="clr-namespace:FastCraft3D.View"
+                Title="Thread">
+
+    <StackPanel>
+        <TextBlock Text="A threaded rod, a nut, or a cutter to Subtract for a threaded hole. The preview is on the plate."
+                   TextWrapping="Wrap" Foreground="#FF3A4550" Margin="0,0,0,8" />
+
+        <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
+            <TextBlock Text="Make" Style="{DynamicResource FieldLabel}" Width="80" />
+            <ComboBox x:Name="KindBox" Width="120" SelectionChanged="OnSelectionChanged"
+                      AutomationProperties.AutomationId="ThreadKind">
+                <ComboBoxItem Content="Threaded rod" />
+                <ComboBoxItem Content="Nut" />
+                <ComboBoxItem Content="Hole cutter" />
+            </ComboBox>
+        </StackPanel>
+
+        <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
+            <TextBlock Text="Size" Style="{DynamicResource FieldLabel}" Width="80"
+                       ToolTip="ISO metric coarse, which fills in the pitch and the nut's size - or Custom for any diameter and pitch" />
+            <ComboBox x:Name="SizeBox" Width="120" SelectionChanged="OnSizeChanged"
+                      AutomationProperties.AutomationId="ThreadSize" />
+        </StackPanel>
+
+        <StackPanel Orientation="Horizontal">
+            <TextBlock Text="Diameter" Style="{DynamicResource FieldLabel}" Width="80"
+                       ToolTip="The nominal diameter over the crests - 8 for M8. The clearance comes off it." />
+            <TextBox x:Name="DiameterBox" Width="60" Style="{DynamicResource NumberBox}" TextChanged="OnChanged"
+                     AutomationProperties.AutomationId="ThreadDiameter" />
+            <TextBlock Text="mm" Foreground="#FF9AA0A8" VerticalAlignment="Center" />
+        </StackPanel>
+
+        <StackPanel Orientation="Horizontal">
+            <TextBlock Text="Pitch" Style="{DynamicResource FieldLabel}" Width="80"
+                       ToolTip="How far the thread advances in one turn" />
+            <TextBox x:Name="PitchBox" Width="60" Style="{DynamicResource NumberBox}" TextChanged="OnChanged"
+                     AutomationProperties.AutomationId="ThreadPitch" />
+            <TextBlock Text="mm" Foreground="#FF9AA0A8" VerticalAlignment="Center" />
+        </StackPanel>
+
+        <StackPanel Orientation="Horizontal">
+            <TextBlock Text="Length" Style="{DynamicResource FieldLabel}" Width="80"
+                       ToolTip="Of a rod or a hole cutter, along Z" />
+            <TextBox x:Name="LengthBox" Width="60" Style="{DynamicResource NumberBox}" TextChanged="OnChanged"
+                     AutomationProperties.AutomationId="ThreadLength" />
+            <TextBlock Text="mm" Foreground="#FF9AA0A8" VerticalAlignment="Center" />
+        </StackPanel>
+
+        <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
+            <TextBlock Text="Clearance" Style="{DynamicResource FieldLabel}" Width="80"
+                       ToolTip="The gap on the diameter between a printed rod and a printed nut of the same size. Half comes off the rod and half goes on the nut. 0.2 suits a well set up filament printer; try 0.3 to 0.4 if parts bind." />
+            <TextBox x:Name="ClearanceBox" Width="60" Style="{DynamicResource NumberBox}" TextChanged="OnChanged"
+                     AutomationProperties.AutomationId="ThreadClearance" />
+            <TextBlock Text="mm" Foreground="#FF9AA0A8" VerticalAlignment="Center" />
+        </StackPanel>
+
+        <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
+            <TextBlock Text="Nut body" Style="{DynamicResource FieldLabel}" Width="80" />
+            <ComboBox x:Name="BodyBox" Width="120" SelectionChanged="OnSelectionChanged"
+                      AutomationProperties.AutomationId="ThreadNutBody">
+                <ComboBoxItem Content="Hexagon" />
+                <ComboBoxItem Content="Round" />
+            </ComboBox>
+        </StackPanel>
+
+        <StackPanel Orientation="Horizontal">
+            <TextBlock x:Name="AcrossLabel" Text="Across flats" Style="{DynamicResource FieldLabel}" Width="80"
+                       ToolTip="The spanner size of a hexagon nut, or the outside diameter of a round one" />
+            <TextBox x:Name="AcrossBox" Width="60" Style="{DynamicResource NumberBox}" TextChanged="OnChanged"
+                     AutomationProperties.AutomationId="ThreadAcrossFlats" />
+            <TextBlock Text="mm" Foreground="#FF9AA0A8" VerticalAlignment="Center" />
+        </StackPanel>
+
+        <StackPanel Orientation="Horizontal">
+            <TextBlock Text="Height" Style="{DynamicResource FieldLabel}" Width="80"
+                       ToolTip="Of a nut, along Z" />
+            <TextBox x:Name="HeightBox" Width="60" Style="{DynamicResource NumberBox}" TextChanged="OnChanged"
+                     AutomationProperties.AutomationId="ThreadNutHeight" />
+            <TextBlock Text="mm" Foreground="#FF9AA0A8" VerticalAlignment="Center" />
+        </StackPanel>
+
+        <Border Margin="0,8,0,0" Padding="8,6" CornerRadius="3"
+                Background="White" BorderBrush="#FFD5DEEA" BorderThickness="1">
+            <TextBlock x:Name="SummaryText" TextWrapping="Wrap" Foreground="#FF3A3F45" />
+        </Border>
+
+        <StackPanel Orientation="Horizontal" Margin="0,10,0,0">
+            <Button x:Name="AddButton" Content="Add" Style="{DynamicResource PanelButton}" Click="OnAccept"
+                    AutomationProperties.Name="ThreadAccept" />
+            <Button Content="Cancel" Style="{DynamicResource PanelButton}" IsCancel="True" />
+        </StackPanel>
+    </StackPanel>
+</view:ToolPanel>
