@@ -141,6 +141,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
         InsertStairCommand = RelayCommand.Simple(InsertStair);
         InsertFitTestCommand = RelayCommand.Simple(InsertFitTest);
         InsertCustomCommand = RelayCommand.Simple(InsertCustom);
+        InsertGearCommand = RelayCommand.Simple(InsertGear);
         DeleteCommand = RelayCommand.Simple(Delete, () => Scene.Selection.Count > 0);
         DuplicateCommand = new RelayCommand(p => Duplicate(offset: !Equals(p, "InPlace")),
             _ => Scene.Selection.Count > 0);
@@ -237,6 +238,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
     public System.Windows.Input.ICommand InsertStairCommand { get; }
     public System.Windows.Input.ICommand InsertFitTestCommand { get; }
     public System.Windows.Input.ICommand InsertCustomCommand { get; }
+    public System.Windows.Input.ICommand InsertGearCommand { get; }
     public System.Windows.Input.ICommand DeleteCommand { get; }
     public System.Windows.Input.ICommand DuplicateCommand { get; }
     public System.Windows.Input.ICommand MirrorCommand { get; }
@@ -3982,6 +3984,73 @@ public sealed class MainViewModel : INotifyPropertyChanged
         Undo.Execute(new AddObjectsCommand($"Insert custom {shape.Kind}", [o]));
         RefreshSelection();
         Status = $"Inserted a custom {shape.Kind.ToString().ToLowerInvariant()} - {built.TriangleCount:N0} triangles";
+    }
+
+    /// <summary>What the gear panel was last left at, so a second gear starts from the first.</summary>
+    private GearOptions lastGear = new();
+
+    /// <summary>
+    /// Makes a gear, a ring gear or a rack, and a partner in mesh with it if asked, from the panel.
+    ///
+    /// Shown on the plate while the numbers are set, as a custom shape is, and put down as one undo
+    /// step when added. A pair is placed in mesh and moved together to the middle of the bed, so
+    /// it can be printed as it stands.
+    /// </summary>
+    private void InsertGear()
+    {
+        var colours = new[] { NextAutomaticColour(), NextAutomaticColour() };
+        var shown = new List<SceneObject>();
+
+        List<SceneObject> Place(GearResult result)
+        {
+            var objects = result.Parts
+                .Select((part, i) => new SceneObject(part.Name, part.Mesh) { Colour = colours[i % colours.Length] }.Centred())
+                .ToList();
+            BedPlacement.Fit(objects, 1f);
+            return objects;
+        }
+
+        void Clear()
+        {
+            foreach (var o in shown) Scene.Objects.Remove(o);
+            shown.Clear();
+        }
+
+        var dialog = new GearDialog(lastGear, options =>
+        {
+            Clear();
+            if (options is null) return null;
+
+            var result = Gears.Build(options);
+            foreach (var o in Place(result))
+            {
+                Scene.Objects.Add(o);
+                shown.Add(o);
+            }
+            return result;
+        });
+
+        bool accepted = dialog.ShowDialog() == true;
+        Clear();
+
+        if (!accepted || dialog.Result is not { } chosen) return;
+        lastGear = chosen;
+
+        var made = Gears.Build(chosen);
+        if (made.Parts.Count == 0)
+        {
+            Status = made.Refusal ?? "No gear was made";
+            return;
+        }
+
+        var parts = Place(made);
+        foreach (var o in parts) o.Name = Scene.UniqueName(o.Name);
+
+        Undo.Execute(new AddObjectsCommand(parts.Count == 1 ? "Insert gear" : "Insert gears", parts));
+        RefreshSelection();
+        Status = parts.Count == 1
+            ? $"Inserted {parts[0].Name}"
+            : $"Inserted {parts[0].Name} and {parts[1].Name}, in mesh";
     }
 
     private void Mirror(object? parameter)

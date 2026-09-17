@@ -451,6 +451,9 @@
                     <Button Style="{StaticResource ToolButton}" Content="Stair..." Tag="{StaticResource IconStair}"
                             Command="{Binding InsertStairCommand}" MinWidth="70"
                             ToolTip="A straight flight, built as one solid, with the riser and going reported in real units" />
+                    <Button Style="{StaticResource ToolButton}" Content="Gear..." Tag="{StaticResource IconGear}"
+                            Command="{Binding InsertGearCommand}" MinWidth="64"
+                            ToolTip="An involute gear, ring gear or rack - straight, helical or herringbone - with a bore, a hub and a set-screw hole, and a partner made already in mesh with it" />
                     <Separator Margin="8,0" />
                     <Button Style="{StaticResource ToolButton}" Content="Import..." Tag="{StaticResource IconImport}"
                             Command="{Binding ImportCommand}" ToolTip="Bring in an STL, an OBJ, or another 3DFastCraft project - its objects join what is already on the plate (Ctrl+I)" />
