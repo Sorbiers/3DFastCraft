@@ -448,6 +448,9 @@
                     <Button Style="{StaticResource ToolButton}" Content="Fit test" Tag="{StaticResource IconFitTest}"
                             Command="{Binding InsertFitTestCommand}" MinWidth="64"
                             ToolTip="Four small 2x2 brick plates at Fit -0.2, -0.1, 0 and +0.1 mm, marked with one to four notches, each with studs on top and the underside below. Print them in your filament and press each onto real bricks. Without real bricks, stack one plate on another: the pair grips like the sum of their two Fits. To test two printed halves exactly as Split with connectors makes them - the same Fit on both - print the set twice and try each plate on its twin. Type the Fit that holds firmly but still comes apart by hand." />
+                    <Button Style="{StaticResource ToolButton}" Content="Thread..." Tag="{StaticResource IconThread}"
+                            Command="{Binding InsertThreadCommand}" MinWidth="70"
+                            ToolTip="A threaded rod, a nut, or a cutter to Subtract for a threaded hole: ISO metric M3 to M20 or any diameter and pitch, with a clearance so a printed rod and nut screw together" />
                     <Button Style="{StaticResource ToolButton}" Content="Stair..." Tag="{StaticResource IconStair}"
                             Command="{Binding InsertStairCommand}" MinWidth="70"
                             ToolTip="A straight flight, built as one solid, with the riser and going reported in real units" />
