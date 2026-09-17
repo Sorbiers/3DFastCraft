@@ -51,6 +51,18 @@ public static class Palette
 
     public static Vector3 Default => Cycle[0];
 
+    /// <summary>
+    /// A small, deliberately loud row for marking something rather than colouring it: the
+    /// overhang highlight. Full or near-full saturation throughout, so whichever one is picked
+    /// still reads against an object painted from <see cref="Swatches"/>, which none of these are.
+    /// </summary>
+    public static readonly IReadOnlyList<Swatch> WarningSwatches =
+    [
+        new("Red", new(1f, 0.08f, 0.05f)), new("Orange", new(1f, 0.42f, 0.02f)),
+        new("Magenta", new(0.95f, 0.05f, 0.55f)), new("Yellow", new(1f, 0.85f, 0.05f)),
+        new("Cyan", new(0.05f, 0.85f, 0.95f)), new("White", new(0.97f, 0.97f, 0.97f))
+    ];
+
     public static (byte R, byte G, byte B) ToBytes(Vector3 colour) => (
         ToByte(colour.X), ToByte(colour.Y), ToByte(colour.Z));
 

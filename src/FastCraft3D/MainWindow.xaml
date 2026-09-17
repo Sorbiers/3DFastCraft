@@ -600,13 +600,13 @@
                                Foreground="#FF5A5F66" Margin="10,0,4,0" />
                     <Button Visibility="{Binding IsAdvancedMode, Converter={StaticResource BoolToVisibility}}" Style="{StaticResource ToolButton}" Content="Left" Tag="{StaticResource IconAlignMin}"
                             Command="{Binding AlignCommand}" CommandParameter="X:Minimum" MinWidth="58"
-                            ToolTip="Needs two or more objects selected." />
+                            ToolTip="With several selected, moves every other one to match the last picked; with one, moves it to the bed's edge." />
                     <Button Visibility="{Binding IsAdvancedMode, Converter={StaticResource BoolToVisibility}}" Style="{StaticResource ToolButton}" Content="Centre" Tag="{StaticResource IconAlignCentre}"
                             Command="{Binding AlignCommand}" CommandParameter="X:Centre" MinWidth="58"
-                            ToolTip="Needs two or more objects selected." />
+                            ToolTip="With several selected, moves every other one to match the last picked; with one, centres it on the bed." />
                     <Button Visibility="{Binding IsAdvancedMode, Converter={StaticResource BoolToVisibility}}" Style="{StaticResource ToolButton}" Content="Right" Tag="{StaticResource IconAlignMax}"
                             Command="{Binding AlignCommand}" CommandParameter="X:Maximum" MinWidth="58"
-                            ToolTip="Needs two or more objects selected." />
+                            ToolTip="With several selected, moves every other one to match the last picked; with one, moves it to the bed's edge." />
                     <Button Visibility="{Binding IsAdvancedMode, Converter={StaticResource BoolToVisibility}}" Style="{StaticResource ToolButton}" Content="Spread" Tag="{StaticResource IconDistribute}"
                             Command="{Binding AlignCommand}" CommandParameter="X:Distribute" MinWidth="58"
                             ToolTip="Even out the gaps along X, keeping the two outermost objects where they are. Needs two or more objects selected." />
@@ -615,13 +615,13 @@
                                Foreground="#FF5A5F66" Margin="10,0,4,0" />
                     <Button Visibility="{Binding IsAdvancedMode, Converter={StaticResource BoolToVisibility}}" Style="{StaticResource ToolButton}" Content="Front" Tag="{StaticResource IconAlignMin}"
                             Command="{Binding AlignCommand}" CommandParameter="Y:Minimum" MinWidth="58"
-                            ToolTip="Needs two or more objects selected." />
+                            ToolTip="With several selected, moves every other one to match the last picked; with one, moves it to the bed's edge." />
                     <Button Visibility="{Binding IsAdvancedMode, Converter={StaticResource BoolToVisibility}}" Style="{StaticResource ToolButton}" Content="Centre" Tag="{StaticResource IconAlignCentre}"
                             Command="{Binding AlignCommand}" CommandParameter="Y:Centre" MinWidth="58"
-                            ToolTip="Needs two or more objects selected." />
+                            ToolTip="With several selected, moves every other one to match the last picked; with one, centres it on the bed." />
                     <Button Visibility="{Binding IsAdvancedMode, Converter={StaticResource BoolToVisibility}}" Style="{StaticResource ToolButton}" Content="Back" Tag="{StaticResource IconAlignMax}"
                             Command="{Binding AlignCommand}" CommandParameter="Y:Maximum" MinWidth="58"
-                            ToolTip="Needs two or more objects selected." />
+                            ToolTip="With several selected, moves every other one to match the last picked; with one, moves it to the bed's edge." />
                     <Button Visibility="{Binding IsAdvancedMode, Converter={StaticResource BoolToVisibility}}" Style="{StaticResource ToolButton}" Content="Spread" Tag="{StaticResource IconDistribute}"
                             Command="{Binding AlignCommand}" CommandParameter="Y:Distribute" MinWidth="58"
                             ToolTip="Even out the gaps along Y, keeping the two outermost objects where they are. Needs two or more objects selected." />
@@ -630,13 +630,13 @@
                                Foreground="#FF5A5F66" Margin="10,0,4,0" />
                     <Button Visibility="{Binding IsAdvancedMode, Converter={StaticResource BoolToVisibility}}" Style="{StaticResource ToolButton}" Content="Bottom" Tag="{StaticResource IconAlignMin}"
                             Command="{Binding AlignCommand}" CommandParameter="Z:Minimum" MinWidth="58"
-                            ToolTip="Needs two or more objects selected." />
+                            ToolTip="With several selected, moves every other one to match the last picked; with one, moves it to the bed's edge." />
                     <Button Visibility="{Binding IsAdvancedMode, Converter={StaticResource BoolToVisibility}}" Style="{StaticResource ToolButton}" Content="Centre" Tag="{StaticResource IconAlignCentre}"
                             Command="{Binding AlignCommand}" CommandParameter="Z:Centre" MinWidth="58"
-                            ToolTip="Needs two or more objects selected." />
+                            ToolTip="With several selected, moves every other one to match the last picked; with one, centres it on the bed." />
                     <Button Visibility="{Binding IsAdvancedMode, Converter={StaticResource BoolToVisibility}}" Style="{StaticResource ToolButton}" Content="Top" Tag="{StaticResource IconAlignMax}"
                             Command="{Binding AlignCommand}" CommandParameter="Z:Maximum" MinWidth="58"
-                            ToolTip="Needs two or more objects selected." />
+                            ToolTip="With several selected, moves every other one to match the last picked; with one, moves it to the bed's edge." />
                     <Button Visibility="{Binding IsAdvancedMode, Converter={StaticResource BoolToVisibility}}" Style="{StaticResource ToolButton}" Content="Spread" Tag="{StaticResource IconDistribute}"
                             Command="{Binding AlignCommand}" CommandParameter="Z:Distribute" MinWidth="58"
                             ToolTip="Even out the gaps along Z, keeping the two outermost objects where they are. Needs two or more objects selected." />
@@ -794,13 +794,7 @@
                     <ToggleButton Style="{StaticResource ToolToggle}" Content="Overhangs" Visibility="{Binding IsAdvancedMode, Converter={StaticResource BoolToVisibility}}" Tag="{StaticResource IconOverhang}"
                                   IsChecked="{Binding ShowOverhangs, Mode=TwoWay}" MinWidth="76"
                                   AutomationProperties.Name="Overhangs"
-                                  ToolTip="Faces that lean further from upright than the angle beside it, in red - what the slicer will want to support. Faces flat on the bed are left out: the bed holds them up." />
-                    <ComboBox Width="58" VerticalAlignment="Center" Margin="2,0,6,0"
-                              ItemsSource="{Binding OverhangAngles}" SelectedItem="{Binding OverhangAngle, Mode=TwoWay}"
-                              ItemStringFormat="{}{0:0}°"
-                              Visibility="{Binding ShowOverhangs, Converter={StaticResource BoolToVisibility}}"
-                              AutomationProperties.AutomationId="OverhangAngle"
-                              ToolTip="How far from upright a face may lean before it counts. 45 degrees suits most printers; a well-cooled one manages 50 or more." />
+                                  ToolTip="Faces that lean further from upright than the angle, marked in colour - what the slicer will want to support. Faces flat on the bed are left out: the bed holds them up. The angle and colour are set in the side panel while this is on." />
                     <ToggleButton Style="{StaticResource ToolToggle}" Content="Grid" Tag="{StaticResource IconGrid}"
                                   IsChecked="{Binding IsGridPanelOpen, Mode=TwoWay}"
                                   AutomationProperties.Name="Grid"
@@ -1734,7 +1728,7 @@
                                        ToolTip="How much bigger than the cutter the opening comes out, on every side. A 3 mm pin subtracted with 0.2 leaves a 3.4 mm bore." />
                             <TextBox Width="64" Style="{StaticResource NumberBox}" Tag="number"
                                      AutomationProperties.AutomationId="SubtractTolerance"
-                                     ToolTip="Millimetres per side. Exact on a cube, a cylinder or a sphere; refused on anything with a sloped face, where the gap would come out smaller than asked. 0 subtracts exactly as before."
+                                     ToolTip="Millimetres per side. Exact on a cube, a cylinder or a sphere; on anything else it asks first, since a sloped or off-axis face can come out with less than the number typed. 0 subtracts exactly as before."
                                      Text="{Binding SubtractTolerance, StringFormat=N2, UpdateSourceTrigger=LostFocus}" />
                             <TextBlock Text="mm" Foreground="#FF9AA0A8" VerticalAlignment="Center" Margin="5,0,0,0" />
                         </StackPanel>
@@ -1756,6 +1750,49 @@
                 </Border>
 
                 <StackPanel Grid.Row="8">
+                <!-- Overhangs: which faces will need support, and how they are marked. Not a tool
+                     either - Close here is the same switch as the ribbon's own toggle. -->
+                <Border Margin="0,10,0,0" Padding="8" Background="#FFEFF5FF"
+                        BorderBrush="#FFB8D2F0" BorderThickness="1" CornerRadius="3"
+                        AutomationProperties.AutomationId="OverhangsPanel"
+                        Visibility="{Binding ShowOverhangs, Converter={StaticResource BoolToVisibility}}">
+                    <StackPanel>
+                        <DockPanel Margin="0,0,0,6">
+                            <Button DockPanel.Dock="Right" Content="Close" Style="{StaticResource PanelButton}"
+                                    Command="{Binding CloseOverhangsPanelCommand}" />
+                            <TextBlock Text="Overhangs" FontWeight="SemiBold" VerticalAlignment="Center" />
+                        </DockPanel>
+
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+                            <TextBlock Text="Angle" Style="{StaticResource FieldLabel}" Width="50"
+                                       ToolTip="How far from upright a face may lean before it counts. 45 degrees suits most printers; a well-cooled one manages 50 or more." />
+                            <ComboBox Width="70" ItemsSource="{Binding OverhangAngles}" SelectedItem="{Binding OverhangAngle, Mode=TwoWay}"
+                                      ItemStringFormat="{}{0:0}°" AutomationProperties.AutomationId="OverhangAngle" />
+                        </StackPanel>
+
+                        <TextBlock Text="Colour" Style="{StaticResource FieldLabel}" HorizontalAlignment="Left" Margin="0,0,0,4" />
+                        <ItemsControl ItemsSource="{Binding OverhangSwatches}" Margin="0,0,0,6">
+                            <ItemsControl.ItemsPanel>
+                                <ItemsPanelTemplate>
+                                    <UniformGrid Columns="6" />
+                                </ItemsPanelTemplate>
+                            </ItemsControl.ItemsPanel>
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Button Style="{StaticResource SwatchButton}"
+                                            Background="{Binding Colour, Converter={StaticResource ColourToBrush}}"
+                                            ToolTip="{Binding Name}"
+                                            CommandParameter="{Binding Colour}"
+                                            Command="{Binding DataContext.SetOverhangColourCommand,
+                                                              RelativeSource={RelativeSource AncestorType=Window}}" />
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                        <Button Content="Custom..." Command="{Binding PickOverhangColourCommand}"
+                                HorizontalAlignment="Left" Padding="10,3" ToolTip="Pick any colour" />
+                    </StackPanel>
+                </Border>
+
                 <!-- Grid settings: the printable area, and what is drawn on the plate. Not a tool - it
                      stands nothing down and can stay open while working. -->
                 <Border Margin="0,10,0,0" Padding="8" Background="#FFEFF5FF"

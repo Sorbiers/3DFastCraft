@@ -69,11 +69,16 @@ public static class BedPlacement
     }
 
     /// <summary>
-    /// Where footprints of these sizes go on a bed <paramref name="width"/> across: in rows from the
-    /// back of the bed to the front, <paramref name="gap"/> between neighbours and between rows,
-    /// each row centred and the rows together centred on the bed. Deepest first, so no row is
-    /// deeper than it has to be. Returns the middle of each footprint in the order given, and how
-    /// much of the bed the arrangement covers.
+    /// Where footprints of these sizes go on a bed <paramref name="width"/> across: in rows from
+    /// the back of the bed to the front, <paramref name="gap"/> between neighbours and between
+    /// rows, each row centred and the rows together centred on the bed. Deepest first within a
+    /// row, so no row is deeper than it has to be. Returns the middle of each footprint in the
+    /// order given, and how much of the bed the arrangement covers.
+    ///
+    /// Packed at whichever row width, up to the bed's own, comes out closest to square - a
+    /// handful of small parts on a big bed, packed all the way across it, would leave most of its
+    /// depth empty and sit hugging the middle of one edge once centred rather than looking centred
+    /// at all; a row only as wide as the parts need spreads the same margin round every side.
     /// </summary>
     public static (List<Vector2> Centres, Vector2 Covers) Arrange(IReadOnlyList<Vector2> sizes, float gap, float width)
     {
@@ -81,36 +86,39 @@ public static class BedPlacement
         if (sizes.Count == 0) return (centres, Vector2.Zero);
 
         gap = MathF.Max(gap, 0f);
+        var order = Enumerable.Range(0, sizes.Count).OrderByDescending(i => sizes[i].Y).ToList();
 
-        // Rows filled in turn: a footprint goes on the end of the row until it would run off the
-        // bed, and then starts the next. One too wide for the bed has a row to itself.
-        var rows = new List<List<int>>();
-        float used = 0f;
-        foreach (int i in Enumerable.Range(0, sizes.Count).OrderByDescending(i => sizes[i].Y))
+        List<List<int>>? chosen = null;
+        float bestPenalty = float.MaxValue;
+
+        // Tried across a spread of row widths from a quarter of the bed up to the whole of it -
+        // narrow enough to let a handful of small parts pack into something closer to a square,
+        // never so narrow that a single part's own width would force it into a row alone.
+        float floor = MathF.Max(width / 4f, sizes.Max(s => s.X));
+        for (int step = 0; step <= 9; step++)
         {
-            if (rows.Count == 0 || used + gap + sizes[i].X > width)
-            {
-                rows.Add([]);
-                used = -gap;
-            }
+            float target = floor + (width - floor) * step / 9f;
+            var rows = PackRows(order, sizes, gap, target);
 
-            rows[^1].Add(i);
-            used += gap + sizes[i].X;
+            float rowWidth = rows.Max(r => RowWidth(r, sizes, gap));
+            float rowsDepth = rows.Sum(r => RowDepth(r, sizes)) + gap * (rows.Count - 1);
+            float penalty = MathF.Max(rowWidth, rowsDepth) / MathF.Max(MathF.Min(rowWidth, rowsDepth), 1e-3f);
+
+            if (penalty >= bestPenalty) continue;
+            bestPenalty = penalty;
+            chosen = rows;
         }
 
-        float RowWidth(List<int> row) => row.Sum(i => sizes[i].X) + gap * (row.Count - 1);
-        float RowDepth(List<int> row) => row.Max(i => sizes[i].Y);
-
         var covers = new Vector2(
-            rows.Max(RowWidth),
-            rows.Sum(RowDepth) + gap * (rows.Count - 1));
+            chosen!.Max(r => RowWidth(r, sizes, gap)),
+            chosen.Sum(r => RowDepth(r, sizes)) + gap * (chosen.Count - 1));
 
         // From the back edge of the arrangement towards the front, which is towards minus Y.
         float back = covers.Y / 2f;
-        foreach (var row in rows)
+        foreach (var row in chosen)
         {
-            float depth = RowDepth(row);
-            float x = -RowWidth(row) / 2f;
+            float depth = RowDepth(row, sizes);
+            float x = -RowWidth(row, sizes, gap) / 2f;
 
             foreach (int i in row)
             {
@@ -122,6 +130,53 @@ public static class BedPlacement
         }
 
         return (centres, covers);
+    }
+
+    private static float RowWidth(List<int> row, IReadOnlyList<Vector2> sizes, float gap) =>
+        row.Sum(i => sizes[i].X) + gap * (row.Count - 1);
+
+    private static float RowDepth(List<int> row, IReadOnlyList<Vector2> sizes) =>
+        row.Max(i => sizes[i].Y);
+
+    /// <summary>
+    /// Filled by best fit rather than by always adding to the row just opened: a footprint, taken
+    /// in the order given, joins whichever open row would have the least room spare once it is
+    /// in, so a gap a taller neighbour left behind is the one filled, rather than opening a
+    /// shallow row of its own further along. Only when it fits nowhere open does a new row start;
+    /// one too wide for the target on its own still gets a row to itself.
+    /// </summary>
+    private static List<List<int>> PackRows(IReadOnlyList<int> order, IReadOnlyList<Vector2> sizes, float gap, float target)
+    {
+        var rows = new List<List<int>>();
+        var used = new List<float>();
+
+        foreach (int i in order)
+        {
+            int best = -1;
+            float bestRoom = float.MaxValue;
+
+            for (int r = 0; r < rows.Count; r++)
+            {
+                float extra = (rows[r].Count > 0 ? gap : 0f) + sizes[i].X;
+                float room = target - used[r] - extra;
+                if (room < 0f || room >= bestRoom) continue;
+
+                best = r;
+                bestRoom = room;
+            }
+
+            if (best < 0)
+            {
+                rows.Add([]);
+                used.Add(0f);
+                best = rows.Count - 1;
+            }
+
+            used[best] += (rows[best].Count > 0 ? gap : 0f) + sizes[i].X;
+            rows[best].Add(i);
+        }
+
+        return rows;
     }
 
     /// <summary>

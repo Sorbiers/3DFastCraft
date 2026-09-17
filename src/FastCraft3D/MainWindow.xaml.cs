@@ -1340,7 +1340,7 @@ public partial class MainWindow : Window
 
         renderer.Wireframe = viewModel.ShowWireframe;
         renderer.Xray = viewModel.ShowXray;
-        renderer.ShowOverhangs(viewModel.ShowOverhangs, viewModel.OverhangAngle);
+        renderer.ShowOverhangs(viewModel.ShowOverhangs, viewModel.OverhangAngle, viewModel.OverhangColour);
 
         if (plateShown != PlateNow()) RebuildPlate();
 

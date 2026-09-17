@@ -1,5 +1,6 @@
 using System.Numerics;
 using System.Runtime.ExceptionServices;
+using System.Windows;
 using FastCraft3D.Geometry;
 using FastCraft3D.Geometry.Csg;
 using FastCraft3D.Geometry.Drawings;
@@ -22,6 +23,20 @@ public class DrawingTests
     }
 
     private static float Length(IEnumerable<Line2> lines) => lines.Sum(l => Vector2.Distance(l.A, l.B));
+
+    /// <summary>Several small boxes spread far apart along X: wide and shallow head-on, but tall in isometric, which shows every axis at once.</summary>
+    private static Mesh ScatteredBoxes() => Mesh.Combine(Enumerable.Range(0, 5)
+        .Select(i => MeshTransform.Transformed(Primitives.Box(20, 20, 20), Matrix4x4.CreateTranslation(i * 50f, 0, 10))));
+
+    /// <summary>A stepped block: a 60 x 40 x 20 base with a narrower 30 x 40 x 20 block on top of its left end.</summary>
+    private static Mesh SteppedBlock()
+    {
+        var baseBlock = MeshTransform.Transformed(Primitives.Box(60, 40, 20), Matrix4x4.CreateTranslation(30, 20, 10));
+        var step = MeshTransform.Transformed(Primitives.Box(30, 40, 20), Matrix4x4.CreateTranslation(15, 20, 30));
+        var whole = ManifoldCsg.Union(baseBlock, step);
+        Assert.NotNull(whole);
+        return whole;
+    }
 
     private static Dictionary<DrawingView, ViewLines> AllViews(Mesh mesh) =>
         Enum.GetValues<DrawingView>().ToDictionary(v => v, v => ViewDrawing.Build([mesh], v));
@@ -136,6 +151,118 @@ public class DrawingTests
         Assert.Equal((60f / 25.4f).ToString("0.##"), inches.Dimensions[0].Text);
 
         Assert.Empty(DrawingSheet.Layout(views, new Vector2(297, 210), new DrawingOptions { Dimensions = false }).Dimensions);
+    }
+
+    [Fact]
+    public void EveryDimensionChainsTheStepAndAddsTheOverallOnceMore()
+    {
+        var views = AllViews(SteppedBlock());
+
+        var plain = DrawingSheet.Layout(views, new Vector2(297, 210), new DrawingOptions());
+        Assert.Equal(["60", "40", "40"], plain.Dimensions.Select(d => d.Text));
+
+        var chained = DrawingSheet.Layout(views, new Vector2(297, 210), new DrawingOptions { AllDimensions = true });
+        var texts = chained.Dimensions.Select(d => d.Text).ToList();
+
+        // The step's two segments - 30 mm across it, 20 mm up it - are chained wherever the
+        // step is a real edge of the part, which turns out to be more than one view: it is a
+        // genuine corner, not just a front-on illusion, so the right view sees the same step in
+        // height peeking past the base's nearer end exactly as looking at the real part would.
+        Assert.Contains("30", texts);
+        Assert.Contains("20", texts);
+        Assert.Contains("60", texts);
+        Assert.Contains("40", texts);
+
+        // Chained several times over rather than once: every view now carries its own dimensions.
+        Assert.True(chained.Dimensions.Count > plain.Dimensions.Count + 3);
+    }
+
+    [Fact]
+    public void EveryDimensionLeavesACurvedHoleAloneAndOnlyAddsTheStraightEdges()
+    {
+        var views = AllViews(DrilledBlock());
+
+        var chained = DrawingSheet.Layout(views, new Vector2(297, 210), new DrawingOptions { AllDimensions = true });
+        var texts = chained.Dimensions.Select(d => d.Text).ToList();
+
+        // Front and top each give their own width and height, and the right view - which the
+        // plain drawing never dimensions at all - now gets its own two as well: six in all, and
+        // none of them from the hole, which is round from above and dashed from the front and so
+        // never comes out exactly level or plumb.
+        Assert.Equal(6, texts.Count);
+        Assert.All(texts, text => Assert.True(text is "60" or "30" or "40", $"an unexpected dimension: {text}"));
+    }
+
+    [Theory]
+    [InlineData(ScaleFormat.ModelOnly, "60")]
+    [InlineData(ScaleFormat.ModelWithReal, "60 mm (5.22 m)")]
+    [InlineData(ScaleFormat.RealWithModel, "5.22 m (60 mm)")]
+    public void AScaledModelWritesWhicheverFormatIsAsked(ScaleFormat format, string expected)
+    {
+        var views = AllViews(DrilledBlock());
+        var sheet = DrawingSheet.Layout(views, new Vector2(297, 210), new DrawingOptions { ModelScale = 87f, ScaleFormat = format });
+
+        Assert.Equal(expected, sheet.Dimensions[0].Text);
+    }
+
+    [Fact]
+    public void AnUnscaledModelIgnoresTheFormatEntirely()
+    {
+        var views = AllViews(DrilledBlock());
+        var sheet = DrawingSheet.Layout(views, new Vector2(297, 210), new DrawingOptions { ScaleFormat = ScaleFormat.RealWithModel });
+
+        Assert.Equal("60", sheet.Dimensions[0].Text);
+    }
+
+    [Theory]
+    [InlineData(1f, false)]
+    [InlineData(87f, true)]
+    public void TheScaleWordingOnlyShowsOnceTheModelStandsForSomethingElse(float modelScale, bool expectVisible)
+    {
+        ExceptionDispatchInfo? error = null;
+        var thread = new Thread(() =>
+        {
+            try
+            {
+                var window = new DrawingWindow([DrilledBlock()], "Drilled block", "mm", 1f, modelScale);
+                var panel = (FrameworkElement)window.FindName("ScaleFormatPanel")!;
+                Assert.Equal(expectVisible ? Visibility.Visible : Visibility.Collapsed, panel.Visibility);
+                window.Close();
+            }
+            catch (Exception ex) { error = ExceptionDispatchInfo.Capture(ex); }
+        });
+        thread.SetApartmentState(ApartmentState.STA);
+        thread.Start();
+        thread.Join();
+        error?.Throw();
+    }
+
+    /// <summary>
+    /// A wide, flat scatter of parts has an isometric far taller than any of the front, top or
+    /// right views - showing every axis at once, it cannot help but be - and that used to shrink
+    /// the whole sheet to fit that one corner. The isometric now finds its own scale instead,
+    /// smaller if it must be, and everything that actually carries a dimension is drawn as large
+    /// as the page allows.
+    /// </summary>
+    [Fact]
+    public void TheIsometricDoesNotShrinkTheOtherViewsToFitItsOwnCorner()
+    {
+        var views = AllViews(ScatteredBoxes());
+        var sheet = DrawingSheet.Layout(views, new Vector2(297, 210), new DrawingOptions());
+        var byView = sheet.Views.ToDictionary(v => v.Lines.View, v => v);
+
+        // The isometric shares a row with the view from above: its own height, on the page,
+        // ought to be well past what the view from above needs on its own - a wide scatter of
+        // parts spreads across the isometric's height as well as its width, where the view from
+        // above only ever reads their shallow depth.
+        Assert.True(views[DrawingView.Isometric].Size.Y > views[DrawingView.Top].Size.Y * 1.3f,
+            "the fixture does not make an isometric taller than the view from above needs - nothing to prove here");
+
+        Assert.Equal(sheet.Scale, byView[DrawingView.Front].Scale, 4);
+        Assert.Equal(sheet.Scale, byView[DrawingView.Top].Scale, 4);
+        Assert.Equal(sheet.Scale, byView[DrawingView.Right].Scale, 4);
+        Assert.True(byView[DrawingView.Isometric].Scale <= sheet.Scale + 1e-4f,
+            "the isometric was drawn larger than everything else");
     }
 
     [Fact]

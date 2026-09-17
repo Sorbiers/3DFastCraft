@@ -235,6 +235,9 @@ public sealed class MainViewModel : INotifyPropertyChanged
         VersionsCommand = RelayCommand.Simple(ShowVersions, () => projectPath is not null);
         NewCommand = RelayCommand.Simple(NewScene);
         CloseGridPanelCommand = RelayCommand.Simple(() => IsGridPanelOpen = false);
+        SetOverhangColourCommand = new RelayCommand(SetOverhangColour);
+        PickOverhangColourCommand = RelayCommand.Simple(PickOverhangColour);
+        CloseOverhangsPanelCommand = RelayCommand.Simple(() => ShowOverhangs = false);
         CloseShortcutsPanelCommand = RelayCommand.Simple(() => IsShortcutsPanelOpen = false);
         OpenCommand = RelayCommand.Simple(OpenProject);
         SaveCommand = RelayCommand.Simple(() => SaveProject(saveAs: false));
@@ -242,7 +245,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
         SetMoveModeCommand = RelayCommand.Simple(() => GizmoMode = GizmoMode.Move);
         SetRotateModeCommand = RelayCommand.Simple(() => GizmoMode = GizmoMode.Rotate);
         SetScaleModeCommand = RelayCommand.Simple(() => GizmoMode = GizmoMode.Scale);
-        AlignCommand = new RelayCommand(Align, _ => Scene.Selection.Count > 1);
+        AlignCommand = new RelayCommand(Align, CanAlign);
         RoundCommand = RelayCommand.Simple(RoundSelection, () => Scene.Selection.Any(o => o.CanRound));
         CopyCommand = RelayCommand.Simple(Copy, () => Scene.Selection.Count > 0);
         PasteCommand = RelayCommand.Simple(Paste, () => clipboard.Count > 0);
@@ -2498,10 +2501,12 @@ public sealed class MainViewModel : INotifyPropertyChanged
 
     private bool showOverhangs;
     private float overhangAngle = Overhangs.DefaultAngle;
+    private Vector3 overhangColour = Palette.WarningSwatches[0].Colour;
 
     /// <summary>
-    /// Faces that will need support, in red. Said in numbers on the status line as well, so a part
-    /// that has none says so rather than leaving you to look for red that is not there.
+    /// Faces that will need support, marked in <see cref="OverhangColour"/>. Said in numbers on
+    /// the status line as well, so a part that has none says so rather than leaving you to look
+    /// for a colour that is not there.
     /// </summary>
     public bool ShowOverhangs
     {
@@ -2526,14 +2531,42 @@ public sealed class MainViewModel : INotifyPropertyChanged
         }
     }
 
+    /// <summary>What an overhanging face is marked in. The viewer's own, like the grid: not saved with the project.</summary>
+    public Vector3 OverhangColour
+    {
+        get => overhangColour;
+        set
+        {
+            Set(ref overhangColour, value);
+            ViewChanged?.Invoke();
+        }
+    }
+
     public IReadOnlyList<float> OverhangAngles { get; } = [30f, 40f, 45f, 50f, 60f];
+
+    public IReadOnlyList<Swatch> OverhangSwatches => Palette.WarningSwatches;
+
+    public System.Windows.Input.ICommand SetOverhangColourCommand { get; }
+    public System.Windows.Input.ICommand PickOverhangColourCommand { get; }
+    public System.Windows.Input.ICommand CloseOverhangsPanelCommand { get; }
+
+    private void SetOverhangColour(object? parameter)
+    {
+        if (TryReadColour(parameter, out var colour)) OverhangColour = colour;
+    }
+
+    private void PickOverhangColour()
+    {
+        var dialog = new ColourDialog(overhangColour) { Owner = Application.Current?.MainWindow };
+        if (dialog.ShowDialog() == true && dialog.Result is { } picked) OverhangColour = picked;
+    }
 
     private void DescribeOverhangs()
     {
         double area = Scene.Shown.Sum(o => Overhangs.Area(o.ToWorldMesh(), overhangAngle));
         Status = area < 1.0
             ? $"No overhangs steeper than {overhangAngle:0} degrees - nothing needs support"
-            : $"Red: {area / 100.0:0.#} cm² steeper than {overhangAngle:0} degrees from upright, which will need support or a bridge";
+            : $"{area / 100.0:0.#} cm² steeper than {overhangAngle:0} degrees from upright will need support or a bridge";
     }
 
     /// <summary>
@@ -5211,6 +5244,26 @@ public sealed class MainViewModel : INotifyPropertyChanged
     /// <summary>
     /// Lines the selection up along an axis. The parameter is "axis:mode", for example "X:Centre".
     /// </summary>
+    /// <summary>Whether the Align button for this axis and mode has anything to do.</summary>
+    private bool CanAlign(object? parameter)
+    {
+        int count = Scene.Selection.Count;
+        bool distribute = parameter is string text && text.EndsWith(":Distribute", StringComparison.Ordinal);
+        return distribute ? count >= 3 : count >= 1;
+    }
+
+    /// <summary>The bed as a box: its middle at the origin, its surface at Z = 0, as the bed itself is drawn.</summary>
+    private Bounds PlateBounds => new(
+        new Vector3(-plateWidth / 2f, -plateDepth / 2f, 0f), new Vector3(plateWidth / 2f, plateDepth / 2f, plateHeight));
+
+    /// <summary>
+    /// Lines the selection up along an axis. The parameter is "axis:mode", for example "X:Centre".
+    ///
+    /// Everything moves to match the last object picked - the same object <c>Align to</c> moves
+    /// towards and Subtract cuts with, so which one stays put follows the same rule everywhere in
+    /// the app rather than happening to be whichever already sits furthest along the axis. With
+    /// one object selected there is nothing else to match, so it lines up on the bed instead.
+    /// </summary>
     private void Align(object? parameter)
     {
         if (parameter is not string text) return;
@@ -5219,11 +5272,12 @@ public sealed class MainViewModel : INotifyPropertyChanged
         if (!Enum.TryParse<Axis>(parts[0], out var axis)) return;
         if (!Enum.TryParse<AlignMode>(parts[1], out var mode)) return;
 
-        var selection = Scene.Selection;
-        if (selection.Count < 2) return;
+        var selection = Scene.SelectionInPickOrder;
+        if (selection.Count == 0) return;
+        if (mode == AlignMode.Distribute && selection.Count < 3) return;
 
         var before = selection.Select(TransformState.Capture).ToList();
-        var offsets = AlignTools.Offsets(selection, axis, mode);
+        var offsets = AlignTools.Offsets(selection, axis, mode, PlateBounds);
 
         for (int i = 0; i < selection.Count; i++)
             selection[i].Position += offsets[i];
@@ -5231,9 +5285,12 @@ public sealed class MainViewModel : INotifyPropertyChanged
         if (TransformCommand.CreateIfChanged($"Align {axis} {mode}", selection, before) is { } command)
         {
             Undo.Execute(command);
-            Status = mode == AlignMode.Distribute
-                ? $"Spread {selection.Count} objects evenly along {axis}"
-                : $"Aligned {selection.Count} objects to {mode} on {axis}";
+            Status = mode switch
+            {
+                AlignMode.Distribute => $"Spread {selection.Count} objects evenly along {axis}",
+                _ when selection.Count == 1 => $"Aligned {selection[0].Name} to {mode} on the bed's {axis}",
+                _ => $"Aligned {selection.Count - 1} object(s) to {mode} on {axis}, against {selection[^1].Name}"
+            };
         }
         else
         {
@@ -5539,18 +5596,28 @@ public sealed class MainViewModel : INotifyPropertyChanged
                 var awkward = selection[^1].CanTakeClearance ? null : selection[^1];
                 if (awkward is not null)
                 {
-                    Status = $"{awkward.Name} cannot take a clearance";
-                    MessageBox.Show(
-                        $"\"{awkward.Name}\" cannot be grown by a clearance.\n\n"
-                        + "A clearance is only exact on a cube, a cylinder or a sphere. On a "
-                        + "sloped face - a cone, a pyramid, a wedge - growing each dimension "
-                        + "leaves less clearance than you asked for, and a gap smaller than the "
-                        + "number typed is the one direction that jams a printed part. It is "
-                        + "refused rather than quietly under-delivered.\n\n"
-                        + "Subtract with the clearance at 0 and size the cutter yourself, or "
-                        + "make the cutter from a cube or a cylinder.",
-                        "3DFastCraft", MessageBoxButton.OK, MessageBoxImage.Information);
-                    return;
+                    // Not refused outright: growing by axis is only exact on a cube, a cylinder
+                    // or a sphere, but it is a fair approximation on anything roughly round about
+                    // its own centre - a gear about its axis, say - since most of the surface
+                    // then sits at much the same distance from the middle. Asked rather than
+                    // assumed, because on an eccentric shape it is a poor one.
+                    var sure = MessageBox.Show(
+                        $"\"{awkward.Name}\" is not a cube, a cylinder or a sphere, so growing it "
+                        + "by a clearance is not exact.\n\n"
+                        + "On a sloped or off-axis face - a cone, a pyramid, a wedge - it delivers "
+                        + "less than the number typed, by roughly the cosine of the slope: a real "
+                        + "risk of a gap too tight to fit. On a shape that is roughly round about "
+                        + "its own centre - a gear about its own axis - most of the surface sits "
+                        + "at much the same distance from the middle, so it comes out close to "
+                        + "even.\n\n"
+                        + "Grow it anyway?",
+                        "3DFastCraft", MessageBoxButton.YesNo, MessageBoxImage.Warning, MessageBoxResult.No);
+
+                    if (sure != MessageBoxResult.Yes)
+                    {
+                        Status = $"{awkward.Name} was not grown - a clearance is not exact on it";
+                        return;
+                    }
                 }
             }
 
@@ -7178,7 +7245,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
             : subjects.Count == 1 ? subjects[0].Name
             : "Untitled";
 
-        var window = new DrawingWindow(subjects.Select(o => o.ToWorldMesh()).ToList(), title, unit.Label, unit.Millimetres)
+        var window = new DrawingWindow(subjects.Select(o => o.ToWorldMesh()).ToList(), title, unit.Label, unit.Millimetres, modelScale)
         {
             Owner = Application.Current?.MainWindow
         };

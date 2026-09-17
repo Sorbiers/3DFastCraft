@@ -44,7 +44,22 @@
             <TextBlock Text="Show" Style="{StaticResource GroupHeader}" />
             <CheckBox x:Name="HiddenBox" Content="Hidden lines, dashed" Click="OnChanged" />
             <CheckBox x:Name="DimensionsBox" Content="Overall dimensions" Click="OnChanged" />
+            <CheckBox x:Name="AllDimensionsBox" Content="Every dimension" Margin="18,3,2,3" Click="OnChanged"
+                      IsEnabled="{Binding IsChecked, ElementName=DimensionsBox}"
+                      ToolTip="Every straight, axis-aligned edge on each view, not just its overall size - so any one view carries everything it shows. A curved or slanted edge, such as a hole, is left alone." />
             <CheckBox x:Name="IsometricBox" Content="Isometric view" Click="OnChanged" />
+
+            <StackPanel x:Name="ScaleFormatPanel" IsEnabled="{Binding IsChecked, ElementName=DimensionsBox}">
+                <TextBlock Text="Scale" Style="{StaticResource GroupHeader}" />
+                <RadioButton x:Name="ModelOnlyBox" GroupName="ScaleFormat" Content="Model size" Checked="OnChanged"
+                             ToolTip="Just what the model itself measures, e.g. &quot;50 mm&quot; - what the scale is set to makes no difference." />
+                <RadioButton x:Name="ModelWithRealBox" GroupName="ScaleFormat" Content="Model, real in brackets" Checked="OnChanged"
+                             ToolTip="What the model measures, with what it stands for beside it: &quot;50 mm (4.35 m)&quot;." />
+                <RadioButton x:Name="RealWithModelBox" GroupName="ScaleFormat" Content="Real, model in brackets" Checked="OnChanged"
+                             ToolTip="What it stands for, with the model's own size beside it: &quot;4.35 m (50 mm)&quot;." />
+                <RadioButton x:Name="RealOnlyBox" GroupName="ScaleFormat" Content="Real size" Checked="OnChanged"
+                             ToolTip="Only what it stands for, e.g. &quot;4.35 m&quot; - what the model itself measures is left off entirely." />
+            </StackPanel>
 
             <Border Margin="0,16,0,0" Padding="8,6" CornerRadius="3"
                     Background="White" BorderBrush="#FFD5DEEA" BorderThickness="1">

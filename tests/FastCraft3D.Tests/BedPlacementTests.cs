@@ -73,11 +73,14 @@ public class BedPlacementTests
     [Fact]
     public void DistributeLeavesTheGapAskedForBetweenNeighbours()
     {
+        // Deep enough, next to how wide they are together, that one row across is already close
+        // to square - stacking them instead would only make the result taller and thinner - so
+        // all three end up side by side rather than the arrangement splitting them into rows.
         var parts = new[]
         {
-            Box(20, 20, 20, new Vector3(50, 50, 50)),
-            Box(30, 20, 10, new Vector3(-70, 10, -5)),
-            Box(10, 20, 40, new Vector3(0, 0, 0))
+            Box(20, 60, 20, new Vector3(50, 50, 50)),
+            Box(30, 60, 10, new Vector3(-70, 10, -5)),
+            Box(10, 60, 40, new Vector3(0, 0, 0))
         };
 
         var covers = BedPlacement.Distribute(parts, 5f, 200f);
@@ -85,6 +88,8 @@ public class BedPlacementTests
         var sorted = parts.Select(p => p.WorldBounds).OrderBy(b => b.Min.X).ToList();
         Assert.Equal(5f, sorted[1].Min.X - sorted[0].Max.X, 3);
         Assert.Equal(5f, sorted[2].Min.X - sorted[1].Max.X, 3);
+        Assert.Equal(sorted[0].Center.Y, sorted[1].Center.Y, 3);
+        Assert.Equal(sorted[1].Center.Y, sorted[2].Center.Y, 3);
 
         Assert.All(parts, p => Assert.Equal(0f, p.WorldBounds.Min.Z, 3));
         Assert.Equal(70f, covers.X, 3);
@@ -92,16 +97,21 @@ public class BedPlacementTests
         Assert.Equal(0f, BedPlacement.Reach(parts).Center.Y, 3);
     }
 
+    /// <summary>
+    /// Five identical parts on a 200 mm bed used to pack three across before wrapping - 170 x
+    /// 90, a wide, shallow strip - purely because that is as many as the width allows. Packed
+    /// two a row instead, 110 x 140 comes out closer to square, with a more even margin left
+    /// round every side once it is centred.
+    /// </summary>
     [Fact]
     public void DistributeStartsANewRowWhenTheBedIsFull()
     {
         var parts = Enumerable.Range(0, 5).Select(_ => Box(50, 40, 10, Vector3.Zero)).ToArray();
 
-        // Three 50 mm parts and two 10 mm gaps make 170 mm; a fourth would need 230.
         var covers = BedPlacement.Distribute(parts, 10f, 200f);
 
-        Assert.Equal(170f, covers.X, 3);
-        Assert.Equal(90f, covers.Y, 3);
+        Assert.Equal(110f, covers.X, 3);
+        Assert.Equal(140f, covers.Y, 3);
 
         var boxes = parts.Select(p => p.WorldBounds).ToList();
         for (int i = 0; i < boxes.Count; i++)
@@ -109,9 +119,67 @@ public class BedPlacementTests
                 Assert.False(Overlap(boxes[i], boxes[j]), $"parts {i} and {j} overlap");
     }
 
+    /// <summary>
+    /// A handful of small parts on a bed much bigger than any of them used to pack across its
+    /// whole width, leaving most of its depth empty - a shape nothing like the bed's own, so it
+    /// read as hugging one edge rather than sitting in the middle. A squarer arrangement leaves
+    /// a comparable margin on every side instead.
+    /// </summary>
+    [Fact]
+    public void SmallPartsOnABigBedPackCloseToSquareRatherThanAcrossTheWholeWidth()
+    {
+        var sizes = new[] { 90f, 70f, 60f, 55f, 50f, 45f, 40f, 35f, 30f, 25f, 20f };
+        var parts = sizes.Select(s => Box(s, s * 0.8f, 10f, Vector3.Zero)).ToArray();
+
+        var covers = BedPlacement.Distribute(parts, 10f, 280f);
+
+        // Not the roughly 280 mm wide, 100 mm deep strip a full-width pack would have made:
+        // within a couple of times as wide as it is deep, not an order of magnitude.
+        Assert.True(covers.X < 280f * 0.7f, $"packed {covers.X:0} mm across a 280 mm bed - barely narrower than the whole of it");
+        Assert.True(MathF.Max(covers.X, covers.Y) / MathF.Min(covers.X, covers.Y) < 2.5f,
+            $"{covers.X:0} x {covers.Y:0} is not close to square");
+
+        var boxes = parts.Select(p => p.WorldBounds).ToList();
+        for (int i = 0; i < boxes.Count; i++)
+            for (int j = i + 1; j < boxes.Count; j++)
+                Assert.False(Overlap(boxes[i], boxes[j]), $"parts {i} and {j} overlap");
+
+        Assert.Equal(0f, BedPlacement.Reach(parts).Center.X, 3);
+        Assert.Equal(0f, BedPlacement.Reach(parts).Center.Y, 3);
+    }
+
     private static bool Overlap(Bounds a, Bounds b) =>
         a.Min.X < b.Max.X - 1e-3f && b.Min.X < a.Max.X - 1e-3f &&
         a.Min.Y < b.Max.Y - 1e-3f && b.Min.Y < a.Max.Y - 1e-3f;
+
+    /// <summary>
+    /// A small part goes into the gap a taller neighbour left behind in an earlier row, rather
+    /// than starting a shallow row of its own: two rows deep, not three, even though the row it
+    /// would have extended is already full.
+    /// </summary>
+    [Fact]
+    public void ASmallPartFillsTheRoomATallerNeighbourLeftInAnEarlierRow()
+    {
+        var parts = new[]
+        {
+            Box(70, 50, 10, Vector3.Zero),  // opens the first row, 30 mm of room left in it
+            Box(95, 40, 10, Vector3.Zero),  // does not fit the first row, opens the second, nearly full
+            Box(20, 10, 10, Vector3.Zero)   // fits neither row's end, but fits the room the first still has
+        };
+
+        var covers = BedPlacement.Distribute(parts, 5f, 100f);
+
+        // Next fit alone would have had to open a third, shallow row for the last part: 50 + 40
+        // + 10 deep plus two gaps, 110 mm. Best fit keeps it to the two rows already open.
+        Assert.Equal(95f, covers.Y, 3);
+
+        var boxes = parts.Select(p => p.WorldBounds).ToList();
+        Assert.Equal(boxes[0].Center.Y, boxes[2].Center.Y, 3);
+
+        for (int i = 0; i < boxes.Count; i++)
+            for (int j = i + 1; j < boxes.Count; j++)
+                Assert.False(Overlap(boxes[i], boxes[j]), $"parts {i} and {j} overlap");
+    }
 
     [Fact]
     public void APartStandingOnTheBedGrowsUpwardOnly()

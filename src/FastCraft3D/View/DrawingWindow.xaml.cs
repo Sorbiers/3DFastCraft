@@ -33,12 +33,14 @@ public partial class DrawingWindow : Window
     private readonly bool loading;
     private readonly string unitLabel;
     private readonly float unitMillimetres;
+    private readonly float modelScale;
     private Dictionary<DrawingView, ViewLines>? views;
 
-    public DrawingWindow(IReadOnlyList<Mesh> meshes, string title, string unitLabel, float unitMillimetres)
+    public DrawingWindow(IReadOnlyList<Mesh> meshes, string title, string unitLabel, float unitMillimetres, float modelScale = 1f)
     {
         this.unitLabel = unitLabel;
         this.unitMillimetres = unitMillimetres;
+        this.modelScale = modelScale;
 
         loading = true;
         InitializeComponent();
@@ -51,9 +53,17 @@ public partial class DrawingWindow : Window
         ThirdAngleBox.IsChecked = last.Options.Projection == Projection.ThirdAngle;
         HiddenBox.IsChecked = last.Options.HiddenLines;
         DimensionsBox.IsChecked = last.Options.Dimensions;
+        AllDimensionsBox.IsChecked = last.Options.AllDimensions;
         IsometricBox.IsChecked = last.Options.Isometric;
+        ModelOnlyBox.IsChecked = last.Options.ScaleFormat == ScaleFormat.ModelOnly;
+        ModelWithRealBox.IsChecked = last.Options.ScaleFormat == ScaleFormat.ModelWithReal;
+        RealWithModelBox.IsChecked = last.Options.ScaleFormat == ScaleFormat.RealWithModel;
+        RealOnlyBox.IsChecked = last.Options.ScaleFormat == ScaleFormat.RealOnly;
         TitleBox.Text = title;
         loading = false;
+
+        // The choice of wording only matters once the model stands for something else.
+        ScaleFormatPanel.Visibility = modelScale > 1.001f ? Visibility.Visible : Visibility.Collapsed;
 
         Loaded += async (_, _) =>
         {
@@ -71,10 +81,16 @@ public partial class DrawingWindow : Window
         Projection = ThirdAngleBox.IsChecked == true ? Projection.ThirdAngle : Projection.FirstAngle,
         HiddenLines = HiddenBox.IsChecked == true,
         Dimensions = DimensionsBox.IsChecked == true,
+        AllDimensions = AllDimensionsBox.IsChecked == true,
         Isometric = IsometricBox.IsChecked == true,
         Title = string.IsNullOrWhiteSpace(TitleBox.Text) ? "Untitled" : TitleBox.Text.Trim(),
         UnitLabel = unitLabel,
-        UnitMillimetres = unitMillimetres
+        UnitMillimetres = unitMillimetres,
+        ModelScale = modelScale,
+        ScaleFormat = RealOnlyBox.IsChecked == true ? ScaleFormat.RealOnly
+                    : RealWithModelBox.IsChecked == true ? ScaleFormat.RealWithModel
+                    : ModelOnlyBox.IsChecked == true ? ScaleFormat.ModelOnly
+                    : ScaleFormat.ModelWithReal
     };
 
     private Vector2 ChosenPaper()

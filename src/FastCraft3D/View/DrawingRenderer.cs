@@ -47,7 +47,7 @@ public static class DrawingRenderer
         foreach (var placed in sheet.Views)
         {
             var lines = placed.Lines;
-            Vector2 OnPaper(Vector2 model) => placed.Corner + (model - lines.Min) * sheet.Scale;
+            Vector2 OnPaper(Vector2 model) => placed.Corner + (model - lines.Min) * placed.Scale;
 
             // Not on the isometric, which is there to show the shape at a glance: dashed lines
             // through it only make it harder to read.
@@ -55,7 +55,7 @@ public static class DrawingRenderer
                 dc.DrawGeometry(null, hidden, Segments(lines.Hidden.Select(l => (P(OnPaper(l.A)), P(OnPaper(l.B))))));
             dc.DrawGeometry(null, outline, Segments(lines.Visible.Select(l => (P(OnPaper(l.A)), P(OnPaper(l.B))))));
 
-            var size = lines.Size * sheet.Scale;
+            var size = lines.Size * placed.Scale;
             Text(dc, Caption(lines.View), P(placed.Corner + new Vector2(size.X / 2f, size.Y + 4f)), 2.5, Faint, centre: true);
         }
 
@@ -133,7 +133,7 @@ public static class DrawingRenderer
         (string Label, string Value)[] cells =
         [
             ("SCALE", sheet.ScaleText),
-            ("UNITS", options.UnitLabel),
+            ("UNITS", options.ShownUnitLabel),
             ("PROJECTION", options.Projection == Projection.FirstAngle ? "First angle" : "Third angle"),
             ("DATE", date.ToString("d", CultureInfo.CurrentCulture))
         ];

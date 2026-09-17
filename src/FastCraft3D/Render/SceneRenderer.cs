@@ -56,6 +56,7 @@ public sealed class SceneRenderer : IDisposable
     private bool overhangsQueued;
     private bool showOverhangs;
     private float overhangAngle = Overhangs.DefaultAngle;
+    private Vector3 overhangColour = Palette.WarningSwatches[0].Colour;
 
     /// <summary>Stand-ins for the objects a split is being set up on: what stays, then what goes.</summary>
     private readonly Dictionary<SceneObject, List<MeshGeometryModel3D>> splitParts = new();
@@ -386,10 +387,11 @@ public sealed class SceneRenderer : IDisposable
     /// times a second, and turning a dense scan into world space for every one of them would make
     /// the drag itself stutter. Several changes waiting are done once.
     /// </summary>
-    public void ShowOverhangs(bool on, float angleDegrees)
+    public void ShowOverhangs(bool on, float angleDegrees, Vector3 colour)
     {
         showOverhangs = on;
         overhangAngle = angleDegrees;
+        overhangColour = colour;
 
         foreach (var o in visuals.Keys) MarkOverhangs(o);
         if (!on) foreach (var o in overhangs.Keys.ToList()) RemoveOverhangs(o);
@@ -423,8 +425,8 @@ public sealed class SceneRenderer : IDisposable
                 Geometry = MeshConverter.ToGeometry(faces),
                 Material = new PhongMaterial
                 {
-                    DiffuseColor = new SharpDX.Color4(0.93f, 0.24f, 0.2f, 1f),
-                    AmbientColor = new SharpDX.Color4(0.45f, 0.1f, 0.08f, 1f),
+                    DiffuseColor = new SharpDX.Color4(overhangColour.X, overhangColour.Y, overhangColour.Z, 1f),
+                    AmbientColor = new SharpDX.Color4(overhangColour.X * 0.35f, overhangColour.Y * 0.35f, overhangColour.Z * 0.35f, 1f),
                     SpecularColor = new SharpDX.Color4(0, 0, 0, 1)
                 },
                 CullMode = SharpDX.Direct3D11.CullMode.Back,

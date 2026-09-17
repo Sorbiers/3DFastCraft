@@ -31,11 +31,20 @@ public static class AlignTools
     /// <summary>
     /// The offsets that would align the given objects. Returned rather than applied so the
     /// caller can wrap the whole move in a single undo step.
+    ///
+    /// Everything but the last object moves to match it: the last is the anchor, the same
+    /// convention <c>Align to</c> and Subtract already give the last one picked - so which of a
+    /// multi-selection stays put is decided by the order they were chosen in, not by which
+    /// happens to sit furthest along the axis already. <paramref name="objects"/> should be
+    /// handed over in that order.
+    ///
+    /// With one object there is nothing else to line it up against except the bed it stands on,
+    /// given as <paramref name="bed"/>; without one, a single object is left where it is.
     /// </summary>
-    public static IReadOnlyList<Vector3> Offsets(IReadOnlyList<SceneObject> objects, Axis axis, AlignMode mode)
+    public static IReadOnlyList<Vector3> Offsets(IReadOnlyList<SceneObject> objects, Axis axis, AlignMode mode, Bounds? bed = null)
     {
         var offsets = new Vector3[objects.Count];
-        if (objects.Count < 2) return offsets; // nothing to line up against
+        if (objects.Count == 0) return offsets;
 
         var direction = AxisVector(axis);
         var boxes = objects.Select(o => o.WorldBounds).ToList();
@@ -46,29 +55,25 @@ public static class AlignTools
             return offsets;
         }
 
-        var span = Bounds.Empty;
-        foreach (var box in boxes) span = span.Union(box);
-
-        float target = mode switch
+        if (boxes.Count == 1)
         {
-            AlignMode.Minimum => Component(span.Min, axis),
-            AlignMode.Maximum => Component(span.Max, axis),
-            _ => Component(span.Center, axis)
-        };
-
-        for (int i = 0; i < boxes.Count; i++)
-        {
-            float current = mode switch
-            {
-                AlignMode.Minimum => Component(boxes[i].Min, axis),
-                AlignMode.Maximum => Component(boxes[i].Max, axis),
-                _ => Component(boxes[i].Center, axis)
-            };
-            offsets[i] = direction * (target - current);
+            if (bed is { } plate) offsets[0] = direction * (Edge(plate, axis, mode) - Edge(boxes[0], axis, mode));
+            return offsets;
         }
+
+        float anchor = Edge(boxes[^1], axis, mode);
+        for (int i = 0; i < boxes.Count; i++)
+            offsets[i] = direction * (anchor - Edge(boxes[i], axis, mode));
 
         return offsets;
     }
+
+    private static float Edge(Bounds box, Axis axis, AlignMode mode) => mode switch
+    {
+        AlignMode.Minimum => Component(box.Min, axis),
+        AlignMode.Maximum => Component(box.Max, axis),
+        _ => Component(box.Center, axis)
+    };
 
     /// <summary>
     /// Spreads the objects so the gaps between them are equal.

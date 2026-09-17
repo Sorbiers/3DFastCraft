@@ -15,58 +15,70 @@ public class AlignToolsTests
     private static SceneObject Box(string name, float size, Vector3 position) =>
         new(name, Primitives.Box(size, size, size)) { Position = position };
 
+    private static Bounds Bed(float width, float depth, float height) =>
+        new(new Vector3(-width / 2f, -depth / 2f, 0f), new Vector3(width / 2f, depth / 2f, height));
+
     /// <summary>Applies the offsets, as the command does, and reports the resulting bounds.</summary>
-    private static List<Bounds> Apply(List<SceneObject> objects, Axis axis, AlignMode mode)
+    private static List<Bounds> Apply(List<SceneObject> objects, Axis axis, AlignMode mode, Bounds? bed = null)
     {
-        var offsets = AlignTools.Offsets(objects, axis, mode);
+        var offsets = AlignTools.Offsets(objects, axis, mode, bed);
         for (int i = 0; i < objects.Count; i++) objects[i].Position += offsets[i];
         return objects.Select(o => o.WorldBounds).ToList();
     }
 
+    /// <summary>
+    /// The anchor - the last object handed in, the app's own convention for which of a selection
+    /// stays put - is deliberately the one sitting in the middle, neither the nearest nor the
+    /// furthest edge: aligning used to go to whichever object happened to be most extreme, which
+    /// made the result depend on where things already stood rather than on what was picked.
+    /// </summary>
     [Fact]
-    public void AligningToTheMinimumMakesTheNearEdgesAgree()
+    public void AligningToTheMinimumMovesEveryoneToMatchTheLastObjectPicked()
     {
         var objects = new List<SceneObject>
         {
-            Box("Big", 20, new Vector3(0, 0, 0)),
-            Box("Small", 10, new Vector3(40, 0, 0))
+            Box("Left", 10, new Vector3(0, 0, 0)),      // spans -5..5
+            Box("Right", 10, new Vector3(40, 0, 0)),    // spans 35..45
+            Box("Anchor", 10, new Vector3(20, 0, 0))    // spans 15..25 - picked last, neither extreme
         };
 
         var result = Apply(objects, Axis.X, AlignMode.Minimum);
 
-        // The big box spans -10..10, so both must now start at -10.
-        Assert.Equal(-10f, result[0].Min.X, 3);
-        Assert.Equal(-10f, result[1].Min.X, 3);
+        Assert.Equal(15f, result[0].Min.X, 3);
+        Assert.Equal(15f, result[1].Min.X, 3);
+        Assert.Equal(15f, result[2].Min.X, 3); // the anchor itself, unmoved
     }
 
     [Fact]
-    public void AligningToTheMaximumMakesTheFarEdgesAgree()
+    public void AligningToTheMaximumMovesEveryoneToMatchTheLastObjectPicked()
     {
         var objects = new List<SceneObject>
         {
-            Box("Big", 20, new Vector3(0, 0, 0)),
-            Box("Small", 10, new Vector3(40, 0, 0))
+            Box("Left", 10, new Vector3(0, 0, 0)),
+            Box("Right", 10, new Vector3(40, 0, 0)),
+            Box("Anchor", 10, new Vector3(20, 0, 0))    // spans 15..25, its far edge at 25
         };
 
         var result = Apply(objects, Axis.X, AlignMode.Maximum);
 
-        // The small box reaches 45, which is the furthest edge.
-        Assert.Equal(45f, result[0].Max.X, 3);
-        Assert.Equal(45f, result[1].Max.X, 3);
+        Assert.Equal(25f, result[0].Max.X, 3);
+        Assert.Equal(25f, result[1].Max.X, 3);
+        Assert.Equal(25f, result[2].Max.X, 3);
     }
 
     [Fact]
-    public void AligningToTheCentreLevelsTheCentres()
+    public void AligningToTheCentreLevelsEveryoneWithTheLastObjectPicked()
     {
         var objects = new List<SceneObject>
         {
             Box("A", 20, new Vector3(0, 0, 0)),
-            Box("B", 10, new Vector3(40, 0, 0))
+            Box("B", 10, new Vector3(40, 0, 0))  // the anchor, handed in last
         };
 
         var result = Apply(objects, Axis.X, AlignMode.Centre);
 
-        Assert.Equal(result[0].Center.X, result[1].Center.X, 3);
+        Assert.Equal(40f, result[0].Center.X, 3);
+        Assert.Equal(40f, result[1].Center.X, 3);
     }
 
     /// <summary>Only the chosen axis may move.</summary>
@@ -144,13 +156,38 @@ public class AlignToolsTests
     }
 
     [Fact]
-    public void ASingleObjectHasNothingToAlignAgainst()
+    public void ASingleObjectHasNothingToAlignAgainstWithoutABed()
     {
         var objects = new List<SceneObject> { Box("Only", 20, new Vector3(7, 3, 1)) };
 
         var offsets = AlignTools.Offsets(objects, Axis.X, AlignMode.Centre);
 
         Assert.Equal(Vector3.Zero, offsets[0]);
+    }
+
+    [Fact]
+    public void ASingleObjectLinesUpWithTheBedsEdgesAndMiddleWhenOneIsGiven()
+    {
+        var objects = new List<SceneObject> { Box("Only", 20, new Vector3(7, 3, 50)) };
+        var bed = Bed(200, 200, 200);
+
+        Assert.Equal(-100f, Apply(objects, Axis.X, AlignMode.Minimum, bed)[0].Min.X, 3);
+        Assert.Equal(100f, Apply(objects, Axis.X, AlignMode.Maximum, bed)[0].Max.X, 3);
+        Assert.Equal(0f, Apply(objects, Axis.Y, AlignMode.Centre, bed)[0].Center.Y, 3);
+
+        // The bed's own surface, not its middle height.
+        Assert.Equal(0f, Apply(objects, Axis.Z, AlignMode.Minimum, bed)[0].Min.Z, 3);
+    }
+
+    [Fact]
+    public void ASingleObjectCentresOnTheBedsMiddleHeightNotJustItsSurface()
+    {
+        var objects = new List<SceneObject> { Box("Only", 20, new Vector3(0, 0, 50)) };
+        var bed = Bed(200, 200, 240);
+
+        var result = Apply(objects, Axis.Z, AlignMode.Centre, bed);
+
+        Assert.Equal(120f, result[0].Center.Z, 3);
     }
 
     [Fact]
