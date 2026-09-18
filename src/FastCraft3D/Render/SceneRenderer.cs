@@ -423,10 +423,18 @@ public sealed class SceneRenderer : IDisposable
             var shown = new MeshGeometryModel3D
             {
                 Geometry = MeshConverter.ToGeometry(faces),
+
+                // An overhanging face is, by definition, tilted past the threshold - which more
+                // often than not means it faces away from the light rather than towards it. Lit
+                // the ordinary way, on diffuse and ambient alone, the colour picked for it read
+                // as a dark, muddy version of itself on exactly the faces it is meant to flag.
+                // Mostly emissive instead, so it reads as the colour chosen wherever it is on
+                // the model; diffuse and ambient only add a little shading on top of that.
                 Material = new PhongMaterial
                 {
-                    DiffuseColor = new SharpDX.Color4(overhangColour.X, overhangColour.Y, overhangColour.Z, 1f),
-                    AmbientColor = new SharpDX.Color4(overhangColour.X * 0.35f, overhangColour.Y * 0.35f, overhangColour.Z * 0.35f, 1f),
+                    EmissiveColor = new SharpDX.Color4(overhangColour.X * 0.75f, overhangColour.Y * 0.75f, overhangColour.Z * 0.75f, 1f),
+                    DiffuseColor = new SharpDX.Color4(overhangColour.X * 0.35f, overhangColour.Y * 0.35f, overhangColour.Z * 0.35f, 1f),
+                    AmbientColor = new SharpDX.Color4(overhangColour.X * 0.2f, overhangColour.Y * 0.2f, overhangColour.Z * 0.2f, 1f),
                     SpecularColor = new SharpDX.Color4(0, 0, 0, 1)
                 },
                 CullMode = SharpDX.Direct3D11.CullMode.Back,
