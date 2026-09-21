@@ -67,6 +67,11 @@ public sealed class SceneRenderer : IDisposable
     /// <summary>What the split has in hand, while everything else stands out of the way.</summary>
     private IReadOnlyList<SceneObject>? isolated;
 
+    /// <summary>The one object a tool is previewing, when a tool has the plate to itself.</summary>
+    private SceneObject? alone;
+
+    private bool showOutlines = true;
+
     /// <summary>The face waiting to be engraved, drawn over the surface while it is picked.</summary>
     private bool wireframe;
     private bool xray;
@@ -78,14 +83,21 @@ public sealed class SceneRenderer : IDisposable
     private MeshGeometryModel3D? restingShown;
     private MeshGeometryModel3D? restingHovered;
 
-    public SceneRenderer(GroupModel3D root, Scene scene)
+    /// <summary>Asks the viewport for a frame when the scene changes. See ViewportRepaint.</summary>
+    private readonly ViewportRepaint? repaint;
+
+    public SceneRenderer(GroupModel3D root, Scene scene, ViewportRepaint? repaint = null)
     {
         this.root = root;
         this.scene = scene;
+        this.repaint = repaint;
 
         scene.Objects.CollectionChanged += OnCollectionChanged;
         foreach (var o in scene.Objects) Attach(o);
     }
+
+    /// <summary>Asks for the scene to be drawn again. See ViewportRepaint for why it has to.</summary>
+    private void Invalidate() => repaint?.Ask();
 
     /// <summary>
     /// Marks the face that is about to be engraved, or clears it when given null.
@@ -97,6 +109,8 @@ public sealed class SceneRenderer : IDisposable
     /// </summary>
     public void ShowFace(FacePatch? face, GrooveSet? preview = null, Mesh? overlay = null)
     {
+        Invalidate();
+
         if (facePreview is not null)
         {
             root.Children.Remove(facePreview);
@@ -175,6 +189,8 @@ public sealed class SceneRenderer : IDisposable
     /// </summary>
     public void ShowConnectorMarks(IReadOnlyList<Connectors.Mark> marks, Vector3 normal)
     {
+        Invalidate();
+
         if (connectorMarks is not null)
         {
             root.Children.Remove(connectorMarks);
@@ -232,6 +248,8 @@ public sealed class SceneRenderer : IDisposable
     /// </summary>
     public void ShowRestingFaces(IReadOnlyList<RestingFace> faces, int hovered)
     {
+        Invalidate();
+
         foreach (var shown in new[] { restingShown, restingHovered })
         {
             if (shown is null) continue;
@@ -326,6 +344,8 @@ public sealed class SceneRenderer : IDisposable
     public void ShowSplit(IReadOnlyList<SceneObject> targets, Vector3 normal, float offset,
                           SplitKeep keep, SplitOffcut offcut, bool fill)
     {
+        Invalidate();
+
         // Keeping both halves throws nothing away, so there is nothing to fade or hide.
         bool showing = offcut is not SplitOffcut.Shown
                        && keep is SplitKeep.Front or SplitKeep.Back
@@ -360,23 +380,70 @@ public sealed class SceneRenderer : IDisposable
     /// </summary>
     public void IsolateForSplit(IReadOnlyList<SceneObject>? cutting)
     {
+        Invalidate();
+
         isolated = cutting;
 
         foreach (var (o, visual) in visuals) ShowOrHide(o, visual);
     }
 
     /// <summary>
-    /// Whether an object is drawn at all. Two things take it off the plate: a split standing its
-    /// halves in for it, and a split standing everything else out of the way.
+    /// Draws one object and nothing else, for a tool showing what it is about to add, or puts
+    /// everything back when given null.
+    ///
+    /// A lithophane is judged by its picture, and whatever else is standing on the plate is read
+    /// as part of it. Only the drawing is affected: nothing is hidden in the scene itself, so the
+    /// object list and the undo history are left alone.
+    /// </summary>
+    public void ShowOnly(SceneObject? o)
+    {
+        if (ReferenceEquals(alone, o)) return;
+
+        Invalidate();
+        alone = o;
+
+        foreach (var (obj, visual) in visuals) ShowOrHide(obj, visual);
+    }
+
+    /// <summary>
+    /// Whether a selected object is traced in white.
+    ///
+    /// On a dense mesh every feature edge is an edge, so the outline covers the surface rather
+    /// than bounding it - a lithophane comes back as a white haze of its own picture. Worth
+    /// turning off there, which is what the View tab's Outline does.
+    /// </summary>
+    public bool ShowOutlines
+    {
+        get => showOutlines;
+        set
+        {
+            if (showOutlines == value) return;
+
+            Invalidate();
+            showOutlines = value;
+
+            foreach (var o in visuals.Keys.ToList()) UpdateOutline(o);
+        }
+    }
+
+    /// <summary>
+    /// Whether an object is drawn at all. Three things take it off the plate: a split standing
+    /// its halves in for it, a split standing everything else out of the way, and a tool showing
+    /// its own preview on its own.
     /// </summary>
     private void ShowOrHide(SceneObject o, MeshGeometryModel3D visual)
     {
         bool draw = !o.IsHidden
                     && !splitParts.ContainsKey(o)
-                    && (isolated is null || isolated.Contains(o));
+                    && (isolated is null || isolated.Contains(o))
+                    && (alone is null || ReferenceEquals(alone, o));
 
         visual.Visibility = draw ? Visibility.Visible : Visibility.Collapsed;
         if (overhangs.TryGetValue(o, out var shown)) shown.Visibility = visual.Visibility;
+
+        // The outline is a model of its own rather than part of the solid, so left alone it
+        // would hang in the air round an object that is no longer drawn.
+        if (outlines.TryGetValue(o, out var line)) line.Visibility = visual.Visibility;
     }
 
     /// <summary>
@@ -389,6 +456,8 @@ public sealed class SceneRenderer : IDisposable
     /// </summary>
     public void ShowOverhangs(bool on, float angleDegrees, Vector3 colour)
     {
+        Invalidate();
+
         showOverhangs = on;
         overhangAngle = angleDegrees;
         overhangColour = colour;
@@ -408,6 +477,8 @@ public sealed class SceneRenderer : IDisposable
 
     private void UpdateOverhangs()
     {
+        Invalidate();
+
         overhangsQueued = false;
         var stale = overhangsStale.ToList();
         overhangsStale.Clear();
@@ -464,6 +535,8 @@ public sealed class SceneRenderer : IDisposable
     /// </summary>
     public void ShowSketch(Geometry.Sketches.Sketch? sketch, Vector2? cursor, Geometry.Sketches.SketchTool tool)
     {
+        Invalidate();
+
         if (sketchShown is not null)
         {
             root.Children.Remove(sketchShown);
@@ -529,6 +602,8 @@ public sealed class SceneRenderer : IDisposable
     /// <summary>Puts the objects back the way they are drawn when no split is being set up.</summary>
     public void ClearSplit()
     {
+        Invalidate();
+
         split = null;
         foreach (var o in splitParts.Keys.ToList()) Release(o);
     }
@@ -657,6 +732,7 @@ public sealed class SceneRenderer : IDisposable
 
             foreach (var (o, visual) in visuals) ApplyLook(o, visual);
             RefreshSplitLook();
+            Invalidate();
         }
     }
 
@@ -674,6 +750,7 @@ public sealed class SceneRenderer : IDisposable
 
             foreach (var (o, visual) in visuals) ApplyLook(o, visual);
             RefreshSplitLook();
+            Invalidate();
         }
     }
 
@@ -712,6 +789,8 @@ public sealed class SceneRenderer : IDisposable
 
     private void OnCollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
     {
+        Invalidate();
+
         if (e.OldItems is not null)
             foreach (SceneObject o in e.OldItems) Detach(o);
 
@@ -759,6 +838,8 @@ public sealed class SceneRenderer : IDisposable
 
     private void OnObjectChanged(object? sender, PropertyChangedEventArgs e)
     {
+        Invalidate();
+
         if (sender is not SceneObject o || !visuals.TryGetValue(o, out var visual)) return;
 
         switch (e.PropertyName)
@@ -810,6 +891,12 @@ public sealed class SceneRenderer : IDisposable
         // outline of the whole shape round them would draw the half that is being taken off.
         if (splitParts.ContainsKey(o)) return;
 
+        if (!showOutlines)
+        {
+            RemoveOutline(o);
+            return;
+        }
+
         if (!o.IsSelected)
         {
             RemoveOutline(o);
@@ -841,6 +928,8 @@ public sealed class SceneRenderer : IDisposable
 
         outlines[o] = outline;
         root.Children.Add(outline);
+
+        if (visuals.TryGetValue(o, out var solid)) outline.Visibility = solid.Visibility;
     }
 
     private void RemoveOutline(SceneObject o)

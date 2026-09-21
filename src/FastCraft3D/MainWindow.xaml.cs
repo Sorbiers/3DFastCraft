@@ -30,6 +30,9 @@ public partial class MainWindow : Window
 {
     private readonly MainViewModel viewModel = new();
     private SceneRenderer? renderer;
+
+    /// <summary>Asks the viewport for a frame. The renderer is given this same one.</summary>
+    private ViewportRepaint? repaint;
     private MeasureOverlay? measure;
 
     /// <summary>Which end of the tape is being dragged: 0, 1, or -1 for none.</summary>
@@ -87,10 +90,12 @@ public partial class MainWindow : Window
         View.Camera = CreateCamera();
         ConfigureCameraGestures();
 
+        repaint = new ViewportRepaint(View);
+
         RebuildPlate();
         viewModel.ViewChanged += ApplyViewSettings;
 
-        renderer = new SceneRenderer(ContentGroup, viewModel.Scene);
+        renderer = new SceneRenderer(ContentGroup, viewModel.Scene, repaint);
 
         measure = new MeasureOverlay(MeasureLayer, new Viewport3DXProjector(View));
         viewModel.MeasureChanged += () => measure.Show(viewModel.MeasureFrom, viewModel.MeasureTo);
@@ -157,8 +162,15 @@ public partial class MainWindow : Window
         CompositionTarget.Rendering += OnFrame;
 
         // A resize changes where everything projects to without touching the camera, so the
-        // dirty check above would not notice on its own.
-        View.SizeChanged += (_, _) => { gizmo?.Reposition(); measure?.Reposition(); };
+        // dirty check above would not notice on its own. The scene has to be asked for as well:
+        // the frame the host draws as it resizes can go out before it has the meshes to draw,
+        // which is the plate that comes back with its squares missing.
+        View.SizeChanged += (_, _) =>
+        {
+            gizmo?.Reposition();
+            measure?.Reposition();
+            Repaint();
+        };
 
         viewModel.ZoomExtentsRequested += () => Dispatcher.BeginInvoke(new Action(ZoomExtents));
         viewModel.PropertyChanged += OnViewModelChanged;
@@ -1340,15 +1352,27 @@ public partial class MainWindow : Window
 
         renderer.Wireframe = viewModel.ShowWireframe;
         renderer.Xray = viewModel.ShowXray;
+        renderer.ShowOutlines = viewModel.ShowOutlines;
+        renderer.ShowOnly(viewModel.PreviewAlone);
         renderer.ShowOverhangs(viewModel.ShowOverhangs, viewModel.OverhangAngle, viewModel.OverhangColour);
 
         if (plateShown != PlateNow()) RebuildPlate();
 
         PlateGroup.Visibility = viewModel.ShowPlate ? Visibility.Visible : Visibility.Collapsed;
+        Repaint();
     }
+
+    /// <summary>
+    /// Asks for a frame after something outside the renderer has changed what is drawn: the
+    /// plate, the split plane, a view setting, the window's own size. See ViewportRepaint for
+    /// why anything has to ask at all.
+    /// </summary>
+    private void Repaint() => repaint?.Ask();
 
     private void RebuildPlate()
     {
+        Repaint();
+
         foreach (var element in PlateGroup.Children) element.Dispose();
         PlateGroup.Children.Clear();
 
@@ -1481,6 +1505,8 @@ public partial class MainWindow : Window
 
     private void UpdateSplitPlane()
     {
+        Repaint();
+
         if (splitPlaneVisual is not null)
         {
             OverlayGroup.Children.Remove(splitPlaneVisual);

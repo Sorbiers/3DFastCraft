@@ -503,6 +503,9 @@
                     <Button Style="{StaticResource ToolButton}" Content="Text" Tag="{StaticResource IconText3D}"
                             Command="{Binding InsertTextCommand}" MinWidth="58"
                             ToolTip="Lettering as an object of its own - a sign, a name tag, a keychain - in any installed font, lying on the plate or standing up. To put letters on a face that is already there, use Emboss or Engrave." />
+                    <Button Style="{StaticResource ToolButton}" Content="Lithophane" Visibility="{Binding IsAdvancedMode, Converter={StaticResource BoolToVisibility}}" Tag="{StaticResource IconLithophane}"
+                            Command="{Binding InsertLithophaneCommand}" MinWidth="86"
+                            ToolTip="A photograph as a thin translucent plate: thin where the picture is white, thick where it is dark, so it shows only when it is lit from behind. Flat, or curved round for a lamp shade." />
                     <Button Style="{StaticResource ToolButton}" Content="Sketch" Visibility="{Binding IsAdvancedMode, Converter={StaticResource BoolToVisibility}}" Tag="{StaticResource IconSketchLine}"
                             Command="{Binding BeginSketchCommand}" MinWidth="64"
                             ToolTip="Draw an outline on the plate - lines, arcs, smooth curves, freehand, rectangles, circles - and extrude or revolve it into a solid. Seen from above; Escape or Done when finished." />
@@ -788,6 +791,10 @@
                     <ToggleButton Style="{StaticResource ToolToggle}" Content="X-ray" Tag="{StaticResource IconXray}"
                                   IsChecked="{Binding ShowXray}"
                                   ToolTip="Fade everything that is not selected, to see a part buried inside another" />
+                    <ToggleButton Style="{StaticResource ToolToggle}" Content="Outline" Tag="{StaticResource IconOutline}"
+                                  IsChecked="{Binding ShowOutlines}" MinWidth="76"
+                                  AutomationProperties.Name="Outline"
+                                  ToolTip="The white line round a selected object's own edges. Turn it off on a dense mesh, where it traces every feature edge and covers the surface it is meant to bound" />
                     <ToggleButton Style="{StaticResource ToolToggle}" Content="Plate" Tag="{StaticResource IconPlate}"
                                   IsChecked="{Binding ShowPlate}"
                                   ToolTip="Show or hide the build plate" />

@@ -149,6 +149,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
         InsertCustomCommand = RelayCommand.Simple(InsertCustom);
         InsertTextCommand = RelayCommand.Simple(InsertText);
         InsertHoleCommand = AsyncRelayCommand.Simple(InsertHole);
+        InsertLithophaneCommand = AsyncRelayCommand.Simple(InsertLithophane);
         HullCommand = RelayCommand.Simple(HullSelection, () => Scene.Selection.Count > 0);
         BeginSketchCommand = new RelayCommand(p => BeginSketch(Enum.TryParse<SketchTool>(p as string, out var tool) ? tool : SketchTool.Line));
         SketchCloseCommand = RelayCommand.Simple(() => SayOfSketch(sketch.Close()), () => sketch.Chain.Count >= 3);
@@ -268,6 +269,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
     public System.Windows.Input.ICommand InsertCustomCommand { get; }
     public System.Windows.Input.ICommand InsertTextCommand { get; }
     public System.Windows.Input.ICommand InsertHoleCommand { get; }
+    public System.Windows.Input.ICommand InsertLithophaneCommand { get; }
     public System.Windows.Input.ICommand HullCommand { get; }
     public System.Windows.Input.ICommand BeginSketchCommand { get; }
     public System.Windows.Input.ICommand SketchCloseCommand { get; }
@@ -2499,6 +2501,29 @@ public sealed class MainViewModel : INotifyPropertyChanged
         set { Set(ref showPlate, value); ViewChanged?.Invoke(); }
     }
 
+    private bool showOutlines = true;
+    private SceneObject? previewAlone;
+
+    /// <summary>
+    /// The white line traced round a selected object's own edges. Worth turning off on a dense
+    /// mesh, where every feature edge is an edge and the outline covers the surface itself.
+    /// </summary>
+    public bool ShowOutlines
+    {
+        get => showOutlines;
+        set { Set(ref showOutlines, value); ViewChanged?.Invoke(); }
+    }
+
+    /// <summary>
+    /// The one object a tool is previewing, drawn on its own while the tool's panel is open.
+    /// Null the rest of the time, which is everything drawn as usual.
+    /// </summary>
+    public SceneObject? PreviewAlone
+    {
+        get => previewAlone;
+        set { Set(ref previewAlone, value); ViewChanged?.Invoke(); }
+    }
+
     private bool showOverhangs;
     private float overhangAngle = Overhangs.DefaultAngle;
     private Vector3 overhangColour = Palette.WarningSwatches[0].Colour;
@@ -4147,6 +4172,104 @@ public sealed class MainViewModel : INotifyPropertyChanged
         var check = StairBuilder.Measure(s.Rise, s.Run, s.Steps, modelScale);
         Status = $"Inserted a flight of {s.Steps} - {check.RiserMm:0.#} mm risers on "
                + $"{check.GoingMm:0.#} mm treads{(check.IsClimbable ? "" : ", which is steep")}";
+    }
+
+    /// <summary>The last lithophane made, so the next starts where the last was left.</summary>
+    private LithophaneOptions lastLithophane = new();
+
+    /// <summary>
+    /// A photograph as a lithophane: a thin plate carrying it as thickness, shown on the plate
+    /// while the numbers are chosen and built at full detail only once it is added.
+    ///
+    /// The picture is asked for first. Everything in the panel is about a picture, and a panel
+    /// that opens with nothing in it has nothing to say.
+    /// </summary>
+    private async Task InsertLithophane()
+    {
+        if (IsBusy) return;
+
+        var chosen = new OpenFileDialog { Filter = PictureReader.Filter, Title = "A picture for the lithophane" };
+        if (chosen.ShowDialog() != true) return;
+
+        var colour = NextAutomaticColour();
+        SceneObject? shown = null;
+
+        var dialog = new LithophaneDialog(chosen.FileName, lastLithophane, mesh =>
+        {
+            if (mesh is null)
+            {
+                if (shown is not null) Scene.Objects.Remove(shown);
+                shown = null;
+                PreviewAlone = null;
+                return;
+            }
+
+            if (shown is null)
+            {
+                shown = new SceneObject("Lithophane", mesh) { Colour = colour };
+                Scene.Objects.Add(shown);
+
+                // On the plate on its own, and not selected. Anything else standing there is
+                // read as part of the picture, and the white outline of a selected lithophane
+                // traces every feature edge - which is the picture itself.
+                Scene.ClearSelection();
+                PreviewAlone = shown;
+                RefreshSelection();
+            }
+            else
+            {
+                shown.Mesh = mesh;
+            }
+
+            // Standing on the plate, wherever the picture's own size has moved its middle to.
+            shown.Position = shown.Position with { Z = shown.Position.Z - shown.WorldBounds.Min.Z };
+        });
+
+        bool accepted;
+        try
+        {
+            accepted = dialog.ShowDialog() == true;
+        }
+        finally
+        {
+            // However it ended: the preview comes off the plate - it was never in the undo
+            // history - and everything else is drawn again.
+            PreviewAlone = null;
+            if (shown is not null) Scene.Objects.Remove(shown);
+        }
+        if (!accepted || dialog.Result is not { } options || dialog.Picture is not { } picture) return;
+
+        lastLithophane = options;
+
+        // The real one is a few hundred thousand triangles: off the window's thread, with the
+        // usual way out if it turns out to be more than anyone wanted to wait for.
+        var token = StartWork($"Building {dialog.PictureName}");
+        try
+        {
+            var built = await Task.Run(() => Lithophane.Build(picture, options), token);
+
+            var o = new SceneObject(Scene.UniqueName(dialog.PictureName), built) { Colour = colour }.Centred();
+            o.Position = o.Position with { Z = o.Position.Z - o.WorldBounds.Min.Z };
+
+            Undo.Execute(new AddObjectsCommand($"Insert {dialog.PictureName}", [o]));
+            RefreshSelection();
+
+            var grid = Lithophane.Grid(picture.Width, picture.Height, options);
+            Status = $"Added {dialog.PictureName} - {grid.Width:0.#} x {grid.Height:0.#} mm, "
+                   + $"{Lithophane.GreyLevels(options)} greys, {built.TriangleCount:N0} triangles. It needs a light behind it.";
+        }
+        catch (Exception abort) when (WasAborted(abort))
+        {
+            Status = $"{busyTitle} aborted - nothing was added";
+        }
+        catch (Exception ex)
+        {
+            Status = $"The lithophane could not be built: {ex.Message}";
+        }
+        finally
+        {
+            EndWork();
+        }
     }
 
     /// <summary>The last thread added, so a nut made after its rod starts at the same size.</summary>
