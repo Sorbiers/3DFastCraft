@@ -1,4 +1,4 @@
-param([int]$X, [int]$Y, [switch]$Drag, [int]$ToX, [int]$ToY)
+param([int]$X, [int]$Y, [switch]$Drag, [int]$ToX, [int]$ToY, [switch]$Right)
 
 Add-Type -TypeDefinition @"
 using System;
@@ -9,7 +9,7 @@ public class M {
   [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr h);
   [DllImport("user32.dll")] public static extern bool GetWindowRect(IntPtr h, out R r);
   public struct R { public int L, T, Rt, B; }
-  public const uint DOWN = 0x0002, UP = 0x0004;
+  public const uint DOWN = 0x0002, UP = 0x0004, RDOWN = 0x0008, RUP = 0x0010;
 }
 "@ -ErrorAction SilentlyContinue
 
@@ -23,7 +23,10 @@ $r = New-Object M+R
 $sx = $r.L + $X; $sy = $r.T + $Y
 [void][M]::SetCursorPos($sx, $sy)
 Start-Sleep -Milliseconds 150
-[M]::mouse_event([M]::DOWN, 0, 0, 0, [IntPtr]::Zero)
+$down = if ($Right) { [M]::RDOWN } else { [M]::DOWN }
+$up = if ($Right) { [M]::RUP } else { [M]::UP }
+
+[M]::mouse_event($down, 0, 0, 0, [IntPtr]::Zero)
 Start-Sleep -Milliseconds 120
 
 if ($Drag) {
@@ -36,6 +39,6 @@ if ($Drag) {
   }
 }
 
-[M]::mouse_event([M]::UP, 0, 0, 0, [IntPtr]::Zero)
+[M]::mouse_event($up, 0, 0, 0, [IntPtr]::Zero)
 Start-Sleep -Milliseconds 350
-Write-Output "clicked window($X,$Y) -> screen($sx,$sy)"
+Write-Output "$(if ($Right) { "right-" })clicked window($X,$Y) -> screen($sx,$sy)"

@@ -790,7 +790,7 @@
                                   ToolTip="Draw every triangle edge - useful for seeing how dense an import is" />
                     <ToggleButton Style="{StaticResource ToolToggle}" Content="X-ray" Tag="{StaticResource IconXray}"
                                   IsChecked="{Binding ShowXray}"
-                                  ToolTip="Fade everything that is not selected, to see a part buried inside another" />
+                                  ToolTip="Fade everything that is not selected, to see a part buried inside another. While a tool has the plate to itself - a split, a preview - it also brings the rest back, drawn through rather than taken away" />
                     <ToggleButton Style="{StaticResource ToolToggle}" Content="Outline" Tag="{StaticResource IconOutline}"
                                   IsChecked="{Binding ShowOutlines}" MinWidth="76"
                                   AutomationProperties.Name="Outline"
@@ -1235,7 +1235,7 @@
                         <TextBlock Text="{Binding SketchReadout}" TextWrapping="Wrap" Foreground="#FF5A5F66" Margin="0,0,0,6" />
                         <WrapPanel Margin="0,0,0,10">
                             <Button Content="Close" Style="{StaticResource PanelButton}" Command="{Binding SketchCloseCommand}"
-                                    ToolTip="Close the line being drawn into an outline (Enter)" />
+                                    ToolTip="Close the line being drawn into an outline (Enter, or a right-click on the plate)" />
                             <Button Content="Undo" Style="{StaticResource PanelButton}" Command="{Binding SketchUndoCommand}"
                                     ToolTip="Take back the last point, or the last outline (Backspace)" />
                             <Button Content="Clear" Style="{StaticResource PanelButton}" Command="{Binding SketchClearCommand}"

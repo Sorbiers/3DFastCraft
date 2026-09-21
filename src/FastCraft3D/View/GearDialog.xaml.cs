@@ -6,11 +6,14 @@ using FastCraft3D.Geometry;
 namespace FastCraft3D.View;
 
 /// <summary>
-/// Asks for a gear, a ring gear or a rack, showing it on the plate as the numbers change.
+/// Asks for a gear, a ring, a rack, a bevel, a worm or a ratchet, showing it on the plate as the
+/// numbers change.
 ///
-/// Boxes that mean nothing for what is chosen are greyed rather than hidden, as in Custom shape,
-/// so the panel does not jump about. The shaft's boxes apply to a gear, and to the gear made to
-/// mesh with a ring or a rack; a ring or a rack has no shaft of its own.
+/// A row that means nothing for the kind in hand is taken away rather than greyed. Greying it was
+/// tried first, so that the panel would not jump about as the kind changed - but six kinds share
+/// this panel and no one of them uses half of its rows, so what it mostly did was make the panel
+/// longer than the window. The shaft's rows belong to whatever has a shaft: the gear itself, or
+/// the one made to mesh with a ring, a rack or a worm.
 /// </summary>
 public partial class GearDialog : ToolPanel
 {
@@ -32,6 +35,9 @@ public partial class GearDialog : ToolPanel
         GearKindBox.IsChecked = start.Kind == GearKind.Gear;
         RingKindBox.IsChecked = start.Kind == GearKind.Ring;
         RackKindBox.IsChecked = start.Kind == GearKind.Rack;
+        BevelKindBox.IsChecked = start.Kind == GearKind.Bevel;
+        WormKindBox.IsChecked = start.Kind == GearKind.Worm;
+        RatchetKindBox.IsChecked = start.Kind == GearKind.Ratchet;
         StraightBox.IsChecked = start.Form == ToothForm.Straight;
         HelicalBox.IsChecked = start.Form == ToothForm.Helical;
         HerringboneBox.IsChecked = start.Form == ToothForm.Herringbone;
@@ -50,6 +56,14 @@ public partial class GearDialog : ToolPanel
         HubHeightBox.Text = Format(start.HubHeight);
         SetScrewBox.Text = Format(start.SetScrew);
         ChamferBox.Text = Format(start.Chamfer);
+        PartialBox.IsChecked = start.KeptTeeth > 0;
+        KeptTeethBox.Text = (start.KeptTeeth > 0 ? start.KeptTeeth : Math.Max(2, start.Teeth / 4))
+            .ToString(CultureInfo.CurrentCulture);
+        ConeBox.Text = Format(start.ConeAngle);
+        WormDiameterBox.Text = Format(start.WormDiameter);
+        WheelWidthBox.Text = Format(start.WheelWidth);
+        UndercutBox.Text = Format(start.Undercut);
+        PawlBox.IsChecked = start.WithPawl;
         PartnerBox.IsChecked = start.PartnerTeeth > 0;
         PartnerTeethBox.Text = (start.PartnerTeeth > 0 ? start.PartnerTeeth : 2 * start.Teeth)
             .ToString(CultureInfo.CurrentCulture);
@@ -70,7 +84,12 @@ public partial class GearDialog : ToolPanel
 
         return new GearOptions
         {
-            Kind = RingKindBox.IsChecked == true ? GearKind.Ring : RackKindBox.IsChecked == true ? GearKind.Rack : GearKind.Gear,
+            Kind = RingKindBox.IsChecked == true ? GearKind.Ring
+                 : RackKindBox.IsChecked == true ? GearKind.Rack
+                 : BevelKindBox.IsChecked == true ? GearKind.Bevel
+                 : WormKindBox.IsChecked == true ? GearKind.Worm
+                 : RatchetKindBox.IsChecked == true ? GearKind.Ratchet
+                 : GearKind.Gear,
             Form = HelicalBox.IsChecked == true ? ToothForm.Helical : HerringboneBox.IsChecked == true ? ToothForm.Herringbone : ToothForm.Straight,
             Module = Number(ModuleBox, fallback.Module),
             Teeth = Whole(TeethBox, fallback.Teeth),
@@ -86,7 +105,13 @@ public partial class GearDialog : ToolPanel
             HubHeight = Number(HubHeightBox, 0f),
             SetScrew = Number(SetScrewBox, 0f),
             Chamfer = Number(ChamferBox, 0f),
-            PartnerTeeth = PartnerBox.IsChecked == true ? Whole(PartnerTeethBox, 2 * fallback.Teeth) : 0
+            PartnerTeeth = PartnerBox.IsChecked == true ? Whole(PartnerTeethBox, 2 * fallback.Teeth) : 0,
+            KeptTeeth = PartialBox.IsChecked == true ? Whole(KeptTeethBox, 0) : 0,
+            ConeAngle = Number(ConeBox, fallback.ConeAngle),
+            WormDiameter = Number(WormDiameterBox, 0f),
+            WheelWidth = Number(WheelWidthBox, 0f),
+            Undercut = Number(UndercutBox, fallback.Undercut),
+            WithPawl = PawlBox.IsChecked == true
         };
 
         static float Number(TextBox box, float otherwise) =>
@@ -102,18 +127,51 @@ public partial class GearDialog : ToolPanel
 
         var asked = Read();
         var gear = asked.Sane();
-        bool shaft = gear.Kind == GearKind.Gear || PartnerBox.IsChecked == true;
+        bool cut = gear.Kind is GearKind.Gear or GearKind.Ring or GearKind.Rack;
+        bool shaft = gear.Kind is GearKind.Gear or GearKind.Bevel or GearKind.Ratchet or GearKind.Worm
+                  || PartnerBox.IsChecked == true;
         bool hub = gear.HubDiameter > 0 && gear.HubHeight > 0;
 
-        HelixBox.IsEnabled = gear.Form != ToothForm.Straight;
-        RimBox.IsEnabled = gear.Kind != GearKind.Gear;
+        // A worm is drawn from its own diameter and its length; the teeth box belongs to its wheel.
+        bool wheel = gear.Kind == GearKind.Worm;
+        bool hubbed = shaft && gear.Kind != GearKind.Bevel;
+
+        Show(TeethRow, !wheel);
+        Show(FormRow, cut);
+        Show(HelixRow, cut && gear.Form != ToothForm.Straight);
+        Show(PressureRow, gear.Kind != GearKind.Ratchet);
+        Show(BacklashRow, gear.Kind != GearKind.Ratchet);
+        Show(RimRow, gear.Kind is GearKind.Ring or GearKind.Rack);
+        Show(ChamferRow, cut);
         RimLabel.Text = gear.Kind == GearKind.Rack ? "Base" : "Rim";
-        BoreBox.IsEnabled = shaft;
-        BoreSizeBox.IsEnabled = shaft && gear.Bore != BoreShape.None;
-        FlatBox.IsEnabled = shaft && gear.Bore == BoreShape.DShaft;
-        HubDiameterBox.IsEnabled = HubHeightBox.IsEnabled = shaft;
-        SetScrewBox.IsEnabled = shaft && hub;
+        ThicknessLabel.Text = wheel ? "Length" : "Thickness";
+
+        Show(PartialRow, gear.Kind == GearKind.Gear);
+        KeptTeethBox.IsEnabled = PartialBox.IsChecked == true;
+        KeptText.Text = gear.KeptTeeth > 0 ? $"of {gear.Teeth} ({360f * gear.KeptTeeth / gear.Teeth:0} deg)" : "teeth";
+
+        // With a mate asked for, a bevel's cones come from the two tooth counts instead.
+        Show(ConeRow, gear.Kind == GearKind.Bevel && PartnerBox.IsChecked != true);
+        Show(WormRow, wheel);
+        Show(WheelWidthRow, wheel && PartnerBox.IsChecked == true);
+        Show(RatchetRow, gear.Kind == GearKind.Ratchet);
+
+        Show(PartnerRow, gear.Kind != GearKind.Ratchet);
+        PartnerBox.Content = gear.Kind switch
+        {
+            GearKind.Worm => "Wheel with",
+            GearKind.Bevel => "Mating bevel with",
+            GearKind.Ring or GearKind.Rack => "Gear inside it with",
+            _ => "Meshing gear with"
+        };
         PartnerTeethBox.IsEnabled = PartnerBox.IsChecked == true;
+
+        Show(ShaftHeader, shaft);
+        Show(BoreRow, shaft);
+        Show(FlatRow, shaft && gear.Bore == BoreShape.DShaft);
+        Show(HubRow, hubbed);
+        Show(SetScrewRow, hubbed && hub);
+        BoreSizeBox.IsEnabled = gear.Bore != BoreShape.None;
 
         var result = preview(gear);
 
@@ -133,6 +191,9 @@ public partial class GearDialog : ToolPanel
         SummaryText.Text = string.Join("\n", lines);
         AddButton.IsEnabled = result?.Parts.Count > 0;
     }
+
+    private static void Show(UIElement row, bool wanted) =>
+        row.Visibility = wanted ? Visibility.Visible : Visibility.Collapsed;
 
     private void OnChanged(object sender, TextChangedEventArgs e) => Refresh();
 

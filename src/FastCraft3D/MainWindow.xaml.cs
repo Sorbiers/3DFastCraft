@@ -31,6 +31,14 @@ public partial class MainWindow : Window
     private readonly MainViewModel viewModel = new();
     private SceneRenderer? renderer;
 
+    /// <summary>The sketch point taken hold of, and where it was before the drag started.</summary>
+    private (int Loop, int Index, Vector2 From)? sketchGrab;
+
+    private bool sketchDragging;
+
+    /// <summary>Where the right button went down, to tell a click from the drag that pans.</summary>
+    private Point rightPressScreen;
+
     /// <summary>Asks the viewport for a frame. The renderer is given this same one.</summary>
     private ViewportRepaint? repaint;
     private MeasureOverlay? measure;
@@ -99,8 +107,14 @@ public partial class MainWindow : Window
 
         measure = new MeasureOverlay(MeasureLayer, new Viewport3DXProjector(View));
         viewModel.MeasureChanged += () => measure.Show(viewModel.MeasureFrom, viewModel.MeasureTo);
-        viewModel.SketchChanged += () => renderer?.ShowSketch(
-            viewModel.IsSketchMode ? viewModel.CurrentSketch : null, viewModel.SketchCursor, viewModel.CurrentSketchTool);
+        viewModel.SketchChanged += () =>
+        {
+            renderer?.ShowSketch(
+                viewModel.IsSketchMode ? viewModel.CurrentSketch : null, viewModel.SketchCursor, viewModel.CurrentSketchTool);
+
+            // Entering and leaving sketch mode comes through here as well.
+            RefreshFocus();
+        };
         viewModel.LookFromTopRequested += top =>
         {
             if (top) OnViewTop(this, new RoutedEventArgs());
@@ -220,6 +234,8 @@ public partial class MainWindow : Window
         View.PreviewMouseLeftButtonDown += OnViewportLeftDown;
         View.PreviewMouseMove += OnViewportMove;
         View.PreviewMouseLeftButtonUp += OnViewportLeftUp;
+        View.PreviewMouseRightButtonDown += OnViewportRightDown;
+        View.PreviewMouseRightButtonUp += OnViewportRightUp;
 
         // The last chance to save: this is the only path where unsaved work would vanish
         // without the user having asked for anything.
@@ -818,6 +834,15 @@ public partial class MainWindow : Window
                     viewModel.BeginSketchStroke(new Vector2(onPlate.X, onPlate.Y));
                     View.CaptureMouse();
                 }
+                else if (SketchHandleAt(screen) is { } grabbed)
+                {
+                    // Taken hold of, not yet moved: a press that goes nowhere is still a click,
+                    // and a click on the first point is what closes the outline. Which of the two
+                    // it was is settled when the button comes up.
+                    sketchGrab = grabbed;
+                    sketchDragging = false;
+                    View.CaptureMouse();
+                }
                 else
                 {
                     viewModel.PlaceSketchPoint(new Vector2(onPlate.X, onPlate.Y), OnFirstSketchPoint(screen));
@@ -1002,6 +1027,24 @@ public partial class MainWindow : Window
         viewModel.RefreshSelection();
     }
 
+    private void OnViewportRightDown(object sender, MouseButtonEventArgs e) => rightPressScreen = e.GetPosition(View);
+
+    /// <summary>
+    /// The right button, clicked rather than dragged, finishes the outline being sketched: the
+    /// usual way out of a polyline, and one hand's worth of mouse nearer than Enter. A right-drag
+    /// is the camera's pan and is left to it.
+    /// </summary>
+    private void OnViewportRightUp(object sender, MouseButtonEventArgs e)
+    {
+        if (!viewModel.IsSketchMode || !viewModel.CurrentSketch.IsDrawing) return;
+        if (!IsClick(e.GetPosition(View), rightPressScreen)) return;
+
+        // Not marked handled, however tempting. The camera's pan starts on the press and has the
+        // mouse; if it never sees the release it keeps it, and the plate then slides about under
+        // a button nobody is holding. A pan that went nowhere has moved nothing anyway.
+        viewModel.EndSketchLine();
+    }
+
     /// <summary>Whether a click is on the first point of the line being sketched, which closes it.</summary>
     private bool OnFirstSketchPoint(Point screen)
     {
@@ -1010,10 +1053,46 @@ public partial class MainWindow : Window
         return (first - screen).Length <= 10;
     }
 
+    /// <summary>
+    /// The sketch point within reach of a place on screen, if there is one. Measured on screen
+    /// rather than on the plate, so how near is near enough does not depend on the zoom.
+    /// </summary>
+    private (int Loop, int Index, Vector2 From)? SketchHandleAt(Point screen)
+    {
+        var projector = new Viewport3DXProjector(View);
+        (int Loop, int Index, Vector2 From)? best = null;
+        double nearest = 10;
+
+        foreach (var (loop, index, at) in viewModel.SketchHandles())
+        {
+            if (!projector.TryProject(new Vector3(at, 0f), out var where)) continue;
+
+            double away = (where - screen).Length;
+            if (away > nearest) continue;
+
+            nearest = away;
+            best = (loop, index, at);
+        }
+
+        return best;
+    }
+
     private void OnViewportMove(object sender, MouseEventArgs e)
     {
         if (viewModel.IsSketchMode && TryIntersectPlane(e.GetPosition(View), 0f, out var onPlate))
+        {
             viewModel.MoveSketchCursor(new Vector2(onPlate.X, onPlate.Y));
+
+            if (sketchGrab is { } grab && e.LeftButton == MouseButtonState.Pressed)
+            {
+                // Still within a click's slack of where it was pressed: it may yet turn out to
+                // have been a click rather than a drag.
+                if (!sketchDragging && IsClick(e.GetPosition(View), pressScreen)) return;
+
+                sketchDragging = true;
+                viewModel.MoveSketchHandle(grab.Loop, grab.Index, new Vector2(onPlate.X, onPlate.Y));
+            }
+        }
 
         if (viewModel.IsLayMode && e.LeftButton != MouseButtonState.Pressed
             && SightLine(e.GetPosition(View)) is var (origin, direction))
@@ -1062,6 +1141,23 @@ public partial class MainWindow : Window
         {
             if (View.IsMouseCaptured) View.ReleaseMouseCapture();
             if (viewModel.CurrentSketch.IsDrawingStroke) viewModel.EndSketchStroke();
+
+            if (sketchGrab is { } grab)
+            {
+                if (sketchDragging)
+                {
+                    viewModel.SettleSketchHandle(grab.Loop, grab.Index, grab.From);
+                }
+                else if (TryIntersectPlane(e.GetPosition(View), 0f, out var onPlate))
+                {
+                    // It never moved, so it was a click on the point after all.
+                    viewModel.PlaceSketchPoint(new Vector2(onPlate.X, onPlate.Y), OnFirstSketchPoint(e.GetPosition(View)));
+                }
+
+                sketchGrab = null;
+                sketchDragging = false;
+            }
+
             return;
         }
 
@@ -1353,7 +1449,7 @@ public partial class MainWindow : Window
         renderer.Wireframe = viewModel.ShowWireframe;
         renderer.Xray = viewModel.ShowXray;
         renderer.ShowOutlines = viewModel.ShowOutlines;
-        renderer.ShowOnly(viewModel.PreviewAlone);
+        RefreshFocus();
         renderer.ShowOverhangs(viewModel.ShowOverhangs, viewModel.OverhangAngle, viewModel.OverhangColour);
 
         if (plateShown != PlateNow()) RebuildPlate();
@@ -1592,6 +1688,27 @@ public partial class MainWindow : Window
         renderer.ShowConnectorMarks(viewModel.ConnectorMarks(), viewModel.ConnectorPlane?.Normal ?? viewModel.SplitNormal);
     }
 
+    /// <summary>
+    /// Tells the renderer what a tool has in hand, so everything else can stand aside. The one
+    /// place that decides it: a split and a tool's preview both want the plate to themselves,
+    /// and they are set from different corners of the window - each having its own way of asking
+    /// meant either could undo the other's.
+    /// </summary>
+    private void RefreshFocus()
+    {
+        if (renderer is null) return;
+
+        IReadOnlyList<SceneObject>? working = null;
+
+        // Nothing in hand and everything aside: a sketch is drawn on the plate itself, and
+        // anything standing on it is in the way of both the drawing and the clicks.
+        if (viewModel.IsSketchMode) working = [];
+        else if (viewModel.PreviewOnly is { Count: > 0 } previewing) working = previewing;
+        else if (viewModel.IsSplitMode || viewModel.ConnectorPlane is not null) working = viewModel.Scene.Selection;
+
+        renderer.Focus(working);
+    }
+
     private void RefreshSplitPreview(bool now = false)
     {
         if (renderer is null) return;
@@ -1599,13 +1716,13 @@ public partial class MainWindow : Window
         if (!viewModel.IsSplitMode && viewModel.ConnectorPlane is null)
         {
             splitPreviewStale = false;
-            renderer.IsolateForSplit(null);
+            RefreshFocus();
             renderer.ClearSplit();
             return;
         }
 
         // Immediately, not on the throttle below: this is a visibility flag, not geometry.
-        renderer.IsolateForSplit(viewModel.Scene.Selection);
+        RefreshFocus();
 
         splitPreviewStale = true;
         if (now) splitPreviewWait = 0;

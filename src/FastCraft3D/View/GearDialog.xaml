@@ -14,12 +14,21 @@
             <RadioButton x:Name="RingKindBox" GroupName="GearKind" Content="Ring gear" Margin="0,0,10,0" Checked="OnChoice"
                          AutomationProperties.AutomationId="GearKindRing"
                          ToolTip="Teeth round the inside of a ring: the outside of a planetary gearbox" />
-            <RadioButton x:Name="RackKindBox" GroupName="GearKind" Content="Rack" Checked="OnChoice"
+            <RadioButton x:Name="RackKindBox" GroupName="GearKind" Content="Rack" Margin="0,0,10,0" Checked="OnChoice"
                          AutomationProperties.AutomationId="GearKindRack"
                          ToolTip="Teeth along a straight bar, for a gear to drive back and forth" />
+            <RadioButton x:Name="BevelKindBox" GroupName="GearKind" Content="Bevel" Margin="0,0,10,0" Checked="OnChoice"
+                         AutomationProperties.AutomationId="GearKindBevel"
+                         ToolTip="Teeth on a cone, for a pair that turns the drive through a right angle" />
+            <RadioButton x:Name="WormKindBox" GroupName="GearKind" Content="Worm" Margin="0,0,10,0" Checked="OnChoice"
+                         AutomationProperties.AutomationId="GearKindWorm"
+                         ToolTip="A screw and the wheel it drives: a large reduction in one step, and at a shallow enough angle the wheel cannot drive it back" />
+            <RadioButton x:Name="RatchetKindBox" GroupName="GearKind" Content="Ratchet" Checked="OnChoice"
+                         AutomationProperties.AutomationId="GearKindRatchet"
+                         ToolTip="A sawtooth wheel, free one way and held the other by its pawl" />
         </WrapPanel>
 
-        <WrapPanel Margin="0,0,0,8">
+        <WrapPanel x:Name="FormRow" Margin="0,0,0,8">
             <RadioButton x:Name="StraightBox" GroupName="ToothForm" Content="Straight" Margin="0,0,10,0" Checked="OnChoice"
                          AutomationProperties.AutomationId="GearStraight" />
             <RadioButton x:Name="HelicalBox" GroupName="ToothForm" Content="Helical" Margin="0,0,10,0" Checked="OnChoice"
@@ -38,7 +47,7 @@
             <TextBlock Text="mm" Foreground="#FF9AA0A8" VerticalAlignment="Center" />
         </StackPanel>
 
-        <StackPanel Orientation="Horizontal">
+        <StackPanel x:Name="TeethRow" Orientation="Horizontal">
             <TextBlock Text="Teeth" Style="{DynamicResource FieldLabel}" Width="86"
                        ToolTip="On a rack, how many teeth long it is" />
             <TextBox x:Name="TeethBox" Width="60" Style="{DynamicResource NumberBox}" Tag="number" TextChanged="OnChanged"
@@ -46,13 +55,13 @@
         </StackPanel>
 
         <StackPanel Orientation="Horizontal">
-            <TextBlock Text="Thickness" Style="{DynamicResource FieldLabel}" Width="86" ToolTip="The width of the teeth, along Z" />
+            <TextBlock x:Name="ThicknessLabel" Text="Thickness" Style="{DynamicResource FieldLabel}" Width="86" ToolTip="The width of the teeth, along Z" />
             <TextBox x:Name="ThicknessBox" Width="60" Style="{DynamicResource NumberBox}" Tag="number" TextChanged="OnChanged"
                      AutomationProperties.AutomationId="GearThickness" />
             <TextBlock Text="mm" Foreground="#FF9AA0A8" VerticalAlignment="Center" />
         </StackPanel>
 
-        <StackPanel Orientation="Horizontal">
+        <StackPanel x:Name="PressureRow" Orientation="Horizontal">
             <TextBlock Text="Pressure angle" Style="{DynamicResource FieldLabel}" Width="86"
                        ToolTip="20 degrees is the standard almost everywhere. Two gears must share it to mesh." />
             <TextBox x:Name="PressureBox" Width="60" Style="{DynamicResource NumberBox}" Tag="number" TextChanged="OnChanged"
@@ -60,7 +69,7 @@
             <TextBlock Text="degrees" Foreground="#FF9AA0A8" VerticalAlignment="Center" />
         </StackPanel>
 
-        <StackPanel Orientation="Horizontal">
+        <StackPanel x:Name="HelixRow" Orientation="Horizontal">
             <TextBlock Text="Helix angle" Style="{DynamicResource FieldLabel}" Width="86"
                        ToolTip="How far the teeth lean. Two helical gears must share it; the partner made here leans the other way, as it has to." />
             <TextBox x:Name="HelixBox" Width="60" Style="{DynamicResource NumberBox}" Tag="number" TextChanged="OnChanged"
@@ -68,7 +77,7 @@
             <TextBlock Text="degrees" Foreground="#FF9AA0A8" VerticalAlignment="Center" />
         </StackPanel>
 
-        <StackPanel Orientation="Horizontal">
+        <StackPanel x:Name="BacklashRow" Orientation="Horizontal">
             <TextBlock Text="Backlash" Style="{DynamicResource FieldLabel}" Width="86"
                        ToolTip="The play between two meshing gears, along their teeth. Each gear's teeth are thinned by half of it, so any two made here fit with this much play. 0.1 to 0.2 suits most printers." />
             <TextBox x:Name="BacklashBox" Width="60" Style="{DynamicResource NumberBox}" Tag="number" TextChanged="OnChanged"
@@ -76,7 +85,7 @@
             <TextBlock Text="mm" Foreground="#FF9AA0A8" VerticalAlignment="Center" />
         </StackPanel>
 
-        <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+        <StackPanel x:Name="RimRow" Orientation="Horizontal" Margin="0,0,0,8">
             <TextBlock x:Name="RimLabel" Text="Rim" Style="{DynamicResource FieldLabel}" Width="86"
                        ToolTip="A ring gear's material outside the roots of its teeth; a rack's below them" />
             <TextBox x:Name="RimBox" Width="60" Style="{DynamicResource NumberBox}" Tag="number" TextChanged="OnChanged"
@@ -84,9 +93,53 @@
             <TextBlock Text="mm" Foreground="#FF9AA0A8" VerticalAlignment="Center" />
         </StackPanel>
 
-        <TextBlock Text="Shaft" FontWeight="SemiBold" Margin="0,0,0,4" />
+        <StackPanel x:Name="PartialRow" Orientation="Horizontal">
+            <CheckBox x:Name="PartialBox" Content="Cut away to" VerticalAlignment="Center" Click="OnChoice"
+                      AutomationProperties.AutomationId="GearPartial"
+                      ToolTip="Leaves teeth on part of the rim only and takes the rest down to the roots: the gear that drives a rack one way, lets it go, and catches it again - the usual way to make something reciprocate from a motor that only turns one way" />
+            <TextBox x:Name="KeptTeethBox" Width="46" Style="{DynamicResource NumberBox}" Tag="number" TextChanged="OnChanged"
+                     Margin="6,0,0,0" AutomationProperties.AutomationId="GearKeptTeeth" />
+            <TextBlock x:Name="KeptText" Text="teeth" Foreground="#FF9AA0A8" VerticalAlignment="Center" Margin="4,0,0,0" />
+        </StackPanel>
 
-        <StackPanel Orientation="Horizontal">
+        <StackPanel x:Name="ConeRow" Orientation="Horizontal">
+            <TextBlock Text="Cone" Style="{DynamicResource FieldLabel}" Width="86"
+                       ToolTip="A bevel's pitch cone angle. A pair whose angles add up to 90 meets at a right angle; with a mate asked for, the two are worked out from the teeth instead." />
+            <TextBox x:Name="ConeBox" Width="60" Style="{DynamicResource NumberBox}" Tag="number" TextChanged="OnChanged"
+                     AutomationProperties.AutomationId="GearCone" />
+            <TextBlock Text="degrees" Foreground="#FF9AA0A8" VerticalAlignment="Center" />
+        </StackPanel>
+
+        <StackPanel x:Name="WheelWidthRow" Orientation="Horizontal">
+            <TextBlock Text="Wheel width" Style="{DynamicResource FieldLabel}" Width="86"
+                       ToolTip="How wide the worm wheel's face is. 0 for what the worm asks for - about two modules for every root of its diameter over the module - which is not the worm's own length." />
+            <TextBox x:Name="WheelWidthBox" Width="60" Style="{DynamicResource NumberBox}" Tag="number" TextChanged="OnChanged"
+                     AutomationProperties.AutomationId="GearWheelWidth" />
+            <TextBlock Text="mm" Foreground="#FF9AA0A8" VerticalAlignment="Center" />
+        </StackPanel>
+
+        <StackPanel x:Name="WormRow" Orientation="Horizontal">
+            <TextBlock Text="Worm across" Style="{DynamicResource FieldLabel}" Width="86"
+                       ToolTip="The worm's pitch diameter. 0 for ten times the module, which is the usual choice: thicker makes a stiffer screw at a shallower angle, thinner a steeper one that drives back more easily." />
+            <TextBox x:Name="WormDiameterBox" Width="60" Style="{DynamicResource NumberBox}" Tag="number" TextChanged="OnChanged"
+                     AutomationProperties.AutomationId="GearWormDiameter" />
+            <TextBlock Text="mm" Foreground="#FF9AA0A8" VerticalAlignment="Center" />
+        </StackPanel>
+
+        <StackPanel x:Name="RatchetRow" Orientation="Horizontal" Margin="0,0,0,8">
+            <TextBlock Text="Undercut" Style="{DynamicResource FieldLabel}" Width="86"
+                       ToolTip="How far a ratchet's catching face leans back from radial. A radial face lets the pawl ride out under load; 3 to 5 degrees pulls it in instead." />
+            <TextBox x:Name="UndercutBox" Width="46" Style="{DynamicResource NumberBox}" Tag="number" TextChanged="OnChanged"
+                     AutomationProperties.AutomationId="GearUndercut" />
+            <TextBlock Text="deg" Foreground="#FF9AA0A8" VerticalAlignment="Center" Margin="0,0,8,0" />
+            <CheckBox x:Name="PawlBox" Content="Pawl" VerticalAlignment="Center" Click="OnChoice"
+                      AutomationProperties.AutomationId="GearPawl"
+                      ToolTip="An arm with a pivot hole at one end and a point at the other, made to the same thickness. Where its pivot goes is given in the notes." />
+        </StackPanel>
+
+        <TextBlock x:Name="ShaftHeader" Text="Shaft" FontWeight="SemiBold" Margin="0,0,0,4" />
+
+        <StackPanel x:Name="BoreRow" Orientation="Horizontal">
             <TextBlock Text="Bore" Style="{DynamicResource FieldLabel}" Width="86"
                        ToolTip="The hole for the shaft. It goes straight through, helical teeth or not." />
             <ComboBox x:Name="BoreBox" Width="86" SelectionChanged="OnBoreChanged"
@@ -97,7 +150,7 @@
             <TextBlock Text="mm" Foreground="#FF9AA0A8" VerticalAlignment="Center" />
         </StackPanel>
 
-        <StackPanel Orientation="Horizontal">
+        <StackPanel x:Name="FlatRow" Orientation="Horizontal">
             <TextBlock Text="Flat" Style="{DynamicResource FieldLabel}" Width="86"
                        ToolTip="For a D-shaped bore: from the flat to the far side of the hole. A 5 mm motor shaft is usually 4.5." />
             <TextBox x:Name="FlatBox" Width="60" Style="{DynamicResource NumberBox}" Tag="number" TextChanged="OnChanged"
@@ -105,7 +158,7 @@
             <TextBlock Text="mm" Foreground="#FF9AA0A8" VerticalAlignment="Center" />
         </StackPanel>
 
-        <StackPanel Orientation="Horizontal">
+        <StackPanel x:Name="HubRow" Orientation="Horizontal">
             <TextBlock Text="Hub" Style="{DynamicResource FieldLabel}" Width="86"
                        ToolTip="A collar standing on the gear round its bore, across and tall. Leave either at 0 for none." />
             <TextBox x:Name="HubDiameterBox" Width="50" Style="{DynamicResource NumberBox}" Tag="number" TextChanged="OnChanged"
@@ -116,7 +169,7 @@
             <TextBlock Text="mm" Foreground="#FF9AA0A8" VerticalAlignment="Center" />
         </StackPanel>
 
-        <StackPanel Orientation="Horizontal">
+        <StackPanel x:Name="SetScrewRow" Orientation="Horizontal">
             <TextBlock Text="Set screw" Style="{DynamicResource FieldLabel}" Width="86"
                        ToolTip="A hole across the hub for a grub screw, this wide - onto the flat of a D-shaped bore. 0 for none; about 2.8 to tap an M3." />
             <TextBox x:Name="SetScrewBox" Width="60" Style="{DynamicResource NumberBox}" Tag="number" TextChanged="OnChanged"
@@ -124,7 +177,7 @@
             <TextBlock Text="mm" Foreground="#FF9AA0A8" VerticalAlignment="Center" />
         </StackPanel>
 
-        <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+        <StackPanel x:Name="ChamferRow" Orientation="Horizontal" Margin="0,0,0,8">
             <TextBlock Text="Chamfer" Style="{DynamicResource FieldLabel}" Width="86"
                        ToolTip="Draws the bottom edge of the teeth in, so the first layer spreading on the bed does not jam them. 0 if your slicer already allows for it." />
             <TextBox x:Name="ChamferBox" Width="60" Style="{DynamicResource NumberBox}" Tag="number" TextChanged="OnChanged"
@@ -132,7 +185,7 @@
             <TextBlock Text="mm" Foreground="#FF9AA0A8" VerticalAlignment="Center" />
         </StackPanel>
 
-        <StackPanel Orientation="Horizontal">
+        <StackPanel x:Name="PartnerRow" Orientation="Horizontal" Margin="0,8,0,0">
             <CheckBox x:Name="PartnerBox" Content="Meshing gear with" VerticalAlignment="Center" Click="OnPartnerClicked"
                       AutomationProperties.AutomationId="GearPartner"
                       ToolTip="Made beside it, already in mesh at the right distance, so the pair can be printed and used as it stands" />
@@ -141,15 +194,15 @@
             <TextBlock Text="teeth" Foreground="#FF9AA0A8" VerticalAlignment="Center" Margin="4,0,0,0" />
         </StackPanel>
 
-        <Border Margin="0,8,0,0" Padding="8,6" CornerRadius="3"
-                Background="White" BorderBrush="#FFD5DEEA" BorderThickness="1">
-            <TextBlock x:Name="SummaryText" TextWrapping="Wrap" Foreground="#FF3A3F45" />
-        </Border>
-
         <StackPanel Orientation="Horizontal" Margin="0,10,0,0">
             <Button x:Name="AddButton" Content="Add" Style="{DynamicResource PanelButton}" Click="OnAccept"
                     AutomationProperties.Name="GearAccept" />
             <Button Content="Cancel" Style="{DynamicResource PanelButton}" IsCancel="True" />
         </StackPanel>
+
+        <Border Margin="0,8,0,0" Padding="8,6" CornerRadius="3"
+                Background="White" BorderBrush="#FFD5DEEA" BorderThickness="1">
+            <TextBlock x:Name="SummaryText" TextWrapping="Wrap" Foreground="#FF3A3F45" />
+        </Border>
     </StackPanel>
 </view:ToolPanel>

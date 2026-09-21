@@ -2502,7 +2502,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
     }
 
     private bool showOutlines = true;
-    private SceneObject? previewAlone;
+    private IReadOnlyList<SceneObject>? previewOnly;
 
     /// <summary>
     /// The white line traced round a selected object's own edges. Worth turning off on a dense
@@ -2515,13 +2515,13 @@ public sealed class MainViewModel : INotifyPropertyChanged
     }
 
     /// <summary>
-    /// The one object a tool is previewing, drawn on its own while the tool's panel is open.
-    /// Null the rest of the time, which is everything drawn as usual.
+    /// What a tool is previewing, drawn on its own while the tool's panel is open - a gear tool
+    /// shows a pair. Null the rest of the time, which is everything drawn as usual.
     /// </summary>
-    public SceneObject? PreviewAlone
+    public IReadOnlyList<SceneObject>? PreviewOnly
     {
-        get => previewAlone;
-        set { Set(ref previewAlone, value); ViewChanged?.Invoke(); }
+        get => previewOnly;
+        set { Set(ref previewOnly, value); ViewChanged?.Invoke(); }
     }
 
     private bool showOverhangs;
@@ -4200,7 +4200,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
             {
                 if (shown is not null) Scene.Objects.Remove(shown);
                 shown = null;
-                PreviewAlone = null;
+                PreviewOnly = null;
                 return;
             }
 
@@ -4213,7 +4213,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
                 // read as part of the picture, and the white outline of a selected lithophane
                 // traces every feature edge - which is the picture itself.
                 Scene.ClearSelection();
-                PreviewAlone = shown;
+                PreviewOnly = [shown];
                 RefreshSelection();
             }
             else
@@ -4234,7 +4234,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
         {
             // However it ended: the preview comes off the plate - it was never in the undo
             // history - and everything else is drawn again.
-            PreviewAlone = null;
+            PreviewOnly = null;
             if (shown is not null) Scene.Objects.Remove(shown);
         }
         if (!accepted || dialog.Result is not { } options || dialog.Picture is not { } picture) return;
@@ -4757,6 +4757,34 @@ public sealed class MainViewModel : INotifyPropertyChanged
 
     public void UndoSketch() => SayOfSketch(sketch.Undo());
 
+    /// <summary>The points of the sketch that can be dragged. See Sketch.Handles.</summary>
+    public IReadOnlyList<(int Loop, int Index, Vector2 At)> SketchHandles() => sketch.Handles();
+
+    /// <summary>A sketch point being dragged, snapped as a placed one is.</summary>
+    public void MoveSketchHandle(int loop, int index, Vector2 onPlate)
+    {
+        var to = Snapped(onPlate);
+        sketch.MoveHandle(loop, index, to);
+        SayOfSketch($"{to.X:0.#}, {to.Y:0.#} mm");
+    }
+
+    /// <summary>The drag let go: a finished outline goes back if the move has spoiled it.</summary>
+    public void SettleSketchHandle(int loop, int index, Vector2 from)
+    {
+        string said = sketch.SettleHandle(loop, index, from);
+
+        if (said.Length > 0) SayOfSketch(said);
+        else RaiseSketch();
+    }
+
+    /// <summary>The right button: the outline being drawn is finished where it stands.</summary>
+    public void EndSketchLine()
+    {
+        if (!sketch.IsDrawing) return;
+
+        SayOfSketch(sketch.EndLine());
+    }
+
     private void SayOfSketch(string message)
     {
         SketchMessage = message;
@@ -5140,17 +5168,24 @@ public sealed class MainViewModel : INotifyPropertyChanged
         var colours = new[] { NextAutomaticColour(), NextAutomaticColour() };
         var shown = new List<SceneObject>();
 
-        List<SceneObject> Place(GearResult result)
+        List<SceneObject> Place(GearResult result, bool together)
         {
             var objects = result.Parts
-                .Select((part, i) => new SceneObject(part.Name, part.Mesh) { Colour = colours[i % colours.Length] }.Centred())
+                .Select((part, i) => new SceneObject(
+                        part.Name,
+                        together && part.InMesh is { } shownAt ? MeshTransform.Transformed(part.Mesh, shownAt) : part.Mesh)
+                    { Colour = colours[i % colours.Length] }.Centred())
                 .ToList();
+
+            // Only shifts the lot onto the bed, so a pair made in mesh stays in it.
             BedPlacement.Fit(objects, 1f);
             return objects;
         }
 
         void Clear()
         {
+            // The plate goes back to showing everything as the preview comes off it.
+            PreviewOnly = null;
             foreach (var o in shown) Scene.Objects.Remove(o);
             shown.Clear();
         }
@@ -5161,11 +5196,17 @@ public sealed class MainViewModel : INotifyPropertyChanged
             if (options is null) return null;
 
             var result = Gears.Build(options);
-            foreach (var o in Place(result))
+
+            // Shown as the pair goes together, which for a bevel is not how it prints.
+            foreach (var o in Place(result, together: true))
             {
                 Scene.Objects.Add(o);
                 shown.Add(o);
             }
+
+            // Whatever else is on the plate stands aside while the gear is being chosen: a pair
+            // laid out to be looked at is hard enough to read without a scene behind it.
+            if (shown.Count > 0) PreviewOnly = shown.ToList();
             return result;
         });
 
@@ -5182,14 +5223,15 @@ public sealed class MainViewModel : INotifyPropertyChanged
             return;
         }
 
-        var parts = Place(made);
+        var parts = Place(made, together: false);
         foreach (var o in parts) o.Name = Scene.UniqueName(o.Name);
 
         Undo.Execute(new AddObjectsCommand(parts.Count == 1 ? "Insert gear" : "Insert gears", parts));
         RefreshSelection();
-        Status = parts.Count == 1
-            ? $"Inserted {parts[0].Name}"
-            : $"Inserted {parts[0].Name} and {parts[1].Name}, in mesh";
+        Status = parts.Count == 1 ? $"Inserted {parts[0].Name}"
+               : made.Parts.Any(p => p.InMesh is not null)
+                   ? $"Inserted {parts[0].Name} and {parts[1].Name}, side by side to print"
+                   : $"Inserted {parts[0].Name} and {parts[1].Name}, in mesh";
     }
 
     private void Mirror(object? parameter)

@@ -399,4 +399,133 @@ public class SketchTests
             Assert.Equal(24f, made.WorldBounds.Size.X, 0.1f);
         });
     }
+
+    // --- Editing what has been drawn ---------------------------------------------------
+
+    [Fact]
+    public void EveryCornerOfADrawnRectangleCanBeDragged()
+    {
+        var sketch = Rectangle(0, 0, 20, 10);
+
+        var handles = sketch.Handles();
+
+        Assert.Equal(4, handles.Count);
+        Assert.All(handles, h => Assert.Equal(0, h.Loop));
+    }
+
+    [Fact]
+    public void ThePiecesACircleIsLaidOutWithAreNotOfferedToDrag()
+    {
+        var sketch = new Sketch();
+        sketch.Place(new Vector2(0, 0), SketchTool.Circle, false);
+        sketch.Place(new Vector2(10, 0), SketchTool.Circle, false);
+
+        Assert.Single(sketch.Loops);
+        Assert.True(sketch.Loops[0].Count > 50, "a circle is drawn as many short pieces");
+
+        // Dragging one of them would dent the circle rather than edit it.
+        Assert.Empty(sketch.Handles());
+    }
+
+    [Fact]
+    public void ThePointsOfTheLineBeingDrawnCanBeDraggedBeforeItCloses()
+    {
+        var sketch = new Sketch();
+        foreach (var p in new Vector2[] { new(0, 0), new(20, 0), new(20, 10) })
+            sketch.Place(p, SketchTool.Line, false);
+
+        var handles = sketch.Handles();
+
+        Assert.Equal(3, handles.Count);
+        Assert.All(handles, h => Assert.Equal(-1, h.Loop));
+
+        sketch.MoveHandle(-1, 1, new Vector2(30, 0));
+        Assert.Equal(new Vector2(30, 0), sketch.Chain[1]);
+    }
+
+    [Fact]
+    public void DraggingACornerChangesTheOutlineItIsIn()
+    {
+        var sketch = Rectangle(0, 0, 20, 10);
+        var corner = sketch.Handles().Single(h => h.At == new Vector2(0, 0));
+
+        sketch.MoveHandle(corner.Loop, corner.Index, new Vector2(-10, 0));
+        string said = sketch.SettleHandle(corner.Loop, corner.Index, corner.At);
+
+        Assert.Equal(new Vector2(-10, 0), sketch.Loops[0][corner.Index]);
+        Assert.Contains("Moved", said);
+
+        // A trapezoid now: 30 mm along the bottom, 20 along the top, 10 deep.
+        Assert.Equal(250f, Area(sketch.Loops[0]), 0.01f);
+    }
+
+    [Fact]
+    public void ACornerDraggedAcrossTheOutlineIsPutBack()
+    {
+        var sketch = Rectangle(0, 0, 20, 10);
+        var corner = sketch.Handles().Single(h => h.At == new Vector2(0, 0));
+
+        // Over the far side: the edges either side of the corner now cross it.
+        sketch.MoveHandle(corner.Loop, corner.Index, new Vector2(10, 15));
+        string said = sketch.SettleHandle(corner.Loop, corner.Index, corner.At);
+
+        Assert.Equal(new Vector2(0, 0), sketch.Loops[0][corner.Index]);
+        Assert.Contains("Put back", said);
+        Assert.Equal(200f, Area(sketch.Loops[0]), 0.01f);
+    }
+
+    [Fact]
+    public void ACornerDraggedOverAnotherOutlineIsPutBack()
+    {
+        var sketch = Rectangle(0, 0, 10, 10);
+        Rectangle(30, 0, 40, 10, sketch);
+
+        var corner = sketch.Handles().Single(h => h.Loop == 0 && h.At == new Vector2(10, 10));
+
+        // Into the middle of the second rectangle, whose edges it now cuts through.
+        sketch.MoveHandle(0, corner.Index, new Vector2(35, 5));
+        string said = sketch.SettleHandle(0, corner.Index, corner.At);
+
+        Assert.Equal(new Vector2(10, 10), sketch.Loops[0][corner.Index]);
+        Assert.Contains("cross another", said);
+    }
+
+    // --- The right button finishes the line ---------------------------------------------
+
+    [Fact]
+    public void TheRightButtonClosesTheLineWhereItStands()
+    {
+        var sketch = new Sketch();
+        foreach (var p in new Vector2[] { new(0, 0), new(20, 0), new(20, 10) })
+            sketch.Place(p, SketchTool.Line, false);
+
+        sketch.EndLine();
+
+        Assert.Single(sketch.Loops);
+        Assert.Empty(sketch.Chain);
+        Assert.Equal(100f, Area(sketch.Loops[0]), 0.01f);
+    }
+
+    [Fact]
+    public void TheRightButtonDropsALineWithTooFewPointsToClose()
+    {
+        var sketch = new Sketch();
+        sketch.Place(new Vector2(0, 0), SketchTool.Line, false);
+        sketch.Place(new Vector2(20, 0), SketchTool.Line, false);
+
+        string said = sketch.EndLine();
+
+        Assert.Empty(sketch.Loops);
+        Assert.Empty(sketch.Chain);
+        Assert.Contains("three points", said);
+    }
+
+    [Fact]
+    public void TheRightButtonOnNothingBeingDrawnLeavesTheSketchAlone()
+    {
+        var sketch = Rectangle(0, 0, 20, 10);
+
+        Assert.Equal("", sketch.EndLine());
+        Assert.Single(sketch.Loops);
+    }
 }

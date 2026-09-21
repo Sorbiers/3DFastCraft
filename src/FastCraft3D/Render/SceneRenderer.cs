@@ -64,11 +64,8 @@ public sealed class SceneRenderer : IDisposable
     /// <summary>The cut being previewed, kept so a moved or edited object can be redone.</summary>
     private (Vector3 Normal, float Offset, bool Ghost, bool Fill)? split;
 
-    /// <summary>What the split has in hand, while everything else stands out of the way.</summary>
-    private IReadOnlyList<SceneObject>? isolated;
-
-    /// <summary>The one object a tool is previewing, when a tool has the plate to itself.</summary>
-    private SceneObject? alone;
+    /// <summary>What a tool has in hand, while everything else stands aside. See Focus.</summary>
+    private IReadOnlyList<SceneObject>? focus;
 
     private bool showOutlines = true;
 
@@ -369,41 +366,51 @@ public sealed class SceneRenderer : IDisposable
     }
 
     /// <summary>
-    /// Leaves only what the split is cutting on the plate, or shows everything again when given
-    /// nothing.
+    /// What a tool has in hand. Everything else stands aside until this is given null again.
     ///
-    /// A plane is aimed by eye, and on a scene of any depth the thing being cut is behind
-    /// something else. Turning x-ray on gets you a view through the rest, but it also draws the
-    /// rest over the top of what you are aiming at, which is worse. Standing them down entirely
-    /// is what you want, and it takes the clicks with it: a face picked for the plane then lands
-    /// on the part being split rather than on whatever happened to be in front of it.
+    /// Two tools wanted the same thing for different reasons and each had grown its own way of
+    /// asking, so this is the one of them. A split plane is aimed by eye, and on a scene of any
+    /// depth the thing being cut is behind something else; a lithophane is judged by its picture,
+    /// and whatever else is on the plate is read as part of it.
+    ///
+    /// What stands aside is not drawn - unless x-ray is on, which is the one setting that asks
+    /// to see past the work rather than to be rid of what is behind it, so there it is drawn
+    /// through instead. Either way it stops taking clicks, so a face picked for a plane lands on
+    /// the part being cut and not on whatever happens to be in front of it.
+    ///
+    /// Only the drawing is affected: nothing is hidden in the scene itself, so the object list
+    /// and the undo history are left alone.
     /// </summary>
-    public void IsolateForSplit(IReadOnlyList<SceneObject>? cutting)
+    public void Focus(IReadOnlyList<SceneObject>? working)
     {
+        // Kept as a copy. What it is usually given is the live selection, and holding that would
+        // leave it comparing a list against itself and never noticing a change. Asked for on
+        // every sketch stroke and every view setting, so it is worth not repeating the work.
+        var next = working?.ToArray();
+        if (Same(focus, next)) return;
+
         Invalidate();
 
-        isolated = cutting;
+        focus = next;
 
-        foreach (var (o, visual) in visuals) ShowOrHide(o, visual);
+        foreach (var (o, visual) in visuals)
+        {
+            ShowOrHide(o, visual);
+            ApplyLook(o, visual);
+        }
     }
+
+    private static bool Same(IReadOnlyList<SceneObject>? a, IReadOnlyList<SceneObject>? b) =>
+        a is null ? b is null : b is not null && a.SequenceEqual(b);
+
+    /// <summary>Whether a tool has something else in hand and this is not it.</summary>
+    private bool StandsAside(SceneObject o) => focus is not null && !focus.Contains(o);
 
     /// <summary>
-    /// Draws one object and nothing else, for a tool showing what it is about to add, or puts
-    /// everything back when given null.
-    ///
-    /// A lithophane is judged by its picture, and whatever else is standing on the plate is read
-    /// as part of it. Only the drawing is affected: nothing is hidden in the scene itself, so the
-    /// object list and the undo history are left alone.
+    /// Whether the object is drawn through rather than solid: in x-ray, everything that is not
+    /// selected, and everything a tool has stood aside even when it is.
     /// </summary>
-    public void ShowOnly(SceneObject? o)
-    {
-        if (ReferenceEquals(alone, o)) return;
-
-        Invalidate();
-        alone = o;
-
-        foreach (var (obj, visual) in visuals) ShowOrHide(obj, visual);
-    }
+    private bool Faded(SceneObject o) => xray && (!o.IsSelected || StandsAside(o));
 
     /// <summary>
     /// Whether a selected object is traced in white.
@@ -427,18 +434,26 @@ public sealed class SceneRenderer : IDisposable
     }
 
     /// <summary>
-    /// Whether an object is drawn at all. Three things take it off the plate: a split standing
-    /// its halves in for it, a split standing everything else out of the way, and a tool showing
-    /// its own preview on its own.
+    /// Whether an object is drawn at all. Three things take it off the plate: the user hiding
+    /// it, a split standing its halves in for it, and a tool with something else in hand.
+    ///
+    /// The last of those is the one x-ray excuses: it is drawn through rather than taken away,
+    /// since x-ray is a request to see past the work and not to be rid of what is behind it.
+    /// Being hidden by hand is not excused - that was asked for outright.
+    ///
+    /// Standing aside takes the clicks with it either way, drawn or not. Otherwise a face picked
+    /// for a split plane would land on the ghost of whatever is in front of the part being cut.
     /// </summary>
     private void ShowOrHide(SceneObject o, MeshGeometryModel3D visual)
     {
+        bool aside = StandsAside(o);
         bool draw = !o.IsHidden
                     && !splitParts.ContainsKey(o)
-                    && (isolated is null || isolated.Contains(o))
-                    && (alone is null || ReferenceEquals(alone, o));
+                    && (!aside || xray);
 
         visual.Visibility = draw ? Visibility.Visible : Visibility.Collapsed;
+        visual.IsHitTestVisible = !aside;
+
         if (overhangs.TryGetValue(o, out var shown)) shown.Visibility = visual.Visibility;
 
         // The outline is a model of its own rather than part of the solid, so left alone it
@@ -578,6 +593,20 @@ public sealed class SceneRenderer : IDisposable
                 Geometry = lines.ToLineGeometry3D(),
                 Color = Color.FromRgb(0xE8, 0x76, 0x2C),
                 Thickness = 2.2,
+                IsHitTestVisible = false
+            });
+        }
+
+        // The corners of the finished outlines that can be dragged, in the blue those outlines
+        // are drawn in. The one being drawn has its own points marked in orange below.
+        var grips = sketch.Handles().Where(h => h.Loop >= 0).Select(h => On(h.At)).ToList();
+        if (grips.Count > 0)
+        {
+            group.Children.Add(new PointGeometryModel3D
+            {
+                Geometry = new PointGeometry3D { Positions = new Vector3Collection(grips) },
+                Color = Color.FromRgb(0x1F, 0x6F, 0xD1),
+                Size = new Size(7, 7),
                 IsHitTestVisible = false
             });
         }
@@ -739,6 +768,8 @@ public sealed class SceneRenderer : IDisposable
     /// <summary>
     /// Fades everything that is not selected, so a part buried inside another can be seen and
     /// worked on. Only the unselected fade: the point is to look past them at what is selected.
+    ///
+    /// It also brings back what a tool has stood aside, drawn through. See Focus.
     /// </summary>
     public bool Xray
     {
@@ -748,7 +779,14 @@ public sealed class SceneRenderer : IDisposable
             if (xray == value) return;
             xray = value;
 
-            foreach (var (o, visual) in visuals) ApplyLook(o, visual);
+            // What is drawn and not only how: this is the exception that puts what a tool stood
+            // aside back on the plate.
+            foreach (var (o, visual) in visuals)
+            {
+                ShowOrHide(o, visual);
+                ApplyLook(o, visual);
+            }
+
             RefreshSplitLook();
             Invalidate();
         }
@@ -764,7 +802,7 @@ public sealed class SceneRenderer : IDisposable
 
         // The flag has to be set as well as the alpha: it is what puts the model through the
         // order-independent transparency pass rather than straight into the depth buffer.
-        visual.IsTransparent = xray && !o.IsSelected;
+        visual.IsTransparent = Faded(o);
 
         visual.RenderWireframe = wireframe;
         visual.WireframeColor = Color.FromArgb(0x99, 0x1E, 0x26, 0x30);
@@ -954,9 +992,10 @@ public sealed class SceneRenderer : IDisposable
             Math.Min(colour.Blue + lift, 1f),
             1f);
 
-        // In x-ray the unselected go translucent. Transparency is ordered by the renderer's
-        // own OIT pass, so parts behind parts still read correctly.
-        if (xray && !o.IsSelected) diffuse.Alpha = 0.28f;
+        // In x-ray the unselected go translucent, and so does whatever a tool has stood aside.
+        // Transparency is ordered by the renderer's own OIT pass, so parts behind parts still
+        // read correctly.
+        if (Faded(o)) diffuse.Alpha = 0.28f;
 
         return new PhongMaterial
         {

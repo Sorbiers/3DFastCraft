@@ -78,15 +78,15 @@
             <TextBlock Text="mm" Foreground="#FF9AA0A8" VerticalAlignment="Center" />
         </StackPanel>
 
-        <Border Margin="0,8,0,0" Padding="8,6" CornerRadius="3"
-                Background="White" BorderBrush="#FFD5DEEA" BorderThickness="1">
-            <TextBlock x:Name="SummaryText" TextWrapping="Wrap" Foreground="#FF3A3F45" />
-        </Border>
-
         <StackPanel Orientation="Horizontal" Margin="0,10,0,0">
             <Button Content="Make mould" Style="{DynamicResource PanelButton}" Click="OnAccept"
                     AutomationProperties.Name="MouldAccept" />
             <Button Content="Cancel" Style="{DynamicResource PanelButton}" IsCancel="True" />
         </StackPanel>
+
+        <Border Margin="0,8,0,0" Padding="8,6" CornerRadius="3"
+                Background="White" BorderBrush="#FFD5DEEA" BorderThickness="1">
+            <TextBlock x:Name="SummaryText" TextWrapping="Wrap" Foreground="#FF3A3F45" />
+        </Border>
     </StackPanel>
 </view:ToolPanel>

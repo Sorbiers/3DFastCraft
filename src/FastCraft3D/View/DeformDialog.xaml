@@ -30,14 +30,14 @@
 
         <TextBlock x:Name="ProblemText" TextWrapping="Wrap" Foreground="#FFB3261E" Margin="0,8,0,0" Visibility="Collapsed" />
 
-        <Border Margin="0,8,0,0" Padding="8,6" CornerRadius="3"
-                Background="White" BorderBrush="#FFD5DEEA" BorderThickness="1">
-            <TextBlock x:Name="SummaryText" TextWrapping="Wrap" Foreground="#FF3A3F45" />
-        </Border>
-
         <StackPanel Orientation="Horizontal" Margin="0,10,0,0">
             <Button x:Name="AcceptButton" Style="{DynamicResource PanelButton}" Click="OnAccept" />
             <Button Content="Cancel" Style="{DynamicResource PanelButton}" IsCancel="True" />
         </StackPanel>
+
+        <Border Margin="0,8,0,0" Padding="8,6" CornerRadius="3"
+                Background="White" BorderBrush="#FFD5DEEA" BorderThickness="1">
+            <TextBlock x:Name="SummaryText" TextWrapping="Wrap" Foreground="#FF3A3F45" />
+        </Border>
     </StackPanel>
 </view:ToolPanel>

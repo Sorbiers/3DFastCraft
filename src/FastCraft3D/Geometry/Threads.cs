@@ -282,7 +282,7 @@ public static class Threads
     /// the height of line j + 4 by the time it has gone once round. So column N is column 0 with
     /// every line four further on, and the surface closes on itself without a seam.
     /// </summary>
-    private sealed class HelicalSurface
+    internal sealed class HelicalSurface
     {
         private const int NoLine = int.MinValue;
         private const int Steps = 8;
@@ -294,6 +294,9 @@ public static class Threads
         private readonly double snap;
         private readonly Func<double, double, double> radius;
 
+        /// <summary>Where along a pitch the profile turns its corners. A worm's are not a screw's.</summary>
+        private readonly double[] corners;
+
         private readonly Dictionary<(int, int, int), int> ids = new();
         private readonly List<Vector3> positions = new();
         private readonly List<int> indices = new();
@@ -304,8 +307,10 @@ public static class Threads
 
         /// <param name="lead">How far the lead-in runs from each end.</param>
         /// <param name="radius">The radius at a phase along the thread, in pitches, and a height.</param>
-        public HelicalSurface(double pitch, double height, double lead, int segments, Func<double, double, double> radius)
+        public HelicalSurface(double pitch, double height, double lead, int segments,
+                              Func<double, double, double> radius, double[]? corners = null)
         {
+            this.corners = corners ?? Corners;
             this.pitch = pitch;
             this.height = height;
             this.segments = segments;
@@ -338,7 +343,7 @@ public static class Threads
         private double Offset(int line)
         {
             int turn = (int)Math.Floor(line / 4.0);
-            return pitch * (turn + Corners[line - 4 * turn]);
+            return pitch * (turn + corners[line - 4 * turn]);
         }
 
         private (int Column, int Line) Canonical(int column, int line) =>

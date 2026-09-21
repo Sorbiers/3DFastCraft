@@ -303,4 +303,450 @@ public class GearTests
         Assert.Equal(2, result.Parts.Count);
         Assert.Contains(result.Notes, n => n.Contains("too small for the bore"));
     }
+
+    // --- Bevel, worm, ratchet, and a gear cut away ------------------------------------
+
+    /// <summary>How far the solid reaches from its axis within a few degrees of a bearing.</summary>
+    private static float ReachAt(Mesh mesh, float degrees, float window = 3f)
+    {
+        float at = degrees * MathF.PI / 180f;
+        float best = 0f;
+
+        foreach (var p in mesh.Positions)
+        {
+            float away = MathF.Abs((float)Math.IEEERemainder(MathF.Atan2(p.Y, p.X) - at, Math.Tau)) * 180f / MathF.PI;
+            if (away <= window) best = MathF.Max(best, new Vector2(p.X, p.Y).Length());
+        }
+
+        return best;
+    }
+
+    [Fact]
+    public void ABevelIsClosedAndTapersTowardsItsApex()
+    {
+        var mesh = Only(Plain with { Kind = GearKind.Bevel, Module = 2f, Teeth = 20, Thickness = 8f, ConeAngle = 45f });
+        Closed(mesh);
+
+        var box = mesh.ComputeBounds();
+
+        // 20 teeth of module 2: 40 mm across the pitch circle, 44 over the tips at the back.
+        Assert.Equal(44f, box.Size.X, 0.3f);
+
+        // An 8 mm face on a 45 degree cone stands 8 * cos 45 tall.
+        Assert.Equal(5.66f, box.Size.Z, 0.05f);
+    }
+
+    [Fact]
+    public void ABevelsFaceIsHeldToAThirdOfItsCone()
+    {
+        var result = Gears.Build(Plain with
+        {
+            Kind = GearKind.Bevel, Module = 2f, Teeth = 20, Thickness = 20f, ConeAngle = 45f
+        });
+
+        Assert.Null(result.Refusal);
+        var mesh = Assert.Single(result.Parts).Mesh;
+
+        // The cone is 40 / 2 / sin 45 = 28.28 mm long, so the face is cut to 9.43 mm and the
+        // gear stands 9.43 * cos 45 tall rather than the 20 asked for.
+        Assert.Equal(6.67f, mesh.ComputeBounds().Size.Z, 0.05f);
+        Assert.Contains(result.Notes, n => n.Contains("third of its cone"));
+    }
+
+    [Fact]
+    public void ABevelPairTakesItsConesFromItsTeeth()
+    {
+        var result = Gears.Build(Plain with
+        {
+            Kind = GearKind.Bevel, Module = 2f, Teeth = 20, PartnerTeeth = 20, Thickness = 6f
+        });
+
+        Assert.Null(result.Refusal);
+        Assert.Equal(2, result.Parts.Count);
+        foreach (var part in result.Parts) Closed(part.Mesh);
+
+        // Equal teeth: two 45 degree cones, which is a right angle between the shafts.
+        Assert.Contains(result.Notes, n => n.Contains("45"));
+    }
+
+    [Fact]
+    public void AWormIsClosedAndAsThickAsItsThreadMakesIt()
+    {
+        var result = Gears.Build(Plain with { Kind = GearKind.Worm, Module = 2f, Thickness = 24f });
+
+        Assert.Null(result.Refusal);
+        var worm = Assert.Single(result.Parts).Mesh;
+        Closed(worm);
+
+        var box = worm.ComputeBounds();
+
+        // Ten times the module across the pitch, and a module above that on each side.
+        Assert.Equal(24f, box.Size.X, 0.4f);
+        Assert.Equal(24f, box.Size.Z, 0.01f);
+    }
+
+    [Fact]
+    public void AWormComesWithItsWheelWhenOneIsAskedFor()
+    {
+        var result = Gears.Build(Plain with
+        {
+            Kind = GearKind.Worm, Module = 1.5f, Thickness = 20f, PartnerTeeth = 30
+        });
+
+        Assert.Null(result.Refusal);
+        Assert.Equal(2, result.Parts.Count);
+        foreach (var part in result.Parts) Closed(part.Mesh);
+
+        Assert.Contains(result.Notes, n => n.Contains("30 to 1"));
+    }
+
+    [Fact]
+    public void ARatchetIsClosedAndAsWideAsItsTips()
+    {
+        var mesh = Only(Plain with { Kind = GearKind.Ratchet, Module = 2f, Teeth = 16, Thickness = 5f });
+        Closed(mesh);
+
+        var box = mesh.ComputeBounds();
+        Assert.Equal(32f, box.Size.X, 0.4f);
+        Assert.Equal(5f, box.Size.Z, 0.001f);
+    }
+
+    [Fact]
+    public void ARatchetsTeethAllLeanTheSameWay()
+    {
+        var wheel = Only(Plain with { Kind = GearKind.Ratchet, Module = 2f, Teeth = 12, Thickness = 4f });
+
+        // A tooth is a long ramp up to a tip and a steep face back down to the next root, so
+        // round the wheel the corners alternate: a long gap, then a short one. Teeth that were
+        // symmetrical - a star, not a ratchet - would leave every gap the same.
+        var angles = wheel.Positions
+            .Where(p => p.Z < 0.001f)
+            .Select(p => (MathF.Atan2(p.Y, p.X) * 180f / MathF.PI + 360f) % 360f)
+            .OrderBy(a => a)
+            .ToList();
+
+        var gaps = new List<float>();
+        for (int i = 0; i < angles.Count; i++)
+        {
+            float gap = (angles[(i + 1) % angles.Count] - angles[i] + 360f) % 360f;
+            if (gap > 0.01f) gaps.Add(gap);
+        }
+
+        Assert.Equal(24, gaps.Count);
+        Assert.Equal(12, gaps.Count(g => MathF.Abs(g - 4f) < 0.1f));    // the catching faces
+        Assert.Equal(12, gaps.Count(g => MathF.Abs(g - 26f) < 0.1f));   // the ramps
+    }
+
+    [Fact]
+    public void ARatchetCanBeMadeWithItsPawl()
+    {
+        var result = Gears.Build(Plain with
+        {
+            Kind = GearKind.Ratchet, Module = 2f, Teeth = 16, Thickness = 5f,
+            WithPawl = true, Bore = BoreShape.Round, BoreSize = 4f
+        });
+
+        Assert.Null(result.Refusal);
+        Assert.Equal(2, result.Parts.Count);
+        foreach (var part in result.Parts) Closed(part.Mesh);
+
+        Assert.Contains(result.Notes, n => n.Contains("pivot"));
+    }
+
+    [Fact]
+    public void AGearCutAwayKeepsItsTeethOnOneSectorOnly()
+    {
+        var whole = Only(Plain with { Module = 2f, Teeth = 20, Thickness = 6f });
+        var part = Only(Plain with { Module = 2f, Teeth = 20, Thickness = 6f, KeptTeeth = 5 });
+
+        Closed(part);
+
+        // Teeth 0 to 4 are kept, so their middles lie at 0, 18, 36, 54 and 72 degrees. A tooth
+        // reaches the tip circle at 22 mm; the bare rim is left at the roots, 17.5 mm.
+        Assert.Equal(22f, ReachAt(part, 36f), 0.2f);
+        Assert.Equal(17.5f, ReachAt(part, 180f), 0.2f);
+
+        // The whole one has teeth in both places.
+        Assert.Equal(22f, ReachAt(whole, 180f), 0.2f);
+
+        Assert.True(part.ComputeSignedVolume() < whole.ComputeSignedVolume(),
+            "cutting teeth away should leave less of it");
+    }
+
+    [Fact]
+    public void AGearCutAwaySaysWhatItLeftAndWhy()
+    {
+        var result = Gears.Build(Plain with { Module = 2f, Teeth = 20, Thickness = 6f, KeptTeeth = 5 });
+
+        Assert.Null(result.Refusal);
+        Assert.Contains(result.Notes, n => n.Contains("5 of 20"));
+        Assert.Contains(result.Notes, n => n.Contains("90") && n.Contains("degree"));
+        Assert.Contains(result.Notes, n => n.Contains("locking arc"));
+    }
+
+    [Fact]
+    public void KeepingEveryToothLeavesAWholeGear()
+    {
+        var whole = Only(Plain with { Module = 2f, Teeth = 20, Thickness = 6f });
+        var kept = Only(Plain with { Module = 2f, Teeth = 20, Thickness = 6f, KeptTeeth = 20 });
+
+        Assert.Equal(whole.TriangleCount, kept.TriangleCount);
+        Assert.Equal(whole.ComputeSignedVolume(), kept.ComputeSignedVolume(), 0.01f);
+    }
+
+    [Fact]
+    public void ABevelPairIsMadeSideBySideToPrint()
+    {
+        var result = Gears.Build(Plain with
+        {
+            Kind = GearKind.Bevel, Module = 1.5f, Teeth = 20, PartnerTeeth = 40, Thickness = 8f
+        });
+
+        Assert.Equal(2, result.Parts.Count);
+
+        var first = result.Parts[0].Mesh.ComputeBounds();
+        var second = result.Parts[1].Mesh.ComputeBounds();
+
+        Assert.True(second.Min.X > first.Max.X, $"they sit on top of each other: {first.Max.X} then {second.Min.X}");
+        Assert.Equal(0f, first.Min.Z, 0.001f);
+        Assert.Equal(0f, second.Min.Z, 0.001f);
+    }
+
+    [Fact]
+    public void ABevelPairStandsAtARightAngleWhenShownTogether()
+    {
+        var result = Gears.Build(Plain with
+        {
+            Kind = GearKind.Bevel, Module = 1.5f, Teeth = 20, PartnerTeeth = 40, Thickness = 8f
+        });
+
+        var mate = result.Parts[1];
+        Assert.NotNull(mate.InMesh);
+
+        var flat = mate.Mesh.ComputeBounds();
+        var stood = MeshTransform.Transformed(mate.Mesh, mate.InMesh!.Value).ComputeBounds();
+
+        // Lying down it is wide and shallow; turned into mesh it is up on its edge, so what was
+        // across it is now its height.
+        Assert.Equal(flat.Size.X, stood.Size.Z, 0.2f);
+        Assert.Equal(flat.Size.Z, stood.Size.X, 0.2f);
+
+        // And it has come back to meet the first, which is at the origin.
+        Assert.True(stood.Min.X < 0f, "the mate should reach back over the first gear's axis");
+    }
+
+    [Fact]
+    public void ABevelsHeightIsItsFaceLeaningAtItsOwnConeAngle()
+    {
+        var result = Gears.Build(Plain with
+        {
+            Kind = GearKind.Bevel, Module = 1.5f, Teeth = 20, PartnerTeeth = 40, Thickness = 8f
+        });
+
+        // 20 and 40 teeth: cones of 26.57 and 63.43 degrees, one cone distance of 33.54 mm, so
+        // both get the whole 8 mm face - and the flatter cone of the two stands the shallower.
+        float pinion = result.Parts[0].Mesh.ComputeBounds().Size.Z;
+        float wheel = result.Parts[1].Mesh.ComputeBounds().Size.Z;
+
+        Assert.Equal(8f * MathF.Cos(26.565f * MathF.PI / 180f), pinion, 0.05f);
+        Assert.Equal(8f * MathF.Cos(63.435f * MathF.PI / 180f), wheel, 0.05f);
+    }
+
+    private static GearOptions WormDrive => Plain with
+    {
+        Kind = GearKind.Worm, Module = 1.5f, Thickness = 20f, PartnerTeeth = 30
+    };
+
+    [Fact]
+    public void AWormDriveIsMadeSideBySideToPrint()
+    {
+        var result = Gears.Build(WormDrive);
+
+        Assert.Null(result.Refusal);
+        Assert.Equal(2, result.Parts.Count);
+
+        var worm = result.Parts[0].Mesh.ComputeBounds();
+        var wheel = result.Parts[1].Mesh.ComputeBounds();
+
+        Assert.True(wheel.Min.X > worm.Max.X, $"they sit on top of each other: {worm.Max.X} then {wheel.Min.X}");
+
+        // The worm stands on its end, which is how a thread prints; the wheel lies flat.
+        Assert.Equal(20f, worm.Size.Z, 0.01f);
+        Assert.Equal(0f, worm.Min.Z, 0.01f);
+        Assert.Equal(0f, wheel.Min.Z, 0.01f);
+    }
+
+    [Fact]
+    public void AWormLiesAcrossItsWheelWhenTheDriveIsShownTogether()
+    {
+        var result = Gears.Build(WormDrive);
+
+        var worm = result.Parts[0];
+        var wheel = result.Parts[1];
+        Assert.NotNull(worm.InMesh);
+        Assert.NotNull(wheel.InMesh);
+
+        var laid = MeshTransform.Transformed(worm.Mesh, worm.InMesh!.Value).ComputeBounds();
+
+        // On its side: its length now runs along Y and its diameter stands up. Ten times the
+        // module across the pitch, and a module of thread on each side of that.
+        Assert.Equal(20f, laid.Size.Y, 0.01f);
+        Assert.Equal(18f, laid.Size.Z, 0.1f);
+
+        // 15 mm across the worm's pitch and 45 across the wheel's: 30 mm between the shafts,
+        // with the worm at the wheel's half height - the wheel's, not its own, which is what
+        // having one Thickness for both of them used to get wrong.
+        Assert.Equal(30f, laid.Center.X, 0.1f);
+        Assert.Equal(9.95f / 2f, laid.Center.Z, 0.1f);
+
+        // And the wheel comes back to the middle to meet it.
+        var back = MeshTransform.Transformed(wheel.Mesh, wheel.InMesh!.Value).ComputeBounds();
+        Assert.Equal(0f, back.Center.X, 0.01f);
+    }
+
+    [Fact]
+    public void AWormAndItsWheelDoNotRunIntoOneAnother()
+    {
+        var result = Gears.Build(WormDrive);
+
+        var worm = MeshTransform.Transformed(result.Parts[0].Mesh, result.Parts[0].InMesh!.Value);
+        var wheel = MeshTransform.Transformed(result.Parts[1].Mesh, result.Parts[1].InMesh!.Value);
+
+        // Nothing of the worm reaches inside the wheel's roots, and nothing of the wheel reaches
+        // inside the worm's. Shown driven into one another, a pair looks broken.
+        float roots = 1.5f * 30 / 2f - 1.25f * 1.5f;
+        float nearest = worm.Positions.Min(p => new Vector2(p.X, p.Y).Length());
+        Assert.True(nearest > roots - 1.5f, $"the worm reaches {nearest} mm in, past the wheel's roots at {roots}");
+
+        float wormRoot = 15f / 2f - 1.25f * 1.5f;
+        float deepest = wheel.Positions
+            .Where(p => MathF.Abs(p.Y) < 8f)
+            .Min(p => new Vector2(p.X - 30f, p.Z - 10f).Length());
+        Assert.True(deepest > wormRoot - 0.1f, $"the wheel reaches {deepest} mm from the worm's axis, inside its root at {wormRoot}");
+    }
+
+    [Fact]
+    public void AWormWheelIsAsWideAsTheWormAsksForAndNotAsLongAsTheWormIs()
+    {
+        // A worm four times as long drives the same wheel: its length only gives the shafts room.
+        var shortWorm = Gears.Build(WormDrive with { Thickness = 20f });
+        var longWorm = Gears.Build(WormDrive with { Thickness = 80f });
+
+        float narrow = shortWorm.Parts[1].Mesh.ComputeBounds().Size.Z;
+        float wide = longWorm.Parts[1].Mesh.ComputeBounds().Size.Z;
+
+        Assert.Equal(narrow, wide, 0.001f);
+
+        // Two modules for every root of the diameter quotient and one: 2 * 1.5 * sqrt(11).
+        Assert.Equal(9.95f, narrow, 0.05f);
+    }
+
+    [Fact]
+    public void AWormWheelTakesTheWidthItIsGiven()
+    {
+        var result = Gears.Build(WormDrive with { WheelWidth = 6f });
+
+        Assert.Equal(6f, result.Parts[1].Mesh.ComputeBounds().Size.Z, 0.001f);
+    }
+
+    [Fact]
+    public void AWormIsBoredForItsShaftAndWillTakeACollar()
+    {
+        var result = Gears.Build(new GearOptions
+        {
+            Kind = GearKind.Worm, Module = 1.5f, Thickness = 30f,
+            Bore = BoreShape.Round, BoreSize = 5f, HubDiameter = 12f, HubHeight = 6f
+        });
+
+        Assert.Null(result.Refusal);
+        var worm = Assert.Single(result.Parts).Mesh;
+        Closed(worm);
+
+        var box = worm.ComputeBounds();
+
+        // The collar stands on the far end of the thread, and the bore goes through the lot.
+        Assert.Equal(36f, box.Size.Z, 0.01f);
+        Assert.True(worm.Positions.Any(p => new Vector2(p.X, p.Y).Length() < 2.6f),
+            "nothing of it is near the axis, so there is no bore");
+        Assert.DoesNotContain(result.Notes, n => n.Contains("left off") || n.Contains("left out"));
+    }
+
+    [Fact]
+    public void AWormWhoseBoreWouldLeaveNoWallIsRefused()
+    {
+        var result = Gears.Build(new GearOptions
+        {
+            Kind = GearKind.Worm, Module = 1.5f, Thickness = 20f,
+            Bore = BoreShape.Round, BoreSize = 12f
+        });
+
+        // 15 mm across the pitch leaves roots at 5.6 mm: a 12 mm hole eats them.
+        Assert.Empty(result.Parts);
+        Assert.NotNull(result.Refusal);
+        Assert.Contains("roots of the worm", result.Refusal);
+    }
+
+    private static GearOptions Ratchet => new()
+    {
+        Kind = GearKind.Ratchet, Module = 2f, Teeth = 16, Thickness = 5f, WithPawl = true,
+        Bore = BoreShape.Round, BoreSize = 4f
+    };
+
+    [Fact]
+    public void ARatchetAndItsPawlAreMadeSideBySideToPrint()
+    {
+        var result = Gears.Build(Ratchet);
+
+        Assert.Null(result.Refusal);
+        Assert.Equal(2, result.Parts.Count);
+
+        var wheel = result.Parts[0].Mesh.ComputeBounds();
+        var pawl = result.Parts[1].Mesh.ComputeBounds();
+
+        Assert.True(pawl.Min.X > wheel.Max.X, $"they sit on top of each other: {wheel.Max.X} then {pawl.Min.X}");
+        Assert.Equal(0f, pawl.Min.Z, 0.001f);
+        Assert.Equal(wheel.Size.Z, pawl.Size.Z, 0.001f);
+    }
+
+    [Fact]
+    public void ThePawlSitsInAToothWhenTheTwoAreShownTogether()
+    {
+        var result = Gears.Build(Ratchet);
+
+        var pawl = result.Parts[1];
+        Assert.NotNull(pawl.InMesh);
+
+        var shown = MeshTransform.Transformed(pawl.Mesh, pawl.InMesh!.Value);
+        var wheel = result.Parts[0].Mesh;
+
+        float tip = 2f * 16 / 2f, root = tip - 2f;
+
+        // Its point reaches into the teeth without cutting into the wheel's roots.
+        float nearest = shown.Positions.Min(p => new Vector2(p.X, p.Y).Length());
+        Assert.True(nearest < tip, $"the pawl stops {nearest} mm out, short of the teeth at {tip}");
+        Assert.True(nearest > root - 0.01f, $"the pawl reaches {nearest} mm in, past the roots at {root}");
+
+        // And they lie in the same plane, as a ratchet and its pawl have to.
+        Assert.Equal(wheel.ComputeBounds().Min.Z, shown.ComputeBounds().Min.Z, 0.01f);
+        Assert.Equal(wheel.ComputeBounds().Max.Z, shown.ComputeBounds().Max.Z, 0.01f);
+    }
+
+    [Fact]
+    public void ThePawlsArmLiesAlongTheWayTheWheelPushesIt()
+    {
+        var result = Gears.Build(Ratchet);
+        var shown = MeshTransform.Transformed(result.Parts[1].Mesh, result.Parts[1].InMesh!.Value);
+
+        // The point is the nearest part of it to the wheel's centre and the pivot the furthest,
+        // and the arm between them is at a right angle to the radius through the point: that is
+        // what puts the tooth's push down the arm rather than under the point.
+        var point = shown.Positions.MinBy(p => new Vector2(p.X, p.Y).LengthSquared());
+        var contact = new Vector2(point.X, point.Y);
+
+        float pivotFromCentre = shown.Positions.Max(p => new Vector2(p.X, p.Y).Length());
+        float armAndReach = MathF.Sqrt(pivotFromCentre * pivotFromCentre - contact.LengthSquared());
+
+        Assert.True(armAndReach > 0.8f * (pivotFromCentre - contact.Length()),
+            "the arm should run across the wheel, not straight out from its centre");
+    }
 }

@@ -43,6 +43,13 @@ public sealed class Sketch
     /// <summary>How far the pointer moves before a freehand stroke takes another point.</summary>
     private const float StrokeStep = 0.25f;
 
+    /// <summary>
+    /// An edge shorter than this was laid out rather than clicked: an arc, a circle and a curve
+    /// are drawn as pieces <see cref="Piece"/> long. It is what tells a corner that can be
+    /// dragged from a point that is only there to make a curve look round.
+    /// </summary>
+    private const float Clicked = 4 * Piece;
+
     /// <summary>How far a freehand outline may be straightened from the pointer's path: its jitter, not its shape.</summary>
     private const float StrokeTolerance = 0.2f;
 
@@ -114,6 +121,105 @@ public sealed class Sketch
     }
 
     /// <summary>
+    /// The points that can be dragged to change the shape: which outline, which point of it, and
+    /// where it is. The outline still being drawn is outline -1.
+    ///
+    /// A point is offered only where the edges either side of it are long enough to have been
+    /// clicked. The pieces an arc, a circle or a curve is laid out as are a fraction of a
+    /// millimetre long, and dragging one of those would dent the curve rather than edit it.
+    /// </summary>
+    public List<(int Loop, int Index, Vector2 At)> Handles()
+    {
+        var handles = new List<(int, int, Vector2)>();
+
+        // A stroke is the pointer's own path, and every point of it was laid out, not placed.
+        if (kind != ChainKind.Stroke)
+        {
+            for (int i = 0; i < Chain.Count; i++)
+            {
+                bool before = i == 0 || Vector2.Distance(Chain[i - 1], Chain[i]) >= Clicked;
+                bool after = i == Chain.Count - 1 || Vector2.Distance(Chain[i], Chain[i + 1]) >= Clicked;
+
+                if (before && after) handles.Add((-1, i, Chain[i]));
+            }
+        }
+
+        for (int loop = 0; loop < Loops.Count; loop++)
+        {
+            var points = Loops[loop];
+
+            for (int i = 0; i < points.Count; i++)
+            {
+                var before = points[(i - 1 + points.Count) % points.Count];
+                var after = points[(i + 1) % points.Count];
+
+                if (Vector2.Distance(before, points[i]) >= Clicked && Vector2.Distance(points[i], after) >= Clicked)
+                    handles.Add((loop, i, points[i]));
+            }
+        }
+
+        return handles;
+    }
+
+    /// <summary>Puts a point somewhere else. Nothing is checked here - see <see cref="SettleHandle"/>.</summary>
+    public void MoveHandle(int loop, int index, Vector2 to)
+    {
+        var points = Points(loop);
+        if (points is null || index < 0 || index >= points.Count) return;
+
+        points[index] = to;
+    }
+
+    /// <summary>
+    /// The end of a drag. A finished outline is checked as it would have been on closing, and put
+    /// back where it was if the move has made it cross itself or another.
+    ///
+    /// Checked here rather than on every step of the drag: it walks every edge against every
+    /// other, and an outline loaded from a drawing has hundreds. The outline being drawn is not
+    /// checked at all, since closing it will do that anyway.
+    /// </summary>
+    public string SettleHandle(int loop, int index, Vector2 from)
+    {
+        if (loop < 0 || loop >= Loops.Count) return "";
+
+        var points = Loops[loop];
+        if (index < 0 || index >= points.Count) return "";
+
+        if (!IsSimple(points))
+        {
+            points[index] = from;
+            return "Put back: there, the outline would cross itself.";
+        }
+
+        for (int other = 0; other < Loops.Count; other++)
+        {
+            if (other == loop || !Crosses(points, Loops[other])) continue;
+
+            points[index] = from;
+            return "Put back: there, the outline would cross another.";
+        }
+
+        return $"Moved the point to {F(points[index].X)}, {F(points[index].Y)} mm.";
+    }
+
+    /// <summary>
+    /// Finishes what is being drawn where it stands: closed into an outline if it has the points
+    /// for one, dropped if it has not. What the right button does.
+    /// </summary>
+    public string EndLine()
+    {
+        if (kind == ChainKind.Stroke) return EndStroke();
+        if (Chain.Count == 0) return "";
+        if (Chain.Count >= 3) return Close();
+
+        DropChain();
+        return "Dropped the line - an outline needs three points or more.";
+    }
+
+    private List<Vector2>? Points(int loop) =>
+        loop < 0 ? Chain : loop < Loops.Count ? Loops[loop] : null;
+
+    /// <summary>
     /// Places a point with a tool, and says what came of it. <paramref name="onFirst"/> is whether
     /// the point was placed on the first point of the outline being drawn, which closes it.
     /// </summary>
@@ -130,8 +236,8 @@ public sealed class Sketch
                 steps.Add(Chain.Count);
                 Chain.Add(point);
                 return Chain.Count == 1
-                    ? "Click the next point. Click the first point again, or press Enter, to close the outline."
-                    : $"{steps.Count} points. Click the first point, or press Enter, to close it.";
+                    ? "Click the next point. Click the first again, press Enter or right-click to close the outline. Drag a point to move it."
+                    : $"{steps.Count} points. Click the first point, press Enter or right-click to close it.";
 
             case SketchTool.Arc:
                 return PlaceArc(point, onFirst);
@@ -144,8 +250,8 @@ public sealed class Sketch
                 steps.Add(Chain.Count);
                 Chain.Add(point);
                 return Chain.Count == 1
-                    ? "Click the points the curve passes through. Click the first again, or press Enter, to close it."
-                    : $"{Chain.Count} points on the curve. Click the first, or press Enter, to close it.";
+                    ? "Click the points the curve passes through. Click the first again, press Enter or right-click to close it."
+                    : $"{Chain.Count} points on the curve. Click the first, press Enter or right-click to close it.";
 
             case SketchTool.Freehand:
                 return "Press and drag to draw round the shape; let go to close it.";
