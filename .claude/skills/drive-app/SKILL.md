@@ -27,7 +27,7 @@ the build fails with an MSBuild stack trace that says nothing about why.
 
 | Call | Does |
 |---|---|
-| `Select-Tab $w "Object"` | Switches ribbon tab |
+| `Select-Tab $w "Edit"` | Switches ribbon tab |
 | `Invoke-ByName $w "Cube"` | Clicks a button by its visible text |
 | `Get-EditBoxes $w` | Every text box in document order |
 | `Set-EditValue $b[3] "17"` | Sets one, committing on focus loss |

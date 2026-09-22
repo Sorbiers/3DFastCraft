@@ -533,8 +533,38 @@
             <!-- Object: what a thing is made of. Edit changes its surface, Align says where it
                  sits - the three used to be mixed, with Drop to plate and Mirror filed under
                  Object and Smooth under it too. -->
-            <TabItem Header="Object">
+            <!-- Edit: everything that changes the selection, from a boolean down to a colour.
+                 Object was a tab of its own and the split never held up - Subtract belonged with
+                 Merge, and both belonged with Smooth and Simplify, which are the same question
+                 asked of the surface rather than of the solid. -->
+            <TabItem Header="Edit">
                 <WrapPanel Margin="4">
+                    <Button Style="{StaticResource ToolButton}" Content="Undo" Tag="{StaticResource IconUndo}"
+                            Command="{Binding UndoCommand}"
+                            ToolTip="{Binding UndoLabel, StringFormat='{}{0} (Ctrl+Z)'}" />
+                    <Button Style="{StaticResource ToolButton}" Content="Redo" Tag="{StaticResource IconRedo}"
+                            Command="{Binding RedoCommand}" ToolTip="Redo what was undone (Ctrl+Y)" />
+                    <Separator Margin="8,0" />
+                    <Button Style="{StaticResource ToolButton}" Content="Copy" Tag="{StaticResource IconCopy}"
+                            Command="{Binding CopyCommand}"
+                            ToolTip="Copy the selection (Ctrl+C). Paste puts it back exactly where it came from." />
+                    <Button Style="{StaticResource ToolButton}" Content="Cut" Tag="{StaticResource IconCut}"
+                            Command="{Binding CutCommand}"
+                            ToolTip="Copy the selection and take it away (Ctrl+X). One undo step puts it back." />
+                    <Button Style="{StaticResource ToolButton}" Content="Paste" Tag="{StaticResource IconPaste}"
+                            Command="{Binding PasteCommand}"
+                            ToolTip="Put the clipboard back exactly where it was taken from (Ctrl+V) - which means a paste can land inside the thing it was copied from. Use Duplicate for a copy set beside the original." />
+                    <Separator Margin="8,0" />
+                    <Button Style="{StaticResource ToolButton}" Content="Duplicate" Tag="{StaticResource IconDuplicate}"
+                            Command="{Binding DuplicateCommand}"
+                            ToolTip="Copy the selection and set it beside the original (Ctrl+D)" />
+                    <Button Style="{StaticResource ToolButton}" Content="In place" Visibility="{Binding IsAdvancedMode, Converter={StaticResource BoolToVisibility}}" Tag="{StaticResource IconDuplicate}"
+                            Command="{Binding DuplicateCommand}" CommandParameter="InPlace" MinWidth="64"
+                            ToolTip="Copy the selection without moving it - what you want before a boolean or a mirror (Ctrl+Shift+D)" />
+                    <Button Style="{StaticResource ToolButton}" Content="Delete" Tag="{StaticResource IconDelete}"
+                            Command="{Binding DeleteCommand}"
+                            ToolTip="Remove the selection (Del)" />
+                    <Separator Margin="8,0" />
                     <Button Style="{StaticResource ToolButton}" Content="Subtract" Tag="{StaticResource IconSubtract}"
                             Command="{Binding BeginSubtractCommand}" MinWidth="80"
                             ToolTip="Take the last object picked away from everything picked before it. Each of those is cut on its own and stays a separate object. Opens the options on the right: a tolerance, and whether to keep the cutter. Needs two or more objects selected, the cutter picked last." />
@@ -544,33 +574,40 @@
                     <Button Style="{StaticResource ToolButton}" Content="Merge" Tag="{StaticResource IconMerge}"
                             Command="{Binding BooleanCommand}" CommandParameter="Union"
                             ToolTip="Fuse the selection into one solid. Needs two or more objects selected." />
-                    <Button Style="{StaticResource ToolButton}" Content="Hull" Visibility="{Binding IsAdvancedMode, Converter={StaticResource BoolToVisibility}}" Tag="{StaticResource IconHull}"
-                            Command="{Binding HullCommand}"
-                            ToolTip="Wrap the selection in one skin, as cling film pulled tight round it: two cylinders make a slot, a row of spheres a rounded bar. Replaces what was selected. Needs something selected." />
 
                     <Button Style="{StaticResource ToolButton}" Content="Split" Tag="{StaticResource IconSplit}"
                             Command="{Binding BeginSplitCommand}"
                             ToolTip="Cut the selected object in two with a plane, or with a face you pick" />
-                    <Separator Margin="8,0" />
-                    <Button Style="{StaticResource ToolButton}" Content="Duplicate" Tag="{StaticResource IconDuplicate}"
-                            Command="{Binding DuplicateCommand}"
-                            ToolTip="Copy the selection and set it beside the original (Ctrl+D)" />
-                    <Button Style="{StaticResource ToolButton}" Content="In place" Visibility="{Binding IsAdvancedMode, Converter={StaticResource BoolToVisibility}}" Tag="{StaticResource IconDuplicate}"
-                            Command="{Binding DuplicateCommand}" CommandParameter="InPlace" MinWidth="64"
-                            ToolTip="Copy the selection without moving it - what you want before a boolean or a mirror (Ctrl+Shift+D)" />
-                    <Button Style="{StaticResource ToolButton}" Content="Repeat" Visibility="{Binding IsAdvancedMode, Converter={StaticResource BoolToVisibility}}" Tag="{StaticResource IconRepeat}"
-                            Command="{Binding RepeatCommand}" MinWidth="76"
-                            ToolTip="Repeat the selection along a line or round a circle, growing as it goes - a flight of steps, a row of dowels, a ring of pins, a spiral stair" />
-                    <Button Style="{StaticResource ToolButton}" Content="Delete" Tag="{StaticResource IconDelete}"
-                            Command="{Binding DeleteCommand}"
-                            ToolTip="Remove the selection (Del)" />
-                    <Separator Margin="8,0" />
+                    <Separator Visibility="{Binding IsAdvancedMode, Converter={StaticResource BoolToVisibility}}" Margin="8,0" />
                     <Button Style="{StaticResource ToolButton}" Content="Set pivot" Visibility="{Binding IsAdvancedMode, Converter={StaticResource BoolToVisibility}}" Tag="{StaticResource IconPivot}"
                             Command="{Binding SetPivotCommand}" MinWidth="80"
                             ToolTip="Click a point on the object to measure and turn it about - a shaft hole, a corner, a hinge line. The position boxes then read that point, a turn goes round it, and lining it up with another part compares it rather than the middle of its box. Kept with the project. Needs exactly one object selected." />
                     <Button Style="{StaticResource ToolButton}" Content="Pivot to centre" Visibility="{Binding IsAdvancedMode, Converter={StaticResource BoolToVisibility}}" Tag="{StaticResource IconPivotCentre}"
                             Command="{Binding PivotToCentreCommand}" MinWidth="104"
                             ToolTip="Puts the pivot back in the middle of the object's box, where it starts out. Needs exactly one object selected." />
+                    <Separator Visibility="{Binding IsAdvancedMode, Converter={StaticResource BoolToVisibility}}" Margin="8,0" />
+                    <Button Style="{StaticResource ToolButton}" Content="Round" Visibility="{Binding IsAdvancedMode, Converter={StaticResource BoolToVisibility}}" Tag="{StaticResource IconRound}"
+                            Command="{Binding RoundCommand}" MinWidth="82"
+                            ToolTip="Round the edges of a cube or cylinder. Only shapes still described by their parameters can be rounded. Needs a cube or cylinder that has not been cut or reshaped since it was inserted." />
+                    <Button Style="{StaticResource ToolButton}" Content="Twist" Visibility="{Binding IsAdvancedMode, Converter={StaticResource BoolToVisibility}}" Tag="{StaticResource IconTwist}"
+                            Command="{Binding TwistCommand}" MinWidth="70"
+                            ToolTip="Turn a shape about its upright axis by more the higher up it goes - twisted columns, vases and spirals. The bottom stays put." />
+                    <Button Style="{StaticResource ToolButton}" Content="Taper" Visibility="{Binding IsAdvancedMode, Converter={StaticResource BoolToVisibility}}" Tag="{StaticResource IconTaper}"
+                            Command="{Binding TaperCommand}" MinWidth="70"
+                            ToolTip="Narrow or widen a shape towards the top - tapered columns, spires, flared vases. The bottom keeps its size." />
+                    <Button Style="{StaticResource ToolButton}" Content="Bend" Visibility="{Binding IsAdvancedMode, Converter={StaticResource BoolToVisibility}}" Tag="{StaticResource IconBend}"
+                            Command="{Binding BendCommand}" MinWidth="70"
+                            ToolTip="Curve a shape over as if round a pipe, towards X or Y - arches, horns, hooks. The bottom stays put." />
+                    <Separator Margin="8,0" />
+                    <Button Style="{StaticResource ToolButton}" Content="Simplify" Tag="{StaticResource IconSimplify}"
+                            Command="{Binding SimplifyCommand}" MinWidth="82"
+                            ToolTip="Cut the triangle count down while keeping the shape. The natural partner to Rebuild." />
+                    <Button Style="{StaticResource ToolButton}" Content="Smooth" Tag="{StaticResource IconSmooth}"
+                            Command="{Binding SmoothCommand}"
+                            ToolTip="Round the facets off, with the result shown as you set it" />
+                    <Button Style="{StaticResource ToolButton}" Content="Hollow" Visibility="{Binding IsAdvancedMode, Converter={StaticResource BoolToVisibility}}" Tag="{StaticResource IconHollow}"
+                            Command="{Binding HollowCommand}" MinWidth="78"
+                            ToolTip="Turn a solid into a shell of a chosen wall thickness, to save material" />
                     <Separator Margin="8,0" />
                     <Button Style="{StaticResource ToolButton}" Content="Colour" Tag="{StaticResource IconColour}"
                             Command="{Binding PickColourCommand}" MinWidth="78"
@@ -650,38 +687,6 @@
                     <Button Visibility="{Binding IsAdvancedMode, Converter={StaticResource BoolToVisibility}}" Style="{StaticResource ToolButton}" Content="Spread" Tag="{StaticResource IconDistribute}"
                             Command="{Binding AlignCommand}" CommandParameter="Z:Distribute" MinWidth="58"
                             ToolTip="Even out the gaps along Z, keeping the two outermost objects where they are. Needs two or more objects selected." />
-                    <Separator Visibility="{Binding IsAdvancedMode, Converter={StaticResource BoolToVisibility}}" Margin="6,0" />
-                </WrapPanel>
-            </TabItem>
-
-            <TabItem Header="Edit">
-                <WrapPanel Margin="4">
-                    <Button Style="{StaticResource ToolButton}" Content="Emboss" Tag="{StaticResource IconText}"
-                            Command="{Binding BeginEmbossCommand}" MinWidth="78"
-                            ToolTip="Raise lettering or a drawing off a face, or cut it in. Needs exactly one object selected." />
-                    <Button Style="{StaticResource ToolButton}" Content="Engrave" Tag="{StaticResource IconEngrave}"
-                            Command="{Binding BeginEngraveCommand}" MinWidth="82"
-                            ToolTip="Put brick, roof tiles, planks or grain on one flat face - cut in, or standing proud. Needs exactly one object selected." />
-                    <Separator Margin="8,0" />
-                    <Button Style="{StaticResource ToolButton}" Content="Smooth" Tag="{StaticResource IconSmooth}"
-                            Command="{Binding SmoothCommand}"
-                            ToolTip="Round the facets off, with the result shown as you set it" />
-                    <Button Style="{StaticResource ToolButton}" Content="Round" Visibility="{Binding IsAdvancedMode, Converter={StaticResource BoolToVisibility}}" Tag="{StaticResource IconRound}"
-                            Command="{Binding RoundCommand}" MinWidth="82"
-                            ToolTip="Round the edges of a cube or cylinder. Only shapes still described by their parameters can be rounded. Needs a cube or cylinder that has not been cut or reshaped since it was inserted." />
-                    <Separator Margin="8,0" />
-                    <Button Style="{StaticResource ToolButton}" Content="Simplify" Tag="{StaticResource IconSimplify}"
-                            Command="{Binding SimplifyCommand}" MinWidth="82"
-                            ToolTip="Cut the triangle count down while keeping the shape. The natural partner to Rebuild." />
-                    <Button Style="{StaticResource ToolButton}" Content="Hollow" Visibility="{Binding IsAdvancedMode, Converter={StaticResource BoolToVisibility}}" Tag="{StaticResource IconHollow}"
-                            Command="{Binding HollowCommand}" MinWidth="78"
-                            ToolTip="Turn a solid into a shell of a chosen wall thickness, to save material" />
-                    <Separator Margin="8,0" />
-                    <Button Style="{StaticResource ToolButton}" Content="{Binding UndoLabel}" Tag="{StaticResource IconUndo}"
-                            Command="{Binding UndoCommand}" MinWidth="120"
-                            ToolTip="Undo the last change (Ctrl+Z)" />
-                    <Button Style="{StaticResource ToolButton}" Content="Redo" Tag="{StaticResource IconRedo}"
-                            Command="{Binding RedoCommand}" ToolTip="Redo what was undone (Ctrl+Y)" />
                 </WrapPanel>
             </TabItem>
 
@@ -694,6 +699,9 @@
                     <Button Style="{StaticResource ToolButton}" Content="Mould" Visibility="{Binding IsAdvancedMode, Converter={StaticResource BoolToVisibility}}" Tag="{StaticResource IconHollow}"
                             Command="{Binding MouldCommand}" MinWidth="76"
                             ToolTip="Make a mould of the selection to pour silicone into: a block with the model taken out of it, cut so the cast part comes out, with a pour hole and air vents. Select one object. Needs exactly one object selected." />
+                    <Button Style="{StaticResource ToolButton}" Content="Hull" Visibility="{Binding IsAdvancedMode, Converter={StaticResource BoolToVisibility}}" Tag="{StaticResource IconHull}"
+                            Command="{Binding HullCommand}"
+                            ToolTip="Wrap the selection in one skin, as cling film pulled tight round it: two cylinders make a slot, a row of spheres a rounded bar. Replaces what was selected. Needs something selected." />
                     <Separator Margin="8,0" Visibility="{Binding IsAdvancedMode, Converter={StaticResource BoolToVisibility}}" />
                     <Button Style="{StaticResource ToolButton}" Content="Repair" Tag="{StaticResource IconRepair}"
                             Command="{Binding RepairCommand}"
@@ -702,15 +710,6 @@
                             Command="{Binding RebuildCommand}" MinWidth="82"
                             ToolTip="Rebuild the surface from scratch. Mends anything, including a model that passes through itself - at the cost of fine detail." />
                     <Separator Margin="8,0" />
-                    <Button Style="{StaticResource ToolButton}" Content="Twist" Visibility="{Binding IsAdvancedMode, Converter={StaticResource BoolToVisibility}}" Tag="{StaticResource IconTwist}"
-                            Command="{Binding TwistCommand}" MinWidth="70"
-                            ToolTip="Turn a shape about its upright axis by more the higher up it goes - twisted columns, vases and spirals. The bottom stays put." />
-                    <Button Style="{StaticResource ToolButton}" Content="Taper" Visibility="{Binding IsAdvancedMode, Converter={StaticResource BoolToVisibility}}" Tag="{StaticResource IconTaper}"
-                            Command="{Binding TaperCommand}" MinWidth="70"
-                            ToolTip="Narrow or widen a shape towards the top - tapered columns, spires, flared vases. The bottom keeps its size." />
-                    <Button Style="{StaticResource ToolButton}" Content="Bend" Visibility="{Binding IsAdvancedMode, Converter={StaticResource BoolToVisibility}}" Tag="{StaticResource IconBend}"
-                            Command="{Binding BendCommand}" MinWidth="70"
-                            ToolTip="Curve a shape over as if round a pipe, towards X or Y - arches, horns, hooks. The bottom stays put." />
                     <Button Style="{StaticResource ToolButton}" Content="Extrude down" Tag="{StaticResource IconExtrudeDown}"
                             Command="{Binding BeginExtrudeCommand}" MinWidth="90"
                             ToolTip="Cut the model at a height and carry its outline straight down to a flat base on the plate. For a scan with a ragged bottom, a relief that is only a skin, or a part tilted off its feet." />
@@ -720,6 +719,17 @@
                     <Button Style="{StaticResource ToolButton}" Content="Connect objects" Visibility="{Binding IsAdvancedMode, Converter={StaticResource BoolToVisibility}}" Tag="{StaticResource IconConnect}"
                             Command="{Binding BeginConnectCommand}" MinWidth="100"
                             ToolTip="Pins or pegs through the face two parts rest against each other on - a floor on its basement, two blocks side by side - so they go together one way only. Select the two parts. Needs exactly two objects selected." />
+                    <Separator Margin="8,0" />
+                    <Button Style="{StaticResource ToolButton}" Content="Emboss" Tag="{StaticResource IconText}"
+                            Command="{Binding BeginEmbossCommand}" MinWidth="78"
+                            ToolTip="Raise lettering or a drawing off a face, or cut it in. Needs exactly one object selected." />
+                    <Button Style="{StaticResource ToolButton}" Content="Engrave" Tag="{StaticResource IconEngrave}"
+                            Command="{Binding BeginEngraveCommand}" MinWidth="82"
+                            ToolTip="Put brick, roof tiles, planks or grain on one flat face - cut in, or standing proud. Needs exactly one object selected." />
+                    <Separator Visibility="{Binding IsAdvancedMode, Converter={StaticResource BoolToVisibility}}" Margin="8,0" />
+                    <Button Style="{StaticResource ToolButton}" Content="Repeat" Visibility="{Binding IsAdvancedMode, Converter={StaticResource BoolToVisibility}}" Tag="{StaticResource IconRepeat}"
+                            Command="{Binding RepeatCommand}" MinWidth="76"
+                            ToolTip="Repeat the selection along a line or round a circle, growing as it goes - a flight of steps, a row of dowels, a ring of pins, a spiral stair" />
                     <Separator Margin="8,0" />
                     <Button Style="{StaticResource ToolButton}" Content="Measure" Tag="{StaticResource IconMeasure}"
                             Command="{Binding BeginMeasureCommand}"
@@ -791,7 +801,7 @@
                     <Button Style="{StaticResource ToolButton}" Content="Left" Tag="{StaticResource IconViewRight}" Click="OnViewLeft" />
                     <Button Style="{StaticResource ToolButton}" Content="Bottom" Tag="{StaticResource IconViewTop}" Click="OnViewBottom" />
                     <Button Style="{StaticResource ToolButton}" Content="Isometric" Tag="{StaticResource IconViewIso}" Click="OnViewIso" ToolTip="Look from the front right, above (4)" />
-                    <Separator Margin="8,0" />
+                    <Separator Visibility="{Binding IsAdvancedMode, Converter={StaticResource BoolToVisibility}}" Margin="8,0" />
                     <ToggleButton Style="{StaticResource ToolToggle}" Content="Wireframe" Tag="{StaticResource IconWireframe}"
                                   IsChecked="{Binding ShowWireframe}" MinWidth="80"
                                   ToolTip="Draw every triangle edge - useful for seeing how dense an import is" />
@@ -2026,7 +2036,7 @@
                                          reading, and typing, is where in the part it sits. -->
                                     <StackPanel Visibility="{Binding DataContext.ShowPivotFields, RelativeSource={RelativeSource AncestorType=Window}, Converter={StaticResource BoolToVisibility}}">
                                         <TextBlock Text="{Binding DataContext.UnitLabel, RelativeSource={RelativeSource AncestorType=Window}, StringFormat='Pivot, from the middle ({0})'}" Style="{StaticResource SectionHeader}"
-                                                   ToolTip="Where the object turns and is measured about, as an offset from the middle of its own box. 0, 0, 0 is the middle. Set it by clicking a point with Set pivot on the Object tab, or type it here." />
+                                                   ToolTip="Where the object turns and is measured about, as an offset from the middle of its own box. 0, 0, 0 is the middle. Set it by clicking a point with Set pivot on the Edit tab, or type it here." />
                                         <Grid>
                                             <Grid.ColumnDefinitions>
                                                 <ColumnDefinition Width="Auto" />

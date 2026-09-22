@@ -254,6 +254,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
         AlignCommand = new RelayCommand(Align, CanAlign);
         RoundCommand = RelayCommand.Simple(RoundSelection, () => Scene.Selection.Any(o => o.CanRound));
         CopyCommand = RelayCommand.Simple(Copy, () => Scene.Selection.Count > 0);
+        CutCommand = RelayCommand.Simple(Cut, () => Scene.Selection.Count > 0);
         PasteCommand = RelayCommand.Simple(Paste, () => clipboard.Count > 0);
         ImportCommand = RelayCommand.Simple(Import);
         ExportCommand = RelayCommand.Simple(Export, () => Scene.Objects.Count > 0);
@@ -359,6 +360,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
     public System.Windows.Input.ICommand AlignCommand { get; }
     public System.Windows.Input.ICommand RoundCommand { get; }
     public System.Windows.Input.ICommand CopyCommand { get; }
+    public System.Windows.Input.ICommand CutCommand { get; }
     public System.Windows.Input.ICommand PasteCommand { get; }
     public System.Windows.Input.ICommand ImportCommand { get; }
     public System.Windows.Input.ICommand ExportCommand { get; }
@@ -6028,24 +6030,54 @@ public sealed class MainViewModel : INotifyPropertyChanged
         Status = selection.Count == 1 ? "Copied 1 object" : $"Copied {selection.Count} objects";
     }
 
+    /// <summary>Copies the selection and takes it away, as one step that Ctrl+Z puts back.</summary>
+    private void Cut()
+    {
+        var selection = Scene.Selection;
+        if (selection.Count == 0) return;
+
+        clipboard.Clear();
+        foreach (var o in selection) clipboard.Add(o.Clone());
+
+        int taken = selection.Count;
+        Undo.Execute(new DeleteObjectsCommand(selection));
+        RefreshSelection();
+
+        Status = taken == 1 ? "Cut 1 object" : $"Cut {taken} objects";
+    }
+
+    /// <summary>
+    /// Puts the clipboard back exactly where it was taken from.
+    ///
+    /// It used to arrive shifted along X, on the reasoning that a copy hidden inside its original
+    /// looks like nothing happened. That is true of the copy and false of everything else a paste
+    /// is for: pasting into another project, or back after a Cut, or onto a part that has to line
+    /// up with what it was measured against. Moving it was the app deciding a position it had no
+    /// business deciding, and there was no way to ask for the real one. Duplicate is still there
+    /// for a copy set beside the original.
+    ///
+    /// Cloned again on the way out, so pasting twice does not hand out the same instance twice.
+    /// </summary>
     private void Paste()
     {
         if (clipboard.Count == 0) return;
 
-        // Offset so a paste is visible rather than hidden exactly inside its original, and
-        // cloned again so pasting twice does not hand out the same instance.
         var name = Namer();
         var pasted = clipboard.Select(source =>
         {
             var copy = source.Clone();
             copy.Name = name(source.Name);
-            copy.Position += new Vector3(source.WorldBounds.Size.X + 5f, 0, 0);
             return copy;
         }).ToList();
 
         Undo.Execute(new AddObjectsCommand("Paste", pasted));
         RefreshSelection();
-        Status = pasted.Count == 1 ? "Pasted 1 object" : $"Pasted {pasted.Count} objects";
+
+        // Said plainly, because what has just landed is invisible when it has landed on top of
+        // what it was copied from - and it is the paste that is selected, so a drag moves it.
+        Status = pasted.Count == 1
+            ? "Pasted 1 object where it came from"
+            : $"Pasted {pasted.Count} objects where they came from";
     }
 
     private void InvertSelection()
@@ -6059,7 +6091,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
     /// Combines the selection into one object.
     ///
     /// The meshes are concatenated, not fused: each part keeps its own shell, so Ungroup can
-    /// tell them apart again afterwards. Use Merge on the Object tab for a true boolean union.
+    /// tell them apart again afterwards. Use Merge on the Edit tab for a true boolean union.
     /// </summary>
     private void Group()
     {
