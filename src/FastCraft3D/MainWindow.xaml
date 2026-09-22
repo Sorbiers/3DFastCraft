@@ -505,7 +505,7 @@
                             ToolTip="Lettering as an object of its own - a sign, a name tag, a keychain - in any installed font, lying on the plate or standing up. To put letters on a face that is already there, use Emboss or Engrave." />
                     <Button Style="{StaticResource ToolButton}" Content="Lithophane" Visibility="{Binding IsAdvancedMode, Converter={StaticResource BoolToVisibility}}" Tag="{StaticResource IconLithophane}"
                             Command="{Binding InsertLithophaneCommand}" MinWidth="86"
-                            ToolTip="A photograph as a thin translucent plate: thin where the picture is white, thick where it is dark, so it shows only when it is lit from behind. Flat, or curved round for a lamp shade." />
+                            ToolTip="BETA - new, and still being proved out; check what it gives you before printing it. A photograph as a thin translucent plate: thin where the picture is white, thick where it is dark, so it shows only when it is lit from behind. Flat, or curved round for a lamp shade." />
                     <Button Style="{StaticResource ToolButton}" Content="Sketch" Visibility="{Binding IsAdvancedMode, Converter={StaticResource BoolToVisibility}}" Tag="{StaticResource IconSketchLine}"
                             Command="{Binding BeginSketchCommand}" MinWidth="64"
                             ToolTip="Draw an outline on the plate - lines, arcs, smooth curves, freehand, rectangles, circles - and extrude or revolve it into a solid. Seen from above; Escape or Done when finished." />
@@ -712,7 +712,7 @@
                     <Separator Margin="8,0" />
                     <Button Style="{StaticResource ToolButton}" Content="Voronoi" Visibility="{Binding IsAdvancedMode, Converter={StaticResource BoolToVisibility}}" Tag="{StaticResource IconVoronoi}"
                             Command="{Binding VoronoiCommand}" MinWidth="82"
-                            ToolTip="Cut the selection into a web of struts along the walls of a Voronoi tessellation - the openwork lamp or vase, or a foam through the inside of a part to take weight out of it. Worked out on a voxel grid, so it comes back watertight; detail finer than a voxel is gone. Needs something selected." />
+                            ToolTip="BETA - new, and still being proved out; check what it gives you before printing it. Cut the selection into a web of struts along the walls of a Voronoi tessellation - the openwork lamp or vase, or a foam through the inside of a part to take weight out of it. Worked out on a voxel grid, so it comes back watertight; detail finer than a voxel is gone. Needs something selected." />
                     <Button Style="{StaticResource ToolButton}" Content="Extrude down" Tag="{StaticResource IconExtrudeDown}"
                             Command="{Binding BeginExtrudeCommand}" MinWidth="90"
                             ToolTip="Cut the model at a height and carry its outline straight down to a flat base on the plate. For a scan with a ragged bottom, a relief that is only a skin, or a part tilted off its feet." />
@@ -2098,7 +2098,16 @@
                     <Border Padding="8" Background="#FFEFF5FF" BorderBrush="#FFB8D2F0"
                             BorderThickness="1" CornerRadius="3" VerticalAlignment="Top">
                         <StackPanel>
-                            <TextBlock Text="{Binding OpenPanel.Title}" FontWeight="SemiBold" Margin="0,0,0,6" />
+                            <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
+                                <TextBlock Text="{Binding OpenPanel.Title}" FontWeight="SemiBold" VerticalAlignment="Center" />
+                                <!-- Still being proved out. See ToolPanel.IsBeta. -->
+                                <Border Margin="8,0,0,0" Padding="6,1" CornerRadius="8"
+                                        Background="#FFF3C969" BorderBrush="#FFC79A1E" BorderThickness="1"
+                                        Visibility="{Binding OpenPanel.IsBeta, Converter={StaticResource BoolToVisibility}}"
+                                        ToolTip="This tool is new and still being proved out. It works, and it is worth checking what it gives you before you print it.">
+                                    <TextBlock Text="beta" FontSize="10" FontWeight="SemiBold" Foreground="#FF5C4708" />
+                                </Border>
+                            </StackPanel>
                             <ContentControl Content="{Binding OpenPanel}" Focusable="False" />
                         </StackPanel>
                     </Border>

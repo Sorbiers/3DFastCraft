@@ -6693,8 +6693,14 @@ public sealed class MainViewModel : INotifyPropertyChanged
             long triangles = produced.Sum(o => (long)o.Mesh.TriangleCount);
             int cells = webs.Where(w => w.Refusal is null).Sum(w => w.Cells);
 
+            float kept = webs.Where(w => w.Refusal is null).Average(w => w.Kept);
+
+            // The share of material left is the one number that says whether these settings made
+            // a web or a block with holes in it, and nothing else on screen says it.
             Status = $"{cells} cells, {settings.StrutMm:0.##} mm struts on a {webs[0].VoxelMm:0.###} mm grid"
-                   + $" - {triangles:N0} triangles"
+                   + $" - {kept:P0} of the material kept, {triangles:N0} triangles"
+                   + (webs.Sum(w => w.Loose) is var loose && loose > 0
+                       ? $"; {loose} piece(s) are not joined to the rest" : "")
                    + (selection.Count > produced.Count ? $"; {selection.Count - produced.Count} were refused" : "");
         }
         catch (Exception abort) when (WasAborted(abort))

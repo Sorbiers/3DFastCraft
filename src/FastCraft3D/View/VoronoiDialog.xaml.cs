@@ -62,6 +62,7 @@ public partial class VoronoiDialog : ToolPanel
     private float Skin => (float)SkinSlider.Value;
     private float Base => (float)BaseSlider.Value;
     private int Resolution => (int)Math.Round(DetailSlider.Value);
+    private bool Smooth => SmoothBox.IsChecked == true;
 
     private static float Longest(SceneObject o)
     {
@@ -100,7 +101,17 @@ public partial class VoronoiDialog : ToolPanel
 
         int wanted = Voronoi.WantedResolution(longestSideMm, Strut);
 
+        // A strut that is a fair share of the cell it sits in leaves next to no hole, and that is
+        // not obvious from either number on its own: 5 mm struts look modest until you notice the
+        // cells are 16 mm. A lattice feels it worse, since a cell has edges running every way.
+        float share = across > 0 ? Strut / across : 0f;
+        float tooFat = lattice ? 0.22f : 0.34f;
+
         string warning =
+            share > tooFat
+                ? $"A {Strut:0.##} mm strut in a {across:0.#} mm cell leaves little hole - this will "
+                  + $"come back mostly solid. Thinner struts, or more cells, or both."
+                :
             voxel > 0 && Strut < voxel * 2f
                 ? $"A {Strut:0.##} mm strut is under two voxels at this detail: it will come out in "
                   + $"lumps, or not at all. Raise the detail to {wanted}, or thicken the strut."
@@ -115,6 +126,12 @@ public partial class VoronoiDialog : ToolPanel
                               + "struts are flatter than they are broad. That prints, but it reads "
                               + "as a cut-out rather than a web."
                             : Estimate(voxel);
+
+        if (lattice && Skin > 0f)
+            warning += Environment.NewLine + Environment.NewLine
+                     + $"A {Skin:0.##} mm skin closes the foam in, so the part will look solid from "
+                     + "outside - which is what a lightened part is for. The saving shows in the "
+                     + "status line when it is cut, and in a section.";
 
         if (Base <= 0f && !lattice)
             warning += Environment.NewLine + Environment.NewLine
@@ -146,7 +163,16 @@ public partial class VoronoiDialog : ToolPanel
     {
         if (voxel <= 0) return "";
 
+        // A web has far more surface than the shape it came from - every strut has four sides and
+        // two ends - so the rebuilder's own estimate is doubled. A lattice is worse again: its
+        // struts run through the whole volume rather than over the skin, and the count follows how
+        // many cells the part holds rather than how big its surface is.
         long triangles = VoxelRebuild.EstimateTriangles(surfaceAreaMm2, voxel) * 2;
+
+        if (Kind == VoronoiKind.Lattice)
+            return "A lattice has a great deal of surface inside it - expect several hundred "
+                 + "thousand triangles at this detail, and more with thinner struts. Simplify "
+                 + "afterwards.";
 
         return triangles > 400_000
             ? $"About {triangles:N0} triangles - heavy. Simplify afterwards, or drop the detail."
@@ -155,7 +181,28 @@ public partial class VoronoiDialog : ToolPanel
 
     private void OnDragged(object sender, RoutedPropertyChangedEventArgs<double> e) => Describe();
 
-    private void OnChoice(object sender, RoutedEventArgs e) => Describe();
+    /// <summary>
+    /// Switching to a lattice opens the skin up, and back to a shell closes it again.
+    ///
+    /// A skin over a lattice is the point of one - a part that is light inside and solid to look
+    /// at - but it also means the first thing anybody sees is the shape they started with, and
+    /// the tool reads as having done nothing. Starting bare shows the struts; the skin is one
+    /// drag away once the lattice itself looks right.
+    /// </summary>
+    private void OnChoice(object sender, RoutedEventArgs e)
+    {
+        // Shell is checked in the markup, so this fires while the panel is still being built -
+        // before the sliders it reaches for exist. Everything else here guards the same way, and
+        // this did not; the panel threw on the way up and never appeared at all.
+        if (!IsInitialized) return;
+
+        if (sender == ShellButton && SkinSlider.Value <= 0.001)
+            SkinSlider.Value = Math.Clamp(longestSideMm / 50f, 1.2f, 4f);
+        else if (sender == LatticeButton)
+            SkinSlider.Value = 0;
+
+        Describe();
+    }
 
     private void OnStrutTyped(object sender, TextChangedEventArgs e) => Typed(StrutBox, StrutSlider);
 
@@ -173,7 +220,7 @@ public partial class VoronoiDialog : ToolPanel
 
     private void OnAccept(object sender, RoutedEventArgs e)
     {
-        Result = new VoronoiOptions(Kind, Cells, Strut, Skin, Base, Resolution).Sane();
+        Result = new VoronoiOptions(Kind, Cells, Strut, Skin, Base, Resolution, Smooth).Sane();
         DialogResult = true;
     }
 }

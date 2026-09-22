@@ -8,7 +8,10 @@ public enum VoronoiKind
     /// <summary>A web of struts following the surface, with nothing behind it.</summary>
     Shell,
 
-    /// <summary>Struts running every way through the whole of it: a foam, under a skin.</summary>
+    /// <summary>
+    /// Struts running every way through the whole of it: a foam, under a skin. Built on the
+    /// cells' edges rather than their walls - see <see cref="Voronoi"/>.
+    /// </summary>
     Lattice
 }
 
@@ -21,8 +24,12 @@ public enum VoronoiKind
 /// </param>
 /// <param name="BaseMm">How much of the bottom to leave solid, so the thing stands and prints.</param>
 /// <param name="Resolution">Voxels along the model's longest side.</param>
+/// <param name="Smooth">
+/// Whether to take the voxel steps off the result. See <see cref="Voronoi.Build"/>.
+/// </param>
 public readonly record struct VoronoiOptions(
-    VoronoiKind Kind, int Cells, float StrutMm, float SkinMm, float BaseMm, int Resolution)
+    VoronoiKind Kind, int Cells, float StrutMm, float SkinMm, float BaseMm, int Resolution,
+    bool Smooth = true)
 {
     public static VoronoiOptions Default =>
         new(VoronoiKind.Shell, 120, 1.6f, 2f, 0f, VoxelRebuild.DefaultResolution);
@@ -40,18 +47,34 @@ public readonly record struct VoronoiOptions(
 /// <param name="Mesh">What came out. Empty when it was refused.</param>
 /// <param name="Cells">How many seeds it actually placed.</param>
 /// <param name="VoxelMm">The grid it was cut on, which is the finest detail that survived.</param>
+/// <param name="Kept">
+/// How much of the material is left, nought to one. Counted on the grid, which is exact for what
+/// was actually built - and the one number that says at a glance whether the settings made a web
+/// or a block with holes in it.
+/// </param>
+/// <param name="Loose">
+/// How many pieces came away from the main one. A lattice whose struts do not all reach each
+/// other prints as a bag of parts, and nothing else on screen would say so.
+/// </param>
 /// <param name="Refusal">Why there is nothing, or null.</param>
-public readonly record struct VoronoiResult(Mesh Mesh, int Cells, float VoxelMm, string? Refusal = null);
+public readonly record struct VoronoiResult(
+    Mesh Mesh, int Cells, float VoxelMm, float Kept = 0f, string? Refusal = null, int Loose = 0);
 
 /// <summary>
 /// Turns a solid into a web of struts along the walls of a Voronoi tessellation - the lamp, the
 /// vase, the lightened bracket.
 ///
-/// Scatter seeds; every point in space belongs to whichever seed is nearest, and the wall between
-/// two cells is where the two are equidistant. A point is on a wall when the nearest seed and the
-/// next nearest are within a strut's width of each other in distance, which is all this has to
-/// ask - no tessellation is ever built, no cell is ever a polygon, and nothing is subtracted from
-/// anything.
+/// Scatter seeds; every point in space belongs to whichever seed is nearest. A wall between two
+/// cells is where those two are equidistant, and an edge is where three are - so a point is on a
+/// wall when the first and second nearest seeds are within a strut of each other, and on an edge
+/// when the first and third are. That is all this has to ask: no tessellation is ever built, no
+/// cell is ever a polygon, and nothing is subtracted from anything.
+///
+/// Which of the two a kind wants is the whole difference between them, and getting it wrong is
+/// not subtle. A shell wants walls: a wall is a plate, and a plate crossing a thin skin leaves a
+/// strut. A lattice wants edges: walls through a volume are plates that fill it, and a cell has
+/// fourteen of them, so 5 mm walls in 16 mm cells came back three quarters solid - a block with
+/// bubbles in it rather than a lattice. The edges are the struts everyone means by the word.
 ///
 /// That last part is the reason it is done this way. The usual recipe is to triangulate the seeds,
 /// dualise them into cells, build a solid of struts and subtract it - and a web of hundreds of
@@ -98,23 +121,23 @@ public static class Voronoi
         var bounds = mesh.ComputeBounds();
 
         if (bounds.IsEmpty || mesh.TriangleCount == 0)
-            return new VoronoiResult(new Mesh(), 0, 0f, "There is nothing there to cut cells into.");
+            return new VoronoiResult(new Mesh(), 0, 0f, 0f, "There is nothing there to cut cells into.");
 
         progress?.Report(WorkProgress.Doing("Measuring the model"));
         var grid = VoxelRebuild.Sample(mesh, o.Resolution, token, progress);
 
         if (grid.Inside.Length == 0)
-            return new VoronoiResult(new Mesh(), 0, 0f, "The model would not go onto a grid.");
+            return new VoronoiResult(new Mesh(), 0, 0f, 0f, "The model would not go onto a grid.");
 
         if (o.StrutMm < grid.Voxel * 2f)
-            return new VoronoiResult(new Mesh(), 0, grid.Voxel,
+            return new VoronoiResult(new Mesh(), 0, grid.Voxel, 0f,
                 $"A {o.StrutMm:0.##} mm strut is under two voxels at this detail, so it would come out"
                 + $" in lumps or not at all. Raise the detail to {WantedResolution(Longest(bounds), o.StrutMm)}"
                 + " or thicken the strut.");
 
         // A web with no depth to it is not thin, it is absent: the grid has nothing to keep.
         if (o.Kind == VoronoiKind.Shell && o.SkinMm < grid.Voxel * 1.5f)
-            return new VoronoiResult(new Mesh(), 0, grid.Voxel,
+            return new VoronoiResult(new Mesh(), 0, grid.Voxel, 0f,
                 $"A {o.SkinMm:0.##} mm web is under a voxel and a half at this detail, so there would"
                 + " be nothing left of it. Deepen the web, or raise the detail.");
 
@@ -126,11 +149,11 @@ public static class Voronoi
             : Throughout(grid, Math.Clamp(o.Cells * 20, 2000, 40000));
 
         if (pool.Count < 2)
-            return new VoronoiResult(new Mesh(), 0, grid.Voxel, "There is not enough of it to put two cells in.");
+            return new VoronoiResult(new Mesh(), 0, grid.Voxel, 0f, "There is not enough of it to put two cells in.");
 
         var seeds = SpreadOut(pool, Math.Min(o.Cells, pool.Count), token);
         if (seeds.Count < 2)
-            return new VoronoiResult(new Mesh(), seeds.Count, grid.Voxel, "Two seeds at least, or there is no wall between them.");
+            return new VoronoiResult(new Mesh(), seeds.Count, grid.Voxel, 0f, "Two seeds at least, or there is no wall between them.");
 
         token.ThrowIfCancellationRequested();
         progress?.Report(WorkProgress.Doing("Measuring the skin"));
@@ -176,8 +199,11 @@ public static class Voronoi
                     continue;
                 }
 
-                cells.Nearest(at, out float first, out float second);
-                if (second - first < o.StrutMm) kept[i] = true;
+                cells.Nearest(at, out float first, out float second, out float third);
+
+                // A shell is cut on the walls, a lattice on the edges where three walls meet.
+                float toEdge = o.Kind == VoronoiKind.Lattice ? third - first : second - first;
+                if (toEdge < o.StrutMm) kept[i] = true;
             }
 
             int seen = Interlocked.Increment(ref done);
@@ -185,14 +211,73 @@ public static class Voronoi
         });
 
         token.ThrowIfCancellationRequested();
+        progress?.Report(WorkProgress.Doing("Mending the pinches"));
+
+        Unpinch(kept, grid.Nx, grid.Ny, grid.Nz, token);
+
+        token.ThrowIfCancellationRequested();
         progress?.Report(WorkProgress.Doing("Building the surface"));
 
         var built = VoxelRebuild.SurfaceNets(kept, grid.Origin, grid.Voxel, grid.Nx, grid.Ny, grid.Nz, progress);
 
+        // The grid leaves its own ripple on anything that does not run along it: a round wall
+        // crosses a column of voxels every so often and comes back ribbed, which on a barrel is
+        // a stripe every half millimetre all the way round. Two Taubin passes take that off and
+        // leave the shape alone - it is the high frequency that is the grid's and the low one
+        // that is the model's, and Taubin's inward-then-outward pair separates exactly those.
+        //
+        // Two rather than more because a strut is only a few voxels across: smoothing hard would
+        // start eating it rather than its steps.
+        if (o.Smooth && built.TriangleCount > 0)
+        {
+            token.ThrowIfCancellationRequested();
+            progress?.Report(WorkProgress.Doing("Taking the steps off"));
+
+            built = MeshSmoothing.Smooth(built, passes: 2);
+        }
+
+        token.ThrowIfCancellationRequested();
+
+        // A grid this fine leaves the odd crumb: a voxel or two on their own, extracted into a
+        // dozen triangles enclosing nothing. Harmless in a slicer and untidy in a model, and
+        // cheap to be rid of now that the pieces have to be counted anyway - the count is worth
+        // having for a lattice, where struts that did not reach the rest of the web are a real
+        // fault rather than a crumb.
+        int loose = 0;
+
+        if (built.TriangleCount > 0)
+        {
+            var pieces = MeshComponents.Split(built);
+
+            if (pieces.Count > 1)
+            {
+                float crumb = grid.Voxel * grid.Voxel * grid.Voxel * 2f;
+                var solidPieces = pieces.Where(p => Math.Abs(p.ComputeSignedVolume()) > crumb).ToList();
+
+                if (solidPieces.Count > 0 && solidPieces.Count < pieces.Count)
+                    built = Mesh.Combine(solidPieces);
+
+                loose = Math.Max(solidPieces.Count - 1, 0);
+            }
+        }
+
+        // Counted on the grid rather than measured off the mesh: the same voxels the shape was
+        // decided on, so it says what was actually cut and not what the extraction made of it.
+        long was = 0, left = 0;
+        for (int i = 0; i < kept.Length; i++)
+        {
+            if (!grid.Inside[i]) continue;
+
+            was++;
+            if (kept[i]) left++;
+        }
+
+        float share = was == 0 ? 0f : (float)left / was;
+
         return built.TriangleCount == 0
-            ? new VoronoiResult(new Mesh(), seeds.Count, grid.Voxel,
+            ? new VoronoiResult(new Mesh(), seeds.Count, grid.Voxel, 0f,
                 "Nothing survived: every strut fell between the voxels. Fewer cells, a wider strut, or more detail.")
-            : new VoronoiResult(built, seeds.Count, grid.Voxel);
+            : new VoronoiResult(built, seeds.Count, grid.Voxel, share, Loose: loose);
     }
 
     /// <summary>
@@ -235,10 +320,12 @@ public static class Voronoi
         float step = MathF.Max(o.StrutMm * 0.7f, 0.05f);
         int most = mesh.TriangleCount > 40_000 ? 2 : mesh.TriangleCount > 8_000 ? 4 : 16;
 
+        bool edges = o.Kind == VoronoiKind.Lattice;
+
         float Wall(Vector3 at)
         {
-            cells.Nearest(at, out float first, out float second);
-            return second - first;
+            cells.Nearest(at, out float first, out float second, out float third);
+            return edges ? third - first : second - first;
         }
 
         for (int t = 0; t + 2 < indices.Count; t += 3)
@@ -305,6 +392,66 @@ public static class Voronoi
         float part = MathF.Abs(span) < 1e-9f ? 0.5f : Math.Clamp((level - value[from]) / span, 0f, 1f);
 
         return Vector3.Lerp(at[from], at[to], part);
+    }
+
+    /// <summary>
+    /// Fills the voxels that would leave the surface pinched to a line.
+    ///
+    /// Two voxels that meet only along an edge, or only at a corner, are a shape that no surface
+    /// can wrap manifold: the material is joined, but the skin round it has to pass through
+    /// itself at the join. The extraction is careful about a cell holding two separate pieces of
+    /// material - it gives each its own vertex - but it cannot do anything about two pieces that
+    /// genuinely touch at nothing wider than a line.
+    ///
+    /// A shell never runs into it, because its material is a slab a few voxels thick. A lattice
+    /// does, over and over: its struts cross at angles and a pair of them passing close leaves
+    /// exactly this. Nine such edges in three quarters of a million triangles, which the healer
+    /// cannot mend either - there is no hole to fill and no face pointing the wrong way.
+    ///
+    /// So the pinch is opened rather than repaired: fill the voxel beside it and the two pieces
+    /// meet across a face like anything else. Filling rather than emptying, because these happen
+    /// where a strut is at its thinnest and taking material away there would break it. It costs a
+    /// handful of voxels out of millions.
+    ///
+    /// Repeated until nothing changes: a fill can put two other voxels corner to corner. It only
+    /// ever adds, so it finishes.
+    /// </summary>
+    private static void Unpinch(bool[] kept, int nx, int ny, int nz, CancellationToken token)
+    {
+        int At(int x, int y, int z) => (z * ny + y) * nx + x;
+
+        for (int pass = 0; pass < 4; pass++)
+        {
+            token.ThrowIfCancellationRequested();
+            bool changed = false;
+
+            for (int z = 0; z + 1 < nz; z++)
+            for (int y = 0; y + 1 < ny; y++)
+            for (int x = 0; x + 1 < nx; x++)
+            {
+                // Each of the three planes of the little cube: two voxels across a diagonal with
+                // the other two empty is a join one line wide.
+                changed |= Open(kept, At(x, y, z), At(x + 1, y + 1, z), At(x + 1, y, z), At(x, y + 1, z));
+                changed |= Open(kept, At(x, y, z), At(x + 1, y, z + 1), At(x + 1, y, z), At(x, y, z + 1));
+                changed |= Open(kept, At(x, y, z), At(x, y + 1, z + 1), At(x, y + 1, z), At(x, y, z + 1));
+
+                changed |= Open(kept, At(x, y + 1, z), At(x + 1, y, z), At(x, y, z), At(x + 1, y + 1, z));
+                changed |= Open(kept, At(x, y, z + 1), At(x + 1, y, z), At(x, y, z), At(x + 1, y, z + 1));
+                changed |= Open(kept, At(x, y, z + 1), At(x, y + 1, z), At(x, y, z), At(x, y + 1, z + 1));
+
+            }
+
+            if (!changed) return;
+        }
+    }
+
+    /// <summary>Two across a diagonal with both the others empty: fill one of them.</summary>
+    private static bool Open(bool[] kept, int a, int b, int first, int second)
+    {
+        if (!kept[a] || !kept[b] || kept[first] || kept[second]) return false;
+
+        kept[first] = true;
+        return true;
     }
 
     private static float Longest(Bounds bounds) =>
@@ -491,11 +638,15 @@ public static class Voronoi
             }
         }
 
-        /// <summary>How far the nearest seed is, and the next nearest after it.</summary>
-        public void Nearest(Vector3 p, out float first, out float second)
+        /// <summary>
+        /// How far the nearest three seeds are. Two of them say where a wall is, three where an
+        /// edge is, and finding the third costs nothing beyond one more comparison per seed.
+        /// </summary>
+        public void Nearest(Vector3 p, out float first, out float second, out float third)
         {
             first = float.MaxValue;
             second = float.MaxValue;
+            third = float.MaxValue;
 
             int cx = Column(p.X, origin.X, nx);
             int cy = Column(p.Y, origin.Y, ny);
@@ -505,9 +656,9 @@ public static class Voronoi
 
             for (int ring = 0; ring <= reach; ring++)
             {
-                // Everything in this ring is at least this far off, so once the second best is
-                // inside it there is nothing further out that can improve on it.
-                if (ring > 0 && (ring - 1) * cell > second) return;
+                // Everything in this ring is at least this far off, so once the third best is
+                // inside it there is nothing further out that can improve on any of them.
+                if (ring > 0 && (ring - 1) * cell > third) return;
 
                 for (int z = cz - ring; z <= cz + ring; z++)
                 {
@@ -534,12 +685,18 @@ public static class Voronoi
 
                                 if (away < first)
                                 {
+                                    third = second;
                                     second = first;
                                     first = away;
                                 }
                                 else if (away < second)
                                 {
+                                    third = second;
                                     second = away;
+                                }
+                                else if (away < third)
+                                {
+                                    third = away;
                                 }
                             }
                         }

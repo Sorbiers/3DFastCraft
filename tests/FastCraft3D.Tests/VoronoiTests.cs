@@ -120,6 +120,65 @@ public class VoronoiTests
         Assert.True(foam < solid * 0.9, "a lattice that keeps nine tenths of the material is not a lattice");
     }
 
+    /// <summary>
+    /// A lattice is the cells' edges, not their walls, and the difference is not subtle. Walls
+    /// through a volume are plates that fill it - a cell has fourteen of them - so building a
+    /// lattice on walls came back three quarters solid: a block with bubbles rather than a
+    /// lattice. On edges the same settings leave most of the material out.
+    /// </summary>
+    [Fact]
+    public void ALatticeIsBuiltOnTheCellsEdgesRatherThanTheirWalls()
+    {
+        var result = Voronoi.Build(Ball(), Web with { Kind = VoronoiKind.Lattice, SkinMm = 0f });
+
+        Assert.Null(result.Refusal);
+        Assert.True(result.Kept < 0.35f,
+            $"a lattice that keeps {result.Kept:P0} of the ball is a block with holes in it");
+    }
+
+    /// <summary>
+    /// The share left is the one number that says whether the settings made a web or a block, so
+    /// it comes back with the result rather than having to be measured off the mesh afterwards.
+    /// </summary>
+    [Fact]
+    public void TheResultSaysHowMuchMaterialIsLeft()
+    {
+        var ball = Ball();
+        var result = Voronoi.Build(ball, Web);
+
+        Assert.InRange(result.Kept, 0.01f, 0.5f);
+
+        // Counted on the grid, so it agrees with the mesh to within what the extraction rounds.
+        double measured = result.Mesh.ComputeSignedVolume() / ball.ComputeSignedVolume();
+        Assert.Equal(measured, result.Kept, 0.08);
+    }
+
+    [Fact]
+    public void AFatterStrutLeavesMoreMaterialBehind()
+    {
+        var thin = Voronoi.Build(Ball(), Web with { Kind = VoronoiKind.Lattice, SkinMm = 0f, StrutMm = 1.5f });
+        var fat = Voronoi.Build(Ball(), Web with { Kind = VoronoiKind.Lattice, SkinMm = 0f, StrutMm = 4f });
+
+        Assert.True(fat.Kept > thin.Kept * 1.5f,
+            $"{thin.Kept:P0} against {fat.Kept:P0} - the strut is not doing anything");
+    }
+
+    /// <summary>
+    /// Two voxels meeting only along an edge are a shape no surface can wrap manifold, and a
+    /// lattice makes them over and over: its struts cross at angles and a pair passing close
+    /// leaves exactly that. It came back with nine non-manifold edges in three quarters of a
+    /// million triangles, which the healer cannot mend either - there is no hole to fill.
+    /// </summary>
+    [Fact]
+    public void ALatticeComesOutWatertightLikeEverythingElse()
+    {
+        var thick = new VoronoiOptions(VoronoiKind.Lattice, 60, 1.2f, 0f, 0f, 96);
+        var result = Voronoi.Build(Ball(), thick);
+
+        Assert.Null(result.Refusal);
+        Assert.True(result.Mesh.CheckHealth().IsWatertight, result.Mesh.CheckHealth().Describe());
+    }
+
     // --- The preview -------------------------------------------------------------------------
 
     /// <summary>

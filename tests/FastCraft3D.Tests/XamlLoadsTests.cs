@@ -73,6 +73,10 @@ public class XamlLoadsTests
                 Assert.True(shown!.TriangleCount > 0);
                 Assert.Null(panel.Result);
 
+                // Marked in the markup as still being proved out, which the panel host draws a
+                // badge from - and a mark that quietly stopped parsing would be found here.
+                Assert.True(panel.IsBeta);
+
                 panel.Close();
             }
             finally

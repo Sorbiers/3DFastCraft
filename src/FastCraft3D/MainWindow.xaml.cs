@@ -2046,7 +2046,9 @@ public partial class MainWindow : Window
     /// </summary>
     private void LightTheView()
     {
-        if (KeyLight is null || View.Camera is not PerspectiveCamera camera) return;
+        // The frame tick can arrive before the window has finished putting itself together, and
+        // this runs ahead of the gizmo check that used to be the guard for everything below it.
+        if (KeyLight is null || View?.Camera is not PerspectiveCamera camera) return;
 
         var forward = camera.LookDirection;
         if (forward.Length < 1e-6) return;

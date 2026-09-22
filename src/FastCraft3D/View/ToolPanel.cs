@@ -41,6 +41,16 @@ public class ToolPanel : UserControl
     /// <summary>The heading the panel is shown under.</summary>
     public string Title { get; set; } = "";
 
+    /// <summary>
+    /// Whether the tool is still being proved out, which puts a mark beside its heading.
+    ///
+    /// Said plainly rather than left to be discovered. A tool that works on the models it was
+    /// written against and has not yet met everybody else's is worth using and worth checking
+    /// afterwards, and the difference between that and a settled tool should not be something
+    /// anyone has to infer from how new it looks.
+    /// </summary>
+    public bool IsBeta { get; set; }
+
     /// <summary>Setting it closes the panel, as it closes a dialog.</summary>
     public bool? DialogResult
     {
