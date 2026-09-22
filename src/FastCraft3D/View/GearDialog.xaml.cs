@@ -31,6 +31,7 @@ public partial class GearDialog : ToolPanel
         InitializeComponent();
 
         foreach (var (_, name) in Bores) BoreBox.Items.Add(name);
+        foreach (var (_, name) in Bores) MateBoreBox.Items.Add(name);
 
         GearKindBox.IsChecked = start.Kind == GearKind.Gear;
         RingKindBox.IsChecked = start.Kind == GearKind.Ring;
@@ -59,14 +60,25 @@ public partial class GearDialog : ToolPanel
         PartialBox.IsChecked = start.KeptTeeth > 0;
         KeptTeethBox.Text = (start.KeptTeeth > 0 ? start.KeptTeeth : Math.Max(2, start.Teeth / 4))
             .ToString(CultureInfo.CurrentCulture);
+        FrameBox.IsChecked = start.Frame;
+        StrokeBox.Text = Format(start.Stroke);
         ConeBox.Text = Format(start.ConeAngle);
         WormDiameterBox.Text = Format(start.WormDiameter);
-        WheelWidthBox.Text = Format(start.WheelWidth);
         UndercutBox.Text = Format(start.Undercut);
         PawlBox.IsChecked = start.WithPawl;
         PartnerBox.IsChecked = start.PartnerTeeth > 0;
         PartnerTeethBox.Text = (start.PartnerTeeth > 0 ? start.PartnerTeeth : 2 * start.Teeth)
             .ToString(CultureInfo.CurrentCulture);
+
+        // The mate opens on whatever it would have been built to anyway: its own numbers where it
+        // has them, the gear's where it has not.
+        MateLengthBox.Text = Format(start.MateThickness ?? 0f);
+        MateBoreBox.SelectedIndex = Array.FindIndex(Bores, b => b.Shape == (start.MateBore ?? start.Bore));
+        MateBoreSizeBox.Text = Format(start.MateBoreSize ?? start.BoreSize);
+        MateFlatBox.Text = Format(start.MateBoreFlat ?? start.BoreFlat);
+        MateHubDiameterBox.Text = Format(start.MateHubDiameter ?? start.HubDiameter);
+        MateHubHeightBox.Text = Format(start.MateHubHeight ?? start.HubHeight);
+        MateSetScrewBox.Text = Format(start.MateSetScrew ?? start.SetScrew);
 
         loading = false;
         Refresh();
@@ -107,9 +119,20 @@ public partial class GearDialog : ToolPanel
             Chamfer = Number(ChamferBox, 0f),
             PartnerTeeth = PartnerBox.IsChecked == true ? Whole(PartnerTeethBox, 2 * fallback.Teeth) : 0,
             KeptTeeth = PartialBox.IsChecked == true ? Whole(KeptTeethBox, 0) : 0,
+            Frame = FrameBox.IsChecked == true,
+            Stroke = Number(StrokeBox, 0f),
             ConeAngle = Number(ConeBox, fallback.ConeAngle),
             WormDiameter = Number(WormDiameterBox, 0f),
-            WheelWidth = Number(WheelWidthBox, 0f),
+
+            // Nought means the gear's own width - or, for a worm wheel, the width the worm asks
+            // for. The rest the mate always states for itself once the panel has been through it.
+            MateThickness = Number(MateLengthBox, 0f) > 0 ? Number(MateLengthBox, 0f) : null,
+            MateBore = MateBoreBox.SelectedIndex >= 0 ? Bores[MateBoreBox.SelectedIndex].Shape : fallback.Bore,
+            MateBoreSize = Number(MateBoreSizeBox, fallback.BoreSize),
+            MateBoreFlat = Number(MateFlatBox, fallback.BoreFlat),
+            MateHubDiameter = Number(MateHubDiameterBox, 0f),
+            MateHubHeight = Number(MateHubHeightBox, 0f),
+            MateSetScrew = Number(MateSetScrewBox, 0f),
             Undercut = Number(UndercutBox, fallback.Undercut),
             WithPawl = PawlBox.IsChecked == true
         };
@@ -128,6 +151,10 @@ public partial class GearDialog : ToolPanel
         var asked = Read();
         var gear = asked.Sane();
         bool cut = gear.Kind is GearKind.Gear or GearKind.Ring or GearKind.Rack;
+
+        // The frame is the cut-away gear's own mate, so it stands in for a meshing gear.
+        bool cutAway = gear.Kind == GearKind.Gear && gear.KeptTeeth > 0;
+        bool framed = cutAway && FrameBox.IsChecked == true;
         bool shaft = gear.Kind is GearKind.Gear or GearKind.Bevel or GearKind.Ratchet or GearKind.Worm
                   || PartnerBox.IsChecked == true;
         bool hub = gear.HubDiameter > 0 && gear.HubHeight > 0;
@@ -141,7 +168,7 @@ public partial class GearDialog : ToolPanel
         Show(HelixRow, cut && gear.Form != ToothForm.Straight);
         Show(PressureRow, gear.Kind != GearKind.Ratchet);
         Show(BacklashRow, gear.Kind != GearKind.Ratchet);
-        Show(RimRow, gear.Kind is GearKind.Ring or GearKind.Rack);
+        Show(RimRow, gear.Kind is GearKind.Ring or GearKind.Rack || framed);
         Show(ChamferRow, cut);
         RimLabel.Text = gear.Kind == GearKind.Rack ? "Base" : "Rim";
         ThicknessLabel.Text = wheel ? "Length" : "Thickness";
@@ -150,13 +177,15 @@ public partial class GearDialog : ToolPanel
         KeptTeethBox.IsEnabled = PartialBox.IsChecked == true;
         KeptText.Text = gear.KeptTeeth > 0 ? $"of {gear.Teeth} ({360f * gear.KeptTeeth / gear.Teeth:0} deg)" : "teeth";
 
+        Show(FrameRow, cutAway);
+        Show(StrokeRow, framed);
+
         // With a mate asked for, a bevel's cones come from the two tooth counts instead.
         Show(ConeRow, gear.Kind == GearKind.Bevel && PartnerBox.IsChecked != true);
         Show(WormRow, wheel);
-        Show(WheelWidthRow, wheel && PartnerBox.IsChecked == true);
         Show(RatchetRow, gear.Kind == GearKind.Ratchet);
 
-        Show(PartnerRow, gear.Kind != GearKind.Ratchet);
+        Show(PartnerRow, gear.Kind != GearKind.Ratchet && !framed);
         PartnerBox.Content = gear.Kind switch
         {
             GearKind.Worm => "Wheel with",
@@ -165,6 +194,17 @@ public partial class GearDialog : ToolPanel
             _ => "Meshing gear with"
         };
         PartnerTeethBox.IsEnabled = PartnerBox.IsChecked == true;
+
+        // A frame is a mate too, but one with no shaft in it.
+        bool mate = framed || (PartnerBox.IsChecked == true && gear.Kind != GearKind.Ratchet);
+        bool mateShaft = mate && !framed && gear.Kind != GearKind.Bevel;
+        Show(MateHeader, mate);
+        Show(MateLengthRow, mate);
+        Show(MateBoreRow, mate && !framed);
+        Show(MateFlatRow, mate && !framed && (gear.MateBore ?? gear.Bore) == BoreShape.DShaft);
+        Show(MateHubRow, mateShaft);
+        Show(MateSetScrewRow, mateShaft && (gear.MateHubDiameter ?? 0f) > 0 && (gear.MateHubHeight ?? 0f) > 0);
+        MateLengthLabel.Text = wheel ? "Width" : "Thickness";
 
         Show(ShaftHeader, shaft);
         Show(BoreRow, shaft);
@@ -201,7 +241,24 @@ public partial class GearDialog : ToolPanel
 
     private void OnBoreChanged(object sender, SelectionChangedEventArgs e) => Refresh();
 
-    private void OnPartnerClicked(object sender, RoutedEventArgs e) => Refresh();
+    /// <summary>
+    /// The mate's own numbers start as copies of the gear's, so a pair that wants two of a kind
+    /// needs nothing typed and a pair that does not has somewhere to type it.
+    /// </summary>
+    private void OnPartnerClicked(object sender, RoutedEventArgs e)
+    {
+        if (PartnerBox.IsChecked == true)
+        {
+            MateBoreBox.SelectedIndex = BoreBox.SelectedIndex;
+            MateBoreSizeBox.Text = BoreSizeBox.Text;
+            MateFlatBox.Text = FlatBox.Text;
+            MateHubDiameterBox.Text = HubDiameterBox.Text;
+            MateHubHeightBox.Text = HubHeightBox.Text;
+            MateSetScrewBox.Text = SetScrewBox.Text;
+        }
+
+        Refresh();
+    }
 
     protected override void OnClosed(EventArgs e)
     {

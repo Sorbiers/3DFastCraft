@@ -25,6 +25,20 @@ public static class ThreeMf
     /// <summary>Where the package keeps its picture, by convention.</summary>
     private const string ThumbnailPath = "Metadata/thumbnail.png";
 
+    /// <summary>
+    /// Where a slicer of the PrusaSlicer family keeps what the core format has no place for.
+    ///
+    /// Which filament prints a part is one of those. The core format carries a colour per object
+    /// and nothing else, and a colour is not a filament - a slicer cannot tell whether two parts
+    /// the same shade of grey are meant to come off the same spool. PrusaSlicer, and the slicers
+    /// grown from it, write this sidecar instead, and read it back when they open a file.
+    ///
+    /// Written only when there is something to say, so an ordinary single-material export is
+    /// exactly the file it was before. A slicer that does not know the part ignores it - it is
+    /// just another entry in the zip.
+    /// </summary>
+    private const string SlicerConfigPath = "Metadata/Slic3r_PE_model.config";
+
     // --- reading ---------------------------------------------------------------------------------
 
     /// <summary>One part per item on the build plate, in millimetres, named and coloured if the file says.</summary>
@@ -351,6 +365,9 @@ public static class ThreeMf
         // it declares depends on whether there is one.
         var thumbnail = MeshThumbnail.Png(parts.Select(part => (part.Mesh, part.Colour)).ToList());
 
+        // Nothing to say about filaments unless something is not on the first one.
+        bool filaments = parts.Any(part => part.Filament > 1);
+
         WriteEntry(zip, "[Content_Types].xml", w =>
         {
             w.WriteStartElement("Types", "http://schemas.openxmlformats.org/package/2006/content-types");
@@ -368,6 +385,14 @@ public static class ThreeMf
                 w.WriteStartElement("Default");
                 w.WriteAttributeString("Extension", "png");
                 w.WriteAttributeString("ContentType", "image/png");
+                w.WriteEndElement();
+            }
+
+            if (filaments)
+            {
+                w.WriteStartElement("Default");
+                w.WriteAttributeString("Extension", "config");
+                w.WriteAttributeString("ContentType", "text/xml");
                 w.WriteEndElement();
             }
 
@@ -434,6 +459,18 @@ public static class ThreeMf
                 w.WriteAttributeString("pid", "1");
                 w.WriteAttributeString("pindex", i.ToString(CultureInfo.InvariantCulture));
 
+                // Some slicers read this off the object and some read the sidecar; it costs one
+                // element to say it both ways, and a reader that knows neither skips it.
+                if (parts[i].Filament > 1)
+                {
+                    w.WriteStartElement("metadatagroup", CoreNamespace);
+                    w.WriteStartElement("metadata", CoreNamespace);
+                    w.WriteAttributeString("name", "extruder");
+                    w.WriteString(parts[i].Filament.ToString(CultureInfo.InvariantCulture));
+                    w.WriteEndElement();
+                    w.WriteEndElement();
+                }
+
                 w.WriteStartElement("mesh", CoreNamespace);
 
                 w.WriteStartElement("vertices", CoreNamespace);
@@ -475,6 +512,48 @@ public static class ThreeMf
 
             w.WriteEndElement(); // model
         });
+
+        if (!filaments) return;
+
+        WriteEntry(zip, SlicerConfigPath, w =>
+        {
+            w.WriteStartElement("config");
+
+            for (int i = 0; i < parts.Count; i++)
+            {
+                w.WriteStartElement("object");
+                w.WriteAttributeString("id", (i + 2).ToString(CultureInfo.InvariantCulture));
+
+                Setting(w, "object", "name", parts[i].Name);
+                Setting(w, "object", "extruder", parts[i].Filament.ToString(CultureInfo.InvariantCulture));
+
+                // One part per object, which is what a scene object is. The slicer wants the
+                // filament on the part as well: an object's own setting is the default for the
+                // parts under it, and the part is what actually gets printed.
+                w.WriteStartElement("volume");
+                w.WriteAttributeString("firstid", "0");
+                w.WriteAttributeString("lastid",
+                    (parts[i].Mesh.TriangleCount - 1).ToString(CultureInfo.InvariantCulture));
+
+                Setting(w, "volume", "name", parts[i].Name);
+                Setting(w, "volume", "volume_type", "ModelPart");
+                Setting(w, "volume", "extruder", parts[i].Filament.ToString(CultureInfo.InvariantCulture));
+
+                w.WriteEndElement(); // volume
+                w.WriteEndElement(); // object
+            }
+
+            w.WriteEndElement(); // config
+        });
+    }
+
+    private static void Setting(XmlWriter w, string type, string key, string value)
+    {
+        w.WriteStartElement("metadata");
+        w.WriteAttributeString("type", type);
+        w.WriteAttributeString("key", key);
+        w.WriteAttributeString("value", value);
+        w.WriteEndElement();
     }
 
     private static void WriteEntry(ZipArchive zip, string name, Action<XmlWriter> body)

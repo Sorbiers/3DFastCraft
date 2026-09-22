@@ -24,6 +24,8 @@ public sealed class SceneObject : INotifyPropertyChanged
     private Vector3 rotation;
     private Vector3 scale = Vector3.One;
     private Vector3 colour = new(0.30f, 0.55f, 0.85f);
+    private List<Anchor> anchors = [];
+    private int filament = 1;
     private string name = "Object";
     private bool isSelected;
     private Bounds? worldBounds;
@@ -37,6 +39,21 @@ public sealed class SceneObject : INotifyPropertyChanged
 
     public event PropertyChangedEventHandler? PropertyChanged;
 
+    /// <summary>
+    /// What a tool knew about this part when it built it: where its shaft hole is, and the like.
+    /// See <see cref="Anchor"/>. Empty for anything nothing was recorded about, which is most of
+    /// a scene.
+    /// </summary>
+    public IReadOnlyList<Anchor> Anchors
+    {
+        get => anchors;
+        set
+        {
+            anchors = value.ToList();
+            Raise(nameof(Anchors));
+        }
+    }
+
     /// <summary>Local-space geometry, centred on its own origin.</summary>
     public Mesh Mesh
     {
@@ -45,6 +62,12 @@ public sealed class SceneObject : INotifyPropertyChanged
         {
             mesh = value;
             health = null;
+
+            // New geometry: whatever was marked on the old was marked on a shape that is no
+            // longer here, and its origin was that shape's. Centring puts both back, shifted to
+            // match - see CentredOn.
+            anchors.Clear();
+            PivotIsOwn = false;
 
             var size = value.ComputeBounds().Size;
             // Guard against flat meshes so dividing by the local size stays safe.
@@ -173,6 +196,25 @@ public sealed class SceneObject : INotifyPropertyChanged
         set => Set(ref colour, value);
     }
 
+    /// <summary>
+    /// Which filament prints this part, counted from one, on a printer that has more than one.
+    ///
+    /// Deliberately not the colour. The colour is how the model is looked at while it is being
+    /// made, and two parts that print in the same filament are often coloured differently just to
+    /// tell them apart; equally, two parts that happen to be the same shade are not therefore the
+    /// same material. The slicer is told this number and nothing is read back off the colour.
+    ///
+    /// One for everything until it is set, so a single-filament printer never sees it at all.
+    /// </summary>
+    public int Filament
+    {
+        get => filament;
+        set => Set(ref filament, Math.Clamp(value, 1, MostFilaments));
+    }
+
+    /// <summary>As many as the biggest multi-material units carry.</summary>
+    public const int MostFilaments = 16;
+
     public Vector3 Position
     {
         get => position;
@@ -242,6 +284,41 @@ public sealed class SceneObject : INotifyPropertyChanged
     }
 
     public Matrix4x4 Transform => MeshTransform.Compose(position, rotation, scale);
+
+    /// <summary>The marked features where they actually are on the plate.</summary>
+    public IEnumerable<Anchor> WorldAnchors()
+    {
+        var transform = Transform;
+        foreach (var a in anchors) yield return a.Through(transform);
+    }
+
+    /// <summary>
+    /// The point the object is measured about: the axis a tool marked on it, or the middle of its
+    /// box when nothing did.
+    ///
+    /// Aligning two cut-away gears by their boxes lines up the outlines of their teeth, which is
+    /// not what anybody means by lining up two gears. Once the tool that made one has said where
+    /// its shaft is, there is no reason to go on guessing from the silhouette.
+    /// </summary>
+    public Vector3 WorldCentre
+    {
+        get
+        {
+            // A pivot somebody put where they wanted it is the point the object is about, and
+            // there is nothing left to work out.
+            if (PivotIsOwn) return Vector3.Transform(Vector3.Zero, Transform);
+
+            var centre = WorldBounds.Center;
+            if (anchors.Count == 0) return centre;
+
+            var axis = WorldAnchors().FirstOrDefault(a => a.Size > 0f);
+            if (axis.Size <= 0f) return centre;
+
+            // On the axis, level with the middle of the box: along the shaft it is still the
+            // part's own middle that matters, and the axis says nothing about that.
+            return axis.At + axis.Along * Vector3.Dot(centre - axis.At, axis.Along);
+        }
+    }
 
     /// <summary>Geometry in build-plate coordinates, ready for export.</summary>
     public Mesh ToWorldMesh() => MeshTransform.Transformed(mesh, Transform);
@@ -397,17 +474,55 @@ public sealed class SceneObject : INotifyPropertyChanged
     /// but the position boxes then describe somewhere else entirely, and typing a coordinate
     /// into one measures from the wrong place. This puts the two back in step.
     /// </summary>
-    public SceneObject Centred()
-    {
-        var centre = mesh.ComputeBounds().Center;
-        if (centre.LengthSquared() < 1e-10f) return this;
+    /// <summary>
+    /// Whether the object's origin was put where it is on purpose rather than falling out of how
+    /// the geometry was built.
+    ///
+    /// The origin is the pivot: it is what a position reads, what a turn goes round, and what
+    /// lining two parts up by their middles compares - so nothing else in the app has to know
+    /// what a pivot is. What this adds is that a pivot somebody chose is not quietly moved back
+    /// to the middle of the box by the next tool that tidies up after itself.
+    ///
+    /// Kept in the project file; dropped when the geometry is replaced, since the point was a
+    /// point on that geometry.
+    /// </summary>
+    public bool PivotIsOwn { get; set; }
 
-        Mesh = MeshTransform.Transformed(mesh, Matrix4x4.CreateTranslation(-centre));
+    /// <summary>Puts the origin at the middle of the box, unless somebody has chosen one.</summary>
+    public SceneObject Centred() => PivotIsOwn ? this : Shifted(mesh.ComputeBounds().Center);
+
+    /// <summary>
+    /// The same, about a point the caller names in the mesh's own coordinates rather than the
+    /// middle of its box.
+    ///
+    /// For a part that is <em>about</em> something. A gear is about its shaft, not about the
+    /// outline of its teeth - and a cut-away gear is a disc with teeth over a quarter of its rim,
+    /// so the middle of its box sits two millimetres off the axis it turns on. Everything that
+    /// reads a position, lines two parts up by their middles or turns one about its own centre
+    /// was then out by that much, in a way nothing on screen explained.
+    /// </summary>
+    public SceneObject CentredOn(Vector3 origin)
+    {
+        Shifted(origin);
+        PivotIsOwn = true;
+
+        return this;
+    }
+
+    /// <summary>The move itself, which says nothing about whose idea the new origin was.</summary>
+    private SceneObject Shifted(Vector3 origin)
+    {
+        if (origin.LengthSquared() < 1e-10f) return this;
+
+        var marked = anchors.Select(a => a.Moved(-origin)).ToList();
+
+        Mesh = MeshTransform.Transformed(mesh, Matrix4x4.CreateTranslation(-origin));
+        Anchors = marked;
 
         // Shifting the geometry one way and the translation the other leaves the object where it
         // was, whatever turn and scale sit between the two.
         Position += Vector3.TransformNormal(
-            centre, Matrix4x4.CreateScale(scale) * MeshTransform.Rotation(rotation));
+            origin, Matrix4x4.CreateScale(scale) * MeshTransform.Rotation(rotation));
 
         return this;
     }
@@ -419,7 +534,10 @@ public sealed class SceneObject : INotifyPropertyChanged
         position = position,
         rotation = rotation,
         scale = scale,
-        colour = colour
+        colour = colour,
+        filament = filament,
+        anchors = [.. anchors],
+        PivotIsOwn = PivotIsOwn
     };
 
     private void RaiseTransform()

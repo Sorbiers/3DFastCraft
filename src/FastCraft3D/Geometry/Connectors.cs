@@ -321,6 +321,23 @@ public static class Connectors
     public sealed record Contact(Vector3 Normal, float Offset, float Gap, bool SecondIsFront, float Overlap);
 
     /// <summary>
+    /// The face two parts rest against each other on, found on the shapes themselves when their
+    /// boxes cannot see it.
+    ///
+    /// A box only knows how far a part reaches, so it can only find a face at the outside of one.
+    /// Sit a can down in a dish and the can's base is six millimetres inside the dish's box - the
+    /// two boxes lap over each other and report no contact at all, though the parts are resting
+    /// on fifty square centimetres of flat floor. Anything that goes into a recess is the same: a
+    /// lid in the mouth of a pot, a spigot in its counterbore.
+    ///
+    /// So where the boxes find nothing, the flat faces square to each axis are read off both
+    /// shapes and matched up. Only faces that look at each other count, and the pair sharing the
+    /// most ground wins - the same rule the boxes use, put to real faces.
+    /// </summary>
+    public static Contact? SharedFace(Mesh first, Mesh second, float gap = ContactGap) =>
+        SharedFace(first.ComputeBounds(), second.ComputeBounds(), gap) ?? Resting(first, second, gap);
+
+    /// <summary>
     /// The face two parts rest against each other on, if they do: the top of one against the
     /// bottom of the other, or side against side, square to X, Y or Z.
     ///
@@ -364,6 +381,116 @@ public static class Connectors
             [(front, contact.Offset + reach + deep), (back, contact.Offset - reach - deep)],
             contact.Normal, contact.Offset, options);
     }
+
+    // --- The same question asked of the faces ------------------------------------------
+
+    /// <summary>How far out of a plane a triangle may sit and still be counted as lying in it.</summary>
+    private const float Level = 1e-4f;
+
+    /// <summary>
+    /// One flat face square to an axis: where it sits along the axis, which way it looks, how
+    /// much of it there is, and what ground it covers.
+    /// </summary>
+    private readonly record struct Flat(
+        float At, int Facing, float Area, float MinU, float MaxU, float MinV, float MaxV);
+
+    /// <summary>Where two parts' own flat faces meet, when their boxes could not tell.</summary>
+    private static Contact? Resting(Mesh first, Mesh second, float gap)
+    {
+        Contact? best = null;
+
+        for (int axis = 0; axis < 3; axis++)
+        {
+            var ours = Flats(first, axis);
+            if (ours.Count == 0) continue;
+
+            var theirs = Flats(second, axis);
+            var normal = axis switch { 0 => Vector3.UnitX, 1 => Vector3.UnitY, _ => Vector3.UnitZ };
+
+            foreach (var mine in ours)
+                foreach (var yours in theirs)
+                {
+                    // Two faces looking the same way are one behind the other, not against each
+                    // other: what rests on an upward face is a downward one.
+                    if (mine.Facing == yours.Facing) continue;
+                    if (MathF.Abs(mine.At - yours.At) > gap) continue;
+
+                    float shared = MathF.Min(Shared(mine, yours), MathF.Min(mine.Area, yours.Area));
+                    if (shared <= 0f || (best is not null && shared <= best.Overlap)) continue;
+
+                    best = new Contact(normal, (mine.At + yours.At) / 2f, MathF.Abs(mine.At - yours.At),
+                                       yours.Facing < 0, shared);
+                }
+        }
+
+        return best;
+    }
+
+    /// <summary>
+    /// The flat faces of a shape square to one axis, each gathered from its own triangles.
+    ///
+    /// Which way a face looks falls out of flattening it, as it does for the sweep: the area
+    /// comes out signed, and the sign is the side being looked at. Triangles standing on edge
+    /// have no area to flatten and are no part of any face.
+    /// </summary>
+    private static List<Flat> Flats(Mesh mesh, int axis)
+    {
+        int u = (axis + 1) % 3, v = (axis + 2) % 3;
+        var pieces = new List<Flat>();
+
+        for (int t = 0; t + 2 < mesh.Indices.Count; t += 3)
+        {
+            var a = mesh.Positions[mesh.Indices[t]];
+            var b = mesh.Positions[mesh.Indices[t + 1]];
+            var c = mesh.Positions[mesh.Indices[t + 2]];
+
+            float at = Along(a, axis);
+            if (MathF.Abs(Along(b, axis) - at) > Level || MathF.Abs(Along(c, axis) - at) > Level) continue;
+
+            float au = Along(a, u), av = Along(a, v);
+            float bu = Along(b, u), bv = Along(b, v);
+            float cu = Along(c, u), cv = Along(c, v);
+
+            float spread = (bv - cv) * (au - cu) + (cu - bu) * (av - cv);
+            if (MathF.Abs(spread) < Level) continue;
+
+            pieces.Add(new Flat(at, MathF.Sign(spread), MathF.Abs(spread) / 2f,
+                MathF.Min(au, MathF.Min(bu, cu)), MathF.Max(au, MathF.Max(bu, cu)),
+                MathF.Min(av, MathF.Min(bv, cv)), MathF.Max(av, MathF.Max(bv, cv))));
+        }
+
+        // The triangles of one face all lie in its plane and look the same way, so sorting on
+        // those two puts each face's own together and a single pass gathers them. The plane stays
+        // the first triangle's, so a run of triangles each a hair above the last cannot walk a
+        // face off its own plane.
+        pieces.Sort((x, y) => x.Facing != y.Facing ? x.Facing.CompareTo(y.Facing) : x.At.CompareTo(y.At));
+
+        var faces = new List<Flat>();
+
+        foreach (var piece in pieces)
+        {
+            if (faces.Count > 0 && faces[^1].Facing == piece.Facing && piece.At - faces[^1].At <= Level)
+            {
+                var into = faces[^1];
+                faces[^1] = into with
+                {
+                    Area = into.Area + piece.Area,
+                    MinU = MathF.Min(into.MinU, piece.MinU),
+                    MaxU = MathF.Max(into.MaxU, piece.MaxU),
+                    MinV = MathF.Min(into.MinV, piece.MinV),
+                    MaxV = MathF.Max(into.MaxV, piece.MaxV)
+                };
+            }
+            else faces.Add(piece);
+        }
+
+        return faces;
+    }
+
+    /// <summary>The ground two faces both cover, taken as rectangles.</summary>
+    private static float Shared(in Flat a, in Flat b) =>
+        MathF.Max(0f, MathF.Min(a.MaxU, b.MaxU) - MathF.Max(a.MinU, b.MinU))
+      * MathF.Max(0f, MathF.Min(a.MaxV, b.MaxV) - MathF.Max(a.MinV, b.MinV));
 
     private static float Overlap(Bounds a, Bounds b, int axis)
     {

@@ -39,7 +39,12 @@ public class GearDialogTests
 
         var shown = Assert.Single(previews);
         Assert.NotNull(shown);
-        Assert.Equal(start.Sane(), shown);
+
+        // The panel states the mate's own shaft rather than leaving it to follow the gear's, so
+        // it comes back filled in where it went in empty. What it stands for is the same: the
+        // mate is still built to the gear's numbers.
+        Assert.Equal(start.Sane().ForMate(), shown.ForMate());
+        Assert.Equal(start.Sane().WithoutMate(), shown.WithoutMate());
 
         dialog.Close();
         Assert.Null(previews[^1]);

@@ -179,6 +179,51 @@ public sealed class SceneRenderer : IDisposable
         ShowPreview(face, preview, overlay);
     }
 
+    private MeshGeometryModel3D? pivotMark;
+
+    /// <summary>
+    /// The pivot: a small bright sphere sitting on the model.
+    ///
+    /// While one is being picked it follows the pointer, so what would be taken is visible before
+    /// the click rather than after it. Setting a pivot moves nothing on the plate - that is the
+    /// whole point of it - so without this the tool looked as though it had done nothing at all.
+    ///
+    /// Drawn without shading and over everything, because a marker half inside the model it marks
+    /// is no marker: this one sits on a shaft hole, which is the inside of a part by definition.
+    /// </summary>
+    public void ShowPivot(Vector3? at, float radius)
+    {
+        Invalidate();
+
+        if (pivotMark is not null)
+        {
+            root.Children.Remove(pivotMark);
+            pivotMark.Dispose();
+            pivotMark = null;
+        }
+
+        if (at is not { } point) return;
+
+        var ball = MeshTransform.Transformed(
+            Primitives.Sphere(MathF.Max(radius, 0.05f), 16, 10), Matrix4x4.CreateTranslation(point));
+
+        pivotMark = new MeshGeometryModel3D
+        {
+            Geometry = MeshConverter.ToGeometry(ball),
+            Material = new PhongMaterial
+            {
+                DiffuseColor = new SharpDX.Color4(0.1f, 0.02f, 0.02f, 1f),
+                EmissiveColor = new SharpDX.Color4(1f, 0.13f, 0.13f, 1f),
+                AmbientColor = new SharpDX.Color4(0.3f, 0.04f, 0.04f, 1f),
+                SpecularColor = new SharpDX.Color4(0.4f, 0.4f, 0.4f, 1f)
+            },
+            DepthBias = -2000,
+            IsHitTestVisible = false
+        };
+
+        root.Children.Add(pivotMark);
+    }
+
     /// <summary>
     /// Marks where the connectors will land on the cut, while the numbers are being set: a disc
     /// the width of each one, lying in the plane. Without them the panel asked for a diameter and

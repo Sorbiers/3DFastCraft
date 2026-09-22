@@ -317,6 +317,66 @@ public sealed class TransformCommand(
 }
 
 /// <summary>
+/// Moving an object's pivot.
+///
+/// The geometry slides one way and the position the other, so the object does not move on the
+/// plate - only what it is measured and turned about changes. Undone by sliding it back, which
+/// is exact: the shift is expressed in whatever the local coordinates are at the time, and
+/// reverting restores them before it is used.
+/// </summary>
+public sealed class PivotCommand(
+    string label, SceneObject target, Vector3 shift, bool own, bool wasOwn) : IUndoableCommand
+{
+    public string Label { get; } = label;
+
+    public void Apply(Scene scene)
+    {
+        target.CentredOn(shift);
+        target.PivotIsOwn = own;
+    }
+
+    public void Revert(Scene scene)
+    {
+        target.CentredOn(-shift);
+        target.PivotIsOwn = wasOwn;
+    }
+}
+
+/// <summary>
+/// Which filament prints a selection. Its own step for the same reasons painting is: it is not
+/// part of the transform, and setting it on a dozen parts is one thing the user did.
+/// </summary>
+public sealed class FilamentCommand(
+    string label,
+    IReadOnlyList<SceneObject> objects,
+    IReadOnlyList<int> before,
+    int after) : IUndoableCommand
+{
+    public string Label { get; } = label;
+
+    public void Apply(Scene scene)
+    {
+        foreach (var o in objects) o.Filament = after;
+    }
+
+    public void Revert(Scene scene)
+    {
+        for (int i = 0; i < objects.Count; i++)
+            objects[i].Filament = before[i];
+    }
+
+    /// <summary>Null when every object is already on that filament.</summary>
+    public static FilamentCommand? CreateIfChanged(
+        string label, IReadOnlyList<SceneObject> objects, int filament)
+    {
+        if (objects.Count == 0) return null;
+
+        var before = objects.Select(o => o.Filament).ToList();
+        return before.All(f => f == filament) ? null : new FilamentCommand(label, objects, before, filament);
+    }
+}
+
+/// <summary>
 /// Painting a selection. Separate from <see cref="TransformCommand"/> because colour is not part
 /// of the transform, and because repainting the whole selection has to undo as one step rather
 /// than one step per object.

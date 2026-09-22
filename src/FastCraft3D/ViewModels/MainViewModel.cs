@@ -1,4 +1,5 @@
 using System.ComponentModel;
+using System.Diagnostics;
 using System.IO;
 using System.Numerics;
 using System.Runtime.CompilerServices;
@@ -88,6 +89,8 @@ public sealed class MainViewModel : INotifyPropertyChanged
     private bool embossItalic;
     private float embossSpacing;
     private bool embossRaised;
+    private bool embossSeparate;
+    private bool isPivotMode;
     private float embossBevel;
     private TextProjection embossProjection = TextProjection.Planar;
     private SurfacePlacement embossPlacement = SurfacePlacement.Middle;
@@ -221,6 +224,8 @@ public sealed class MainViewModel : INotifyPropertyChanged
         AlignToSelectionCommand = RelayCommand.Simple(
             AlignToSelection, () => Scene.Selection.Count == 2);
         FitCheckCommand = RelayCommand.Simple(FitCheck, () => Scene.Selection.Count == 2);
+        SetPivotCommand = RelayCommand.Simple(BeginPivot, () => Scene.Selection.Count == 1);
+        PivotToCentreCommand = RelayCommand.Simple(PivotToCentre, () => Scene.Selection.Count == 1);
         BeginMeasureCommand = RelayCommand.Simple(BeginMeasure, () => Scene.Objects.Count > 0);
         CancelMeasureCommand = RelayCommand.Simple(() => IsMeasureMode = false);
         BeginEngraveCommand = RelayCommand.Simple(BeginEngrave, () => Scene.Selection.Count == 1);
@@ -324,6 +329,8 @@ public sealed class MainViewModel : INotifyPropertyChanged
     public System.Windows.Input.ICommand MouldCommand { get; }
     public System.Windows.Input.ICommand AlignToSelectionCommand { get; }
     public System.Windows.Input.ICommand FitCheckCommand { get; }
+    public System.Windows.Input.ICommand SetPivotCommand { get; }
+    public System.Windows.Input.ICommand PivotToCentreCommand { get; }
     public System.Windows.Input.ICommand BeginEmbossCommand { get; }
     public System.Windows.Input.ICommand BeginLayCommand { get; }
     public System.Windows.Input.ICommand ApplyEmbossCommand { get; }
@@ -1086,8 +1093,108 @@ public sealed class MainViewModel : INotifyPropertyChanged
         get => isDirty;
         private set
         {
+            bool was = isDirty;
+
             Set(ref isDirty, value);
             Raise(nameof(WindowTitle));
+
+            if (value) Changed();
+            else if (was) ForgetRecovery();
+        }
+    }
+
+    // --- The crash file ------------------------------------------------------------------
+
+    /// <summary>Bumped by every change, so the crash file can tell whether it is out of date.</summary>
+    private int changes;
+    private int keptChanges;
+
+    private long lastChange = Stopwatch.GetTimestamp();
+    private readonly Stopwatch sinceKept = Stopwatch.StartNew();
+    private double keepTook;
+
+    /// <summary>How still the scene has to be before the crash file is rewritten, in milliseconds.</summary>
+    private const double Settle = 2_000;
+
+    private void Changed()
+    {
+        changes++;
+        lastChange = Stopwatch.GetTimestamp();
+    }
+
+    /// <summary>Nothing to recover any more: the scene is on disc, or the app is done with it.</summary>
+    private void ForgetRecovery()
+    {
+        Recovery.Clear();
+        keptChanges = changes;
+        sinceKept.Restart();
+    }
+
+    /// <summary>
+    /// Writes the crash file if it has fallen behind. Called on a timer, and directly when the
+    /// app is on its way down after a fault.
+    ///
+    /// Not after every action, which is what it looks like from the outside but is not what it
+    /// does: a drag is hundreds of changes, and a scene of any size costs real time to write. It
+    /// waits for the scene to be still for a moment, so a write lands just after an action rather
+    /// than in the middle of one, and then it waits again for as long as the last write took -
+    /// ten times over, up to a minute. A small model is therefore kept within a second or two of
+    /// every change, and a heavy one costs a fixed small share of the time rather than a stall
+    /// after each edit. The same reasoning as the split preview, and for the same reason.
+    /// </summary>
+    public void KeepRecovery(bool now = false)
+    {
+        if (changes == keptChanges) return;
+
+        if (!now)
+        {
+            if (IsBusy) return;
+            if (Stopwatch.GetElapsedTime(lastChange).TotalMilliseconds < Settle) return;
+            if (sinceKept.Elapsed.TotalMilliseconds < Math.Clamp(keepTook * 10, Settle, 60_000)) return;
+        }
+
+        long started = Stopwatch.GetTimestamp();
+
+        Recovery.Keep(Scene, projectPath, ViewSettings);
+
+        keepTook = Stopwatch.GetElapsedTime(started).TotalMilliseconds;
+        keptChanges = changes;
+        sinceKept.Restart();
+    }
+
+    /// <summary>
+    /// Takes back what an earlier run left behind: the scene as it stood, still unsaved, and
+    /// pointed at the project it came from so Save goes where it was going.
+    /// </summary>
+    public bool Recover(RecoveryPoint point)
+    {
+        try
+        {
+            var loaded = SceneSerializer.Load(point.ScenePath, out var settings);
+            if (settings is { } kept) ApplySettings(kept);
+
+            Scene.Objects.Clear();
+            foreach (var o in loaded) Scene.Objects.Add(o);
+
+            Undo.Clear();
+            projectPath = point.ProjectPath;
+            openedFrom = null;
+            RefreshSelection();
+            ZoomExtentsRequested?.Invoke();
+
+            // Still not written anywhere the user asked for, which is the whole point of it.
+            IsDirty = true;
+
+            Status = point.ProjectPath is null
+                ? "Recovered - this model has never been saved, so save it now"
+                : $"Recovered {Path.GetFileName(point.ProjectPath)} - not saved yet";
+
+            return true;
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(ex.Message, "Could not recover the model", MessageBoxButton.OK, MessageBoxImage.Error);
+            return false;
         }
     }
 
@@ -1452,7 +1559,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
     /// strip that goes with them, stand down while one of them is running rather than sitting
     /// underneath and leaving it to the pointer to decide which was meant.
     /// </summary>
-    public bool IsToolRunning => isSplitMode || isEngraveMode || isEmbossMode || isLayMode || isExtrudeMode || isConnectMode || isSketchMode
+    public bool IsToolRunning => isSplitMode || isEngraveMode || isEmbossMode || isLayMode || isExtrudeMode || isConnectMode || isSketchMode || isPivotMode
                                  || openPanel is not null;
 
     /// <summary>
@@ -1646,6 +1753,21 @@ public sealed class MainViewModel : INotifyPropertyChanged
     {
         get => embossRaised;
         set { Set(ref embossRaised, value); RefreshEmboss(); }
+    }
+
+    /// <summary>
+    /// Whether the lettering comes out as a part of its own rather than being made part of what
+    /// it is on.
+    ///
+    /// For printing it in another filament. A slicer gives a material to a part, so text that has
+    /// been unioned into the wall it sits on is the wall - there is nothing left to point at. Cut
+    /// this way the object gets the recess and the letters come back as the plug that fills it,
+    /// which is an inlay flush with the face; raised, the letters stand on it.
+    /// </summary>
+    public bool EmbossSeparate
+    {
+        get => embossSeparate;
+        set { Set(ref embossSeparate, value); RefreshEmboss(); }
     }
 
     /// <summary>
@@ -1949,6 +2071,75 @@ public sealed class MainViewModel : INotifyPropertyChanged
         Status = "Click the face you want to letter";
     }
 
+    /// <summary>
+    /// Letters the object and keeps the lettering as a second part, ready to be given its own
+    /// filament.
+    ///
+    /// The two are put on different filaments straight away - the body stays on whatever it was,
+    /// the letters go to the next one up - because a part made for a second material and left on
+    /// the first is a part nobody notices is wrong until it comes off the printer one colour. The
+    /// colour follows, so the letters can be seen on the model rather than being found by name.
+    /// </summary>
+    private async Task LetterAsAPart(
+        SceneObject source, Mesh world, IReadOnlyList<TextShape> shapes, IPlacementSurface surface,
+        bool raised, float amount, float bevel, CancellationToken token)
+    {
+        var made = await Task.Run(
+            () => TextCutter.Separate(world, shapes, surface, raised, amount, bevel, token));
+
+        if (made is not { } parts || parts.Lettering.TriangleCount == 0)
+        {
+            Status = "The lettering produced no geometry";
+            return;
+        }
+
+        if (!parts.Body.CheckHealth().IsWatertight || !parts.Lettering.CheckHealth().IsWatertight)
+        {
+            Status = "Lettering that face came out unprintable. Nothing was changed.";
+            MessageBox.Show(
+                "The lettering could not be made cleanly, so the object has been left as it was."
+                + Environment.NewLine + Environment.NewLine + WayRound(),
+                "3DFastCraft", MessageBoxButton.OK, MessageBoxImage.Warning);
+            return;
+        }
+
+        int next = Math.Min(source.Filament + 1, SceneObject.MostFilaments);
+
+        var body = new SceneObject(source.Name, parts.Body)
+        {
+            Colour = source.Colour,
+            Filament = source.Filament
+        }.Centred();
+
+        var letters = new SceneObject(Scene.UniqueName($"{source.Name} text"), parts.Lettering)
+        {
+            Colour = Contrasting(source.Colour),
+            Filament = next
+        }.Centred();
+
+        Undo.Execute(new ReplaceObjectsCommand(
+            raised ? "Raise text as a part" : "Inlay text", [source], [body, letters]));
+
+        IsEmbossMode = false;
+        Scene.SelectOnly(letters);
+        RefreshSelection();
+
+        Status = $"{(raised ? "Raised" : "Inlaid")} {Stamped()} as its own part, on filament {next}"
+               + $" - {parts.Lettering.TriangleCount:N0} triangles";
+    }
+
+    /// <summary>
+    /// Something that will be seen against the given colour: ink on light, paper on dark.
+    ///
+    /// The complement was the obvious answer and is the wrong one - mid grey is its own
+    /// complement, and half the palette is near enough mid grey that the lettering came out
+    /// invisible on exactly the models where it mattered.
+    /// </summary>
+    private static Vector3 Contrasting(Vector3 colour) =>
+        0.299f * colour.X + 0.587f * colour.Y + 0.114f * colour.Z > 0.5f
+            ? new Vector3(0.13f, 0.14f, 0.16f)
+            : new Vector3(0.94f, 0.92f, 0.87f);
+
     /// <summary>Picks the face to letter. Both arguments are in world space, as for engraving.</summary>
     public bool PickEmbossFace(SceneObject target, Vector3 worldPoint, Vector3 worldNormal)
     {
@@ -2156,6 +2347,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
 
         var source = Scene.Selection[0];
         bool raised = embossRaised;
+        bool apart = embossSeparate;
         float amount = embossDepth;
 
         // A bevel that would meet in the middle before it reached the far end leaves nothing
@@ -2167,6 +2359,12 @@ public sealed class MainViewModel : INotifyPropertyChanged
         var token = StartWork(raised ? "Raising lettering" : "Cutting lettering");
         try
         {
+            if (apart)
+            {
+                await LetterAsAPart(source, world, shapes, surface, raised, amount, bevel, token);
+                return;
+            }
+
             var result = await Task.Run(
                 () => TextCutter.Apply(world, shapes, surface, raised, amount, bevel, token));
 
@@ -2864,6 +3062,91 @@ public sealed class MainViewModel : INotifyPropertyChanged
     /// here now for the same reason the sizes do: the unit is the view's business, not the
     /// model's, and the model never learns about it.
     /// </summary>
+    /// <summary>
+    /// Which filament prints the selection, for a printer that has more than one.
+    ///
+    /// Reads the first selected object and writes to all of them, as the colour swatches do: the
+    /// point of it is to take the lettering, or the inlay, or half the parts of an assembly, and
+    /// put the lot on the second spool in one go.
+    /// </summary>
+    public int ObjectFilament
+    {
+        get => Scene.Selection.Count > 0 ? Scene.Selection[0].Filament : 1;
+        set
+        {
+            var selection = Scene.Selection.ToList();
+            int wanted = Math.Clamp(value, 1, SceneObject.MostFilaments);
+
+            if (FilamentCommand.CreateIfChanged(
+                    selection.Count == 1 ? "Filament" : $"Filament for {selection.Count} objects",
+                    selection, wanted) is { } command)
+            {
+                Undo.Execute(command);
+            }
+
+            Raise(nameof(ObjectFilament));
+            Status = wanted == 1
+                ? "Prints in the first filament"
+                : $"Prints in filament {wanted}";
+        }
+    }
+
+    /// <summary>Whether the pivot boxes are worth showing: only a pivot somebody chose.</summary>
+    public bool ShowPivotFields => Selected is { PivotIsOwn: true };
+
+    /// <summary>
+    /// Where the pivot sits in the part, measured from the middle of the part's own box.
+    ///
+    /// The pivot is the object's origin, so in the object's own coordinates it is nought and
+    /// saying so would tell nobody anything. What is worth reading - and worth typing - is where
+    /// in the part it sits, and the only fixed thing to measure that from is the box. A gear's
+    /// shaft reads 0, 0 and whatever height; a hinge pin on the edge of a lid reads half the
+    /// lid's width.
+    ///
+    /// Typing a value slides the geometry one way and the position the other, so the part does
+    /// not move on the plate - the same as picking the point with the tool.
+    /// </summary>
+    public float ObjectPivotX
+    {
+        get => unit.From(Selected is { } o ? -o.LocalCentre.X : 0f);
+        set => MovePivot(p => p with { X = unit.To(value) });
+    }
+
+    public float ObjectPivotY
+    {
+        get => unit.From(Selected is { } o ? -o.LocalCentre.Y : 0f);
+        set => MovePivot(p => p with { Y = unit.To(value) });
+    }
+
+    public float ObjectPivotZ
+    {
+        get => unit.From(Selected is { } o ? -o.LocalCentre.Z : 0f);
+        set => MovePivot(p => p with { Z = unit.To(value) });
+    }
+
+    /// <summary>
+    /// Puts the pivot at a named place in the part.
+    ///
+    /// Shifting the geometry moves the box's middle along with it, so the shift that lands the
+    /// pivot at <c>wanted</c> from the middle is <c>wanted</c> plus where the middle is now -
+    /// which is also why asking for nought is exactly what centring already did.
+    /// </summary>
+    private void MovePivot(Func<Vector3, Vector3> change)
+    {
+        if (Selected is not { } o) return;
+
+        var centre = o.Mesh.ComputeBounds().Center;
+        var wanted = change(-centre);
+        var shift = wanted + centre;
+
+        if ((shift - centre).LengthSquared() < 1e-10f && !o.PivotIsOwn) return;
+        if (shift.LengthSquared() < 1e-10f) return;
+
+        Undo.Execute(new PivotCommand("Move pivot", o, shift, own: true, wasOwn: o.PivotIsOwn));
+        RefreshSelection();
+        Status = $"{o.Name} turns about {ObjectPivotX:0.##}, {ObjectPivotY:0.##}, {ObjectPivotZ:0.##} {UnitLabel} from its middle";
+    }
+
     public float ObjectPositionX
     {
         get => unit.From(Selected?.PositionX ?? 0f);
@@ -2995,6 +3278,11 @@ public sealed class MainViewModel : INotifyPropertyChanged
         Raise(nameof(ObjectPositionX));
         Raise(nameof(ObjectPositionY));
         Raise(nameof(ObjectPositionZ));
+
+        Raise(nameof(ShowPivotFields));
+        Raise(nameof(ObjectPivotX));
+        Raise(nameof(ObjectPivotY));
+        Raise(nameof(ObjectPivotZ));
 
         Raise(nameof(GroupX));
         Raise(nameof(GroupY));
@@ -3732,6 +4020,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
         else if (IsEngraveMode) IsEngraveMode = false;
         else if (IsEmbossMode) IsEmbossMode = false;
         else if (IsLayMode) IsLayMode = false;
+        else if (IsPivotMode) IsPivotMode = false;
         else if (IsSubtractMode) IsSubtractMode = false;
         else return false;
 
@@ -4097,8 +4386,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
         var target = picked[1];
         var before = TransformState.Capture(mover);
 
-        var shift = target.WorldBounds.Center - mover.WorldBounds.Center;
-        mover.Position += shift;
+        mover.Position += target.WorldCentre - mover.WorldCentre;
 
         Undo.Execute(new TransformCommand("Align", [mover], [before], [TransformState.Capture(mover)]));
         RefreshSelection();
@@ -5174,12 +5462,35 @@ public sealed class MainViewModel : INotifyPropertyChanged
                 .Select((part, i) => new SceneObject(
                         part.Name,
                         together && part.InMesh is { } shownAt ? MeshTransform.Transformed(part.Mesh, shownAt) : part.Mesh)
-                    { Colour = colours[i % colours.Length] }.Centred())
+                    {
+                        Colour = colours[i % colours.Length],
+
+                        // Where the tool put the shaft hole, moved with the mesh when the pair is
+                        // shown as it goes together rather than as it prints.
+                        Anchors = part.Anchors is not { Count: > 0 } marked ? []
+                            : together && part.InMesh is { } shown
+                                ? marked.Select(a => a.Through(shown)).ToList()
+                                : marked
+                    })
+                .Select(o => together ? o.Centred() : OnItsAxis(o))
                 .ToList();
 
             // Only shifts the lot onto the bed, so a pair made in mesh stays in it.
             BedPlacement.Fit(objects, 1f);
             return objects;
+        }
+
+        // A gear's own origin is its shaft, so its X and Y read where the shaft is and every
+        // move, align and turn goes by that rather than by the outline of its teeth. Up and down
+        // it is still the middle of the part, which the axis says nothing about. Only for the
+        // parts as they print: the preview lies them out as the pair goes together, and the marks
+        // are tilted with it.
+        static SceneObject OnItsAxis(SceneObject o)
+        {
+            var axis = o.Anchors.FirstOrDefault(a => a.Kind == AnchorKind.Bore);
+            if (axis.Size <= 0f) return o.Centred();
+
+            return o.CentredOn(new Vector3(axis.At.X, axis.At.Y, o.Mesh.ComputeBounds().Center.Z));
         }
 
         void Clear()
@@ -5232,6 +5543,97 @@ public sealed class MainViewModel : INotifyPropertyChanged
                : made.Parts.Any(p => p.InMesh is not null)
                    ? $"Inserted {parts[0].Name} and {parts[1].Name}, side by side to print"
                    : $"Inserted {parts[0].Name} and {parts[1].Name}, in mesh";
+    }
+
+    // --- The pivot ------------------------------------------------------------------------
+
+    /// <summary>While this is on, the next click on the selected object sets its pivot.</summary>
+    public bool IsPivotMode
+    {
+        get => isPivotMode;
+        set
+        {
+            if (isPivotMode == value) return;
+
+            Set(ref isPivotMode, value);
+            Raise(nameof(IsToolRunning));
+            Raise(nameof(ShowManipulatorBar));
+            RaiseToolInHand();
+        }
+    }
+
+    private void BeginPivot()
+    {
+        if (Scene.Selection.Count != 1) return;
+
+        IsSplitMode = false;
+        IsSubtractMode = false;
+        IsEngraveMode = false;
+        IsEmbossMode = false;
+        IsMeasureMode = false;
+        IsLayMode = false;
+        IsPivotMode = true;
+
+        Status = "Click the point to measure and turn this object about";
+    }
+
+    /// <summary>
+    /// Puts the object's pivot on a point of it that was clicked.
+    ///
+    /// The pivot is the origin, so this slides the geometry one way and the position the other:
+    /// nothing moves on the plate, but from now on the position boxes read that point, a turn
+    /// goes round it, and lining this part up with another compares it rather than the middle of
+    /// its box. Which is what a gear wants - it is about its shaft, not about the outline of its
+    /// teeth - and a good deal else besides: a hinge, a lid, an arm on a linkage.
+    /// </summary>
+    public bool TakePivot(SceneObject target, Vector3 worldPoint)
+    {
+        if (!isPivotMode) return false;
+
+        // Nothing happens to something that is not the one being worked on, and saying so beats
+        // leaving the tool looking broken - which, with nothing on the plate moving, it does.
+        if (!Scene.Selection.Contains(target))
+        {
+            Status = $"{target.Name} is not the object being given a pivot - pick a point on "
+                   + $"{Scene.Selection[0].Name}, or press Escape";
+            return false;
+        }
+
+        if (!Matrix4x4.Invert(target.Transform, out var toLocal))
+        {
+            Status = "That object is flattened to nothing, so it has no inside to pivot about";
+            return false;
+        }
+
+        var local = Vector3.Transform(worldPoint, toLocal);
+
+        Undo.Execute(new PivotCommand("Set pivot", target, local, own: true, wasOwn: target.PivotIsOwn));
+        IsPivotMode = false;
+        RefreshSelection();
+
+        Status = $"{target.Name} turns about {ObjectPivotX:0.##}, {ObjectPivotY:0.##}, "
+               + $"{ObjectPivotZ:0.##} {UnitLabel} from its middle";
+
+        return true;
+    }
+
+    /// <summary>Puts the pivot back in the middle of the object's box, where it starts out.</summary>
+    private void PivotToCentre()
+    {
+        if (Scene.Selection.Count != 1) return;
+
+        var target = Scene.Selection[0];
+        var centre = target.Mesh.ComputeBounds().Center;
+
+        if (!target.PivotIsOwn && centre.LengthSquared() < 1e-10f)
+        {
+            Status = $"{target.Name} already turns about its middle";
+            return;
+        }
+
+        Undo.Execute(new PivotCommand("Pivot to centre", target, centre, own: false, wasOwn: target.PivotIsOwn));
+        RefreshSelection();
+        Status = $"{target.Name} turns about its middle again";
     }
 
     private void Mirror(object? parameter)
@@ -6739,6 +7141,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
             if (isConnectMode == value) return;
 
             Set(ref isConnectMode, value);
+            if (!value) connectContact = null;
             Raise(nameof(IsToolRunning));
             Raise(nameof(ShowManipulatorBar));
             RaiseToolInHand();
@@ -6765,14 +7168,18 @@ public sealed class MainViewModel : INotifyPropertyChanged
         return [];
     }
 
+    /// <summary>
+    /// The face the two picked parts rest against each other on, worked out when the panel opens.
+    ///
+    /// Kept rather than asked for again, because finding it now reads the triangles rather than
+    /// the two boxes and the marks are redrawn whenever a setting changes. Nothing can move
+    /// underneath it: the handles are off while a tool is running.
+    /// </summary>
+    private Connectors.Contact? connectContact;
+
     /// <summary>The face two picked parts rest against each other on, or null.</summary>
-    private Connectors.Contact? Contact()
-    {
-        var picked = Scene.SelectionInPickOrder;
-        return picked.Count == 2
-            ? Connectors.SharedFace(picked[0].WorldBounds, picked[1].WorldBounds)
-            : null;
-    }
+    private Connectors.Contact? Contact() =>
+        Scene.SelectionInPickOrder.Count == 2 ? connectContact : null;
 
     /// <summary>
     /// The plane the connectors cross, while a tool is setting them up: the cut, or the face two
@@ -6796,7 +7203,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
         var picked = Scene.SelectionInPickOrder;
         if (picked.Count != 2) return;
 
-        if (Connectors.SharedFace(picked[0].WorldBounds, picked[1].WorldBounds) is not { } contact)
+        if (Connectors.SharedFace(picked[0].ToWorldMesh(), picked[1].ToWorldMesh()) is not { } contact)
         {
             Status = "Those two do not rest against each other";
             MessageBox.Show(
@@ -6815,6 +7222,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
         ConnectSummary = $"Connectors go through {face} \"{picked[0].Name}\" and \"{picked[1].Name}\" share"
                        + (contact.Gap > 0.01f ? $", {contact.Gap:0.##} mm apart." : ".");
 
+        connectContact = contact;
         IsConnectMode = true;
         Status = ConnectSummary;
     }
@@ -6887,7 +7295,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
     {
         var picked = Scene.SelectionInPickOrder.ToList();
         if (picked.Count != 2 || IsBusy) return;
-        if (Connectors.SharedFace(picked[0].WorldBounds, picked[1].WorldBounds) is not { } contact) return;
+        if (connectContact is not { } contact) return;
 
         var options = connectors;
         if (options.Style == ConnectorStyle.Bricks)
@@ -7509,6 +7917,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
 
         SelectionChanged?.Invoke();
         Raise(nameof(HasAnySelection));
+        Raise(nameof(ObjectFilament));
         Raise(nameof(RealSize));
         Raise(nameof(HasOneSelected));
         Raise(nameof(HasManySelected));

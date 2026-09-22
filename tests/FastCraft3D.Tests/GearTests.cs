@@ -301,7 +301,7 @@ public class GearTests
         var result = Gears.Build(new GearOptions { Teeth = 40, PartnerTeeth = 8, Module = 1f, Bore = BoreShape.Round, BoreSize = 5f });
 
         Assert.Equal(2, result.Parts.Count);
-        Assert.Contains(result.Notes, n => n.Contains("too small for the bore"));
+        Assert.Contains(result.Notes, n => n.Contains("too small for that bore"));
     }
 
     // --- Bevel, worm, ratchet, and a gear cut away ------------------------------------
@@ -350,7 +350,7 @@ public class GearTests
         // The cone is 40 / 2 / sin 45 = 28.28 mm long, so the face is cut to 9.43 mm and the
         // gear stands 9.43 * cos 45 tall rather than the 20 asked for.
         Assert.Equal(6.67f, mesh.ComputeBounds().Size.Z, 0.05f);
-        Assert.Contains(result.Notes, n => n.Contains("third of its cone"));
+        Assert.Contains(result.Notes, n => n.Contains("third of the cone"));
     }
 
     [Fact]
@@ -388,16 +388,14 @@ public class GearTests
     [Fact]
     public void AWormComesWithItsWheelWhenOneIsAskedFor()
     {
-        var result = Gears.Build(Plain with
-        {
-            Kind = GearKind.Worm, Module = 1.5f, Thickness = 20f, PartnerTeeth = 30
-        });
+        var drive = Plain with { Kind = GearKind.Worm, Module = 1.5f, Thickness = 20f, PartnerTeeth = 30 };
+        var result = Gears.Build(drive);
 
         Assert.Null(result.Refusal);
         Assert.Equal(2, result.Parts.Count);
         foreach (var part in result.Parts) Closed(part.Mesh);
 
-        Assert.Contains(result.Notes, n => n.Contains("30 to 1"));
+        Assert.Contains(Gears.Describe(drive), line => line.Contains("30:1"));
     }
 
     [Fact]
@@ -644,9 +642,52 @@ public class GearTests
     [Fact]
     public void AWormWheelTakesTheWidthItIsGiven()
     {
-        var result = Gears.Build(WormDrive with { WheelWidth = 6f });
+        var result = Gears.Build(WormDrive with { MateThickness = 6f });
 
         Assert.Equal(6f, result.Parts[1].Mesh.ComputeBounds().Size.Z, 0.001f);
+    }
+
+    [Fact]
+    public void AMateCanHaveItsOwnShaftAndThickness()
+    {
+        var pair = Gears.Build(new GearOptions
+        {
+            Module = 1.5f, Teeth = 40, Thickness = 6f, PartnerTeeth = 12,
+            Bore = BoreShape.Round, BoreSize = 5f,
+            MateThickness = 10f, MateBoreSize = 3f
+        });
+
+        Assert.Null(pair.Refusal);
+        Assert.Equal(2, pair.Parts.Count);
+
+        var wheel = pair.Parts[0].Mesh;
+        var pinion = pair.Parts[1].Mesh;
+        Closed(wheel);
+        Closed(pinion);
+
+        // Its own width, and its own hole: a 12-tooth pinion on a 5 mm arbor would have no rim
+        // left at all, which is exactly why the two are set apart.
+        Assert.Equal(6f, wheel.ComputeBounds().Size.Z, 0.001f);
+        Assert.Equal(10f, pinion.ComputeBounds().Size.Z, 0.001f);
+
+        float bore = pinion.Positions.Min(p => new Vector2(p.X - 39f, p.Y).Length());
+        Assert.Equal(1.5f, bore, 0.05f);
+    }
+
+    [Fact]
+    public void AMateWithNothingOfItsOwnIsBuiltLikeTheGear()
+    {
+        var shared = new GearOptions
+        {
+            Module = 2f, Teeth = 20, Thickness = 7f, PartnerTeeth = 20,
+            Bore = BoreShape.Round, BoreSize = 4f
+        };
+
+        var parts = Gears.Build(shared).Parts;
+
+        Assert.Equal(2, parts.Count);
+        Assert.Equal(parts[0].Mesh.ComputeBounds().Size.Z, parts[1].Mesh.ComputeBounds().Size.Z, 0.001f);
+        Assert.Equal(parts[0].Mesh.TriangleCount, parts[1].Mesh.TriangleCount);
     }
 
     [Fact]
@@ -748,5 +789,78 @@ public class GearTests
 
         Assert.True(armAndReach > 0.8f * (pivotFromCentre - contact.Length()),
             "the arm should run across the wheel, not straight out from its centre");
+    }
+
+    // --- The reciprocating frame --------------------------------------------------------
+
+    private static GearOptions Reciprocator => new()
+    {
+        Module = 2f, Teeth = 20, Thickness = 6f, KeptTeeth = 5, Frame = true, Rim = 3f,
+        Bore = BoreShape.Round, BoreSize = 5f
+    };
+
+    [Fact]
+    public void ACutAwayGearCanBeGivenTheFrameItDrives()
+    {
+        var result = Gears.Build(Reciprocator);
+
+        Assert.Null(result.Refusal);
+        Assert.Equal(2, result.Parts.Count);
+        Assert.Equal("Frame", result.Parts[1].Name);
+        foreach (var part in result.Parts) Closed(part.Mesh);
+
+        // 20 teeth of module 2: a 20 mm pitch radius and a 6.28 mm pitch. Five teeth of sector
+        // drive five teeth of rack, so the ends sit that far apart and the frame is that much
+        // longer than it is tall.
+        var box = result.Parts[1].Mesh.ComputeBounds();
+        float across = 2f * (20f + 1.25f * 2f + 3f);
+
+        Assert.Equal(across, box.Size.Y, 0.05f);
+        Assert.Equal(across + 5f * MathF.PI * 2f, box.Size.X, 0.05f);
+        Assert.Equal(6f, box.Size.Z, 0.001f);
+    }
+
+    [Fact]
+    public void TheFrameSaysHowFarItTravels()
+    {
+        var notes = Gears.Build(Reciprocator).Notes;
+
+        // Five teeth at a 6.283 mm pitch: 31.4 mm out, and the same back.
+        Assert.Contains(notes, n => n.Contains("Travels 31.4 mm each way"));
+    }
+
+    [Fact]
+    public void TheFrameIsShownRoundTheGearAndPrintedBesideIt()
+    {
+        var result = Gears.Build(Reciprocator);
+        var frame = result.Parts[1];
+
+        Assert.NotNull(frame.InMesh);
+        Assert.True(frame.Mesh.ComputeBounds().Min.X > result.Parts[0].Mesh.ComputeBounds().Max.X,
+            "it should stand beside the gear to print");
+
+        // Round it to be looked at: the gear's own axis sits in the middle of the frame's slot.
+        var shown = MeshTransform.Transformed(frame.Mesh, frame.InMesh!.Value).ComputeBounds();
+        Assert.Equal(0f, shown.Center.X, 0.01f);
+        Assert.Equal(0f, shown.Center.Y, 0.01f);
+    }
+
+    [Fact]
+    public void AFrameForASectorOverHalfTheGearIsRefused()
+    {
+        var result = Gears.Build(Reciprocator with { KeptTeeth = 14 });
+
+        // Fourteen of twenty would have the sector in both runs at once.
+        Assert.Single(result.Parts);
+        Assert.Contains(result.Notes, n => n.Contains("both runs at once"));
+    }
+
+    [Fact]
+    public void AFrameNeedsAnEvenNumberOfTeethOnItsGear()
+    {
+        var result = Gears.Build(Reciprocator with { Teeth = 21, KeptTeeth = 5 });
+
+        Assert.Single(result.Parts);
+        Assert.Contains(result.Notes, n => n.Contains("even number of teeth"));
     }
 }

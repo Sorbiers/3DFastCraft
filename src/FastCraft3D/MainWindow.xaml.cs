@@ -8,6 +8,7 @@ using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using System.Windows.Media;
+using System.Windows.Threading;
 using FastCraft3D.Geometry;
 using FastCraft3D.Geometry.Engraving;
 using FastCraft3D.Io;
@@ -59,6 +60,13 @@ public partial class MainWindow : Window
     private Vector3 dragStartHit;
     private List<SceneObject> dragObjects = [];
     private List<TransformState> dragBefore = [];
+
+    /// <summary>The shapes a drag is pushing and what stands in their way, taken once per drag.</summary>
+    private List<Mesh>? dragMeshes;
+    private List<Mesh>? dragObstacles;
+
+    /// <summary>The last contact worked out, kept while the drag keeps heading the same way.</summary>
+    private (Vector3 Way, float Allowed)? dragContact;
     private bool dragMoved;
     private bool pendingToggleOff;
     private bool pendingExclusive;
@@ -257,20 +265,62 @@ public partial class MainWindow : Window
 
         Closed += (_, _) =>
         {
+            // The close was confirmed, so whatever is unsaved was meant to go. What is left in
+            // the recovery folder after this is the work of a run that never got here.
+            recoveryClock.Stop();
+            if (!App.Crashed) Recovery.Clear();
+
             CompositionTarget.Rendering -= OnFrame;
             listSync?.Dispose();
             renderer?.Dispose();
             (EffectsManager as IDisposable)?.Dispose();
         };
 
-        // Whatever the app was double-clicked with. Queued rather than done here: loading raises
-        // the busy panel and can put a message box up, and neither has a window to belong to
-        // until this constructor has finished.
-        if (App.Opening.Count > 0)
+        recoveryClock.Tick += (_, _) => viewModel.KeepRecovery();
+        recoveryClock.Start();
+
+        // Anything left over from an earlier run, and then whatever the app was double-clicked
+        // with. Queued rather than done here: both raise the busy panel and can put a message box
+        // up, and neither has a window to belong to until this constructor has finished.
+        var opening = App.Opening;
+        Dispatcher.BeginInvoke(new Action(() =>
         {
-            var opening = App.Opening;
-            Dispatcher.BeginInvoke(new Action(() => OpenOnStartup(opening)));
-        }
+            if (!OfferRecovery() && opening.Count > 0) OpenOnStartup(opening);
+        }));
+    }
+
+    /// <summary>How often the crash file is looked at. What it costs is decided in the view model.</summary>
+    private readonly DispatcherTimer recoveryClock =
+        new() { Interval = TimeSpan.FromSeconds(2) };
+
+    /// <summary>
+    /// Offers back what a run that stopped without closing left behind, and says whether any of
+    /// it was taken.
+    ///
+    /// One at a time, newest first: the one offered goes either way it is answered, so a folder
+    /// with several in it empties over the next few starts rather than asking the same question
+    /// for ever. Two at once is rare enough not to be worth a picker.
+    /// </summary>
+    private bool OfferRecovery()
+    {
+        var abandoned = Recovery.Abandoned();
+        if (abandoned.Count == 0) return false;
+
+        var point = abandoned[0];
+        string what = point.ProjectPath is null
+            ? $"{point.Objects} object(s) from a model that had never been saved"
+            : $"{Path.GetFileName(point.ProjectPath)}, with {point.Objects} object(s)";
+
+        var answer = MessageBox.Show(
+            $"3DFastCraft stopped on {point.SavedUtc.ToLocalTime():d MMMM 'at' HH:mm} without closing, "
+            + $"and kept what was on the plate: {what}."
+            + Environment.NewLine + Environment.NewLine + "Open it again?",
+            "3DFastCraft", MessageBoxButton.YesNo, MessageBoxImage.Question);
+
+        bool taken = answer == MessageBoxResult.Yes && viewModel.Recover(point);
+
+        Recovery.Discard(point);
+        return taken;
     }
 
     /// <summary>
@@ -885,6 +935,16 @@ public partial class MainWindow : Window
             return;
         }
 
+        // Snapped as the tape's ends are: a pivot is nearly always a corner, the middle of an
+        // edge or the centre of a hole, and none of those is where the pointer actually landed.
+        if (viewModel.IsPivotMode)
+        {
+            viewModel.TakePivot(target, SnappedPoint(target, ToVector3(hit!.PointHit)));
+            RefreshPivotMark();
+            e.Handled = true;
+            return;
+        }
+
         if (viewModel.IsEmbossMode)
         {
             if (!viewModel.Scene.Selection.Contains(target))
@@ -932,6 +992,9 @@ public partial class MainWindow : Window
         dragObjects = viewModel.Scene.Selection.ToList();
         dragBefore = dragObjects.Select(TransformState.Capture).ToList();
         dragStartHit = ToVector3(hit!.PointHit);
+        dragMeshes = null;
+        dragObstacles = null;
+        dragContact = null;
 
         View.CaptureMouse();
         e.Handled = true; // suppress camera orbit while moving an object
@@ -1079,6 +1142,8 @@ public partial class MainWindow : Window
 
     private void OnViewportMove(object sender, MouseEventArgs e)
     {
+        if (viewModel.IsPivotMode) RefreshPivotMark(e.GetPosition(View));
+
         if (viewModel.IsSketchMode && TryIntersectPlane(e.GetPosition(View), 0f, out var onPlate))
         {
             viewModel.MoveSketchCursor(new Vector2(onPlate.X, onPlate.Y));
@@ -1129,10 +1194,22 @@ public partial class MainWindow : Window
             delta.Y = (float)GizmoMath.SnapTravel(dragBefore[0].Position.Y, delta.Y, step);
         }
 
+        bool stopped = false;
+        if (viewModel.StopOnContact)
+        {
+            float allowed = ContactAllowed(delta);
+            float wanted = delta.Length();
+
+            stopped = allowed < wanted - 1e-4f;
+            delta = wanted > 1e-6f ? delta * (allowed / wanted) : Vector3.Zero;
+        }
+
         for (int i = 0; i < dragObjects.Count; i++)
             dragObjects[i].Position = dragBefore[i].Position + delta;
 
-        viewModel.Status = $"Moved {delta.X:0.#}, {delta.Y:0.#} mm";
+        viewModel.Status = stopped
+            ? $"Moved {delta.X:0.#}, {delta.Y:0.#} mm - stopped against another object"
+            : $"Moved {delta.X:0.#}, {delta.Y:0.#} mm";
     }
 
     private void OnViewportLeftUp(object sender, MouseButtonEventArgs e)
@@ -1198,6 +1275,99 @@ public partial class MainWindow : Window
         dragBefore = [];
         viewModel.RefreshSelection();
     }
+
+    /// <summary>
+    /// How far a drag may go the way it is heading before the selection meets something, measured
+    /// against the shapes themselves - the same sweep the handles use with Stop on contact, so
+    /// pushing an object by its own body and pushing it by an arrow stop in the same place.
+    ///
+    /// The shapes are taken once for the drag, and the answer is kept while the drag holds its
+    /// course: a sweep over a dense model is not something to do on every mouse move, and a drag
+    /// that curves round asks again.
+    /// </summary>
+    private float ContactAllowed(Vector3 travel)
+    {
+        float wanted = travel.Length();
+        if (wanted < 1e-4f) return 0f;
+
+        var way = travel / wanted;
+
+        if (dragContact is { } last && Vector3.Dot(last.Way, way) > 0.9998f)
+            return MathF.Min(wanted, last.Allowed);
+
+        dragMeshes ??= dragObjects
+            .Select((o, i) => WorldMeshAt(o, dragBefore[i]))
+            .ToList();
+
+        dragObstacles ??= viewModel.Scene.Objects
+            .Where(o => !dragObjects.Contains(o) && !o.IsHidden)
+            .Select(o => o.ToWorldMesh())
+            .ToList();
+
+        float allowed = dragObstacles.Count == 0
+            ? float.PositiveInfinity
+            : MeshSweep.Distance(dragMeshes, dragObstacles, way);
+
+        dragContact = (way, allowed);
+
+        return MathF.Min(wanted, allowed);
+    }
+
+    /// <summary>The object in world space as it stood when the drag began.</summary>
+    private static Mesh WorldMeshAt(SceneObject o, TransformState state)
+    {
+        var now = TransformState.Capture(o);
+        state.ApplyTo(o);
+        var mesh = o.ToWorldMesh();
+        now.ApplyTo(o);
+
+        return mesh;
+    }
+
+    /// <summary>
+    /// The bright red ball: where a pivot would be taken while one is being picked, and where the
+    /// pivot is once it has been. Sized off the object, so it reads the same on a 5 mm pin and on
+    /// a 200 mm case.
+    ///
+    /// Without it the tool looked broken. Setting a pivot moves nothing on the plate - that is
+    /// what it is for - and the handles are down while a tool is running, so there was nothing on
+    /// screen to say anything had happened at all.
+    /// </summary>
+    private void RefreshPivotMark(Point? pointer = null)
+    {
+        if (renderer is null) return;
+
+        var selected = viewModel.Selected;
+        if (selected is null)
+        {
+            renderer.ShowPivot(null, 0f);
+            return;
+        }
+
+        float radius = Math.Clamp(selected.WorldBounds.Size.Length() * 0.014f, 0.3f, 2.5f);
+
+        if (viewModel.IsPivotMode)
+        {
+            // Only over the object being worked on: a ball hovering over the part next door
+            // would say a click there was going to do something, and it is not.
+            if (pointer is { } screen)
+            {
+                var hit = FirstHit(screen, selectable: true);
+                pivotHover = renderer.Resolve(hit?.ModelHit) == selected
+                    ? SnappedPoint(selected, ToVector3(hit!.PointHit))
+                    : null;
+            }
+
+            renderer.ShowPivot(pivotHover, radius);
+            return;
+        }
+
+        pivotHover = null;
+        renderer.ShowPivot(selected.PivotIsOwn ? selected.WorldCentre : null, radius);
+    }
+
+    /// <summary>Where the pointer last rested on the object, while a pivot is being picked.</summary>
+    private Vector3? pivotHover;
 
     /// <summary>A press and release close enough together to count as a click, not a drag.</summary>
     private static bool IsClick(Point release, Point press) =>
@@ -1495,6 +1665,9 @@ public partial class MainWindow : Window
                 gizmo.Rebuild();
             }
         }
+
+        if (e.PropertyName is nameof(MainViewModel.Selected) or nameof(MainViewModel.IsPivotMode))
+            RefreshPivotMark();
 
         // The labels are written in the current unit, so a change of unit redraws them.
         if (e.PropertyName is nameof(MainViewModel.UnitLabel)) ApplyViewSettings();

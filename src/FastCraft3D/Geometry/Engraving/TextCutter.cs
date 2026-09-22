@@ -59,27 +59,23 @@ public static class TextCutter
         return laid is not null && laid.CheckHealth().IsWatertight ? laid : null;
     }
 
+    /// <param name="Body">The object with the lettering in it.</param>
+    /// <param name="Lettering">
+    /// The solid that put it there: raised, the letters themselves; cut, the plug that exactly
+    /// fills the recess, because it is the very shape the recess was cut with.
+    /// </param>
+    public readonly record struct Lettered(Mesh Body, Mesh Lettering);
+
     /// <summary>
-    /// The cut through Manifold, kept only if it is printable. Null sends the caller on to the BSP
-    /// engine and its retries.
+    /// The solid the lettering is made of. Raised it starts a clearance inside the object and
+    /// stands proud; cut it starts a clearance outside and sinks in.
     /// </summary>
-    private static Mesh? Robust(
-        Mesh world, IReadOnlyList<TextShape> shapes, IPlacementSurface surface,
-        bool raised, float depthMm, float bevelMm, CancellationToken token)
-    {
-        float clear = surface.ClearanceMm;
-        var solid = raised
+    private static Mesh Solid(
+        IReadOnlyList<TextShape> shapes, IPlacementSurface surface,
+        bool raised, float depthMm, float bevelMm, float clear) =>
+        raised
             ? TextSolid.Build(shapes, surface, -clear, depthMm, bevelMm)
             : TextSolid.Build(shapes, surface, clear, -depthMm, bevelMm);
-
-        if (solid.TriangleCount == 0) return null;
-
-        var result = raised
-            ? ManifoldCsg.Union(world, solid, token)
-            : ManifoldCsg.Subtract(world, solid, token);
-
-        return result is { TriangleCount: > 0 } && result.CheckHealth().IsWatertight ? result : null;
-    }
 
     /// <summary>
     /// How far off the surface to stand, as a multiple of the surface's own clearance, and how
@@ -118,20 +114,61 @@ public static class TextCutter
         token.ThrowIfCancellationRequested();
 
         if (Retiled(world, shapes, surface, raised, depthMm, bevelMm) is { } laid) return laid;
-        if (Robust(world, shapes, surface, raised, depthMm, bevelMm, token) is { } exact) return exact;
 
-        Mesh? best = null;
+        return Worked(world, shapes, surface, raised, depthMm, bevelMm, token)?.Body;
+    }
+
+    /// <summary>
+    /// The lettering as a part of its own, and the body that carries it - which is what printing
+    /// the letters in a second filament needs, since a slicer assigns a material to a part and a
+    /// part is a solid, not a patch of a surface.
+    ///
+    /// Raised, nothing is cut at all: the letters are the solid that would have been unioned on,
+    /// and the body is untouched. They dip the surface's own clearance into it, so the two are in
+    /// contact rather than balanced on a shared face, and every slicer takes that.
+    ///
+    /// Cut, the body is engraved exactly as before and the plug handed back is the very solid
+    /// that cut it - including whichever retry finally worked - so the two mate by construction
+    /// rather than by two builds agreeing with each other. The plug stands the clearance proud of
+    /// the face, which is a hundredth of a millimetre and well under a layer.
+    /// </summary>
+    public static Lettered? Separate(
+        Mesh world, IReadOnlyList<TextShape> shapes, IPlacementSurface surface,
+        bool raised, float depthMm, float bevelMm = 0, CancellationToken token = default)
+    {
+        token.ThrowIfCancellationRequested();
+
+        if (!raised) return Worked(world, shapes, surface, false, depthMm, bevelMm, token);
+
+        var letters = Solid(shapes, surface, true, depthMm, bevelMm, surface.ClearanceMm).Welded();
+        return letters.TriangleCount == 0 ? null : new Lettered(world, letters);
+    }
+
+    /// <summary>
+    /// The boolean and its retries, handing back both what came out and the solid that did it.
+    /// </summary>
+    private static Lettered? Worked(
+        Mesh world, IReadOnlyList<TextShape> shapes, IPlacementSurface surface,
+        bool raised, float depthMm, float bevelMm, CancellationToken token)
+    {
+        var first = Solid(shapes, surface, raised, depthMm, bevelMm, surface.ClearanceMm);
+        if (first.TriangleCount == 0) return null;
+
+        var robust = raised
+            ? ManifoldCsg.Union(world, first, token)
+            : ManifoldCsg.Subtract(world, first, token);
+
+        if (robust is { TriangleCount: > 0 } && robust.CheckHealth().IsWatertight)
+            return new Lettered(robust, first.Welded());
+
+        Lettered? best = null;
 
         foreach (var (factor, slide) in Nudges)
         {
             token.ThrowIfCancellationRequested();
 
-            float clear = surface.ClearanceMm * factor;
             var moved = new SurfacePlacement(new Vector2(slide, 0), 0).Apply(shapes);
-
-            var solid = raised
-                ? TextSolid.Build(moved, surface, -clear, depthMm, bevelMm)
-                : TextSolid.Build(moved, surface, clear, -depthMm, bevelMm);
+            var solid = Solid(moved, surface, raised, depthMm, bevelMm, surface.ClearanceMm * factor);
 
             if (solid.TriangleCount == 0) return null;
 
@@ -142,11 +179,11 @@ public static class TextCutter
             foreach (var candidate in new[] { cut, cut.Welded(CoarseWeldMm) })
             {
                 var result = MeshHealer.Heal(candidate, token: token).Mesh;
-                if (result.CheckHealth().IsWatertight) return result;
+                if (result.CheckHealth().IsWatertight) return new Lettered(result, solid.Welded());
 
                 // Kept so the caller has something to report on, and so a run that never
                 // succeeds still says what went wrong rather than nothing at all.
-                best ??= result;
+                best ??= new Lettered(result, solid.Welded());
             }
         }
 

@@ -7,7 +7,10 @@ using FastCraft3D.Geometry;
 namespace FastCraft3D.Io;
 
 /// <param name="Colour">Diffuse colour, components in 0..1. Written to a .mtl sidecar.</param>
-public readonly record struct ObjObject(string Name, Mesh Mesh, Vector3 Colour);
+/// <param name="Filament">
+/// Which filament prints it, counted from one. OBJ has nowhere to put it; 3MF does.
+/// </param>
+public readonly record struct ObjObject(string Name, Mesh Mesh, Vector3 Colour, int Filament = 1);
 
 /// <summary>
 /// Wavefront OBJ writing.
@@ -33,7 +36,7 @@ public static class ObjWriter
 
             for (int i = 0; i < objects.Count; i++)
             {
-                var (name, mesh, _) = objects[i];
+                var (name, mesh, _, _) = objects[i];
                 var (positions, normals, indices) = ShadingNormals.Build(mesh);
 
                 writer.WriteLine($"o {Sanitise(name)}");

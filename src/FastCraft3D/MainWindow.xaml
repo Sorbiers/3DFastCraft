@@ -565,6 +565,13 @@
                             Command="{Binding DeleteCommand}"
                             ToolTip="Remove the selection (Del)" />
                     <Separator Margin="8,0" />
+                    <Button Style="{StaticResource ToolButton}" Content="Set pivot" Visibility="{Binding IsAdvancedMode, Converter={StaticResource BoolToVisibility}}" Tag="{StaticResource IconPivot}"
+                            Command="{Binding SetPivotCommand}" MinWidth="80"
+                            ToolTip="Click a point on the object to measure and turn it about - a shaft hole, a corner, a hinge line. The position boxes then read that point, a turn goes round it, and lining it up with another part compares it rather than the middle of its box. Kept with the project. Needs exactly one object selected." />
+                    <Button Style="{StaticResource ToolButton}" Content="Pivot to centre" Visibility="{Binding IsAdvancedMode, Converter={StaticResource BoolToVisibility}}" Tag="{StaticResource IconPivotCentre}"
+                            Command="{Binding PivotToCentreCommand}" MinWidth="104"
+                            ToolTip="Puts the pivot back in the middle of the object's box, where it starts out. Needs exactly one object selected." />
+                    <Separator Margin="8,0" />
                     <Button Style="{StaticResource ToolButton}" Content="Colour" Tag="{StaticResource IconColour}"
                             Command="{Binding PickColourCommand}" MinWidth="78"
                             ToolTip="Paint the selection. The palette in the right-hand panel is one click." />
@@ -1571,8 +1578,13 @@
 
                         <CheckBox Content="Raised instead of cut" IsChecked="{Binding EmbossRaised, Mode=TwoWay}"
                                   AutomationProperties.AutomationId="EmbossRaised"
-                                  Margin="0,0,0,8"
+                                  Margin="0,0,0,6"
                                   ToolTip="Stand the lettering off the face rather than sinking it in" />
+
+                        <CheckBox Content="Keep as its own part" IsChecked="{Binding EmbossSeparate, Mode=TwoWay}"
+                                  AutomationProperties.AutomationId="EmbossSeparate"
+                                  Margin="0,0,0,8"
+                                  ToolTip="For printing the lettering in another filament. Cut, the object gets the recess and the letters come back as the plug that fills it flush; raised, they stand on it. The letters go onto the next filament up, and the pair export to a 3MF that says so." />
 
                         <StackPanel Orientation="Horizontal">
                             <Button Content="Apply" Style="{StaticResource PanelButton}"
@@ -1922,6 +1934,17 @@
                                         HorizontalAlignment="Left" Padding="10,3" Margin="1,6,0,0"
                                         ToolTip="Pick any colour" />
 
+                                <!-- Which spool prints it. Not the colour: the colour is how the
+                                     model is looked at while it is being made. -->
+                                <StackPanel Orientation="Horizontal" Margin="0,10,0,0">
+                                    <TextBlock Text="Filament" Style="{StaticResource FieldLabel}" Width="62"
+                                               ToolTip="Which filament prints the selection on a printer that has more than one - an AMS slot, an MMU tool. 1 unless you say otherwise. Carried into an exported 3MF; STL and OBJ have nowhere to put it." />
+                                    <TextBox AutomationProperties.AutomationId="ObjectFilament" Width="48"
+                                             Style="{StaticResource NumberBox}" Tag="number"
+                                             Text="{Binding ObjectFilament, UpdateSourceTrigger=LostFocus}" />
+                                    <TextBlock Text="of 16" Foreground="#FF9AA0A8" VerticalAlignment="Center" Margin="6,0,0,0" />
+                                </StackPanel>
+
                                 <StackPanel DataContext="{Binding Selected}" Style="{StaticResource OneObjectOnly}">
                                     <TextBlock Text="{Binding DataContext.UnitLabel, RelativeSource={RelativeSource AncestorType=Window}, StringFormat='Position ({0})'}" Style="{StaticResource SectionHeader}" />
                                     <Grid>
@@ -1996,6 +2019,34 @@
                                         <TextBox AutomationProperties.AutomationId="RotationZ" Grid.Column="5" Style="{StaticResource NumberBox}" Tag="transform"
                                                  Text="{Binding RotationZ, StringFormat=N1, UpdateSourceTrigger=LostFocus}" />
                                     </Grid>
+
+                                    <!-- Only for a pivot somebody chose. The pivot is the
+                                         object's origin, so in its own coordinates it is nought
+                                         and saying so would tell nobody anything; what is worth
+                                         reading, and typing, is where in the part it sits. -->
+                                    <StackPanel Visibility="{Binding DataContext.ShowPivotFields, RelativeSource={RelativeSource AncestorType=Window}, Converter={StaticResource BoolToVisibility}}">
+                                        <TextBlock Text="{Binding DataContext.UnitLabel, RelativeSource={RelativeSource AncestorType=Window}, StringFormat='Pivot, from the middle ({0})'}" Style="{StaticResource SectionHeader}"
+                                                   ToolTip="Where the object turns and is measured about, as an offset from the middle of its own box. 0, 0, 0 is the middle. Set it by clicking a point with Set pivot on the Object tab, or type it here." />
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="Auto" />
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="Auto" />
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="Auto" />
+                                                <ColumnDefinition Width="*" />
+                                            </Grid.ColumnDefinitions>
+                                            <TextBlock Text="X" Style="{StaticResource FieldLabel}" />
+                                            <TextBox AutomationProperties.AutomationId="PivotX" Grid.Column="1" Style="{StaticResource NumberBox}" Tag="transform"
+                                                     Text="{Binding DataContext.ObjectPivotX, RelativeSource={RelativeSource AncestorType=Window}, StringFormat=0.####, UpdateSourceTrigger=LostFocus}" />
+                                            <TextBlock Grid.Column="2" Text="Y" Style="{StaticResource FieldLabel}" />
+                                            <TextBox AutomationProperties.AutomationId="PivotY" Grid.Column="3" Style="{StaticResource NumberBox}" Tag="transform"
+                                                     Text="{Binding DataContext.ObjectPivotY, RelativeSource={RelativeSource AncestorType=Window}, StringFormat=0.####, UpdateSourceTrigger=LostFocus}" />
+                                            <TextBlock Grid.Column="4" Text="Z" Style="{StaticResource FieldLabel}" />
+                                            <TextBox AutomationProperties.AutomationId="PivotZ" Grid.Column="5" Style="{StaticResource NumberBox}" Tag="transform"
+                                                     Text="{Binding DataContext.ObjectPivotZ, RelativeSource={RelativeSource AncestorType=Window}, StringFormat=0.####, UpdateSourceTrigger=LostFocus}" />
+                                        </Grid>
+                                    </StackPanel>
                                 </StackPanel>
                             </StackPanel>
                         </Expander>

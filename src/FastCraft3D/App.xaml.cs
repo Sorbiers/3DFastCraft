@@ -20,6 +20,13 @@ public partial class App : Application
     /// </summary>
     public static IReadOnlyList<string> Opening { get; private set; } = [];
 
+    /// <summary>
+    /// Whether the app is on its way down because something threw rather than because the user
+    /// closed it. The window clears the crash file on a close it was told about; after a fault
+    /// the crash file is the only copy of the work there is, so it stays.
+    /// </summary>
+    public static bool Crashed { get; private set; }
+
     protected override void OnStartup(StartupEventArgs e)
     {
         DispatcherUnhandledException += OnUnhandled;
@@ -48,6 +55,14 @@ public partial class App : Application
         // single layout fault into a stack overflow, which kills the process outright with no
         // dialog at all and is exactly the crash it was written to prevent.
         if (Interlocked.Exchange(ref reported, 1) == 1) return;
+
+        // Before the dialog, because the dialog pumps the dispatcher and anything could happen
+        // under it. The window is gone on the graphics failure, which has nothing to keep anyway.
+        Crashed = true;
+        if (MainWindow?.DataContext is ViewModels.MainViewModel model)
+        {
+            try { model.KeepRecovery(now: true); } catch { }
+        }
 
         bool graphics = LooksLikeGraphics(e.Exception);
 

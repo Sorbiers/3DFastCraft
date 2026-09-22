@@ -42,7 +42,7 @@ public static class ExportComposer
     public static List<ObjObject> ComposeForObj(IEnumerable<SceneObject> objects, bool dropToPlate = false)
     {
         var parts = objects
-            .Select(o => (o.Name, Mesh: o.ToWorldMesh(), o.Colour))
+            .Select(o => (o.Name, Mesh: o.ToWorldMesh(), o.Colour, o.Filament))
             .ToList();
 
         if (dropToPlate)
@@ -54,12 +54,12 @@ public static class ExportComposer
             {
                 var shift = Matrix4x4.CreateTranslation(0, 0, lift);
                 parts = parts
-                    .Select(p => (p.Name, Mesh: MeshTransform.Transformed(p.Mesh, shift), p.Colour))
+                    .Select(p => (p.Name, Mesh: MeshTransform.Transformed(p.Mesh, shift), p.Colour, p.Filament))
                     .ToList();
             }
         }
 
-        return parts.Select(p => new ObjObject(p.Name, p.Mesh, p.Colour)).ToList();
+        return parts.Select(p => new ObjObject(p.Name, p.Mesh, p.Colour, p.Filament)).ToList();
     }
 
     /// <summary>How far everything must move up (or down) to rest on the build plate.</summary>

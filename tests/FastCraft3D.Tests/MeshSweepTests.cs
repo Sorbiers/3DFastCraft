@@ -20,6 +20,36 @@ public class MeshSweepTests
     private static float Travel(Mesh mover, Mesh blocker, Axis axis, int direction) =>
         MeshSweep.Distance([mover], [blocker], axis, direction);
 
+    /// <summary>
+    /// A square facing down at the given height, with one near-vertical sliver hanging off its
+    /// edge - the shape of the triangles a boolean leaves down the side of a cylinder.
+    /// </summary>
+    private static Mesh SquareWithASliver(float height, float top)
+    {
+        var mesh = new Mesh();
+
+        mesh.AddTriangle(new(-10, -10, height), new(10, 10, height), new(10, -10, height));
+        mesh.AddTriangle(new(-10, -10, height), new(-10, 10, height), new(10, 10, height));
+
+        // A wall a hair off vertical: forty millimetres tall, a millionth wide flattened.
+        mesh.AddTriangle(new(10, -10, height), new(10, 10, top), new(10.000001f, 10, top));
+
+        return mesh;
+    }
+
+    [Fact]
+    public void ASliverDownASideIsNotMistakenForTheSurfaceBelowIt()
+    {
+        var mover = SquareWithASliver(30f, 70f);
+        var floor = new Mesh();
+        floor.AddTriangle(new(-20, -20, 0), new(20, -20, 0), new(20, 20, 0));
+        floor.AddTriangle(new(-20, -20, 0), new(20, 20, 0), new(-20, 20, 0));
+
+        // Thirty millimetres to fall, and the sliver is no part of the answer: its plane is too
+        // steep to be evaluated, and before it was clamped it put the drop at nothing.
+        Assert.Equal(30f - MeshSweep.ClearanceMm, Travel(mover, floor, Axis.Z, -1), 3);
+    }
+
     // --- The cases a box gets right too -------------------------------------------------
 
     [Fact]
@@ -245,5 +275,78 @@ public class MeshSweepTests
     {
         var both = FastCraft3D.Geometry.Csg.CsgSolid.Intersect(a, b);
         return both.TriangleCount > 0 && Math.Abs(both.ComputeSignedVolume()) > 1e-3;
+    }
+
+    // --- Any direction, not only the three axes -----------------------------------------
+
+    [Fact]
+    public void ASweepDownAnAxisIsTheSameWhicheverWayItIsAskedFor()
+    {
+        var mover = Primitives.Box(10, 10, 10);
+        var blocker = At(Primitives.Box(10, 10, 10), 30);
+
+        Assert.Equal(
+            MeshSweep.Distance([mover], [blocker], Axis.X, 1),
+            MeshSweep.Distance([mover], [blocker], Vector3.UnitX), 4);
+    }
+
+    [Fact]
+    public void ACornerIsMetOnTheDiagonalRunIntoIt()
+    {
+        var mover = Primitives.Box(10, 10, 10);
+        var blocker = At(Primitives.Box(10, 10, 10), 30, 30);
+
+        // Both boxes are 10 across, so 20 mm of gap on each axis: the corners meet after
+        // 20 * root 2 along the diagonal between them.
+        float diagonal = MeshSweep.Distance([mover], [blocker], new Vector3(1, 1, 0));
+
+        Assert.Equal(20f * MathF.Sqrt(2f) - MeshSweep.ClearanceMm, diagonal, 3);
+    }
+
+    [Fact]
+    public void GoingPastSomethingOnTheDiagonalIsNotBlockedByIt()
+    {
+        var mover = Primitives.Box(10, 10, 10);
+
+        // Dead ahead on X, so a move that way is stopped 30 mm out. Set off at 45 degrees and
+        // the mover passes beside it instead, with nothing to stop it at all.
+        var blocker = At(Primitives.Box(10, 10, 10), 40);
+
+        Assert.Equal(30f - MeshSweep.ClearanceMm, MeshSweep.Distance([mover], [blocker], Axis.X, 1), 3);
+        Assert.True(float.IsPositiveInfinity(MeshSweep.Distance([mover], [blocker], new Vector3(1, 1, 0))));
+    }
+
+    [Fact]
+    public void ADiagonalSweepUpwardsMeetsWhatIsAboveAndAcross()
+    {
+        var mover = Primitives.Box(10, 10, 10);
+        var above = At(Primitives.Box(10, 10, 10), 20, 0, 20);
+
+        float slope = MeshSweep.Distance([mover], [above], new Vector3(1, 0, 1));
+
+        Assert.Equal(10f * MathF.Sqrt(2f) - MeshSweep.ClearanceMm, slope, 3);
+    }
+
+    [Fact]
+    public void SomethingAlreadyTouchingLeavesNowhereToGo()
+    {
+        var mover = Primitives.Box(10, 10, 10);
+        var touching = At(Primitives.Box(10, 10, 10), 10);
+
+        Assert.Equal(0f, MeshSweep.Distance([mover], [touching], new Vector3(2, 0, 0)), 3);
+    }
+
+    [Fact]
+    public void ACanComesDownOnItsBowlAndNotThroughIt()
+    {
+        // The shape of the complaint: a round part hanging over a wider one, dropped straight
+        // down. It should stop on the bowl's rim, not carry on to the plate.
+        var can = At(Primitives.Prism(40, 132, 64), 0, 0, 100);
+        var bowl = Primitives.Prism(50, 20, 6);
+
+        float down = MeshSweep.Distance([can], [bowl], -Vector3.UnitZ);
+
+        // The can's bottom starts at 100 - 66 = 34; the bowl's top is at 10.
+        Assert.Equal(24f - MeshSweep.ClearanceMm, down, 3);
     }
 }

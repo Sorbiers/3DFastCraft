@@ -67,6 +67,52 @@ public static class MeshSweep
     }
 
     /// <summary>
+    /// How far it may go this way before contact, in any direction rather than along an axis.
+    ///
+    /// The meshes are turned so the direction becomes +Z and the axis sweep does the work. The
+    /// sweep's whole trick is that looking down the line of travel turns the question into a flat
+    /// one, and which way the world's axes happen to point has nothing to do with it - so a turn
+    /// costs one pass over the vertices and nothing else.
+    /// </summary>
+    public static float Distance(IReadOnlyList<Mesh> moving, IReadOnlyList<Mesh> obstacles, Vector3 direction)
+    {
+        float length = direction.Length();
+        if (length < 1e-6f) return float.PositiveInfinity;
+
+        direction /= length;
+
+        // Already down an axis: nothing to turn.
+        if (MathF.Abs(direction.X) > 0.999999f) return Distance(moving, obstacles, Axis.X, MathF.Sign(direction.X));
+        if (MathF.Abs(direction.Y) > 0.999999f) return Distance(moving, obstacles, Axis.Y, MathF.Sign(direction.Y));
+        if (MathF.Abs(direction.Z) > 0.999999f) return Distance(moving, obstacles, Axis.Z, MathF.Sign(direction.Z));
+
+        var turn = Matrix4x4.CreateFromQuaternion(Turning(direction, Vector3.UnitZ));
+
+        return Distance(
+            moving.Select(m => MeshTransform.Transformed(m, turn)).ToList(),
+            obstacles.Select(m => MeshTransform.Transformed(m, turn)).ToList(),
+            Axis.Z, 1);
+    }
+
+    /// <summary>The shortest turn taking one unit vector onto another.</summary>
+    private static Quaternion Turning(Vector3 from, Vector3 to)
+    {
+        var axis = Vector3.Cross(from, to);
+        float dot = Vector3.Dot(from, to);
+
+        if (axis.LengthSquared() < 1e-12f)
+        {
+            if (dot > 0f) return Quaternion.Identity;
+
+            // Straight back the way it came: any half turn across it will do.
+            var across = MathF.Abs(from.X) < 0.9f ? Vector3.UnitX : Vector3.UnitY;
+            return new Quaternion(Vector3.Normalize(Vector3.Cross(from, across)), 0f);
+        }
+
+        return Quaternion.Normalize(new Quaternion(axis, 1f + dot));
+    }
+
+    /// <summary>
     /// How far it may go in the given direction before contact, or infinity when nothing is in
     /// the way. Never negative.
     /// </summary>
@@ -342,11 +388,25 @@ public static class MeshSweep
         /// <summary>
         /// How far along the axis the triangle sits over a point of ground. Only ever asked of
         /// triangles that face the sweep, so there is always exactly one answer.
+        ///
+        /// Held to the triangle's own span along the axis. Over ground the triangle covers this
+        /// is a convex combination of its corners and so cannot leave that span anyway - but a
+        /// wall triangle that is a hair off edge-on has a projected area of next to nothing, and
+        /// dividing by it turns a rounding error in the point into tens of millimetres of
+        /// height. That was a can reported as resting on a bowl it was still a centimetre above:
+        /// one sliver down the side of the can, forty millimetres tall and a millionth of a
+        /// millimetre wide flattened, answered with a height near the bowl's own.
+        ///
+        /// The clamp costs nothing when the triangle has any area to speak of, and where it bites
+        /// it gives back the nearest corner of the sliver - a real point of the real surface -
+        /// rather than a number off the end of its plane.
         /// </summary>
         public float HeightAt(Vector2 at)
         {
             var (first, second) = Weights(at);
-            return first * a.Z + second * b.Z + (1f - first - second) * c.Z;
+            float height = first * a.Z + second * b.Z + (1f - first - second) * c.Z;
+
+            return Math.Clamp(height, MinH, MaxH);
         }
 
         private (float First, float Second) Weights(Vector2 at) => (

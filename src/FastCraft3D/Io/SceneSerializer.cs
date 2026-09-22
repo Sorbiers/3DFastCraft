@@ -57,6 +57,21 @@ public static class SceneSerializer
         Write(path, dto);
     }
 
+    /// <summary>
+    /// Writes the scene on its own, without reading back whatever is at the path already.
+    ///
+    /// For the crash file, which is rewritten over and over as the work goes on and has no kept
+    /// versions to preserve. The ordinary save reads the file first precisely so that it cannot
+    /// lose them; reading half a megabyte back every half minute to preserve nothing is work for
+    /// nothing.
+    /// </summary>
+    public static void SaveSnapshot(string path, Scene scene, ProjectSettings? settings = null)
+    {
+        var dto = new SceneDto { Version = CurrentVersion, Objects = scene.Objects.Select(ToDto).ToList() };
+        Keep(dto, settings);
+        Write(path, dto);
+    }
+
     /// <summary>Keeps a labelled snapshot in the file, and saves the scene as current.</summary>
     public static void SaveVersion(string path, Scene scene, string label, ProjectSettings? settings = null)
     {
@@ -183,6 +198,9 @@ public static class SceneSerializer
         Rotation = ToArray(o.Rotation),
         Scale = ToArray(o.Scale),
         Colour = ToArray(o.Colour),
+        Filament = o.Filament > 1 ? o.Filament : null,
+        Anchors = o.Anchors.Count > 0 ? o.Anchors.Select(ToDto).ToArray() : null,
+        Pivot = o.PivotIsOwn ? true : null,
         Origin = o.Origin?.ToString(),
         Pristine = o.IsPristine,
         PiecesTakeClearance = o.PiecesTakeClearance,
@@ -203,6 +221,9 @@ public static class SceneSerializer
             Rotation = ToVector(o.Rotation),
             Scale = o.Scale is { Length: 3 } ? ToVector(o.Scale) : Vector3.One,
             Colour = o.Colour is { Length: 3 } ? ToVector(o.Colour) : new Vector3(0.3f, 0.55f, 0.85f),
+            Filament = o.Filament ?? 1,
+            Anchors = o.Anchors?.Select(FromDto).ToList() ?? [],
+            PivotIsOwn = o.Pivot == true,
             Origin = origin,
             IsPristine = origin is not null && (o.Pristine ?? IsConvex(mesh)),
             PiecesTakeClearance = o.PiecesTakeClearance,
@@ -299,6 +320,16 @@ public static class SceneSerializer
         public float[]? Rotation { get; set; }
         public float[]? Scale { get; set; }
         public float[]? Colour { get; set; }
+
+        /// <summary>Written only when it is not the first filament, so old files read as they did.</summary>
+        public int? Filament { get; set; }
+
+        /// <summary>What a tool marked on the part. Null for everything nothing was marked on.</summary>
+        public AnchorDto[]? Anchors { get; set; }
+
+        /// <summary>Written only when the origin was chosen, so an ordinary object reads as it did.</summary>
+        public bool? Pivot { get; set; }
+
         public string? Origin { get; set; }
 
         /// <summary>Null in files written before it existed, which are then judged by shape.</summary>
@@ -315,4 +346,45 @@ public static class SceneSerializer
         public float[]? Vertices { get; set; }
         public int[]? Triangles { get; set; }
     }
+
+    /// <summary>
+    /// One marked feature. Written out field by field rather than as the record itself so that a
+    /// field added later reads back as its default instead of making the file unreadable.
+    /// </summary>
+    private sealed class AnchorDto
+    {
+        public string? Kind { get; set; }
+        public string? Name { get; set; }
+        public float[]? At { get; set; }
+        public float[]? Along { get; set; }
+        public float[]? Across { get; set; }
+        public float Size { get; set; }
+        public float Length { get; set; }
+        public string? Shape { get; set; }
+        public float Flat { get; set; }
+    }
+
+    private static AnchorDto ToDto(Anchor a) => new()
+    {
+        Kind = a.Kind.ToString(),
+        Name = a.Name,
+        At = ToArray(a.At),
+        Along = ToArray(a.Along),
+        Across = ToArray(a.Across),
+        Size = a.Size,
+        Length = a.Length,
+        Shape = a.Shape.ToString(),
+        Flat = a.Flat
+    };
+
+    private static Anchor FromDto(AnchorDto a) => new(
+        Enum.TryParse<AnchorKind>(a.Kind, out var kind) ? kind : AnchorKind.Bore,
+        a.Name ?? "Feature",
+        ToVector(a.At),
+        a.Along is { Length: 3 } ? ToVector(a.Along) : Vector3.UnitZ,
+        ToVector(a.Across),
+        a.Size,
+        a.Length,
+        Enum.TryParse<BoreShape>(a.Shape, out var shape) ? shape : BoreShape.Round,
+        a.Flat);
 }

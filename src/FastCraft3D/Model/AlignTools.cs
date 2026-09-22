@@ -22,9 +22,13 @@ public enum AlignMode
 /// <summary>
 /// Lines objects up along an axis.
 ///
-/// Everything works on world bounding boxes rather than object positions, because that is what
-/// "flush left" actually means to someone looking at the plate: a large and a small part are
+/// Flush left and flush right work on world bounding boxes rather than object positions, because
+/// that is what they actually mean to someone looking at the plate: a large and a small part are
 /// aligned when their edges agree, not when their centres do.
+///
+/// Centres go by <see cref="SceneObject.WorldCentre"/>, which is the box for most things and the
+/// marked axis for a part that turns on one - two gears are lined up when their shafts are, not
+/// when the outlines of their teeth are.
 /// </summary>
 public static class AlignTools
 {
@@ -55,19 +59,27 @@ public static class AlignTools
             return offsets;
         }
 
+        float Line(int i) => mode switch
+        {
+            AlignMode.Minimum => Component(boxes[i].Min, axis),
+            AlignMode.Maximum => Component(boxes[i].Max, axis),
+            _ => Component(objects[i].WorldCentre, axis)
+        };
+
         if (boxes.Count == 1)
         {
-            if (bed is { } plate) offsets[0] = direction * (Edge(plate, axis, mode) - Edge(boxes[0], axis, mode));
+            if (bed is { } plate) offsets[0] = direction * (Edge(plate, axis, mode) - Line(0));
             return offsets;
         }
 
-        float anchor = Edge(boxes[^1], axis, mode);
+        float anchor = Line(boxes.Count - 1);
         for (int i = 0; i < boxes.Count; i++)
-            offsets[i] = direction * (anchor - Edge(boxes[i], axis, mode));
+            offsets[i] = direction * (anchor - Line(i));
 
         return offsets;
     }
 
+    /// <summary>The bed's own edge, which has no axis marked on it and never will.</summary>
     private static float Edge(Bounds box, Axis axis, AlignMode mode) => mode switch
     {
         AlignMode.Minimum => Component(box.Min, axis),

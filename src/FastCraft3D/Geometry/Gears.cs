@@ -110,18 +110,64 @@ public sealed record GearOptions
     /// </summary>
     public int KeptTeeth { get; init; }
 
+    /// <summary>
+    /// Makes the cut-away gear's mate the closed rack it drives back and forth rather than
+    /// another gear. See <see cref="Gears"/>.
+    /// </summary>
+    public bool Frame { get; init; }
+
+    /// <summary>How far the frame travels; nought for twice the gear's pitch diameter.</summary>
+    public float Stroke { get; init; }
+
     /// <summary>A bevel's pitch cone angle. A pair whose angles add up to 90 meets at a right angle.</summary>
     public float ConeAngle { get; init; } = 45f;
 
     /// <summary>A worm's pitch diameter; nought for ten times the module, which is the usual choice.</summary>
     public float WormDiameter { get; init; }
 
+    // --- What the mate is made to, where that is not simply the gear's own -------------
+
     /// <summary>
-    /// How wide a worm wheel's face is. Nought for what the worm asks for, which is not the
-    /// worm's own length: a long worm drives the same narrow wheel, it just gives the shafts
-    /// room to move along one another.
+    /// The mate's width and shaft, each null for the gear's own. A pair is usually two of a kind
+    /// and only the odd one needs saying - but a pinion on a 3 mm arbor often drives a wheel on a
+    /// 5 mm one, and a worm's wheel is never as wide as the worm is long.
     /// </summary>
-    public float WheelWidth { get; init; }
+    public float? MateThickness { get; init; }
+
+    public BoreShape? MateBore { get; init; }
+
+    public float? MateBoreSize { get; init; }
+
+    public float? MateBoreFlat { get; init; }
+
+    public float? MateHubDiameter { get; init; }
+
+    public float? MateHubHeight { get; init; }
+
+    public float? MateSetScrew { get; init; }
+
+    /// <summary>The same options with nothing of the mate's own left on them.</summary>
+    public GearOptions WithoutMate() => this with
+    {
+        MateThickness = null, MateBore = null, MateBoreSize = null, MateBoreFlat = null,
+        MateHubDiameter = null, MateHubHeight = null, MateSetScrew = null
+    };
+
+    /// <summary>
+    /// What the mate is built from: its own numbers where it has them, the gear's where it has
+    /// not. <paramref name="width"/> is what its width falls back to before the gear's own does,
+    /// which is how a worm wheel gets the width the worm asks for rather than the worm's length.
+    /// </summary>
+    public GearOptions ForMate(float? width = null) => (this with
+    {
+        Thickness = MateThickness ?? width ?? Thickness,
+        Bore = MateBore ?? Bore,
+        BoreSize = MateBoreSize ?? BoreSize,
+        BoreFlat = MateBoreFlat ?? BoreFlat,
+        HubDiameter = MateHubDiameter ?? HubDiameter,
+        HubHeight = MateHubHeight ?? HubHeight,
+        SetScrew = MateSetScrew ?? SetScrew
+    }).WithoutMate().Sane();
 
     /// <summary>How far a ratchet's catching face leans back from radial, so its pawl cannot ride out.</summary>
     public float Undercut { get; init; } = 4f;
@@ -154,8 +200,8 @@ public sealed record GearOptions
             PartnerTeeth = PartnerTeeth <= 0 ? 0 : Math.Clamp(PartnerTeeth, 6, 400),
             KeptTeeth = KeptTeeth <= 0 ? 0 : Math.Clamp(KeptTeeth, 1, Math.Clamp(Teeth, least, 400)),
             ConeAngle = Clamp(ConeAngle, 5f, 85f, 45f),
+            Stroke = Clamp(Stroke, 0f, 1000f, 0f),
             WormDiameter = Clamp(WormDiameter, 0f, 500f, 0f),
-            WheelWidth = Clamp(WheelWidth, 0f, 500f, 0f),
             Undercut = Clamp(Undercut, 0f, 20f, 4f)
         };
 
@@ -173,7 +219,12 @@ public sealed record GearOptions
 /// are the same place. A bevel pair meshes at a right angle, with one of them standing on its edge
 /// - which is how it is shown and not how it prints.
 /// </param>
-public sealed record GearPart(string Name, Mesh Mesh, Matrix4x4? InMesh = null);
+/// <param name="Anchors">
+/// What this part's own tool knows about it - where its shaft hole is, and the like - so a shaft
+/// can be fitted to it afterwards without anyone measuring. See <see cref="Anchor"/>.
+/// </param>
+public sealed record GearPart(
+    string Name, Mesh Mesh, Matrix4x4? InMesh = null, IReadOnlyList<Anchor>? Anchors = null);
 
 /// <param name="Parts">What was made - none when it was refused.</param>
 /// <param name="Notes">Things worth knowing about what was made.</param>
@@ -223,7 +274,7 @@ public static class Gears
         float m = o.Module;
 
         if (m < 0.8f)
-            notes.Add("Teeth this small are finer than a 0.4 mm nozzle prints well; a module of 1 or more comes out cleaner.");
+            notes.Add("Module under 0.8 mm is finer than a 0.4 mm nozzle prints well.");
 
         switch (o.Kind)
         {
@@ -231,16 +282,36 @@ public static class Gears
             {
                 var gear = External(o, o.Teeth, 1, 0f, notes, out string? refusal, token, partial: true);
                 if (gear is null) return new([], notes, refusal);
-                parts.Add(new($"Gear {o.Teeth}T", gear));
+                parts.Add(new($"Gear {o.Teeth}T", gear, Anchors: Bore(o, gear)));
 
-                if (o.PartnerTeeth > 0)
+                if (o.Frame && o.KeptTeeth > 0 && o.KeptTeeth < o.Teeth)
+                {
+                    var frame = RecipFrame(o, notes, out string? why);
+
+                    if (frame is null) notes.Add(why!);
+                    else
+                    {
+                        // Beside the gear to print; round it to be looked at, which is where it
+                        // works: the gear turns on the spot and the frame slides past it.
+                        var box = frame.ComputeBounds();
+                        float aside = m * (o.Teeth + 2) / 2f + 3f - box.Min.X;
+
+                        parts.Add(new("Frame", Moved(frame, new Vector3(aside, 0f, 0f)),
+                                      Matrix4x4.CreateTranslation(-aside, 0f, 0f)));
+                    }
+                }
+                else if (o.PartnerTeeth > 0)
                 {
                     // Their tooth lines have to lie together where they touch, and the two turn opposite
                     // ways - so the partner leans the other way.
                     float apart = m * (o.Teeth + o.PartnerTeeth) / 2f;
-                    var partner = Partner(o, o.PartnerTeeth, -1, MathF.PI - MathF.PI / o.PartnerTeeth, notes, token);
+                    var partner = Partner(o.ForMate(), o.PartnerTeeth, -1, MathF.PI - MathF.PI / o.PartnerTeeth, notes, token);
                     if (partner is not null)
-                        parts.Add(new($"Gear {o.PartnerTeeth}T", Moved(partner, new Vector3(apart, 0, 0))));
+                    {
+                        var placed = Moved(partner, new Vector3(apart, 0, 0));
+                        parts.Add(new($"Gear {o.PartnerTeeth}T", placed,
+                                      Anchors: Bore(o.ForMate(), placed, new Vector2(apart, 0f))));
+                    }
                 }
                 break;
             }
@@ -249,24 +320,28 @@ public static class Gears
             {
                 var ring = Ring(o, 1, notes, out string? refusal);
                 if (ring is null) return new([], notes, refusal);
-                parts.Add(new($"Ring gear {o.Teeth}T", ring));
+                parts.Add(new($"Ring gear {o.Teeth}T", ring, Anchors: Bore(o, ring)));
 
                 if (o.PartnerTeeth > 0)
                 {
                     if (o.PartnerTeeth > o.Teeth - 3)
                     {
-                        notes.Add("A gear inside a ring has to have fewer teeth than the ring, so none was made.");
+                        notes.Add("No pinion: it needs fewer teeth than the ring.");
                     }
                     else
                     {
                         if (o.Teeth - o.PartnerTeeth < 12)
-                            notes.Add("A ring gear wants about 12 more teeth than the gear inside it, or the tips can catch.");
+                            notes.Add("A ring wants 12 teeth more than its pinion, or the tips catch.");
 
                         // Inside a ring both turn the same way, so the pinion leans the same way.
                         float apart = m * (o.Teeth - o.PartnerTeeth) / 2f;
-                        var pinion = Partner(o, o.PartnerTeeth, 1, 0f, notes, token);
+                        var pinion = Partner(o.ForMate(), o.PartnerTeeth, 1, 0f, notes, token);
                         if (pinion is not null)
-                            parts.Add(new($"Gear {o.PartnerTeeth}T", Moved(pinion, new Vector3(apart, 0, 0))));
+                        {
+                            var placed = Moved(pinion, new Vector3(apart, 0, 0));
+                            parts.Add(new($"Gear {o.PartnerTeeth}T", placed,
+                                          Anchors: Bore(o.ForMate(), placed, new Vector2(apart, 0f))));
+                        }
                     }
                 }
                 break;
@@ -279,31 +354,31 @@ public static class Gears
 
                 var bevel = BevelGear(o, o.Teeth, cone, notes, out string? refusal, token);
                 if (bevel is null) return new([], notes, refusal);
-                parts.Add(new($"Bevel {o.Teeth}T", bevel));
+                parts.Add(new($"Bevel {o.Teeth}T", bevel, Anchors: Bore(o, bevel)));
 
                 if (pair)
                 {
-                    var mate = BevelGear(o, o.PartnerTeeth, 90f - cone, notes, out _, token);
+                    var mate = BevelGear(o.ForMate(), o.PartnerTeeth, 90f - cone, notes, out _, token);
                     if (mate is not null)
                     {
                         // Side by side, both on their backs. A bevel pair in mesh has one of them
                         // standing on its edge, which is no way to print it - so that is kept for
                         // the preview and the parts themselves are laid out to go on the bed.
                         float apart = m * (o.Teeth + o.PartnerTeeth + 4) / 2f + 2f;
-                        parts.Add(new($"Bevel {o.PartnerTeeth}T",
-                                      Moved(mate, new Vector3(apart, 0, 0)),
-                                      MatingBevel(o, cone, apart)));
+                        var placed = Moved(mate, new Vector3(apart, 0, 0));
+
+                        parts.Add(new($"Bevel {o.PartnerTeeth}T", placed,
+                                      MatingBevel(o, cone, apart),
+                                      Bore(o.ForMate(), placed, new Vector2(apart, 0f))));
                     }
 
-                    notes.Add($"A right-angled pair: cones of {cone:0.#} and {90f - cone:0.#} degrees, {o.Teeth} to {o.PartnerTeeth}.");
-                    notes.Add($"They are made side by side to print. The one with {o.PartnerTeeth} teeth stands "
-                            + $"{m * (o.PartnerTeeth + 2) / 2f * MathF.Cos(Radians(90f - cone)):0.#} mm tall against the other's "
-                            + $"{m * (o.Teeth + 2) / 2f * MathF.Cos(Radians(cone)):0.#}: a bevel's height is its face leaning at its own cone angle, "
-                            + "so the flatter cone of the two always comes out the shallower.");
+                    notes.Add($"Right-angled pair: {cone:0.#} and {90f - cone:0.#} degree cones, {o.Teeth}:{o.PartnerTeeth}.");
+                    notes.Add("Made side by side to print, shown in mesh. A bevel stands as high as "
+                            + "its face leaning at its own cone, so the flatter of the two is the shallower.");
                 }
                 else
                 {
-                    notes.Add($"Its mate wants a {90f - cone:0.#} degree cone to meet it at a right angle.");
+                    notes.Add($"Its mate wants a {90f - cone:0.#} degree cone.");
                 }
                 break;
             }
@@ -318,17 +393,18 @@ public static class Gears
 
                 if (o.PartnerTeeth <= 0)
                 {
-                    parts.Add(new("Worm", screw));
+                    parts.Add(new("Worm", screw, Anchors: Bore(o, screw)));
                 }
                 else
                 {
-                    // As wide as the worm asks for, which has nothing to do with how long the worm
-                    // is: two modules for every root of the diameter quotient and one, the usual
-                    // rule. A long worm only gives the shafts room to slide along one another.
-                    float width = o.WheelWidth > 0 ? o.WheelWidth : (float)(2.0 * m * Math.Sqrt(d / m + 1.0));
+                    // Left to itself the wheel is as wide as the worm asks for, which has nothing
+                    // to do with how long the worm is: two modules for every root of the diameter
+                    // quotient and one. A long worm only lets the shafts slide along one another.
+                    var mate = o.ForMate((float)(2.0 * m * Math.Sqrt(d / m + 1.0)))
+                                with { Form = ToothForm.Helical, HelixAngle = (float)leadAngle };
+                    float width = mate.Thickness;
 
-                    var wheel = External(o with { Form = ToothForm.Helical, HelixAngle = (float)leadAngle, Thickness = width },
-                                         o.PartnerTeeth, 1, 0f, notes, out string? refusal, token);
+                    var wheel = External(mate, o.PartnerTeeth, 1, 0f, notes, out string? refusal, token);
                     if (wheel is null) return new([], notes, refusal);
 
                     // The worm stands on its end to print, which is how a thread wants to be
@@ -337,24 +413,21 @@ public static class Gears
                     double centres = d / 2.0 + m * o.PartnerTeeth / 2.0;
                     float apart = (float)(d / 2.0 + m + m * (o.PartnerTeeth + 2) / 2f + 2f);
 
-                    parts.Add(new("Worm", screw, AcrossTheWheel(o, screw, width, centres, Radians((float)leadAngle))));
-                    parts.Add(new($"Worm wheel {o.PartnerTeeth}T",
-                                  Moved(wheel, new Vector3(apart, 0, 0)),
-                                  Matrix4x4.CreateTranslation(-apart, 0f, 0f)));
+                    var seated = Moved(wheel, new Vector3(apart, 0, 0));
 
-                    notes.Add($"One turn of the worm moves the wheel by one tooth: {o.PartnerTeeth} to 1, "
-                            + $"with the shafts {centres:0.##} mm apart and at right angles.");
-                    notes.Add($"The wheel's face is {width:0.#} mm"
-                            + (o.WheelWidth > 0 ? "." : " - what a worm this thick asks for, whatever length the worm is. Set it yourself for more."));
-                    notes.Add("They are made side by side to print - the worm on its end, which is how a thread prints "
-                            + "cleanly - and shown as they go together.");
-                    notes.Add("The wheel is a helical gear leaning at the worm's own angle, not hollowed to wrap round it: "
-                            + "it touches at a point rather than along a line, which is how a printed worm drive is usually made anyway.");
-                    notes.Add("Both are right-handed, so the wheel turns away from you at the top as the worm turns clockwise seen from its far end.");
+                    parts.Add(new("Worm", screw,
+                                  AcrossTheWheel(o, screw, width, centres, Radians((float)leadAngle)),
+                                  Bore(o, screw)));
+                    parts.Add(new($"Worm wheel {o.PartnerTeeth}T", seated,
+                                  Matrix4x4.CreateTranslation(-apart, 0f, 0f),
+                                  Bore(o.ForMate(), seated, new Vector2(apart, 0f))));
+
+                    notes.Add("Made side by side to print, shown in mesh. Both right-handed.");
+                    notes.Add("The wheel is helical, not throated: it touches at a point.");
                 }
 
-                notes.Add($"A single start, {d:0.##} mm across the pitch, its thread leaning {leadAngle:0.#} degrees. "
-                        + "Under about 5 degrees the wheel cannot drive the worm backwards, which is what a worm drive is usually for.");
+                notes.Add($"Single start, {d:0.##} mm across the pitch, thread leaning {leadAngle:0.#} degrees"
+                        + (leadAngle < 5.0 ? " - under 5, so the wheel cannot drive it backwards." : "."));
                 break;
             }
 
@@ -364,7 +437,7 @@ public static class Gears
                 var wheel = RatchetWheel(o, notes, out string? refusal, token);
                 if (wheel is null) return new([], notes, refusal);
 
-                parts.Add(new($"Ratchet {o.Teeth}T", wheel));
+                parts.Add(new($"Ratchet {o.Teeth}T", wheel, Anchors: Bore(o, wheel)));
 
                 if (o.WithPawl)
                 {
@@ -375,8 +448,7 @@ public static class Gears
                     var (against, pivot) = AgainstTheRatchet(o, Moved(pawl, new Vector3(apart, 0f, 0f)), apart, reach);
 
                     parts.Add(new("Pawl", Moved(pawl, new Vector3(apart, 0f, 0f)), against));
-                    notes.Add($"The pawl's pivot goes {pivot.Length():0.#} mm from the wheel's centre, "
-                            + $"with its arm along the tooth it rests in - that is where it is shown.");
+                    notes.Add($"The pawl's pivot goes {pivot.Length():0.#} mm from the centre, as shown.");
                 }
 
                 break;
@@ -389,10 +461,15 @@ public static class Gears
                 if (o.PartnerTeeth > 0)
                 {
                     float pitchLine = o.Rim + 1.25f * m;
-                    var gear = Partner(o, o.PartnerTeeth, 1, -MathF.PI / 2f, notes, token);
+                    var gear = Partner(o.ForMate(), o.PartnerTeeth, 1, -MathF.PI / 2f, notes, token);
                     if (gear is not null)
-                        parts.Add(new($"Gear {o.PartnerTeeth}T",
-                            Moved(gear, new Vector3(0, pitchLine + m * o.PartnerTeeth / 2f, 0))));
+                    {
+                        float up = pitchLine + m * o.PartnerTeeth / 2f;
+                        var placed = Moved(gear, new Vector3(0, up, 0));
+
+                        parts.Add(new($"Gear {o.PartnerTeeth}T", placed,
+                                      Anchors: Bore(o.ForMate(), placed, new Vector2(0f, up))));
+                    }
                 }
                 break;
             }
@@ -436,9 +513,10 @@ public static class Gears
                 lines.Add($"Worm {F(d + 2f * m)} mm across, {F(o.Thickness)} mm long, a thread every {F(MathF.PI * m)} mm.");
                 if (o.PartnerTeeth > 0)
                 {
-                    float width = o.WheelWidth > 0 ? o.WheelWidth : (float)(2.0 * m * Math.Sqrt(d / m + 1.0));
-                    lines.Add($"Wheel {F(m * (o.PartnerTeeth + 2))} mm across and {F(width)} mm wide.");
-                    lines.Add($"Ratio {o.PartnerTeeth} : 1 - shafts {F(d / 2f + m * o.PartnerTeeth / 2f)} mm apart.");
+                    float width = o.ForMate((float)(2.0 * m * Math.Sqrt(d / m + 1.0))).Thickness;
+                    lines.Add($"Wheel {F(m * (o.PartnerTeeth + 2))} mm across, {F(width)} mm wide"
+                            + (o.MateThickness is null ? " - as the worm asks." : "."));
+                    lines.Add($"Ratio {o.PartnerTeeth}:1 - shafts {F(d / 2f + m * o.PartnerTeeth / 2f)} mm apart, at right angles.");
                 }
                 break;
             }
@@ -740,7 +818,181 @@ public static class Gears
         return points;
     }
 
+    /// <summary>
+    /// The shaft hole of a part that has one.
+    ///
+    /// Every round part here is built about the Z axis with its bore on that axis and then moved
+    /// sideways to stand beside its mate, so <paramref name="moved"/> is where the axis ended up.
+    /// It has to be handed over: taking it as the middle of the part's own box is right for a
+    /// whole gear and wrong for a cut-away one, which is a disc with teeth over part of its rim
+    /// and whose box therefore sits a couple of millimetres off the shaft it turns on. That put
+    /// every fitted shaft exactly that far out.
+    ///
+    /// The height still comes off the box, which is exact: the hole runs the whole of the part.
+    ///
+    /// Empty rather than null for a part with no bore, so the caller never has to ask twice.
+    /// </summary>
+    private static IReadOnlyList<Anchor> Bore(GearOptions o, Mesh placed, Vector2 moved = default)
+    {
+        if (o.Bore == BoreShape.None || o.BoreSize <= 0) return [];
+
+        var box = placed.ComputeBounds();
+        if (box.IsEmpty) return [];
+
+        return [new Anchor(
+            AnchorKind.Bore, "Shaft hole",
+            new Vector3(moved.X, moved.Y, box.Min.Z),
+            Vector3.UnitZ,
+
+            // BoreLoop cuts the flat of a D on +X and never turns it, whatever phase the teeth
+            // are given, so that is where it still is.
+            o.Bore == BoreShape.Round ? Vector3.Zero : Vector3.UnitX,
+            o.BoreSize, box.Size.Z, o.Bore,
+            o.Bore == BoreShape.DShaft ? o.BoreFlat : 0f)];
+    }
+
     // --- Solids ------------------------------------------------------------------------
+
+    /// <summary>
+    /// The closed rack a cut-away gear drives back and forth: a racetrack of teeth facing inward,
+    /// with the gear turning on the spot inside it. The gear's sector pushes one straight run,
+    /// lets go, crosses the end, and pushes the other - so a motor that only turns one way drives
+    /// the frame to and fro.
+    ///
+    /// Its pitch line is the path the gear's own pitch circle rolls along: two straights a pitch
+    /// diameter apart, joined by half circles of the gear's own pitch radius, so the gear turns on
+    /// the spot at each end while the frame changes direction. The teeth are a rack's, bent round
+    /// that line and spaced by arc length - which is how these frames are made, and why the ends
+    /// want the backlash that the straights can do without.
+    ///
+    /// The ends take exactly half the gear's teeth each, so the gear's count has to be even or the
+    /// teeth come back half a pitch out after a lap.
+    /// </summary>
+    private static Mesh? RecipFrame(GearOptions o, List<string> notes, out string? refusal)
+    {
+        refusal = null;
+
+        double m = o.Module, r = m * o.Teeth / 2.0, pitch = Math.PI * m;
+
+        if (o.Teeth % 2 != 0)
+        {
+            refusal = $"A frame needs an even number of teeth on the gear: {o.Teeth} leaves the ends half a tooth out.";
+            return null;
+        }
+
+        // What the gear actually drives: its sector pushes one tooth of rack per tooth it has,
+        // so the frame travels that far and then waits while the blank goes by.
+        int kept = Math.Clamp(o.KeptTeeth, 1, o.Teeth);
+        double travel = kept * pitch;
+
+        if (2 * kept > o.Teeth)
+        {
+            refusal = $"A sector of {kept} teeth is more than half of {o.Teeth}: it would take both runs at once."
+                    + $" Cut it to {o.Teeth / 2} teeth or fewer.";
+            return null;
+        }
+
+        double asked = o.Stroke > 0 ? o.Stroke : travel;
+        int alongEach = Math.Max(2, (int)Math.Round(asked / pitch));
+        double straight = alongEach * pitch;
+        double round = 2.0 * Math.PI * r;
+        double total = 2.0 * straight + round;
+        int teeth = 2 * alongEach + o.Teeth;
+
+        double rim = Math.Max(o.Rim, 1.0);
+        double dedendum = 1.25 * m, addendum = m;
+
+        /// Where the pitch line is at arc length s, and which way lies the slot it wraps.
+        (Vector2 At, Vector2 In) Path(double s)
+        {
+            s = ((s % total) + total) % total;
+
+            if (s < straight)
+                return (new Vector2((float)(s - straight / 2.0), (float)-r), new Vector2(0f, 1f));
+
+            s -= straight;
+            if (s < round / 2.0)
+            {
+                double a = -Math.PI / 2.0 + s / r;
+                var away = new Vector2((float)Math.Cos(a), (float)Math.Sin(a));
+                return (new Vector2((float)(straight / 2.0), 0f) + away * (float)r, -away);
+            }
+
+            s -= round / 2.0;
+            if (s < straight)
+                return (new Vector2((float)(straight / 2.0 - s), (float)r), new Vector2(0f, -1f));
+
+            s -= straight;
+            {
+                double a = Math.PI / 2.0 + s / r;
+                var away = new Vector2((float)Math.Cos(a), (float)Math.Sin(a));
+                return (new Vector2((float)(-straight / 2.0), 0f) + away * (float)r, -away);
+            }
+        }
+
+        // A rack's tooth: wide at the root, narrowed to the tip by the pressure angle, thinned by
+        // half the backlash as the gear's own teeth are.
+        double lean = Math.Tan(Radians(o.PressureAngle));
+        double halfPitch = pitch / 4.0 - o.Backlash / 4.0;
+        double halfRoot = halfPitch + dedendum * lean;
+        double halfTip = Math.Max(halfPitch - addendum * lean, 0.05 * m);
+
+        // A space faces the gear where the gear has a tooth: its teeth are centred on its own
+        // angle nought, and it meets the bottom run at the bottom of its pitch circle.
+        double toGear = -Math.PI / 2.0;
+        double nearest = toGear - Math.Round(toGear / (2.0 * Math.PI / o.Teeth)) * (2.0 * Math.PI / o.Teeth);
+        double phase = r * nearest + pitch / 2.0;
+
+        var inner = new List<Vector2>();
+        var outer = new List<Vector2>();
+
+        void Add(double s, double into)
+        {
+            var (at, In) = Path(s);
+            inner.Add(at + In * (float)into);
+            outer.Add(at - In * (float)(dedendum + rim));
+        }
+
+        for (int k = 0; k < teeth; k++)
+        {
+            double middle = phase + k * pitch;
+
+            // The root between this tooth and the one before it, cut into pieces so the ends come
+            // out round rather than as a chord.
+            double from = middle - pitch + halfRoot, to = middle - halfRoot;
+            int pieces = Math.Max(1, (int)Math.Ceiling((to - from) / 0.5));
+            for (int i = 0; i < pieces; i++) Add(from + (to - from) * i / pieces, -dedendum);
+
+            Add(middle - halfRoot, -dedendum);
+            Add(middle - halfTip, addendum);
+            Add(middle + halfTip, addendum);
+        }
+
+        float height = o.ForMate().Thickness;
+        var mesh = new Mesh();
+
+        Wall(mesh, inner, 0f, inner, height, outward: false);
+        Wall(mesh, outer, 0f, outer, height, outward: true);
+
+        for (int i = 0; i < inner.Count; i++)
+        {
+            int j = (i + 1) % inner.Count;
+            Face(mesh, inner[i], outer[i], outer[j], 0f, up: false);
+            Face(mesh, inner[i], outer[j], inner[j], 0f, up: false);
+            Face(mesh, inner[i], outer[i], outer[j], height, up: true);
+            Face(mesh, inner[i], outer[j], inner[j], height, up: true);
+        }
+
+        notes.Add($"Travels {travel:0.#} mm each way: {kept} teeth of rack, and one turn of the gear does both.");
+        notes.Add($"Frame {straight:0.#} mm between the ends, {teeth} teeth round it, {height:0.#} mm thick.");
+
+        if (straight < travel - 0.01)
+            notes.Add($"The run is shorter than the {travel:0.#} mm the sector drives: give it {travel:0.#} mm, or fewer teeth.");
+
+        notes.Add("Its arms are a plain bar: add one with Cube and Merge.");
+
+        return mesh.Welded();
+    }
 
     /// <summary>
     /// A straight bevel gear: the tooth section at the heel, run in straight lines towards the
@@ -760,7 +1012,7 @@ public static class Gears
         double face = Math.Min(o.Thickness, distance / 3.0);
 
         if (face < o.Thickness - 1e-3)
-            notes.Add($"A bevel's face is kept to a third of its cone, so this one is {face:0.#} mm wide rather than {o.Thickness:0.#}.");
+            notes.Add($"Face cut to {face:0.#} mm from {o.Thickness:0.#}: a third of the cone, as a cut bevel's is.");
 
         var profile = ExternalProfile(o, teeth, 0.0, null);
         double shrink = 1.0 - face / distance;
@@ -770,7 +1022,7 @@ public static class Gears
         if (middle is null) return null;
 
         if (o.HubDiameter > 0 && o.HubHeight > 0)
-            notes.Add("No hub is put on a bevel: its back is the face that seats against the bearing, and a collar there would lift it off.");
+            notes.Add("No hub on a bevel: its back is the face that seats.");
 
         var heel = ExternalLoop(profile, teeth, 0.0);
         var toe = heel.Select(p => p * (float)shrink).ToArray();
@@ -916,7 +1168,7 @@ public static class Gears
             var joined = LocalCsg.Union(mesh, collar, token);
 
             if (joined.CheckHealth().IsWatertight) mesh = joined;
-            else notes.Add("The hub would not join the worm cleanly, so it was left off.");
+            else notes.Add("Hub left off: it would not join cleanly.");
         }
 
         if (bore is not null)
@@ -925,7 +1177,7 @@ public static class Gears
             var drilled = LocalCsg.Subtract(mesh, hole, token);
 
             if (drilled.CheckHealth().IsWatertight) mesh = drilled;
-            else notes.Add("The bore would not cut the worm cleanly, so it was left out.");
+            else notes.Add("Bore left out: it would not cut cleanly.");
         }
 
         var middle = new Middle(bore, boreReach, hubRadius, hub ? Circle(hubRadius) : null,
@@ -1015,10 +1267,9 @@ public static class Gears
         if (middle.HubCircle is not null) Zip(mesh, middle.HubCircle, middle.Bore, top, up: true);
 
         if (lean < Radians(o.Undercut) - 1e-4)
-            notes.Add($"With {o.Teeth} teeth there is only room for the face to lean back {lean * 180.0 / Math.PI:0.#} degrees.");
+            notes.Add($"The face leans {lean * 180.0 / Math.PI:0.#} degrees: the pitch has room for no more.");
 
-        notes.Add("It turns freely clockwise seen from above and is caught anticlockwise: the long ramp "
-                + "slides under the pawl one way, and the steep face runs into it the other.");
+        notes.Add("Free clockwise from above, caught anticlockwise.");
 
         return SetScrewed(mesh.Welded(), o, middle, notes, token);
     }
@@ -1120,7 +1371,7 @@ public static class Gears
         var plain = o with { Bore = BoreShape.None, HubHeight = 0f, SetScrew = 0f };
         gear = External(plain, teeth, hand, phase, notes, out string? refusal, token);
         if (gear is not null)
-            notes.Add($"The {teeth}-tooth gear is too small for the bore and hub, so it has none - drill it, or give it its own.");
+            notes.Add($"The {teeth}-tooth gear is too small for that bore, so it was made plain.");
         else if (refusal is not null)
             notes.Add(refusal);
 
@@ -1148,13 +1399,13 @@ public static class Gears
 
         if (mutilated)
         {
-            notes.Add($"{kept} of {teeth} teeth left, a {360.0 * kept / teeth:0.#} degree sector; the rest of the rim is at the root circle.");
-            notes.Add("The first and last of them are drawn a little short, so they can come back into mesh without meeting a rack tooth head-on.");
-            notes.Add("A follower that must be held still between engagements wants a locking arc at the tip circle and a hollow to match it, which is not made here.");
+            notes.Add($"{kept} of {teeth} teeth, a {360.0 * kept / teeth:0.#} degree sector; the rest at the roots.");
+            notes.Add("The first and last are shortened, to come back into mesh cleanly.");
+            notes.Add("No locking arc: nothing holds the follower between engagements.");
         }
 
         if (teeth < 17 && !notes.Any(n => n.StartsWith("Under 17", StringComparison.Ordinal)))
-            notes.Add("Under 17 teeth the roots are undercut, as a cut gear's are: it meshes properly, but each tooth is thinner at its base.");
+            notes.Add("Under 17 teeth the roots undercut, as a cut gear's do.");
 
         var middle = Fitting(o, profile.BandReach, $"the roots of a {teeth}-tooth gear", out refusal);
         if (middle is null) return null;
@@ -1237,19 +1488,19 @@ public static class Gears
 
         if (!middle.HasHub)
         {
-            notes.Add("A set screw needs a hub to go through, so there is no hole for one.");
+            notes.Add("No set screw: it needs a hub to go through.");
             return mesh;
         }
 
         if (o.HubHeight < o.SetScrew + 1f)
         {
-            notes.Add($"The hub is too short for a {o.SetScrew:0.#} mm set screw, so there is no hole for one.");
+            notes.Add($"No set screw: the hub is under {o.SetScrew + 1f:0.#} mm tall.");
             return mesh;
         }
 
         if (middle.HubRadius - middle.BoreReach < 1f)
         {
-            notes.Add("The hub wall is too thin for a set screw, so there is no hole for one.");
+            notes.Add("No set screw: the hub wall is under 1 mm.");
             return mesh;
         }
 
@@ -1264,7 +1515,7 @@ public static class Gears
         var drilled = LocalCsg.Subtract(mesh, rod, token);
         if (drilled.CheckHealth().IsWatertight) return drilled;
 
-        notes.Add("The set-screw hole would not cut cleanly, so it was left out.");
+        notes.Add("Set-screw hole left out: it would not cut cleanly.");
         return mesh;
     }
 

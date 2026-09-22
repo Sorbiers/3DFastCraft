@@ -230,6 +230,80 @@ public class ConnectorTests
         Assert.Equal(0.3f, contact.Gap, 3);
     }
 
+    /// <summary>
+    /// A dish 60 mm across with a flat floor 5 mm up and a rim reaching 12 mm, and a can 40 mm
+    /// across standing on that floor. The two boxes lap over each other by the height of the rim,
+    /// so the boxes see no contact at all - which is how a can standing in a bowl came to be
+    /// refused a connector though the two shared a 12 cm2 flat face.
+    /// </summary>
+    private static (Mesh Dish, Mesh Can) CanInADish(float standing = 5f)
+    {
+        var dish = FastCraft3D.Geometry.Csg.CsgSolid.Subtract(
+            MeshTransform.Transformed(Primitives.Prism(30, 12, 32), Matrix4x4.CreateTranslation(0, 0, 6)),
+            MeshTransform.Transformed(Primitives.Prism(25, 10, 32), Matrix4x4.CreateTranslation(0, 0, 10)));
+
+        var can = MeshTransform.Transformed(
+            Primitives.Prism(20, 30, 32), Matrix4x4.CreateTranslation(0, 0, standing + 15f));
+
+        return (dish, can);
+    }
+
+    [Fact]
+    public void APartStandingInsideAnotherRestsOnTheFaceUnderIt()
+    {
+        var (dish, can) = CanInADish();
+
+        Assert.Null(Connectors.SharedFace(dish.ComputeBounds(), can.ComputeBounds()));
+
+        var contact = Connectors.SharedFace(dish, can);
+
+        Assert.NotNull(contact);
+        Assert.Equal(Vector3.UnitZ, contact.Normal);
+        Assert.Equal(5f, contact.Offset, 3);
+        Assert.True(contact.SecondIsFront, "the can is the one above the face");
+        Assert.Equal(0f, contact.Gap, 3);
+
+        // What they share is the can's base - a 32-sided disc 40 mm across, near enough 12.5 cm2 -
+        // and not the whole 19.5 cm2 floor of the dish.
+        Assert.InRange(contact.Overlap, 1200f, 1300f);
+    }
+
+    [Fact]
+    public void APartStandingInsideAnotherAHairAboveItStillRests()
+    {
+        var (dish, can) = CanInADish(standing: 5.3f);
+        var contact = Connectors.SharedFace(dish, can);
+
+        Assert.NotNull(contact);
+        Assert.Equal(0.3f, contact.Gap, 3);
+        Assert.Equal(5.15f, contact.Offset, 3);
+    }
+
+    [Fact]
+    public void APartHeldWellClearInsideAnotherRestsOnNothing()
+    {
+        var (dish, can) = CanInADish(standing: 7f);
+
+        Assert.Null(Connectors.SharedFace(dish, can));
+    }
+
+    [Fact]
+    public void ConnectorsGoThroughTheFaceFoundInsideARecess()
+    {
+        var (dish, can) = CanInADish();
+        var contact = Connectors.SharedFace(dish, can);
+        Assert.NotNull(contact);
+
+        var layout = Connectors.Survey(can, dish, contact, Pins(3, diameter: 3f, edge: 1f));
+
+        Assert.NotEmpty(layout.Points);
+        foreach (var p in layout.Points)
+        {
+            Assert.Equal(5f, p.Z, 3);
+            Assert.True(MathF.Sqrt(p.X * p.X + p.Y * p.Y) < 20f, "inside the can's base");
+        }
+    }
+
     [Fact]
     public void PartsApartOrOverlappingShareNothing()
     {
