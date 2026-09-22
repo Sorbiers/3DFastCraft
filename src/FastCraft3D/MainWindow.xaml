@@ -710,6 +710,9 @@
                             Command="{Binding RebuildCommand}" MinWidth="82"
                             ToolTip="Rebuild the surface from scratch. Mends anything, including a model that passes through itself - at the cost of fine detail." />
                     <Separator Margin="8,0" />
+                    <Button Style="{StaticResource ToolButton}" Content="Voronoi" Visibility="{Binding IsAdvancedMode, Converter={StaticResource BoolToVisibility}}" Tag="{StaticResource IconVoronoi}"
+                            Command="{Binding VoronoiCommand}" MinWidth="82"
+                            ToolTip="Cut the selection into a web of struts along the walls of a Voronoi tessellation - the openwork lamp or vase, or a foam through the inside of a part to take weight out of it. Worked out on a voxel grid, so it comes back watertight; detail finer than a voxel is gone. Needs something selected." />
                     <Button Style="{StaticResource ToolButton}" Content="Extrude down" Tag="{StaticResource IconExtrudeDown}"
                             Command="{Binding BeginExtrudeCommand}" MinWidth="90"
                             ToolTip="Cut the model at a height and carry its outline straight down to a flat base on the plate. For a scan with a ragged bottom, a relief that is only a skin, or a part tilted off its feet." />
@@ -1586,6 +1589,30 @@
                             <TextBlock Text="deg" Foreground="#FF9AA0A8" VerticalAlignment="Center" />
                         </StackPanel>
 
+                        <!-- Repeating the stamp. The distance is between the edges of one copy
+                             and the next, so it means the same thing whatever is being stamped. -->
+                        <StackPanel Orientation="Horizontal" Margin="0,6,0,0">
+                            <TextBlock Text="Repeat" Style="{StaticResource FieldLabel}" Width="62"
+                                       ToolTip="How many copies of the stamp go across the face and how many rows of them go up it. 1 x 1 is a single stamp. Ignored while Fill the face is on, which works the numbers out for itself." />
+                            <TextBox AutomationProperties.AutomationId="EmbossColumns" Width="44" Style="{StaticResource NumberBox}" Tag="number"
+                                     Text="{Binding EmbossColumns, UpdateSourceTrigger=LostFocus}" />
+                            <TextBlock Text="x" Foreground="#FF9AA0A8" VerticalAlignment="Center" Margin="4,0" />
+                            <TextBox AutomationProperties.AutomationId="EmbossRows" Width="44" Style="{StaticResource NumberBox}" Tag="number"
+                                     Text="{Binding EmbossRows, UpdateSourceTrigger=LostFocus}" />
+                        </StackPanel>
+
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="Distance" Style="{StaticResource FieldLabel}" Width="62"
+                                       ToolTip="The blank left between one copy and the next, edge to edge." />
+                            <TextBox AutomationProperties.AutomationId="EmbossGap" Width="64" Style="{StaticResource NumberBox}" Tag="number"
+                                     Text="{Binding EmbossGap, StringFormat=N2, UpdateSourceTrigger=LostFocus}" />
+                            <TextBlock Text="mm" Foreground="#FF9AA0A8" VerticalAlignment="Center" />
+                        </StackPanel>
+
+                        <CheckBox Content="Fill the face" IsChecked="{Binding EmbossFill, Mode=TwoWay}"
+                                  AutomationProperties.AutomationId="EmbossFill" Margin="0,4,0,8"
+                                  ToolTip="Covers the whole face with as many as fit at that distance, instead of the numbers above. Wrapped round a part, it goes the whole way round and the distance takes up the difference so there is no seam." />
+
                         <CheckBox Content="Raised instead of cut" IsChecked="{Binding EmbossRaised, Mode=TwoWay}"
                                   AutomationProperties.AutomationId="EmbossRaised"
                                   Margin="0,0,0,6"
@@ -2089,9 +2116,13 @@
                             ShowViewCube="True"
                             UseDefaultGestures="True"
                             ZoomExtentsWhenLoaded="False">
-                <hx:AmbientLight3D Color="#FF565A60" />
-                <hx:DirectionalLight3D Direction="-0.5,-0.8,-1.0" Color="#FFB0B0B0" />
-                <hx:DirectionalLight3D Direction="0.8,0.4,-0.4" Color="#FF606060" />
+                <!-- The key follows the camera - see MainWindow.LightTheView. Both lights used
+                     to be fixed in the world and both pointed downwards, so an upright wall got
+                     almost no light at all and turning round to the far side of a model left you
+                     looking at the unlit half of it. -->
+                <hx:AmbientLight3D Color="#FF4E5259" />
+                <hx:DirectionalLight3D x:Name="KeyLight" Direction="-0.5,-0.8,-1.0" Color="#FFB4B4B4" />
+                <hx:DirectionalLight3D x:Name="FillLight" Direction="0.55,0.35,0.75" Color="#FF4E5258" />
                 <hx:GroupModel3D x:Name="PlateGroup" />
                 <hx:GroupModel3D x:Name="ContentGroup" />
                 <hx:GroupModel3D x:Name="OverlayGroup" />

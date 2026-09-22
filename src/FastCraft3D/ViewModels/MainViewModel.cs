@@ -90,6 +90,10 @@ public sealed class MainViewModel : INotifyPropertyChanged
     private float embossSpacing;
     private bool embossRaised;
     private bool embossSeparate;
+    private int embossColumns = 1;
+    private int embossRows = 1;
+    private float embossGap = 2f;
+    private bool embossFill;
     private bool isPivotMode;
     private float embossBevel;
     private TextProjection embossProjection = TextProjection.Planar;
@@ -209,6 +213,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
         RebuildCommand = AsyncRelayCommand.Simple(RebuildObjects, () => Scene.Objects.Count > 0);
         SimplifyCommand = AsyncRelayCommand.Simple(SimplifySelection, () => Scene.Selection.Count > 0);
         HollowCommand = AsyncRelayCommand.Simple(HollowSelection, () => Scene.Selection.Count > 0);
+        VoronoiCommand = AsyncRelayCommand.Simple(VoronoiSelection, () => Scene.Selection.Count > 0);
         BeginEmbossCommand = RelayCommand.Simple(BeginEmboss, () => Scene.Selection.Count == 1);
         BeginLayCommand = RelayCommand.Simple(BeginLay, () => Scene.Selection.Count == 1);
         ApplyEmbossCommand = AsyncRelayCommand.Simple(ApplyEmboss, () => isEmbossMode && embossFace is not null);
@@ -325,6 +330,16 @@ public sealed class MainViewModel : INotifyPropertyChanged
     public System.Windows.Input.ICommand RebuildCommand { get; }
     public System.Windows.Input.ICommand SimplifyCommand { get; }
     public System.Windows.Input.ICommand HollowCommand { get; }
+    public System.Windows.Input.ICommand VoronoiCommand { get; }
+
+    private IReadOnlyList<(Vector3 From, Vector3 To)> voronoiOutline = [];
+
+    /// <summary>The web a Voronoi cut would leave, for the viewport to draw while it is set up.</summary>
+    public IReadOnlyList<(Vector3 From, Vector3 To)> VoronoiOutline
+    {
+        get => voronoiOutline;
+        private set => Set(ref voronoiOutline, value);
+    }
     public System.Windows.Input.ICommand RepeatCommand { get; }
     public System.Windows.Input.ICommand AbortCommand { get; }
     public System.Windows.Input.ICommand MouldCommand { get; }
@@ -1766,6 +1781,40 @@ public sealed class MainViewModel : INotifyPropertyChanged
     /// this way the object gets the recess and the letters come back as the plug that fills it,
     /// which is an inlay flush with the face; raised, the letters stand on it.
     /// </summary>
+    /// <summary>How many copies of the stamp go across the face. One is no repeat at all.</summary>
+    public int EmbossColumns
+    {
+        get => embossColumns;
+        set { Set(ref embossColumns, Math.Clamp(value, 1, 200)); RefreshEmboss(); }
+    }
+
+    /// <summary>How many rows of it go up the face.</summary>
+    public int EmbossRows
+    {
+        get => embossRows;
+        set { Set(ref embossRows, Math.Clamp(value, 1, 200)); RefreshEmboss(); }
+    }
+
+    /// <summary>
+    /// The distance left between one copy and the next, measured between their edges rather than
+    /// their middles - so the spacing means the same thing whatever is being stamped.
+    /// </summary>
+    public float EmbossGap
+    {
+        get => embossGap;
+        set { Set(ref embossGap, Math.Clamp(value, 0f, 500f)); RefreshEmboss(); }
+    }
+
+    /// <summary>
+    /// Covers the face with as many as will fit at that gap, rather than the numbers asked for.
+    /// The numbers are then what it worked out, and the summary says them.
+    /// </summary>
+    public bool EmbossFill
+    {
+        get => embossFill;
+        set { Set(ref embossFill, value); RefreshEmboss(); }
+    }
+
     public bool EmbossSeparate
     {
         get => embossSeparate;
@@ -1916,7 +1965,12 @@ public sealed class MainViewModel : INotifyPropertyChanged
 
             string bevel = embossBevel > 0 ? $", {embossBevel:0.##} mm bevel" : "";
 
-            return $"{shapes.Count} shape(s), {embossHeight:0.#} mm tall, {what}{wrapped}{bevel}";
+            var (across, up) = EmbossField();
+            string field = across > 1 || up > 1
+                ? $"{across} x {up}, {embossGap:0.##} mm apart, "
+                : "";
+
+            return $"{field}{shapes.Count} shape(s), {embossHeight:0.#} mm tall, {what}{wrapped}{bevel}";
         }
     }
 
@@ -2283,7 +2337,130 @@ public sealed class MainViewModel : INotifyPropertyChanged
     }
 
     /// <summary>The outlines where they have been put, ready to lay on the surface.</summary>
-    private IReadOnlyList<TextShape> EmbossShapes() => embossPlacement.Apply(Lettering());
+    private IReadOnlyList<TextShape> EmbossShapes() => embossPlacement.Apply(Repeated(Lettering()));
+
+    /// <summary>
+    /// The stamp laid out over and over: a chosen number across and up, or as many as the face
+    /// will take.
+    ///
+    /// Repeated before the placement rather than after it, so the whole field moves and turns
+    /// together - tiling the placed shapes would turn each copy on the spot and leave the grid
+    /// square to the face.
+    ///
+    /// The pitch is the stamp's own size plus the gap, measured edge to edge, so a gap of 2 mm
+    /// means two millimetres of blank between one and the next whether the stamp is a heart or a
+    /// word. Round a barrel the field meets itself, so the count has to divide the way round or
+    /// there is a seam down one side; the gap takes up the difference.
+    /// </summary>
+    private IReadOnlyList<TextShape> Repeated(IReadOnlyList<TextShape> shapes)
+    {
+        if (shapes.Count == 0) return shapes;
+        if (!embossFill && embossColumns <= 1 && embossRows <= 1) return shapes;
+
+        var (low, high) = Extent(shapes);
+        float pitchX = high.X - low.X + embossGap;
+        float pitchY = high.Y - low.Y + embossGap;
+
+        if (pitchX < 0.01f || pitchY < 0.01f) return shapes;
+
+        var (across, up) = Counts(pitchX, pitchY);
+
+        // Round a barrel the field meets itself, so the count has to divide the way round or
+        // there is a seam down one side; the gap takes up the difference.
+        if (embossFill && embossProjection != TextProjection.Planar)
+        {
+            float room = FaceRoom().Across;
+            if (room > 0.01f) pitchX = room / across;
+        }
+
+        // Past this the boolean has more cutter than model and nothing good happens.
+        if (across * up > 1200) return shapes;
+
+        var field = new List<TextShape>(shapes.Count * across * up);
+
+        for (int j = 0; j < up; j++)
+        for (int i = 0; i < across; i++)
+        {
+            var shift = new Vector2(
+                (i - (across - 1) / 2f) * pitchX,
+                (j - (up - 1) / 2f) * pitchY);
+
+            if (shift == Vector2.Zero)
+            {
+                field.AddRange(shapes);
+                continue;
+            }
+
+            foreach (var shape in shapes)
+                field.Add(new TextShape(
+                    shape.Outline.Select(p => p + shift).ToList(),
+                    shape.Holes.Select(h => (IReadOnlyList<Vector2>)h.Select(p => p + shift).ToList()).ToList()));
+        }
+
+        return field;
+    }
+
+    /// <summary>
+    /// How many copies go down and across: the numbers asked for, or as many as the face will
+    /// take at that pitch. Worked out rather than stored, so the boxes go on saying what was
+    /// typed while Fill is on and reading them cannot change them.
+    /// </summary>
+    private (int Across, int Up) Counts(float pitchX, float pitchY)
+    {
+        if (!embossFill) return (Math.Max(embossColumns, 1), Math.Max(embossRows, 1));
+
+        var (room, height) = FaceRoom();
+
+        // The last one needs no gap after it, so there is a gap more room than it looks.
+        return (Math.Clamp((int)MathF.Floor((room + embossGap) / pitchX), 1, 200),
+                Math.Clamp((int)MathF.Floor((height + embossGap) / pitchY), 1, 200));
+    }
+
+    /// <summary>What the field actually comes to, for the panel to report.</summary>
+    public (int Across, int Up) EmbossField()
+    {
+        var (low, high) = Extent(Lettering());
+        float pitchX = high.X - low.X + embossGap;
+        float pitchY = high.Y - low.Y + embossGap;
+
+        return pitchX < 0.01f || pitchY < 0.01f ? (1, 1) : Counts(pitchX, pitchY);
+    }
+
+    /// <summary>The rectangle the stamp covers in its own flat layout.</summary>
+    private static (Vector2 Low, Vector2 High) Extent(IReadOnlyList<TextShape> shapes)
+    {
+        var low = new Vector2(float.MaxValue);
+        var high = new Vector2(float.MinValue);
+
+        foreach (var shape in shapes)
+        foreach (var p in shape.Outline)
+        {
+            low = Vector2.Min(low, p);
+            high = Vector2.Max(high, p);
+        }
+
+        return low.X > high.X ? (Vector2.Zero, Vector2.Zero) : (low, high);
+    }
+
+    /// <summary>
+    /// How much room there is to fill. On a flat face that is the face; wrapped, it is the whole
+    /// way round the part and its full height, since the stamp is no longer confined to the one
+    /// facet that was clicked.
+    /// </summary>
+    private (float Across, float Up) FaceRoom()
+    {
+        if (embossFace is not { } face) return (0f, 0f);
+
+        if (embossProjection == TextProjection.Planar)
+            return (face.Max.X - face.Min.X, face.Max.Y - face.Min.Y);
+
+        var axis = new Vector2(embossBounds.Center.X, embossBounds.Center.Y);
+        float radius = (new Vector2(embossPick.X, embossPick.Y) - axis).Length();
+
+        return radius < 0.05f
+            ? (face.Max.X - face.Min.X, face.Max.Y - face.Min.Y)
+            : (2f * MathF.PI * radius, embossBounds.Size.Z);
+    }
 
     /// <summary>A thin slab of the lettering, laid on the shape so the placement can be seen.</summary>
     public Mesh? EmbossPreview()
@@ -6441,6 +6618,92 @@ public sealed class MainViewModel : INotifyPropertyChanged
         catch (Exception ex)
         {
             Status = $"Hollow failed: {ex.Message}";
+        }
+        finally
+        {
+            EndWork();
+        }
+    }
+
+    /// <summary>
+    /// Cuts the selection into a web of struts along the walls of a Voronoi tessellation.
+    ///
+    /// Everything is worked out on the same grid the rebuilder and the hollower use, so nothing
+    /// is subtracted from anything and the result comes back watertight however torn a web of
+    /// hundreds of thin struts would have left a boolean. See <see cref="Voronoi"/>.
+    /// </summary>
+    private async Task VoronoiSelection()
+    {
+        var selection = Scene.Selection.ToList();
+        if (selection.Count == 0) return;
+
+        // Taken once: the outline is redrawn on every slider move, and baking each object to
+        // world space each time would copy every triangle for nothing.
+        var world = selection.Select(o => o.ToWorldMesh()).ToList();
+
+        var dialog = new VoronoiDialog(selection, options =>
+        {
+            VoronoiOutline = options is { } wanted
+                ? world.SelectMany(m => Voronoi.Outline(m, wanted)).ToList()
+                : [];
+        });
+
+        bool accepted = dialog.ShowDialog() == true;
+        VoronoiOutline = [];
+
+        if (!accepted || dialog.Result is not { } settings) return;
+
+        if (IsBusy) return;
+
+        var token = StartWork("Cutting cells");
+        try
+        {
+            // Baked to world space, as the other grid-based tools are: the grid is in world
+            // millimetres, so struts on a stretched object would otherwise come out stretched.
+            var webs = await Task.Run(() => world
+                .Select(m => Voronoi.Build(m, settings, token, Progress))
+                .ToList());
+
+            var produced = new List<SceneObject>();
+            var consumed = new List<SceneObject>();
+
+            for (int i = 0; i < selection.Count; i++)
+            {
+                if (webs[i].Refusal is not null || webs[i].Mesh.TriangleCount == 0) continue;
+
+                consumed.Add(selection[i]);
+                produced.Add(new SceneObject(selection[i].Name, webs[i].Mesh)
+                {
+                    Colour = selection[i].Colour,
+                    Filament = selection[i].Filament
+                }.Centred());
+            }
+
+            if (produced.Count == 0)
+            {
+                Status = webs.Select(w => w.Refusal).FirstOrDefault(r => r is not null)
+                         ?? "Nothing came out of it";
+                MessageBox.Show(Status, "3DFastCraft", MessageBoxButton.OK, MessageBoxImage.Information);
+                return;
+            }
+
+            Undo.Execute(new ReplaceObjectsCommand("Voronoi", consumed, produced));
+            RefreshSelection();
+
+            long triangles = produced.Sum(o => (long)o.Mesh.TriangleCount);
+            int cells = webs.Where(w => w.Refusal is null).Sum(w => w.Cells);
+
+            Status = $"{cells} cells, {settings.StrutMm:0.##} mm struts on a {webs[0].VoxelMm:0.###} mm grid"
+                   + $" - {triangles:N0} triangles"
+                   + (selection.Count > produced.Count ? $"; {selection.Count - produced.Count} were refused" : "");
+        }
+        catch (Exception abort) when (WasAborted(abort))
+        {
+            Status = $"{busyTitle} aborted - nothing was changed";
+        }
+        catch (Exception ex)
+        {
+            Status = $"Voronoi failed: {ex.Message}";
         }
         finally
         {

@@ -69,9 +69,32 @@
             <TextBlock Text="mm" Foreground="#FF9AA0A8" VerticalAlignment="Center" />
         </StackPanel>
 
-        <CheckBox x:Name="UprightBox" Content="Standing up, facing the front" Click="OnClicked"
-                  AutomationProperties.AutomationId="TextObjectUpright"
-                  ToolTip="Off, the letters lie on the plate and read from above - how most lettering prints best. On, they stand up to read from the front." />
+        <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
+            <TextBlock Text="Laid out" Style="{DynamicResource FieldLabel}" Width="62"
+                       ToolTip="In a line, or bent round a circle or a cylinder." />
+            <ComboBox x:Name="LayoutBox" Width="180" SelectedIndex="0" SelectionChanged="OnLayoutChanged"
+                      AutomationProperties.AutomationId="TextObjectLayout">
+                <ComboBoxItem Content="In a line, lying flat" ToolTip="The letters lie on the plate and read from above - how most lettering prints best." />
+                <ComboBoxItem Content="In a line, standing up" ToolTip="The letters stand up to read from the front." />
+                <ComboBoxItem Content="Round a circle" ToolTip="Lying on the plate, bent round a circle - a clock face, a coaster, a ring of words. The middle of the lettering sits at the top and it runs anticlockwise." />
+                <ComboBoxItem Content="Round a cylinder" ToolTip="Standing up, wrapped round a cylinder - a cup, a napkin ring, a barrel label. Across is measured along the surface, so a letter keeps its width whatever the radius." />
+            </ComboBox>
+        </StackPanel>
+
+        <StackPanel x:Name="RadiusRow" Orientation="Horizontal" Margin="0,0,0,6">
+            <TextBlock Text="Radius" Style="{DynamicResource FieldLabel}" Width="62"
+                       ToolTip="To the feet of the letters, so they stand outside it. The circle a 30 mm radius draws is 60 mm across and 188 mm round." />
+            <TextBox x:Name="RadiusBox" Width="60" Style="{DynamicResource NumberBox}" Tag="number" TextChanged="OnChanged"
+                     AutomationProperties.AutomationId="TextObjectRadius" />
+            <TextBlock x:Name="RadiusText" Text="mm" Foreground="#FF9AA0A8" VerticalAlignment="Center" />
+        </StackPanel>
+
+        <StackPanel x:Name="InwardRow" Orientation="Horizontal" Margin="0,0,0,6">
+            <TextBlock Width="62" />
+            <CheckBox x:Name="InwardBox" Content="Facing in, round the bottom" Click="OnClicked"
+                      AutomationProperties.AutomationId="TextObjectInward"
+                      ToolTip="Off, the lettering stands outward from the middle and runs round the top of the circle. On, it stands inward and runs round the bottom - the two halves of a badge or a seal. Either way it reads the right way up from above." />
+        </StackPanel>
 
         <StackPanel Orientation="Horizontal" Margin="0,10,0,0">
             <Button x:Name="AddButton" Content="Add" Style="{DynamicResource PanelButton}" Click="OnAccept"

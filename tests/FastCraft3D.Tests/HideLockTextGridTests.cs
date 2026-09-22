@@ -190,7 +190,7 @@ public class HideLockTextGridTests
         RunSta(() =>
         {
             var flat = TextObject.Build(new TextOptions { Text = "HI", Font = "Arial", Height = 10f, Depth = 2f }).ComputeBounds().Size;
-            var upright = TextObject.Build(new TextOptions { Text = "HI", Font = "Arial", Height = 10f, Depth = 2f, Upright = true }).ComputeBounds().Size;
+            var upright = TextObject.Build(new TextOptions { Text = "HI", Font = "Arial", Height = 10f, Depth = 2f, Layout = TextLayout.Upright }).ComputeBounds().Size;
 
             Assert.Equal(flat.X, upright.X, 3);
             Assert.Equal(flat.Y, upright.Z, 3);

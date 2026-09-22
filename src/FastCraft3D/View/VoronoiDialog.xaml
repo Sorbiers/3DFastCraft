@@ -1,0 +1,77 @@
+<view:ToolPanel x:Class="FastCraft3D.View.VoronoiDialog"
+                xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                xmlns:view="clr-namespace:FastCraft3D.View"
+                Title="Voronoi">
+
+    <StackPanel>
+        <TextBlock x:Name="SubjectText" TextWrapping="Wrap" Foreground="#FF3A4550" Margin="0,0,0,8" />
+
+        <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
+            <RadioButton x:Name="ShellButton" Content="Shell" IsChecked="True" Margin="0,0,14,0"
+                         AutomationProperties.AutomationId="VoronoiShell" Checked="OnChoice"
+                         ToolTip="A web of struts following the surface with nothing behind it - the lamp, the vase, the openwork bust." />
+            <RadioButton x:Name="LatticeButton" Content="Lattice"
+                         AutomationProperties.AutomationId="VoronoiLattice" Checked="OnChoice"
+                         ToolTip="Struts running every way through the solid, under a skin - a foam, for taking weight out of a part that still has to be stiff." />
+        </StackPanel>
+
+        <DockPanel>
+            <TextBlock Text="Cells" Style="{DynamicResource FieldLabel}" Width="62"
+                       ToolTip="How many seeds. More seeds, smaller cells." />
+            <TextBlock x:Name="CellsText" VerticalAlignment="Center" Foreground="#FF33383F" TextWrapping="Wrap" />
+        </DockPanel>
+        <Slider x:Name="CellsSlider" Minimum="4" Maximum="600" TickFrequency="2"
+                IsSnapToTickEnabled="True" ValueChanged="OnDragged" Margin="0,4,0,8"
+                AutomationProperties.AutomationId="VoronoiCells" />
+
+        <StackPanel Orientation="Horizontal">
+            <TextBlock Text="Strut" Style="{DynamicResource FieldLabel}" Width="62"
+                       ToolTip="How wide the struts come out. Two nozzle widths is the floor; the grid has to hold it, so a fine strut asks for high detail." />
+            <TextBox x:Name="StrutBox" Width="64" Style="{DynamicResource NumberBox}"
+                     TextChanged="OnStrutTyped" AutomationProperties.AutomationId="VoronoiStrut" />
+            <TextBlock Text="mm" Foreground="#FF9AA0A8" VerticalAlignment="Center" />
+        </StackPanel>
+        <Slider x:Name="StrutSlider" Minimum="0.8" Maximum="12" TickFrequency="0.1"
+                IsSnapToTickEnabled="True" ValueChanged="OnDragged" Margin="0,4,0,8" />
+
+        <StackPanel Orientation="Horizontal">
+            <TextBlock x:Name="SkinLabel" Text="Skin" Style="{DynamicResource FieldLabel}" Width="62"
+                       ToolTip="For a shell, how thick the web itself is. For a lattice, the solid face over the foam - 0 leaves it bare." />
+            <TextBox x:Name="SkinBox" Width="64" Style="{DynamicResource NumberBox}"
+                     TextChanged="OnSkinTyped" AutomationProperties.AutomationId="VoronoiSkin" />
+            <TextBlock Text="mm" Foreground="#FF9AA0A8" VerticalAlignment="Center" />
+        </StackPanel>
+        <Slider x:Name="SkinSlider" Minimum="0" Maximum="15" TickFrequency="0.2"
+                IsSnapToTickEnabled="True" ValueChanged="OnDragged" Margin="0,4,0,8" />
+
+        <StackPanel Orientation="Horizontal">
+            <TextBlock Text="Solid base" Style="{DynamicResource FieldLabel}" Width="62"
+                       ToolTip="How much of the bottom to leave whole, so the thing stands and has a first layer to print on. 0 leaves the web running all the way down." />
+            <TextBox x:Name="BaseBox" Width="64" Style="{DynamicResource NumberBox}"
+                     TextChanged="OnBaseTyped" AutomationProperties.AutomationId="VoronoiBase" />
+            <TextBlock Text="mm" Foreground="#FF9AA0A8" VerticalAlignment="Center" />
+        </StackPanel>
+        <Slider x:Name="BaseSlider" Minimum="0" Maximum="30" TickFrequency="0.5"
+                IsSnapToTickEnabled="True" ValueChanged="OnDragged" Margin="0,4,0,8" />
+
+        <DockPanel>
+            <TextBlock Text="Detail" Style="{DynamicResource FieldLabel}" Width="62"
+                       ToolTip="Voxels along the model's longest side. Everything is cut on this grid, so a strut finer than about three voxels comes out lumpy." />
+            <TextBlock x:Name="DetailText" VerticalAlignment="Center" Foreground="#FF33383F" TextWrapping="Wrap" />
+        </DockPanel>
+        <Slider x:Name="DetailSlider" Minimum="40" Maximum="320" TickFrequency="10"
+                IsSnapToTickEnabled="True" ValueChanged="OnDragged" Margin="0,4,0,8"
+                AutomationProperties.AutomationId="VoronoiDetail" />
+
+        <Border Margin="0,8,0,0" Padding="8,6" CornerRadius="3"
+                Background="#FFFFF6E8" BorderBrush="#FFE8C88A" BorderThickness="1">
+            <TextBlock x:Name="WarningText" TextWrapping="Wrap" Foreground="#FF6B4E12" />
+        </Border>
+
+        <StackPanel Orientation="Horizontal" Margin="0,10,0,0">
+            <Button Content="Cut cells" Style="{DynamicResource PanelButton}" Click="OnAccept" />
+            <Button Content="Cancel" Style="{DynamicResource PanelButton}" IsCancel="True" />
+        </StackPanel>
+    </StackPanel>
+</view:ToolPanel>

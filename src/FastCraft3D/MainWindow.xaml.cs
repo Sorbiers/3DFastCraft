@@ -763,6 +763,8 @@ public partial class MainWindow : Window
         // selection currently projects to rather than by watching the camera and the window
         // size. Those inputs miss a resize that the viewport has not finished applying yet -
         // which is what left the handles stranded in a corner.
+        LightTheView();
+
         if (gizmo is null) return;
         if (gizmo.NeedsReposition || gizmo.IsStale()) gizmo.Reposition();
         if (viewModel.IsSplitMode || viewModel.IsExtrudeMode) splitGizmo?.Reposition();
@@ -1669,6 +1671,9 @@ public partial class MainWindow : Window
         if (e.PropertyName is nameof(MainViewModel.Selected) or nameof(MainViewModel.IsPivotMode))
             RefreshPivotMark();
 
+        if (e.PropertyName is nameof(MainViewModel.VoronoiOutline))
+            renderer?.ShowVoronoi(viewModel.VoronoiOutline);
+
         // The labels are written in the current unit, so a change of unit redraws them.
         if (e.PropertyName is nameof(MainViewModel.UnitLabel)) ApplyViewSettings();
 
@@ -2020,6 +2025,50 @@ public partial class MainWindow : Window
 
     private void OnViewBottom(object sender, RoutedEventArgs e) =>
         LookFrom(new Media3D.Vector3D(0, 0, -1), new Media3D.Vector3D(0, 1, 0));
+
+    private Media3D.Vector3D litFrom;
+
+    /// <summary>
+    /// Keeps the key light with the camera, a little above it and off to one side.
+    ///
+    /// Both lights used to be fixed in the world and both pointed downwards, which cost twice
+    /// over: an upright wall was lit by neither and came back nearly black beside a bright top
+    /// face, and turning the camera to the far side of a model put you behind the light, looking
+    /// at the half of it nothing reached. A modelling view wants whatever is being looked at to
+    /// be lit, which is what every other CAD viewport does.
+    ///
+    /// Not straight down the line of sight, though: a light exactly where the eye is casts no
+    /// shading at all, and a curved surface then reads as a flat silhouette. Off to one side and
+    /// up by a third or so gives the shape back without leaving anything in the dark.
+    ///
+    /// The fill stays fixed in the world and comes from below, which is what keeps a sense of
+    /// which way up the model is now that the key no longer says.
+    /// </summary>
+    private void LightTheView()
+    {
+        if (KeyLight is null || View.Camera is not PerspectiveCamera camera) return;
+
+        var forward = camera.LookDirection;
+        if (forward.Length < 1e-6) return;
+
+        forward.Normalize();
+
+        var up = Upright(forward, camera.UpDirection);
+        var right = Media3D.Vector3D.CrossProduct(forward, up);
+        if (right.Length < 1e-6) return;
+
+        right.Normalize();
+
+        var wanted = forward - up * 0.45 + right * 0.3;
+        wanted.Normalize();
+
+        // Only when it has actually moved: setting a light asks the viewport to redraw, and an
+        // orbit that has come to rest should stop costing frames.
+        if ((wanted - litFrom).Length < 0.002) return;
+
+        litFrom = wanted;
+        KeyLight.Direction = wanted;
+    }
 
     /// <summary>
     /// An up vector the camera can actually use. Anything parallel to the way it is looking

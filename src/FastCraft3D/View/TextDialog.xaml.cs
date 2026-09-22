@@ -27,7 +27,9 @@ public partial class TextDialog : ToolPanel
         HeightBox.Text = Format(start.Height);
         DepthBox.Text = Format(start.Depth);
         SpacingBox.Text = Format(start.Spacing);
-        UprightBox.IsChecked = start.Upright;
+        LayoutBox.SelectedIndex = (int)start.Layout;
+        RadiusBox.Text = Format(start.Radius);
+        InwardBox.IsChecked = start.Inward;
 
         loading = false;
         Refresh();
@@ -57,11 +59,42 @@ public partial class TextDialog : ToolPanel
             Height = Number(HeightBox, fallback.Height),
             Depth = Number(DepthBox, fallback.Depth),
             Spacing = Number(SpacingBox, 0f),
-            Upright = UprightBox.IsChecked == true
+            Layout = (TextLayout)Math.Max(LayoutBox.SelectedIndex, 0),
+            Radius = Number(RadiusBox, fallback.Radius),
+            Inward = InwardBox.IsChecked == true
         }.Sane();
 
         static float Number(TextBox box, float otherwise) =>
             float.TryParse(box.Text, NumberStyles.Float, CultureInfo.CurrentCulture, out float v) ? v : otherwise;
+    }
+
+    /// <summary>
+    /// What a bent layout is about to do, which the size of the result does not say: lettering
+    /// longer than the circle is round comes back over itself, and there is nothing in a bounding
+    /// box to tell you that has happened.
+    /// </summary>
+    private static string Round(TextOptions options)
+    {
+        if (!options.IsRound) return "";
+
+        // How far the lettering runs, measured straight, against how far there is to run.
+        float along = TextObject.Build(options with { Layout = TextLayout.Flat }).ComputeBounds().Size.X;
+        float round = 2f * MathF.PI * options.Radius;
+
+        string said = along > round
+            ? $"The lettering is {along:0.#} mm long and the circle only {round:0.#} mm round, so it "
+              + $"laps itself. A radius of {along / (2f * MathF.PI):0.#} mm or more would hold it."
+            : $"{along:0.#} mm of lettering on a {round:0.#} mm circle - {along / round:P0} of the way round.";
+
+        // Facing in, the tops of the letters point at the middle - and past it, if the radius is
+        // the smaller of the two.
+        if (options is { Layout: TextLayout.Circle, Inward: true } && options.Height >= options.Radius)
+            said += Environment.NewLine
+                  + $"{options.Height:0.#} mm letters facing in do not fit a {options.Radius:0.#} mm "
+                  + "radius: their tops reach the middle and fold through it. A bigger radius, or "
+                  + "shorter letters.";
+
+        return Environment.NewLine + said;
     }
 
     private void Refresh()
@@ -69,6 +102,9 @@ public partial class TextDialog : ToolPanel
         if (loading || !IsInitialized) return;
 
         var options = Read();
+        RadiusRow.Visibility = options.IsRound ? Visibility.Visible : Visibility.Collapsed;
+        InwardRow.Visibility = options.Layout == TextLayout.Circle ? Visibility.Visible : Visibility.Collapsed;
+
         var mesh = TextObject.Build(options);
 
         if (mesh.TriangleCount == 0)
@@ -84,11 +120,14 @@ public partial class TextDialog : ToolPanel
         preview(mesh);
         var size = mesh.ComputeBounds().Size;
         SummaryText.Text = $"{size.X:0.#} x {size.Y:0.#} x {size.Z:0.#} mm, {mesh.TriangleCount:N0} triangles."
+                           + Round(options)
                            + (options.Height < 4f ? "\nLetters under about 4 mm tall lose their detail on a 0.4 mm nozzle." : "");
         AddButton.IsEnabled = true;
     }
 
     private void OnChanged(object sender, TextChangedEventArgs e) => Refresh();
+
+    private void OnLayoutChanged(object sender, SelectionChangedEventArgs e) => Refresh();
 
     private void OnFontChanged(object sender, SelectionChangedEventArgs e) => Refresh();
 

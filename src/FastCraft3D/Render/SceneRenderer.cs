@@ -179,6 +179,47 @@ public sealed class SceneRenderer : IDisposable
         ShowPreview(face, preview, overlay);
     }
 
+    private GroupModel3D? voronoiWeb;
+
+    /// <summary>
+    /// The web a Voronoi cut would leave, drawn on the model as lines while the numbers are being
+    /// chosen.
+    ///
+    /// Lines rather than a solid, because a solid preview cannot be honest: it would have to be
+    /// built on a coarser grid than the real thing, and a coarse grid cannot hold a strut of the
+    /// width somebody is choosing - the preview would refuse to show the very thing being set.
+    /// This is the exact edge the finished web will have, drawn straight onto the surface.
+    /// </summary>
+    public void ShowVoronoi(IReadOnlyList<(Vector3 From, Vector3 To)> lines)
+    {
+        Invalidate();
+
+        if (voronoiWeb is not null)
+        {
+            root.Children.Remove(voronoiWeb);
+            voronoiWeb.Dispose();
+            voronoiWeb = null;
+        }
+
+        if (lines.Count == 0) return;
+
+        var drawn = new LineBuilder();
+        foreach (var (from, to) in lines)
+            drawn.AddLine(new SharpDX.Vector3(from.X, from.Y, from.Z), new SharpDX.Vector3(to.X, to.Y, to.Z));
+
+        var group = new GroupModel3D();
+        group.Children.Add(new LineGeometryModel3D
+        {
+            Geometry = drawn.ToLineGeometry3D(),
+            Color = Color.FromRgb(0xE8, 0x76, 0x2C),
+            Thickness = 1.8,
+            IsHitTestVisible = false
+        });
+
+        root.Children.Add(group);
+        voronoiWeb = group;
+    }
+
     private MeshGeometryModel3D? pivotMark;
 
     /// <summary>
