@@ -286,18 +286,23 @@ public static class Gears
 
                 if (o.Frame && o.KeptTeeth > 0 && o.KeptTeeth < o.Teeth)
                 {
-                    var frame = RecipFrame(o, notes, out string? why);
+                    var frame = RecipFrame(o, notes, out string? why, out float run);
 
                     if (frame is null) notes.Add(why!);
                     else
                     {
                         // Beside the gear to print; round it to be looked at, which is where it
                         // works: the gear turns on the spot and the frame slides past it.
+                        //
+                        // Shown with the gear at one end of the run rather than halfway along it.
+                        // Halfway is a position the thing passes through and never stops at, and
+                        // it reads as the rest position - so the stated travel, tried from there,
+                        // ran the gear half a stroke out through the end cap.
                         var box = frame.ComputeBounds();
                         float aside = m * (o.Teeth + 2) / 2f + 3f - box.Min.X;
 
                         parts.Add(new("Frame", Moved(frame, new Vector3(aside, 0f, 0f)),
-                                      Matrix4x4.CreateTranslation(-aside, 0f, 0f)));
+                                      Matrix4x4.CreateTranslation(run / 2f - aside, 0f, 0f)));
                     }
                 }
                 else if (o.PartnerTeeth > 0)
@@ -868,9 +873,10 @@ public static class Gears
     /// The ends take exactly half the gear's teeth each, so the gear's count has to be even or the
     /// teeth come back half a pitch out after a lap.
     /// </summary>
-    private static Mesh? RecipFrame(GearOptions o, List<string> notes, out string? refusal)
+    private static Mesh? RecipFrame(GearOptions o, List<string> notes, out string? refusal, out float run)
     {
         refusal = null;
+        run = 0f;
 
         double m = o.Module, r = m * o.Teeth / 2.0, pitch = Math.PI * m;
 
@@ -892,9 +898,15 @@ public static class Gears
             return null;
         }
 
+        // The straights cannot be shorter than the push: the gear would still be driving when
+        // the rack ran out under it, and the sector would climb the end cap. Whole teeth, since
+        // the rack is bent round the path by arc length and a part tooth at the join is a tooth
+        // the gear catches on.
         double asked = o.Stroke > 0 ? o.Stroke : travel;
-        int alongEach = Math.Max(2, (int)Math.Round(asked / pitch));
+        int least = Math.Max(2, kept);
+        int alongEach = Math.Max(least, (int)Math.Round(asked / pitch));
         double straight = alongEach * pitch;
+        run = (float)straight;
         double round = 2.0 * Math.PI * r;
         double total = 2.0 * straight + round;
         int teeth = 2 * alongEach + o.Teeth;
@@ -937,11 +949,22 @@ public static class Gears
         double halfRoot = halfPitch + dedendum * lean;
         double halfTip = Math.Max(halfPitch - addendum * lean, 0.05 * m);
 
-        // A space faces the gear where the gear has a tooth: its teeth are centred on its own
-        // angle nought, and it meets the bottom run at the bottom of its pitch circle.
+        // A space faces the gear where the gear has a tooth, or the two drive into each other
+        // instead of meshing.
+        //
+        // The gear's teeth are centred on its own angle nought and it meets the bottom run at the
+        // bottom of its pitch circle, so the tooth nearest that contact sits a distance
+        // -r * nearest along the rack from it. The frame's teeth are laid out by arc length from
+        // s = 0, which Path puts at the left end of the bottom run - and that is where the gear
+        // is shown, so the two measurements start from the same place and the phase is only the
+        // half pitch that puts a space against a tooth.
+        //
+        // It matters where the gear is shown, which is not obvious: at half stroke the extra
+        // straight/2 would be half a pitch whenever the run is an odd number of teeth, and the
+        // frame's teeth would come out on the gear's instead of between them.
         double toGear = -Math.PI / 2.0;
         double nearest = toGear - Math.Round(toGear / (2.0 * Math.PI / o.Teeth)) * (2.0 * Math.PI / o.Teeth);
-        double phase = r * nearest + pitch / 2.0;
+        double phase = pitch / 2.0 - r * nearest;
 
         var inner = new List<Vector2>();
         var outer = new List<Vector2>();
@@ -983,11 +1006,20 @@ public static class Gears
             Face(mesh, inner[i], outer[j], inner[j], height, up: true);
         }
 
-        notes.Add($"Travels {travel:0.#} mm each way: {kept} teeth of rack, and one turn of the gear does both.");
+        notes.Add($"Slides {travel:0.#} mm end to end: {kept} teeth of rack, and one turn of the gear takes it there and back.");
+        notes.Add($"Shown at one end of its run, which is where it stands between pushes - so the gear crosses to the other end, not {travel / 2.0:0.#} mm either side of here.");
         notes.Add($"Frame {straight:0.#} mm between the ends, {teeth} teeth round it, {height:0.#} mm thick.");
 
-        if (straight < travel - 0.01)
-            notes.Add($"The run is shorter than the {travel:0.#} mm the sector drives: give it {travel:0.#} mm, or fewer teeth.");
+        if (o.Stroke > 0 && Math.Abs(straight - o.Stroke) > 0.05)
+            notes.Add(alongEach == least && o.Stroke < travel - 0.05
+                ? $"A {o.Stroke:0.#} mm run is shorter than the {travel:0.#} mm the sector drives, so it was opened to that."
+                : $"Runs go up in whole teeth, so {o.Stroke:0.#} mm became {straight:0.#}.");
+
+        // A run longer than the push is slack, not travel: the sector lets go after its own teeth
+        // have gone by, whatever is left of the rack.
+        if (straight > travel + 0.05)
+            notes.Add($"The sector drives {travel:0.#} mm of that {straight:0.#} mm run, so the frame never reaches the far end."
+                    + " A longer frame is slack, not more travel - more teeth in the sector is more travel.");
 
         notes.Add("Its arms are a plain bar: add one with Cube and Merge.");
 

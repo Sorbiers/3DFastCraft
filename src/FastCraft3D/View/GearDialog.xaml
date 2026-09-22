@@ -110,10 +110,10 @@
 
         <StackPanel x:Name="StrokeRow" Orientation="Horizontal" Margin="0,0,0,3">
             <TextBlock Text="Stroke" Style="{DynamicResource FieldLabel}" Width="86"
-                       ToolTip="How far apart the frame's ends are. 0 for what the sector drives, which is its teeth times the pitch - the travel is written below either way." />
+                       ToolTip="How far the frame slides, end to end. 0 for what the sector drives, which is also the shortest that works and the only length it actually uses - a longer frame is slack, not more travel. More travel is more teeth in the sector. Runs go up in whole teeth; the figures beside the box say which." />
             <TextBox x:Name="StrokeBox" Width="60" Style="{DynamicResource NumberBox}" Tag="number" TextChanged="OnChanged"
                      AutomationProperties.AutomationId="GearStroke" />
-            <TextBlock Text="mm" Foreground="#FF9AA0A8" VerticalAlignment="Center" />
+            <TextBlock x:Name="StrokeText" Text="mm" Foreground="#FF9AA0A8" VerticalAlignment="Center" />
         </StackPanel>
 
         <StackPanel x:Name="ConeRow" Orientation="Horizontal" Margin="0,0,0,3">

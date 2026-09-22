@@ -180,6 +180,16 @@ public partial class GearDialog : ToolPanel
         Show(FrameRow, cutAway);
         Show(StrokeRow, framed);
 
+        // What a run may be, beside the box that asks for it: it cannot be shorter than the push,
+        // and it goes up a whole tooth at a time, so most numbers typed in become another number.
+        if (framed)
+        {
+            float pitch = MathF.PI * gear.Module;
+            float least = Math.Max(2, gear.KeptTeeth) * pitch;
+
+            StrokeText.Text = $"mm - {least:0.#} or more, in {pitch:0.#} steps";
+        }
+
         // With a mate asked for, a bevel's cones come from the two tooth counts instead.
         Show(ConeRow, gear.Kind == GearKind.Bevel && PartnerBox.IsChecked != true);
         Show(WormRow, wheel);

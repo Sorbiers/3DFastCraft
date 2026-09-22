@@ -820,13 +820,75 @@ public class GearTests
         Assert.Equal(6f, box.Size.Z, 0.001f);
     }
 
+    /// <summary>
+    /// The one thing a frame has to get right. Its teeth are laid out by arc length from the
+    /// middle of the bottom run, and the phase left that starting point out - so with an odd
+    /// number of teeth along each run the frame's teeth came out on the gear's instead of between
+    /// them, and the two drove into each other. Five of twenty is that case.
+    /// </summary>
+    [Fact]
+    public void TheFramesTeethLandBetweenTheGearsRatherThanOnThem()
+    {
+        var result = Gears.Build(Reciprocator);
+        var gear = result.Parts[0];
+        var frame = result.Parts[1];
+
+        // Where the two actually run together, which is what the preview shows.
+        var shown = MeshTransform.Transformed(frame.Mesh, frame.InMesh!.Value);
+        double clash = CsgSolid.Intersect(gear.Mesh, shown).ComputeSignedVolume();
+
+        Assert.True(clash < 1.0, $"they overlap by {clash:0.#} mm3 - the teeth are driving into each other");
+    }
+
+    /// <summary>
+    /// The stated travel has to be what a hand actually gets: shifting the frame by it should
+    /// carry the gear from one end of the run to the other. Shown at half stroke it carried the
+    /// gear half a stroke out through the end cap instead, which is what it looked like.
+    /// </summary>
+    [Fact]
+    public void MovingTheFrameByTheStatedTravelTakesTheGearToTheOtherEnd()
+    {
+        var result = Gears.Build(Reciprocator);
+        var gear = result.Parts[0];
+        var frame = result.Parts[1];
+
+        var shown = MeshTransform.Transformed(frame.Mesh, frame.InMesh!.Value);
+        var pushed = MeshTransform.Transformed(shown, Matrix4x4.CreateTranslation(-31.416f, 0f, 0f));
+
+        double clash = CsgSolid.Intersect(gear.Mesh, pushed).ComputeSignedVolume();
+        Assert.True(clash < 1.0, $"the gear is {clash:0.#} mm3 into the frame at the end of its run");
+
+        var box = pushed.ComputeBounds();
+        Assert.True(box.Min.X < 0f && box.Max.X > 0f, "the gear should still be inside the frame");
+    }
+
+    [Fact]
+    public void ARunShorterThanTheSectorDrivesIsOpenedUpToIt()
+    {
+        var result = Gears.Build(Reciprocator with { Stroke = 5f });
+
+        // Five teeth at a 6.283 mm pitch: nothing shorter than 31.4 mm can take the push.
+        Assert.Contains(result.Notes, n => n.Contains("was opened to that"));
+        Assert.Contains(result.Notes, n => n.Contains("Frame 31.4 mm between the ends"));
+    }
+
+    [Fact]
+    public void ARunGoesUpInWholeTeeth()
+    {
+        var result = Gears.Build(Reciprocator with { Stroke = 60f });
+
+        // Nine and a half teeth of run is not a thing: ten of them, 62.8 mm.
+        Assert.Contains(result.Notes, n => n.Contains("60 mm became 62.8"));
+        Assert.Equal(62.83f, result.Parts[1].Mesh.ComputeBounds().Size.X - 2f * 25.5f, 0.05f);
+    }
+
     [Fact]
     public void TheFrameSaysHowFarItTravels()
     {
         var notes = Gears.Build(Reciprocator).Notes;
 
-        // Five teeth at a 6.283 mm pitch: 31.4 mm out, and the same back.
-        Assert.Contains(notes, n => n.Contains("Travels 31.4 mm each way"));
+        // Five teeth at a 6.283 mm pitch: 31.4 mm from one end of the run to the other.
+        Assert.Contains(notes, n => n.Contains("Slides 31.4 mm end to end"));
     }
 
     [Fact]
@@ -839,10 +901,12 @@ public class GearTests
         Assert.True(frame.Mesh.ComputeBounds().Min.X > result.Parts[0].Mesh.ComputeBounds().Max.X,
             "it should stand beside the gear to print");
 
-        // Round it to be looked at: the gear's own axis sits in the middle of the frame's slot.
+        // Round it to be looked at, with the gear at one end of the run rather than halfway
+        // along it - halfway is a place the thing passes through and never stands at.
         var shown = MeshTransform.Transformed(frame.Mesh, frame.InMesh!.Value).ComputeBounds();
-        Assert.Equal(0f, shown.Center.X, 0.01f);
+        Assert.Equal(31.416f / 2f, shown.Center.X, 0.05f);
         Assert.Equal(0f, shown.Center.Y, 0.01f);
+        Assert.True(shown.Min.X < 0f && shown.Max.X > 0f, "the frame should still close round the gear");
     }
 
     [Fact]
