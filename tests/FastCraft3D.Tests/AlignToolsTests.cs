@@ -219,4 +219,82 @@ public class AlignToolsTests
 
         Assert.All(offsets, o => Assert.True(o.Length() < 1e-4f, "aligning twice moved things again"));
     }
+
+    // --- OffsetToPoint: Align to face ---------------------------------------------------
+
+    /// <summary>
+    /// Two objects with a fixed gap between them, moved together against a target point, keep
+    /// that gap - the whole group is one rigid body, not each object aligning on its own.
+    /// </summary>
+    [Fact]
+    public void MovingAGroupToAPointKeepsItsMembersArrangedTheSame()
+    {
+        var a = Box("A", 10, new Vector3(0, 0, 0));   // spans -5..5
+        var b = Box("B", 10, new Vector3(30, 0, 0));  // spans 25..35, 25 mm from A
+        var group = a.WorldBounds.Union(b.WorldBounds);
+
+        var offset = AlignTools.OffsetToPoint(group, new Vector3(100, 0, 0), AlignMode.Centre, null, null);
+        a.Position += offset;
+        b.Position += offset;
+
+        Assert.Equal(100f, a.WorldBounds.Union(b.WorldBounds).Center.X, 3);
+        Assert.Equal(30f, b.Position.X - a.Position.X, 3); // the 30 mm apart they started
+    }
+
+    [Fact]
+    public void MinimumBringsTheGroupsNearEdgeToThePoint()
+    {
+        var a = Box("A", 10, new Vector3(0, 0, 0));
+        var b = Box("B", 20, new Vector3(20, 0, 0));   // group spans -5..30
+        var group = a.WorldBounds.Union(b.WorldBounds);
+
+        var offset = AlignTools.OffsetToPoint(group, new Vector3(50, 0, 0), AlignMode.Minimum, null, null);
+
+        Assert.Equal(50f, group.Min.X + offset.X, 3);
+    }
+
+    [Fact]
+    public void MaximumBringsTheGroupsFarEdgeToThePoint()
+    {
+        var a = Box("A", 10, new Vector3(0, 0, 0));
+        var b = Box("B", 20, new Vector3(20, 0, 0));
+        var group = a.WorldBounds.Union(b.WorldBounds);
+
+        var offset = AlignTools.OffsetToPoint(group, new Vector3(50, 0, 0), AlignMode.Maximum, null, null);
+
+        Assert.Equal(50f, group.Max.X + offset.X, 3);
+    }
+
+    /// <summary>An axis given no mode is left exactly where it was.</summary>
+    [Fact]
+    public void AnAxisWithNoModeIsLeftAlone()
+    {
+        var box = Box("Only", 10, new Vector3(3, 7, 11));
+
+        var offset = AlignTools.OffsetToPoint(box.WorldBounds, new Vector3(100, 100, 100), null, null, null);
+
+        Assert.Equal(Vector3.Zero, offset);
+    }
+
+    /// <summary>Each axis reads its own mode independently, against the same target point.</summary>
+    [Fact]
+    public void EachAxisCanBeGivenItsOwnMode()
+    {
+        var box = Box("Only", 10, new Vector3(0, 0, 0)); // spans -5..5 on every axis
+        var target = new Vector3(50, 60, 70);
+
+        var offset = AlignTools.OffsetToPoint(box.WorldBounds, target, AlignMode.Minimum, null, AlignMode.Maximum);
+
+        Assert.Equal(55f, offset.X, 3);  // Min (-5) onto 50
+        Assert.Equal(0f, offset.Y, 3);   // Y left alone
+        Assert.Equal(65f, offset.Z, 3);  // Max (5) onto 70
+    }
+
+    [Fact]
+    public void AnEmptyGroupHasNothingToMove()
+    {
+        var offset = AlignTools.OffsetToPoint(Bounds.Empty, new Vector3(10, 10, 10), AlignMode.Centre, AlignMode.Centre, AlignMode.Centre);
+
+        Assert.Equal(Vector3.Zero, offset);
+    }
 }

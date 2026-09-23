@@ -90,6 +90,13 @@ public partial class MainWindow : Window
     private static readonly Color PlainBackground = Color.FromRgb(0xB8, 0xBC, 0xC2);
     private static readonly Color ToolBackground = Color.FromRgb(0xA6, 0xB2, 0xC4);
 
+    /// <summary>
+    /// Align to face's own colour for a face once it is picked, so it reads differently from the
+    /// ordinary blue used for hovering over one - and for engraving and lettering, which mark a
+    /// face the same way but mean something else by it.
+    /// </summary>
+    private static readonly Color AlignFacePickedColour = Color.FromRgb(0x3F, 0xA3, 0x4D);
+
     public MainWindow()
     {
         InitializeComponent();
@@ -137,6 +144,8 @@ public partial class MainWindow : Window
 
         viewModel.EngraveFaceChanged += ShowFacePreview;
         viewModel.RestingFacesChanged += () => renderer?.ShowRestingFaces(viewModel.RestingFaceList, viewModel.RestingHover);
+        viewModel.AlignFaceChanged += () => renderer?.ShowFace(
+            viewModel.AlignFace, tint: viewModel.HasAlignFaceTarget ? AlignFacePickedColour : null);
 
         listSync = new SelectionListSync(ObjectList, viewModel.Scene);
         listSync.ChangedFromList += viewModel.RefreshSelection;
@@ -976,6 +985,15 @@ public partial class MainWindow : Window
             return;
         }
 
+        // Align to face: the click picks the reference, not necessarily on a selected object, so
+        // the selection is left alone exactly as Split leaves it.
+        if (viewModel.IsAlignFaceMode && viewModel.PickAlignFace(
+                target, ToVector3(hit!.PointHit), ToVector3(hit.NormalAtHit)))
+        {
+            e.Handled = true;
+            return;
+        }
+
         // While a face is being picked the click means something else entirely, so it never
         // reaches the selection logic. Clicking a different object switches the selection to it
         // first, which is the only way to engrave something else without leaving the mode.
@@ -1152,6 +1170,15 @@ public partial class MainWindow : Window
     private void OnViewportMove(object sender, MouseEventArgs e)
     {
         if (viewModel.IsPivotMode) RefreshPivotMark(e.GetPosition(View));
+
+        if (viewModel.IsAlignFaceMode)
+        {
+            var faceHit = FirstHit(e.GetPosition(View), selectable: true);
+            if (faceHit is not null && renderer?.Resolve(faceHit.ModelHit) is { } hovered)
+                viewModel.HoverAlignFace(hovered, ToVector3(faceHit.PointHit), ToVector3(faceHit.NormalAtHit));
+            else
+                viewModel.HoverAlignFace(null, Vector3.Zero, Vector3.Zero);
+        }
 
         if (viewModel.IsSketchMode && TryIntersectPlane(e.GetPosition(View), 0f, out var onPlate))
         {
@@ -1855,6 +1882,18 @@ public partial class MainWindow : Window
     {
         if (sender is RadioButton { Tag: string tag } && Enum.TryParse(tag, out SplitOffcut offcut))
             viewModel.SplitOffcut = offcut;
+    }
+
+    /// <summary>Reads "Axis:Mode" off the radio button's Tag, e.g. "X:Centre" or "Y:None" for "leave it".</summary>
+    private void OnAlignFaceModeChanged(object sender, RoutedEventArgs e)
+    {
+        if (sender is not RadioButton { Tag: string tag }) return;
+
+        var parts = tag.Split(':');
+        if (parts.Length != 2 || !Enum.TryParse<Axis>(parts[0], out var axis)) return;
+
+        AlignMode? mode = parts[1] != "None" && Enum.TryParse<AlignMode>(parts[1], out var parsed) ? parsed : null;
+        viewModel.SetAlignFaceMode(axis, mode);
     }
 
     /// <summary>

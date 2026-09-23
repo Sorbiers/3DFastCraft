@@ -79,6 +79,27 @@ public static class AlignTools
         return offsets;
     }
 
+    /// <summary>
+    /// The single offset that would move a whole group of objects together so its combined
+    /// bounding box lines up, on whichever axes ask for it, with a point such as a picked face's
+    /// middle - the same three positions (Minimum, Centre, Maximum) as lining objects up against
+    /// each other, but against an arbitrary point rather than another object or the bed. An axis
+    /// given null keeps its position, and Distribute has no meaning for a single group, so it is
+    /// treated the same way.
+    /// </summary>
+    public static Vector3 OffsetToPoint(Bounds group, Vector3 target, AlignMode? modeX, AlignMode? modeY, AlignMode? modeZ)
+    {
+        if (group.IsEmpty) return Vector3.Zero;
+
+        return new Vector3(
+            AxisOffset(group, Axis.X, modeX, target.X),
+            AxisOffset(group, Axis.Y, modeY, target.Y),
+            AxisOffset(group, Axis.Z, modeZ, target.Z));
+    }
+
+    private static float AxisOffset(Bounds group, Axis axis, AlignMode? mode, float target) =>
+        mode is { } m and not AlignMode.Distribute ? target - Edge(group, axis, m) : 0f;
+
     /// <summary>The bed's own edge, which has no axis marked on it and never will.</summary>
     private static float Edge(Bounds box, Axis axis, AlignMode mode) => mode switch
     {

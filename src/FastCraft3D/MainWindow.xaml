@@ -626,6 +626,9 @@
                     <Button Style="{StaticResource ToolButton}" Content="Align to" Visibility="{Binding IsAdvancedMode, Converter={StaticResource BoolToVisibility}}" Tag="{StaticResource IconAlignCentre}"
                             Command="{Binding AlignToSelectionCommand}" MinWidth="72"
                             ToolTip="Move the first object you picked so its bounding box is centred on the second's. Two objects: the first moves, the second stays. Nothing is rotated or resized. Needs exactly two objects selected." />
+                    <Button Style="{StaticResource ToolButton}" Content="Align to face" Visibility="{Binding IsAdvancedMode, Converter={StaticResource BoolToVisibility}}" Tag="{StaticResource IconAlignToFace}"
+                            Command="{Binding BeginAlignFaceCommand}" MinWidth="86"
+                            ToolTip="Pick a face on any object, then choose for X, Y and Z whether the selection's near edge, middle or far edge should land on the middle of that face. The whole selection moves together, keeping its own arrangement - nothing is rotated or resized." />
                     <Separator Margin="8,0" Visibility="{Binding IsAdvancedMode, Converter={StaticResource BoolToVisibility}}" />
                     <Button Style="{StaticResource ToolButton}" Content="Fit" Visibility="{Binding IsAdvancedMode, Converter={StaticResource BoolToVisibility}}" Tag="{StaticResource IconFitBed}"
                             Command="{Binding FitToBedCommand}" MinWidth="58"
@@ -1210,6 +1213,46 @@
                         <StackPanel Orientation="Horizontal">
                             <Button Content="Split" Style="{StaticResource PanelButton}" Command="{Binding ApplySplitCommand}" />
                             <Button Content="Cancel" Style="{StaticResource PanelButton}" Command="{Binding CancelSplitCommand}" />
+                        </StackPanel>
+                    </StackPanel>
+                </Border>
+
+                <!-- Align-to-face panel, shown only while that tool is running. Shares Split's row:
+                     the two never run together. -->
+                <Border Grid.Row="2" Margin="0,10,0,0" Padding="8" Background="#FFEFF5FF"
+                        BorderBrush="#FFB8D2F0" BorderThickness="1" CornerRadius="3"
+                        Visibility="{Binding IsAlignFaceMode, Converter={StaticResource BoolToVisibility}}">
+                    <StackPanel>
+                        <TextBlock Text="Align to a face" FontWeight="SemiBold" Margin="0,0,0,6" />
+                        <TextBlock TextWrapping="Wrap" Foreground="#FF5A5F66" Margin="0,0,0,6"
+                                   Text="Click a face on any object - it does not have to be part of the selection - then choose how each axis should land on its middle." />
+                        <TextBlock Text="{Binding AlignFaceTargetLabel}" FontStyle="Italic" Foreground="#FF5A5F66" Margin="0,0,0,8" />
+
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
+                            <TextBlock Text="X" Style="{StaticResource FieldLabel}" />
+                            <RadioButton Content="Leave" GroupName="AlignFaceX" Margin="0,0,8,0" IsChecked="True" Checked="OnAlignFaceModeChanged" Tag="X:None" />
+                            <RadioButton Content="Min" GroupName="AlignFaceX" Margin="0,0,8,0" Checked="OnAlignFaceModeChanged" Tag="X:Minimum" />
+                            <RadioButton Content="Centre" GroupName="AlignFaceX" Margin="0,0,8,0" Checked="OnAlignFaceModeChanged" Tag="X:Centre" />
+                            <RadioButton Content="Max" GroupName="AlignFaceX" Checked="OnAlignFaceModeChanged" Tag="X:Maximum" />
+                        </StackPanel>
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
+                            <TextBlock Text="Y" Style="{StaticResource FieldLabel}" />
+                            <RadioButton Content="Leave" GroupName="AlignFaceY" Margin="0,0,8,0" IsChecked="True" Checked="OnAlignFaceModeChanged" Tag="Y:None" />
+                            <RadioButton Content="Min" GroupName="AlignFaceY" Margin="0,0,8,0" Checked="OnAlignFaceModeChanged" Tag="Y:Minimum" />
+                            <RadioButton Content="Centre" GroupName="AlignFaceY" Margin="0,0,8,0" Checked="OnAlignFaceModeChanged" Tag="Y:Centre" />
+                            <RadioButton Content="Max" GroupName="AlignFaceY" Checked="OnAlignFaceModeChanged" Tag="Y:Maximum" />
+                        </StackPanel>
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+                            <TextBlock Text="Z" Style="{StaticResource FieldLabel}" />
+                            <RadioButton Content="Leave" GroupName="AlignFaceZ" Margin="0,0,8,0" IsChecked="True" Checked="OnAlignFaceModeChanged" Tag="Z:None" />
+                            <RadioButton Content="Min" GroupName="AlignFaceZ" Margin="0,0,8,0" Checked="OnAlignFaceModeChanged" Tag="Z:Minimum" />
+                            <RadioButton Content="Centre" GroupName="AlignFaceZ" Margin="0,0,8,0" Checked="OnAlignFaceModeChanged" Tag="Z:Centre" />
+                            <RadioButton Content="Max" GroupName="AlignFaceZ" Checked="OnAlignFaceModeChanged" Tag="Z:Maximum" />
+                        </StackPanel>
+
+                        <StackPanel Orientation="Horizontal">
+                            <Button Content="Apply" Style="{StaticResource PanelButton}" Command="{Binding ApplyAlignFaceCommand}" />
+                            <Button Content="Cancel" Style="{StaticResource PanelButton}" Command="{Binding CancelAlignFaceCommand}" />
                         </StackPanel>
                     </StackPanel>
                 </Border>

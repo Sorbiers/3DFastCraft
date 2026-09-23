@@ -95,6 +95,11 @@ public sealed class MainViewModel : INotifyPropertyChanged
     private float embossGap = 2f;
     private bool embossFill;
     private bool isPivotMode;
+    private bool isAlignFaceMode;
+    private FacePatch? alignFace;
+    private bool alignFacePicked;
+    private string? alignFaceTargetLabel;
+    private AlignMode? alignFaceModeX, alignFaceModeY, alignFaceModeZ;
     private float embossBevel;
     private TextProjection embossProjection = TextProjection.Planar;
     private SurfacePlacement embossPlacement = SurfacePlacement.Middle;
@@ -245,6 +250,10 @@ public sealed class MainViewModel : INotifyPropertyChanged
         BeginLayCommand = Track(RelayCommand.Simple(BeginLay, () => Scene.Selection.Count == 1));
         ApplyEmbossCommand = AsyncRelayCommand.Simple(ApplyEmboss, () => isEmbossMode && embossFace is not null);
         CancelEmbossCommand = RelayCommand.Simple(() => IsEmbossMode = false);
+        BeginAlignFaceCommand = Track(RelayCommand.Simple(BeginAlignFace, () => Scene.Selection.Count > 0));
+        ApplyAlignFaceCommand = RelayCommand.Simple(
+            ApplyAlignFace, () => alignFacePicked && (alignFaceModeX is not null || alignFaceModeY is not null || alignFaceModeZ is not null));
+        CancelAlignFaceCommand = RelayCommand.Simple(() => IsAlignFaceMode = false);
         LoadDrawingCommand = RelayCommand.Simple(LoadDrawing);
         ClearDrawingCommand = RelayCommand.Simple(
             () => { svgFile = ""; RefreshDrawing(); }, () => svgFile.Length > 0);
@@ -384,6 +393,9 @@ public sealed class MainViewModel : INotifyPropertyChanged
     public System.Windows.Input.ICommand BeginLayCommand { get; }
     public System.Windows.Input.ICommand ApplyEmbossCommand { get; }
     public System.Windows.Input.ICommand CancelEmbossCommand { get; }
+    public System.Windows.Input.ICommand BeginAlignFaceCommand { get; }
+    public System.Windows.Input.ICommand ApplyAlignFaceCommand { get; }
+    public System.Windows.Input.ICommand CancelAlignFaceCommand { get; }
     public System.Windows.Input.ICommand LoadDrawingCommand { get; }
     public System.Windows.Input.ICommand ClearDrawingCommand { get; }
     public System.Windows.Input.ICommand BeginMeasureCommand { get; }
@@ -1675,7 +1687,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
     /// underneath and leaving it to the pointer to decide which was meant.
     /// </summary>
     public bool IsToolRunning => isSplitMode || isEngraveMode || isEmbossMode || isLayMode || isExtrudeMode || isConnectMode || isSketchMode || isPivotMode
-                                 || openPanel is not null;
+                                 || isAlignFaceMode || openPanel is not null;
 
     /// <summary>
     /// Whether a tool has the object in hand, counting the two that do not take the handles
@@ -1741,6 +1753,161 @@ public sealed class MainViewModel : INotifyPropertyChanged
             RaiseToolInHand();
             Raise(nameof(ShowManipulatorBar));
         }
+    }
+
+    // --- Align to face ---------------------------------------------------------------
+
+    /// <summary>
+    /// While this is on, a click on any object's face picks it as the reference the selection is
+    /// then lined up against on Apply. It does not touch the selection itself, the same as Split -
+    /// the face being picked is not necessarily part of what is about to move.
+    /// </summary>
+    public bool IsAlignFaceMode
+    {
+        get => isAlignFaceMode;
+        set
+        {
+            if (isAlignFaceMode == value) return;
+
+            Set(ref isAlignFaceMode, value);
+            if (!value)
+            {
+                alignFace = null;
+                alignFaceTargetLabel = null;
+                alignFaceModeX = alignFaceModeY = alignFaceModeZ = null;
+                RaiseAlignFace();
+            }
+            Raise(nameof(IsToolRunning));
+            RaiseToolInHand();
+            Raise(nameof(ShowManipulatorBar));
+        }
+    }
+
+    /// <summary>Raised whenever the picked or hovered face changes, so the viewport can redraw the marker.</summary>
+    public event Action? AlignFaceChanged;
+
+    /// <summary>The face last picked or hovered, for the viewport to highlight. Null shows nothing.</summary>
+    public FacePatch? AlignFace => alignFace;
+
+    /// <summary>Whether a face has been picked (as against merely hovered), so Apply has something to work with.</summary>
+    public bool HasAlignFaceTarget => alignFacePicked;
+
+    public string AlignFaceTargetLabel => alignFaceTargetLabel is { } name
+        ? $"Picked a face on {name}"
+        : "Click a face on any object";
+
+    private void RaiseAlignFace()
+    {
+        Raise(nameof(HasAlignFaceTarget));
+        Raise(nameof(AlignFaceTargetLabel));
+        AlignFaceChanged?.Invoke();
+    }
+
+    private void BeginAlignFace()
+    {
+        if (Scene.Selection.Count == 0) return;
+
+        IsSplitMode = false;
+        IsSubtractMode = false;
+        IsEngraveMode = false;
+        IsEmbossMode = false;
+        IsMeasureMode = false;
+        IsLayMode = false;
+        IsPivotMode = false;
+
+        alignFace = null;
+        alignFacePicked = false;
+        alignFaceTargetLabel = null;
+        alignFaceModeX = alignFaceModeY = alignFaceModeZ = null;
+
+        IsAlignFaceMode = true;
+        RaiseAlignFace();
+        Status = "Click a face on any object to align the selection against";
+    }
+
+    /// <summary>
+    /// Shows the face under the pointer before it is picked, so the surface about to be chosen
+    /// is clear rather than a guess. Does nothing once a face has been picked - the marker then
+    /// stays on what was chosen instead of following the pointer round the viewport.
+    /// </summary>
+    public void HoverAlignFace(SceneObject? target, Vector3 worldPoint, Vector3 worldNormal)
+    {
+        if (!isAlignFaceMode || alignFacePicked) return;
+
+        alignFace = target is null ? null : FacePatch.Find(target.ToWorldMesh(), worldPoint, worldNormal);
+        AlignFaceChanged?.Invoke();
+    }
+
+    /// <summary>
+    /// Picks the face the selection will be lined up against - the face's own middle, not the
+    /// point clicked on it, so a click near the corner of a wall and one in the middle of it
+    /// align the same way.
+    /// </summary>
+    public bool PickAlignFace(SceneObject target, Vector3 worldPoint, Vector3 worldNormal)
+    {
+        if (!isAlignFaceMode) return false;
+
+        var face = FacePatch.Find(target.ToWorldMesh(), worldPoint, worldNormal);
+        if (face is null) return false;
+
+        alignFace = face;
+        alignFacePicked = true;
+        alignFaceTargetLabel = target.Name;
+        RaiseAlignFace();
+
+        Status = $"Picked a face on {target.Name} - choose how X, Y and Z should line up, then Apply";
+        return true;
+    }
+
+    /// <summary>Which way, if any, the selection's group box should line up on this axis with the picked face.</summary>
+    public void SetAlignFaceMode(Axis axis, AlignMode? mode)
+    {
+        switch (axis)
+        {
+            case Axis.X: alignFaceModeX = mode; break;
+            case Axis.Y: alignFaceModeY = mode; break;
+            default: alignFaceModeZ = mode; break;
+        }
+    }
+
+    /// <summary>
+    /// Moves the whole selection together so its combined bounding box lines up, on whichever
+    /// axes were asked for, with the middle of the picked face.
+    ///
+    /// Everything selected moves by the same offset, so the arrangement between the objects is
+    /// kept - the point is to place the group against the face, not to line its members up
+    /// against each other the way Align to does.
+    /// </summary>
+    private void ApplyAlignFace()
+    {
+        if (!alignFacePicked || alignFace is not { } face) return;
+        if (alignFaceModeX is null && alignFaceModeY is null && alignFaceModeZ is null) return;
+
+        var selection = Scene.Selection.ToList();
+        if (selection.Count == 0) return;
+
+        var bounds = Bounds.Empty;
+        foreach (var o in selection) bounds = bounds.Union(o.WorldBounds);
+        if (bounds.IsEmpty) return;
+
+        var target = face.ToLocal((face.Min + face.Max) * 0.5f);
+        var offset = AlignTools.OffsetToPoint(bounds, target, alignFaceModeX, alignFaceModeY, alignFaceModeZ);
+
+        var before = selection.Select(TransformState.Capture).ToList();
+        foreach (var o in selection) o.Position += offset;
+
+        if (TransformCommand.CreateIfChanged("Align to face", selection, before) is { } command)
+        {
+            Undo.Execute(command);
+            Status = $"Aligned {selection.Count} object(s) to the picked face";
+        }
+        else
+        {
+            Status = "Already aligned";
+        }
+
+        IsAlignFaceMode = false;
+        RefreshSelection();
     }
 
     // --- Engraving -----------------------------------------------------------------
@@ -2088,6 +2255,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
         IsEngraveMode = false;
         IsEmbossMode = false;
         IsMeasureMode = false;
+        IsAlignFaceMode = false;
         IsLayMode = true;
 
         Status = "Click the face you want it to stand on";
@@ -2227,6 +2395,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
         IsEngraveMode = false;
         IsMeasureMode = false;
         IsLayMode = false;
+        IsAlignFaceMode = false;
         IsEmbossMode = true;
 
         Status = "Click the face you want to letter";
@@ -2880,6 +3049,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
         IsLayMode = false;
         IsMeasureMode = false;
         IsSplitMode = false;
+        IsAlignFaceMode = false;
 
         IsSubtractMode = true;
         Raise(nameof(SubtractSummary));
@@ -2899,6 +3069,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
         IsEngraveMode = false;
         IsEmbossMode = false;
         IsLayMode = false;
+        IsAlignFaceMode = false;
         measureFrom = null;
         measureTo = null;
         IsMeasureMode = true;
@@ -4357,6 +4528,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
         else if (IsEmbossMode) IsEmbossMode = false;
         else if (IsLayMode) IsLayMode = false;
         else if (IsPivotMode) IsPivotMode = false;
+        else if (IsAlignFaceMode) IsAlignFaceMode = false;
         else if (IsSubtractMode) IsSubtractMode = false;
         else return false;
 
@@ -5961,6 +6133,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
         IsEmbossMode = false;
         IsMeasureMode = false;
         IsLayMode = false;
+        IsAlignFaceMode = false;
         IsPivotMode = true;
 
         Status = "Click the point to measure and turn this object about";
@@ -7293,6 +7466,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
         IsEmbossMode = false;
         IsMeasureMode = false;
         IsLayMode = false;
+        IsAlignFaceMode = false;
         IsEngraveMode = true;
         Status = "Click the face you want to engrave";
     }
@@ -7426,6 +7600,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
         IsEmbossMode = false;
         IsMeasureMode = false;
         IsLayMode = false;
+        IsAlignFaceMode = false;
         IsSplitMode = true;
         ResetSplitOffset();
         Status = "Drag the arrows to slide the split plane, the rings to tilt it";

@@ -107,14 +107,16 @@ public sealed class SceneRenderer : IDisposable
     private void Invalidate() => repaint?.Ask();
 
     /// <summary>
-    /// Marks the face that is about to be engraved, or clears it when given null.
+    /// Marks a face - the one about to be engraved, hovered, or picked - or clears it when given
+    /// null. <paramref name="tint"/> is the usual blue when left out; Align to face uses its own
+    /// colour so a face only hovered over reads differently from one actually picked.
     ///
     /// Drawn as a tinted skin over the face rather than as a change to the object's own
     /// material: the point is to show which of several flat surfaces was picked, and repainting
     /// the whole object would show nothing at all. The patch is already in world space, so the
     /// highlight carries no transform.
     /// </summary>
-    public void ShowFace(FacePatch? face, GrooveSet? preview = null, Mesh? overlay = null)
+    public void ShowFace(FacePatch? face, GrooveSet? preview = null, Mesh? overlay = null, Color? tint = null)
     {
         Invalidate();
 
@@ -153,13 +155,16 @@ public sealed class SceneRenderer : IDisposable
                 face.Mesh.Positions[face.Mesh.Indices[t + 2]] + lift);
         }
 
+        var accent = tint ?? Color.FromRgb(0x2E, 0x9B, 0xFF);
+        float r = accent.R / 255f, g = accent.G / 255f, b_ = accent.B / 255f;
+
         faceHighlight = new MeshGeometryModel3D
         {
             Geometry = MeshConverter.ToGeometry(skin),
             Material = new PhongMaterial
             {
-                DiffuseColor = new SharpDX.Color4(0.20f, 0.62f, 1f, 0.42f),
-                AmbientColor = new SharpDX.Color4(0.10f, 0.30f, 0.50f, 1f),
+                DiffuseColor = new SharpDX.Color4(r, g, b_, 0.42f),
+                AmbientColor = new SharpDX.Color4(r * 0.5f, g * 0.5f, b_ * 0.5f, 1f),
                 SpecularColor = new SharpDX.Color4(0, 0, 0, 1)
             },
             IsTransparent = true,
@@ -180,7 +185,7 @@ public sealed class SceneRenderer : IDisposable
         faceOutline = new LineGeometryModel3D
         {
             Geometry = builder.ToLineGeometry3D(),
-            Color = Color.FromRgb(0x2E, 0x9B, 0xFF),
+            Color = accent,
             Thickness = 2.2,
             IsHitTestVisible = false
         };
