@@ -85,6 +85,8 @@ public sealed class SceneRenderer : IDisposable
 
     private MeshGeometryModel3D? faceHighlight;
     private LineGeometryModel3D? faceOutline;
+    private MeshGeometryModel3D? faceHighlight2;
+    private LineGeometryModel3D? faceOutline2;
     private MeshGeometryModel3D? facePreview;
     private MeshGeometryModel3D? connectorMarks;
     private MeshGeometryModel3D? restingShown;
@@ -127,18 +129,37 @@ public sealed class SceneRenderer : IDisposable
             facePreview = null;
         }
 
-        if (faceHighlight is not null)
+        SetFaceMarker(face, tint, ref faceHighlight, ref faceOutline);
+        ShowPreview(face, preview, overlay);
+    }
+
+    /// <summary>
+    /// A second, independent face marker, for a tool such as Centre face to face that has two
+    /// faces on screen at once and needs both told apart - the first picked and the second being
+    /// hovered or picked, each its own colour, neither disturbing the other.
+    /// </summary>
+    public void ShowSecondFace(FacePatch? face, Color? tint = null)
+    {
+        Invalidate();
+        SetFaceMarker(face, tint, ref faceHighlight2, ref faceOutline2);
+    }
+
+    /// <summary>Builds or clears the tinted skin and outline a face marker is drawn from.</summary>
+    private void SetFaceMarker(
+        FacePatch? face, Color? tint, ref MeshGeometryModel3D? highlight, ref LineGeometryModel3D? outline)
+    {
+        if (highlight is not null)
         {
-            root.Children.Remove(faceHighlight);
-            faceHighlight.Dispose();
-            faceHighlight = null;
+            root.Children.Remove(highlight);
+            highlight.Dispose();
+            highlight = null;
         }
 
-        if (faceOutline is not null)
+        if (outline is not null)
         {
-            root.Children.Remove(faceOutline);
-            faceOutline.Dispose();
-            faceOutline = null;
+            root.Children.Remove(outline);
+            outline.Dispose();
+            outline = null;
         }
 
         if (face is null || face.Triangles.Count == 0) return;
@@ -158,7 +179,7 @@ public sealed class SceneRenderer : IDisposable
         var accent = tint ?? Color.FromRgb(0x2E, 0x9B, 0xFF);
         float r = accent.R / 255f, g = accent.G / 255f, b_ = accent.B / 255f;
 
-        faceHighlight = new MeshGeometryModel3D
+        highlight = new MeshGeometryModel3D
         {
             Geometry = MeshConverter.ToGeometry(skin),
             Material = new PhongMaterial
@@ -170,7 +191,7 @@ public sealed class SceneRenderer : IDisposable
             IsTransparent = true,
             IsHitTestVisible = false // clicking again must pick the face underneath, not this
         };
-        root.Children.Add(faceHighlight);
+        root.Children.Add(highlight);
 
         var builder = new LineBuilder();
         foreach (var (a, b) in face.Boundary)
@@ -182,16 +203,14 @@ public sealed class SceneRenderer : IDisposable
                 new SharpDX.Vector3(to.X, to.Y, to.Z));
         }
 
-        faceOutline = new LineGeometryModel3D
+        outline = new LineGeometryModel3D
         {
             Geometry = builder.ToLineGeometry3D(),
             Color = accent,
             Thickness = 2.2,
             IsHitTestVisible = false
         };
-        root.Children.Add(faceOutline);
-
-        ShowPreview(face, preview, overlay);
+        root.Children.Add(outline);
     }
 
     private GroupModel3D? voronoiWeb;
@@ -1199,6 +1218,7 @@ public sealed class SceneRenderer : IDisposable
     {
         ClearSplit();
         ShowFace(null);
+        ShowSecondFace(null);
         scene.Objects.CollectionChanged -= OnCollectionChanged;
         foreach (var o in visuals.Keys.ToList()) Detach(o);
     }

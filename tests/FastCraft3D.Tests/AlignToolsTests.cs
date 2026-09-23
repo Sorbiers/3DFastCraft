@@ -297,4 +297,49 @@ public class AlignToolsTests
 
         Assert.Equal(Vector3.Zero, offset);
     }
+
+    // --- OffsetBetweenPoints: Centre face to face -------------------------------------
+
+    [Fact]
+    public void MatchingAllThreeAxesMovesOnePointExactlyOntoTheOther()
+    {
+        var offset = AlignTools.OffsetBetweenPoints(new Vector3(1, 2, 3), new Vector3(11, 22, 33), true, true, true);
+
+        Assert.Equal(new Vector3(10, 20, 30), offset);
+    }
+
+    [Fact]
+    public void AnAxisNotAskedForIsLeftAtZero()
+    {
+        var offset = AlignTools.OffsetBetweenPoints(new Vector3(0, 0, 0), new Vector3(5, 6, 7), true, false, true);
+
+        Assert.Equal(5f, offset.X, 3);
+        Assert.Equal(0f, offset.Y, 3);
+        Assert.Equal(7f, offset.Z, 3);
+    }
+
+    [Fact]
+    public void MatchingNoAxisMovesNothing()
+    {
+        var offset = AlignTools.OffsetBetweenPoints(new Vector3(1, 2, 3), new Vector3(100, 200, 300), false, false, false);
+
+        Assert.Equal(Vector3.Zero, offset);
+    }
+
+    /// <summary>
+    /// Applying the offset to the moving face's own centre lands it exactly on the target's -
+    /// the point of the whole tool, checked the way Apply actually uses the result.
+    /// </summary>
+    [Fact]
+    public void ApplyingTheOffsetPutsTheFirstPointOnTheSecond()
+    {
+        var from = new Vector3(-40, 15, 3);
+        var to = new Vector3(60, -5, 3);
+
+        var offset = AlignTools.OffsetBetweenPoints(from, to, true, true, false);
+
+        Assert.Equal(to.X, from.X + offset.X, 3);
+        Assert.Equal(to.Y, from.Y + offset.Y, 3);
+        Assert.Equal(from.Z, from.Z + offset.Z, 3); // Z was not asked to match
+    }
 }

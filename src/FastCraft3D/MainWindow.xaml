@@ -629,6 +629,9 @@
                     <Button Style="{StaticResource ToolButton}" Content="Align to face" Visibility="{Binding IsAdvancedMode, Converter={StaticResource BoolToVisibility}}" Tag="{StaticResource IconAlignToFace}"
                             Command="{Binding BeginAlignFaceCommand}" MinWidth="86"
                             ToolTip="Pick a face on any object, then choose for X, Y and Z whether the selection's near edge, middle or far edge should land on the middle of that face. The whole selection moves together, keeping its own arrangement - nothing is rotated or resized." />
+                    <Button Style="{StaticResource ToolButton}" Content="Centre face to face" Visibility="{Binding IsAdvancedMode, Converter={StaticResource BoolToVisibility}}" Tag="{StaticResource IconCentreFaceToFace}"
+                            Command="{Binding BeginCentreFaceCommand}" MinWidth="96"
+                            ToolTip="Pick a face on the selected object(s), then a face on a different, unselected one, then choose which axes should match. The whole selection moves together so the two faces' middles coincide on those axes - the way you'd centre a lid on an opening or a flange on its mate." />
                     <Separator Margin="8,0" Visibility="{Binding IsAdvancedMode, Converter={StaticResource BoolToVisibility}}" />
                     <Button Style="{StaticResource ToolButton}" Content="Fit" Visibility="{Binding IsAdvancedMode, Converter={StaticResource BoolToVisibility}}" Tag="{StaticResource IconFitBed}"
                             Command="{Binding FitToBedCommand}" MinWidth="58"
@@ -1253,6 +1256,32 @@
                         <StackPanel Orientation="Horizontal">
                             <Button Content="Apply" Style="{StaticResource PanelButton}" Command="{Binding ApplyAlignFaceCommand}" />
                             <Button Content="Cancel" Style="{StaticResource PanelButton}" Command="{Binding CancelAlignFaceCommand}" />
+                        </StackPanel>
+                    </StackPanel>
+                </Border>
+
+                <!-- Centre-face-to-face panel, shown only while that tool is running. Shares
+                     Split's row: none of them ever run together. -->
+                <Border Grid.Row="2" Margin="0,10,0,0" Padding="8" Background="#FFEFF5FF"
+                        BorderBrush="#FFB8D2F0" BorderThickness="1" CornerRadius="3"
+                        Visibility="{Binding IsCentreFaceMode, Converter={StaticResource BoolToVisibility}}">
+                    <StackPanel>
+                        <TextBlock Text="Centre face to face" FontWeight="SemiBold" Margin="0,0,0,6" />
+                        <TextBlock TextWrapping="Wrap" Foreground="#FF5A5F66" Margin="0,0,0,6"
+                                   Text="Click a face on the selected object(s), then a face on a different, unselected one." />
+                        <TextBlock Text="{Binding CentreFaceStatusLabel}" FontStyle="Italic" Foreground="#FF5A5F66"
+                                   TextWrapping="Wrap" Margin="0,0,0,8" />
+
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+                            <TextBlock Text="Match" Style="{StaticResource FieldLabel}" />
+                            <CheckBox Content="X" Margin="0,0,10,0" IsChecked="{Binding CentreAxisX, Mode=TwoWay}" />
+                            <CheckBox Content="Y" Margin="0,0,10,0" IsChecked="{Binding CentreAxisY, Mode=TwoWay}" />
+                            <CheckBox Content="Z" IsChecked="{Binding CentreAxisZ, Mode=TwoWay}" />
+                        </StackPanel>
+
+                        <StackPanel Orientation="Horizontal">
+                            <Button Content="Apply" Style="{StaticResource PanelButton}" Command="{Binding ApplyCentreFaceCommand}" />
+                            <Button Content="Cancel" Style="{StaticResource PanelButton}" Command="{Binding CancelCentreFaceCommand}" />
                         </StackPanel>
                     </StackPanel>
                 </Border>

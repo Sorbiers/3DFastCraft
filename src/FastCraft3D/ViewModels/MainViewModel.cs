@@ -100,6 +100,11 @@ public sealed class MainViewModel : INotifyPropertyChanged
     private bool alignFacePicked;
     private string? alignFaceTargetLabel;
     private AlignMode? alignFaceModeX, alignFaceModeY, alignFaceModeZ;
+    private bool isCentreFaceMode;
+    private FacePatch? centreFaceA, centreFaceB;
+    private bool centreFaceAPicked, centreFaceBPicked;
+    private string? centreFaceALabel, centreFaceBLabel;
+    private bool centreAxisX = true, centreAxisY = true, centreAxisZ = true;
     private float embossBevel;
     private TextProjection embossProjection = TextProjection.Planar;
     private SurfacePlacement embossPlacement = SurfacePlacement.Middle;
@@ -254,6 +259,10 @@ public sealed class MainViewModel : INotifyPropertyChanged
         ApplyAlignFaceCommand = RelayCommand.Simple(
             ApplyAlignFace, () => alignFacePicked && (alignFaceModeX is not null || alignFaceModeY is not null || alignFaceModeZ is not null));
         CancelAlignFaceCommand = RelayCommand.Simple(() => IsAlignFaceMode = false);
+        BeginCentreFaceCommand = Track(RelayCommand.Simple(BeginCentreFace, () => Scene.Selection.Count > 0));
+        ApplyCentreFaceCommand = RelayCommand.Simple(
+            ApplyCentreFace, () => centreFaceAPicked && centreFaceBPicked && (centreAxisX || centreAxisY || centreAxisZ));
+        CancelCentreFaceCommand = RelayCommand.Simple(() => IsCentreFaceMode = false);
         LoadDrawingCommand = RelayCommand.Simple(LoadDrawing);
         ClearDrawingCommand = RelayCommand.Simple(
             () => { svgFile = ""; RefreshDrawing(); }, () => svgFile.Length > 0);
@@ -396,6 +405,9 @@ public sealed class MainViewModel : INotifyPropertyChanged
     public System.Windows.Input.ICommand BeginAlignFaceCommand { get; }
     public System.Windows.Input.ICommand ApplyAlignFaceCommand { get; }
     public System.Windows.Input.ICommand CancelAlignFaceCommand { get; }
+    public System.Windows.Input.ICommand BeginCentreFaceCommand { get; }
+    public System.Windows.Input.ICommand ApplyCentreFaceCommand { get; }
+    public System.Windows.Input.ICommand CancelCentreFaceCommand { get; }
     public System.Windows.Input.ICommand LoadDrawingCommand { get; }
     public System.Windows.Input.ICommand ClearDrawingCommand { get; }
     public System.Windows.Input.ICommand BeginMeasureCommand { get; }
@@ -1687,7 +1699,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
     /// underneath and leaving it to the pointer to decide which was meant.
     /// </summary>
     public bool IsToolRunning => isSplitMode || isEngraveMode || isEmbossMode || isLayMode || isExtrudeMode || isConnectMode || isSketchMode || isPivotMode
-                                 || isAlignFaceMode || openPanel is not null;
+                                 || isAlignFaceMode || isCentreFaceMode || openPanel is not null;
 
     /// <summary>
     /// Whether a tool has the object in hand, counting the two that do not take the handles
@@ -1814,6 +1826,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
         IsMeasureMode = false;
         IsLayMode = false;
         IsPivotMode = false;
+        IsCentreFaceMode = false;
 
         alignFace = null;
         alignFacePicked = false;
@@ -1907,6 +1920,176 @@ public sealed class MainViewModel : INotifyPropertyChanged
         }
 
         IsAlignFaceMode = false;
+        RefreshSelection();
+    }
+
+    // --- Centre face to face ----------------------------------------------------------
+
+    /// <summary>
+    /// While this is on, a click picks one of two faces: on a selected object it sets the face
+    /// that is about to move, on any other object the face it is aimed at. Apply then moves the
+    /// whole selection, as one rigid group, so the two faces' middles coincide on whichever axes
+    /// were asked for - the same idea as Align to face, but against a second real face instead of
+    /// a point picked once.
+    /// </summary>
+    public bool IsCentreFaceMode
+    {
+        get => isCentreFaceMode;
+        set
+        {
+            if (isCentreFaceMode == value) return;
+
+            Set(ref isCentreFaceMode, value);
+            if (!value)
+            {
+                centreFaceA = centreFaceB = null;
+                centreFaceAPicked = centreFaceBPicked = false;
+                centreFaceALabel = centreFaceBLabel = null;
+                RaiseCentreFace();
+            }
+            Raise(nameof(IsToolRunning));
+            RaiseToolInHand();
+            Raise(nameof(ShowManipulatorBar));
+        }
+    }
+
+    /// <summary>Raised whenever either picked or hovered face changes, so the viewport can redraw both markers.</summary>
+    public event Action? CentreFaceChanged;
+
+    public FacePatch? CentreFaceA => centreFaceA;
+    public FacePatch? CentreFaceB => centreFaceB;
+    public bool HasCentreFaceA => centreFaceAPicked;
+    public bool HasCentreFaceB => centreFaceBPicked;
+
+    public string CentreFaceStatusLabel => (centreFaceAPicked, centreFaceBPicked) switch
+    {
+        (false, false) => "Click a face on the selected object(s)",
+        (true, false) => $"Picked a face on {centreFaceALabel} - now click a face on a different, unselected object",
+        (false, true) => $"Picked a face on {centreFaceBLabel} - now click a face on the selected object(s)",
+        (true, true) => $"Picked {centreFaceALabel} against {centreFaceBLabel} - choose the axes, then Apply"
+    };
+
+    /// <summary>Whether this axis' offset should be applied at all - the other two keep their position.</summary>
+    public bool CentreAxisX { get => centreAxisX; set => Set(ref centreAxisX, value); }
+    public bool CentreAxisY { get => centreAxisY; set => Set(ref centreAxisY, value); }
+    public bool CentreAxisZ { get => centreAxisZ; set => Set(ref centreAxisZ, value); }
+
+    private void RaiseCentreFace()
+    {
+        Raise(nameof(HasCentreFaceA));
+        Raise(nameof(HasCentreFaceB));
+        Raise(nameof(CentreFaceStatusLabel));
+        CentreFaceChanged?.Invoke();
+    }
+
+    private void BeginCentreFace()
+    {
+        if (Scene.Selection.Count == 0) return;
+
+        IsSplitMode = false;
+        IsSubtractMode = false;
+        IsEngraveMode = false;
+        IsEmbossMode = false;
+        IsMeasureMode = false;
+        IsLayMode = false;
+        IsPivotMode = false;
+        IsAlignFaceMode = false;
+
+        centreFaceA = centreFaceB = null;
+        centreFaceAPicked = centreFaceBPicked = false;
+        centreFaceALabel = centreFaceBLabel = null;
+        centreAxisX = centreAxisY = centreAxisZ = true;
+
+        IsCentreFaceMode = true;
+        RaiseCentreFace();
+        Status = "Click a face on the selected object(s)";
+    }
+
+    /// <summary>
+    /// Shows, on whichever of the two faces is not yet picked, the face under the pointer - on
+    /// the selection for the first, on anything else for the second. Once a face is picked only a
+    /// fresh click moves it, so the marker does not chase the pointer round the viewport after it
+    /// has already said what it means.
+    /// </summary>
+    public void HoverCentreFace(SceneObject? target, Vector3 worldPoint, Vector3 worldNormal)
+    {
+        if (!isCentreFaceMode) return;
+
+        bool onSelection = target is not null && target.IsSelected;
+
+        if (!centreFaceAPicked && (target is null || onSelection))
+        {
+            centreFaceA = target is null ? null : FacePatch.Find(target.ToWorldMesh(), worldPoint, worldNormal);
+            CentreFaceChanged?.Invoke();
+        }
+        else if (!centreFaceBPicked && (target is null || !onSelection))
+        {
+            centreFaceB = target is null ? null : FacePatch.Find(target.ToWorldMesh(), worldPoint, worldNormal);
+            CentreFaceChanged?.Invoke();
+        }
+    }
+
+    /// <summary>
+    /// Picks a face: one on a selected object sets the first, on anything else the second -
+    /// whichever it is, re-picking replaces what was there before rather than being refused.
+    /// </summary>
+    public bool PickCentreFace(SceneObject target, Vector3 worldPoint, Vector3 worldNormal)
+    {
+        if (!isCentreFaceMode) return false;
+
+        var face = FacePatch.Find(target.ToWorldMesh(), worldPoint, worldNormal);
+        if (face is null) return false;
+
+        if (target.IsSelected)
+        {
+            centreFaceA = face;
+            centreFaceAPicked = true;
+            centreFaceALabel = target.Name;
+        }
+        else
+        {
+            centreFaceB = face;
+            centreFaceBPicked = true;
+            centreFaceBLabel = target.Name;
+        }
+
+        RaiseCentreFace();
+        Status = CentreFaceStatusLabel;
+        return true;
+    }
+
+    /// <summary>
+    /// Moves the whole selection together so the two picked faces' middles coincide on whichever
+    /// axes were asked for. The first face belongs to what is about to move, so it moves with
+    /// everything else selected; the offset is worked out from where it started.
+    /// </summary>
+    private void ApplyCentreFace()
+    {
+        if (!centreFaceAPicked || centreFaceA is not { } faceA) return;
+        if (!centreFaceBPicked || centreFaceB is not { } faceB) return;
+        if (!centreAxisX && !centreAxisY && !centreAxisZ) return;
+
+        var selection = Scene.Selection.ToList();
+        if (selection.Count == 0) return;
+
+        var centreA = faceA.ToLocal((faceA.Min + faceA.Max) * 0.5f);
+        var centreB = faceB.ToLocal((faceB.Min + faceB.Max) * 0.5f);
+        var offset = AlignTools.OffsetBetweenPoints(centreA, centreB, centreAxisX, centreAxisY, centreAxisZ);
+
+        var before = selection.Select(TransformState.Capture).ToList();
+        foreach (var o in selection) o.Position += offset;
+
+        if (TransformCommand.CreateIfChanged("Centre face to face", selection, before) is { } command)
+        {
+            Undo.Execute(command);
+            Status = $"Aligned {selection.Count} object(s) so the two faces' centres match";
+        }
+        else
+        {
+            Status = "Already aligned";
+        }
+
+        IsCentreFaceMode = false;
         RefreshSelection();
     }
 
@@ -2256,6 +2439,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
         IsEmbossMode = false;
         IsMeasureMode = false;
         IsAlignFaceMode = false;
+        IsCentreFaceMode = false;
         IsLayMode = true;
 
         Status = "Click the face you want it to stand on";
@@ -2396,6 +2580,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
         IsMeasureMode = false;
         IsLayMode = false;
         IsAlignFaceMode = false;
+        IsCentreFaceMode = false;
         IsEmbossMode = true;
 
         Status = "Click the face you want to letter";
@@ -3050,6 +3235,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
         IsMeasureMode = false;
         IsSplitMode = false;
         IsAlignFaceMode = false;
+        IsCentreFaceMode = false;
 
         IsSubtractMode = true;
         Raise(nameof(SubtractSummary));
@@ -3070,6 +3256,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
         IsEmbossMode = false;
         IsLayMode = false;
         IsAlignFaceMode = false;
+        IsCentreFaceMode = false;
         measureFrom = null;
         measureTo = null;
         IsMeasureMode = true;
@@ -4529,6 +4716,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
         else if (IsLayMode) IsLayMode = false;
         else if (IsPivotMode) IsPivotMode = false;
         else if (IsAlignFaceMode) IsAlignFaceMode = false;
+        else if (IsCentreFaceMode) IsCentreFaceMode = false;
         else if (IsSubtractMode) IsSubtractMode = false;
         else return false;
 
@@ -6134,6 +6322,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
         IsMeasureMode = false;
         IsLayMode = false;
         IsAlignFaceMode = false;
+        IsCentreFaceMode = false;
         IsPivotMode = true;
 
         Status = "Click the point to measure and turn this object about";
@@ -7467,6 +7656,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
         IsMeasureMode = false;
         IsLayMode = false;
         IsAlignFaceMode = false;
+        IsCentreFaceMode = false;
         IsEngraveMode = true;
         Status = "Click the face you want to engrave";
     }
@@ -7601,6 +7791,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
         IsMeasureMode = false;
         IsLayMode = false;
         IsAlignFaceMode = false;
+        IsCentreFaceMode = false;
         IsSplitMode = true;
         ResetSplitOffset();
         Status = "Drag the arrows to slide the split plane, the rings to tilt it";

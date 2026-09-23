@@ -100,6 +100,15 @@ public static class AlignTools
     private static float AxisOffset(Bounds group, Axis axis, AlignMode? mode, float target) =>
         mode is { } m and not AlignMode.Distribute ? target - Edge(group, axis, m) : 0f;
 
+    /// <summary>
+    /// The offset that would move <paramref name="from"/> onto <paramref name="to"/>, on
+    /// whichever axes are asked to match - what Centre face to face moves the whole selection by,
+    /// the two points being the middles of the two picked faces. An axis left false keeps its
+    /// position, the same as an axis given no mode in <see cref="OffsetToPoint"/>.
+    /// </summary>
+    public static Vector3 OffsetBetweenPoints(Vector3 from, Vector3 to, bool matchX, bool matchY, bool matchZ) =>
+        new(matchX ? to.X - from.X : 0f, matchY ? to.Y - from.Y : 0f, matchZ ? to.Z - from.Z : 0f);
+
     /// <summary>The bed's own edge, which has no axis marked on it and never will.</summary>
     private static float Edge(Bounds box, Axis axis, AlignMode mode) => mode switch
     {

@@ -93,9 +93,12 @@ public partial class MainWindow : Window
     /// <summary>
     /// Align to face's own colour for a face once it is picked, so it reads differently from the
     /// ordinary blue used for hovering over one - and for engraving and lettering, which mark a
-    /// face the same way but mean something else by it.
+    /// face the same way but mean something else by it. Centre face to face reuses it for the
+    /// first face it picks - the one on the selection - and a second colour of its own for the
+    /// second, so the two faces on screen at once read as two different things.
     /// </summary>
     private static readonly Color AlignFacePickedColour = Color.FromRgb(0x3F, 0xA3, 0x4D);
+    private static readonly Color CentreFaceSecondColour = Color.FromRgb(0xE8, 0x8A, 0x2E);
 
     public MainWindow()
     {
@@ -146,6 +149,11 @@ public partial class MainWindow : Window
         viewModel.RestingFacesChanged += () => renderer?.ShowRestingFaces(viewModel.RestingFaceList, viewModel.RestingHover);
         viewModel.AlignFaceChanged += () => renderer?.ShowFace(
             viewModel.AlignFace, tint: viewModel.HasAlignFaceTarget ? AlignFacePickedColour : null);
+        viewModel.CentreFaceChanged += () =>
+        {
+            renderer?.ShowFace(viewModel.CentreFaceA, tint: viewModel.HasCentreFaceA ? AlignFacePickedColour : null);
+            renderer?.ShowSecondFace(viewModel.CentreFaceB, tint: viewModel.HasCentreFaceB ? CentreFaceSecondColour : null);
+        };
 
         listSync = new SelectionListSync(ObjectList, viewModel.Scene);
         listSync.ChangedFromList += viewModel.RefreshSelection;
@@ -994,6 +1002,15 @@ public partial class MainWindow : Window
             return;
         }
 
+        // Centre face to face: which of the two faces a click sets follows the object clicked,
+        // not the order clicked in, so the selection is left alone here too.
+        if (viewModel.IsCentreFaceMode && viewModel.PickCentreFace(
+                target, ToVector3(hit!.PointHit), ToVector3(hit.NormalAtHit)))
+        {
+            e.Handled = true;
+            return;
+        }
+
         // While a face is being picked the click means something else entirely, so it never
         // reaches the selection logic. Clicking a different object switches the selection to it
         // first, which is the only way to engrave something else without leaving the mode.
@@ -1178,6 +1195,15 @@ public partial class MainWindow : Window
                 viewModel.HoverAlignFace(hovered, ToVector3(faceHit.PointHit), ToVector3(faceHit.NormalAtHit));
             else
                 viewModel.HoverAlignFace(null, Vector3.Zero, Vector3.Zero);
+        }
+
+        if (viewModel.IsCentreFaceMode)
+        {
+            var faceHit = FirstHit(e.GetPosition(View), selectable: true);
+            if (faceHit is not null && renderer?.Resolve(faceHit.ModelHit) is { } hovered)
+                viewModel.HoverCentreFace(hovered, ToVector3(faceHit.PointHit), ToVector3(faceHit.NormalAtHit));
+            else
+                viewModel.HoverCentreFace(null, Vector3.Zero, Vector3.Zero);
         }
 
         if (viewModel.IsSketchMode && TryIntersectPlane(e.GetPosition(View), 0f, out var onPlate))
