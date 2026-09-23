@@ -138,6 +138,7 @@ public partial class MainWindow : Window
 
         gizmo = new GizmoController(GizmoLayer, new Viewport3DXProjector(View), viewModel.Scene, viewModel.Undo);
         gizmo.Feedback += text => viewModel.Status = text;
+        gizmo.GroupRotated += viewModel.NoteGroupTurn;
         gizmo.KeepOnBedMove = viewModel.KeepOnBedMove;
         gizmo.KeepOnBedScale = viewModel.KeepOnBedScale;
         GizmoLayer.PreviewMouseLeftButtonDown += OnGizmoDown;

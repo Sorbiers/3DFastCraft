@@ -107,6 +107,10 @@ public sealed class MainViewModel : INotifyPropertyChanged
     private bool? damaged;
     private bool scaleOneSide;
     private bool aroundSelectionCentre = true;
+    private float groupRollSinceGrab;
+    private float groupPitchSinceGrab;
+    private float groupYawSinceGrab;
+    private List<SceneObject> groupTurnBaseline = [];
     private bool stopOnContact;
     private bool keepOnBedMove;
     private bool keepOnBedScale = true;
@@ -137,6 +141,27 @@ public sealed class MainViewModel : INotifyPropertyChanged
     private bool stickySelection = true;
     private bool isSelectionMenuOpen = true;
 
+    /// <summary>The last tool-launching command run, and what it was given, for RepeatLastCommand.</summary>
+    private System.Windows.Input.ICommand? lastRepeatable;
+    private object? lastRepeatableParameter;
+
+    /// <summary>
+    /// Wraps a tool-launching command so Ctrl+Space can run it again with the same parameter.
+    /// Reopening a dialog starts from the numbers it was last left with, since the dialog
+    /// remembers those itself; a mode that takes no parameter just begins again the same way.
+    /// Only the commands that open a tool are wrapped - undo, file and selection commands have
+    /// nothing sensible to repeat. A bare key was ruled out: this window's shortcuts fire from
+    /// Window.InputBindings no matter what has focus, so an unmodified Space or a letter would
+    /// have swallowed typing into an object's name or clicking a focused button.
+    /// </summary>
+    private System.Windows.Input.ICommand Track(System.Windows.Input.ICommand inner) =>
+        new RelayCommand(p =>
+        {
+            lastRepeatable = inner;
+            lastRepeatableParameter = p;
+            inner.Execute(p);
+        }, p => inner.CanExecute(p));
+
     public MainViewModel()
     {
         Scene = new Scene();
@@ -149,15 +174,15 @@ public sealed class MainViewModel : INotifyPropertyChanged
         Scene.Objects.CollectionChanged += (_, _) => RefreshSelection();
         Scene.Objects.CollectionChanged += (_, _) => RaiseHiddenAndLocked();
 
-        InsertCommand = new RelayCommand(p => Insert(p));
-        InsertStairCommand = RelayCommand.Simple(InsertStair);
-        InsertThreadCommand = AsyncRelayCommand.Simple(InsertThread);
-        InsertFitTestCommand = RelayCommand.Simple(InsertFitTest);
-        InsertCustomCommand = RelayCommand.Simple(InsertCustom);
-        InsertTextCommand = RelayCommand.Simple(InsertText);
-        InsertHoleCommand = AsyncRelayCommand.Simple(InsertHole);
-        InsertLithophaneCommand = AsyncRelayCommand.Simple(InsertLithophane);
-        HullCommand = RelayCommand.Simple(HullSelection, () => Scene.Selection.Count > 0);
+        InsertCommand = Track(new RelayCommand(p => Insert(p)));
+        InsertStairCommand = Track(RelayCommand.Simple(InsertStair));
+        InsertThreadCommand = Track(AsyncRelayCommand.Simple(InsertThread));
+        InsertFitTestCommand = Track(RelayCommand.Simple(InsertFitTest));
+        InsertCustomCommand = Track(RelayCommand.Simple(InsertCustom));
+        InsertTextCommand = Track(RelayCommand.Simple(InsertText));
+        InsertHoleCommand = Track(AsyncRelayCommand.Simple(InsertHole));
+        InsertLithophaneCommand = Track(AsyncRelayCommand.Simple(InsertLithophane));
+        HullCommand = Track(RelayCommand.Simple(HullSelection, () => Scene.Selection.Count > 0));
         BeginSketchCommand = new RelayCommand(p => BeginSketch(Enum.TryParse<SketchTool>(p as string, out var tool) ? tool : SketchTool.Line));
         SketchCloseCommand = RelayCommand.Simple(() => SayOfSketch(sketch.Close()), () => sketch.Chain.Count >= 3);
         SketchUndoCommand = RelayCommand.Simple(() => SayOfSketch(sketch.Undo()), () => !sketch.IsEmpty);
@@ -166,7 +191,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
         SketchExtrudeCommand = RelayCommand.Simple(ExtrudeSketch, () => sketch.Loops.Count > 0);
         SketchRevolveCommand = RelayCommand.Simple(RevolveSketch, () => sketch.Loops.Count > 0);
         DoneSketchCommand = RelayCommand.Simple(() => IsSketchMode = false);
-        InsertGearCommand = RelayCommand.Simple(InsertGear);
+        InsertGearCommand = Track(RelayCommand.Simple(InsertGear));
         DeleteCommand = RelayCommand.Simple(Delete, () => Scene.Selection.Count > 0);
         DuplicateCommand = new RelayCommand(p => Duplicate(offset: !Equals(p, "InPlace")),
             _ => Scene.Selection.Count > 0);
@@ -187,53 +212,53 @@ public sealed class MainViewModel : INotifyPropertyChanged
             () => { Scene.ClearSelection(); RefreshSelection(); },
             () => Scene.Selection.Count > 0);
 
-        BooleanCommand = new AsyncRelayCommand(p => RunBoolean(p), _ => Scene.Selection.Count >= 2);
-        BeginSubtractCommand = RelayCommand.Simple(BeginSubtract, () => Scene.Selection.Count >= 2);
-        BeginExtrudeCommand = RelayCommand.Simple(BeginExtrude, () => Scene.Selection.Count > 0);
+        BooleanCommand = Track(new AsyncRelayCommand(p => RunBoolean(p), _ => Scene.Selection.Count >= 2));
+        BeginSubtractCommand = Track(RelayCommand.Simple(BeginSubtract, () => Scene.Selection.Count >= 2));
+        BeginExtrudeCommand = Track(RelayCommand.Simple(BeginExtrude, () => Scene.Selection.Count > 0));
         ApplyExtrudeCommand = AsyncRelayCommand.Simple(ApplyExtrude, () => IsExtrudeMode);
         CancelExtrudeCommand = RelayCommand.Simple(() => IsExtrudeMode = false);
         ApplySubtractCommand = new AsyncRelayCommand(_ => ApplySubtract(), _ => Scene.Selection.Count >= 2);
         CancelSubtractCommand = RelayCommand.Simple(() => IsSubtractMode = false);
-        BeginSplitCommand = RelayCommand.Simple(
-            () => { SplitWithConnectors = false; BeginSplit(); }, () => Scene.Selection.Count > 0);
-        BeginConnectCommand = RelayCommand.Simple(BeginConnect, () => Scene.Selection.Count == 2);
+        BeginSplitCommand = Track(RelayCommand.Simple(
+            () => { SplitWithConnectors = false; BeginSplit(); }, () => Scene.Selection.Count > 0));
+        BeginConnectCommand = Track(RelayCommand.Simple(BeginConnect, () => Scene.Selection.Count == 2));
         ApplyConnectCommand = AsyncRelayCommand.Simple(ApplyConnect, () => IsConnectMode);
         CancelConnectCommand = RelayCommand.Simple(() => IsConnectMode = false);
-        BeginSplitWithConnectorsCommand = RelayCommand.Simple(
-            () => { SplitWithConnectors = true; BeginSplit(); }, () => Scene.Selection.Count > 0);
+        BeginSplitWithConnectorsCommand = Track(RelayCommand.Simple(
+            () => { SplitWithConnectors = true; BeginSplit(); }, () => Scene.Selection.Count > 0));
         AlignToAxesCommand = RelayCommand.Simple(AlignToAxes, AnythingTurned);
         ApplySplitCommand = AsyncRelayCommand.Simple(ApplySplit, () => IsSplitMode);
         CancelSplitCommand = RelayCommand.Simple(() => IsSplitMode = false);
 
-        RepairCommand = AsyncRelayCommand.Simple(RepairObjects, () => Scene.Objects.Count > 0);
-        SmoothCommand = RelayCommand.Simple(SmoothSelection, () => Scene.Selection.Count > 0);
-        TwistCommand = RelayCommand.Simple(TwistSelection, () => Scene.Selection.Count > 0);
-        TaperCommand = RelayCommand.Simple(TaperSelection, () => Scene.Selection.Count > 0);
-        BendCommand = RelayCommand.Simple(BendSelection, () => Scene.Selection.Count > 0);
-        RebuildCommand = AsyncRelayCommand.Simple(RebuildObjects, () => Scene.Objects.Count > 0);
-        SimplifyCommand = AsyncRelayCommand.Simple(SimplifySelection, () => Scene.Selection.Count > 0);
-        HollowCommand = AsyncRelayCommand.Simple(HollowSelection, () => Scene.Selection.Count > 0);
-        VoronoiCommand = AsyncRelayCommand.Simple(VoronoiSelection, () => Scene.Selection.Count > 0);
-        BeginEmbossCommand = RelayCommand.Simple(BeginEmboss, () => Scene.Selection.Count == 1);
-        BeginLayCommand = RelayCommand.Simple(BeginLay, () => Scene.Selection.Count == 1);
+        RepairCommand = Track(AsyncRelayCommand.Simple(RepairObjects, () => Scene.Objects.Count > 0));
+        SmoothCommand = Track(RelayCommand.Simple(SmoothSelection, () => Scene.Selection.Count > 0));
+        TwistCommand = Track(RelayCommand.Simple(TwistSelection, () => Scene.Selection.Count > 0));
+        TaperCommand = Track(RelayCommand.Simple(TaperSelection, () => Scene.Selection.Count > 0));
+        BendCommand = Track(RelayCommand.Simple(BendSelection, () => Scene.Selection.Count > 0));
+        RebuildCommand = Track(AsyncRelayCommand.Simple(RebuildObjects, () => Scene.Objects.Count > 0));
+        SimplifyCommand = Track(AsyncRelayCommand.Simple(SimplifySelection, () => Scene.Selection.Count > 0));
+        HollowCommand = Track(AsyncRelayCommand.Simple(HollowSelection, () => Scene.Selection.Count > 0));
+        VoronoiCommand = Track(AsyncRelayCommand.Simple(VoronoiSelection, () => Scene.Selection.Count > 0));
+        BeginEmbossCommand = Track(RelayCommand.Simple(BeginEmboss, () => Scene.Selection.Count == 1));
+        BeginLayCommand = Track(RelayCommand.Simple(BeginLay, () => Scene.Selection.Count == 1));
         ApplyEmbossCommand = AsyncRelayCommand.Simple(ApplyEmboss, () => isEmbossMode && embossFace is not null);
         CancelEmbossCommand = RelayCommand.Simple(() => IsEmbossMode = false);
         LoadDrawingCommand = RelayCommand.Simple(LoadDrawing);
         ClearDrawingCommand = RelayCommand.Simple(
             () => { svgFile = ""; RefreshDrawing(); }, () => svgFile.Length > 0);
-        RepeatCommand = RelayCommand.Simple(RepeatSelection, () => Scene.Selection.Count > 0);
+        RepeatCommand = Track(RelayCommand.Simple(RepeatSelection, () => Scene.Selection.Count > 0));
         AbortCommand = RelayCommand.Simple(AbortWork, () => CanAbort);
         Undo.Trimmed += () => HistoryTrimmed = true;
         sink = new Sink(value => reported = value);
-        MouldCommand = new AsyncRelayCommand(_ => MakeMould(), _ => Scene.Selection.Count == 1);
+        MouldCommand = Track(new AsyncRelayCommand(_ => MakeMould(), _ => Scene.Selection.Count == 1));
         AlignToSelectionCommand = RelayCommand.Simple(
             AlignToSelection, () => Scene.Selection.Count == 2);
         FitCheckCommand = RelayCommand.Simple(FitCheck, () => Scene.Selection.Count == 2);
-        SetPivotCommand = RelayCommand.Simple(BeginPivot, () => Scene.Selection.Count == 1);
+        SetPivotCommand = Track(RelayCommand.Simple(BeginPivot, () => Scene.Selection.Count == 1));
         PivotToCentreCommand = RelayCommand.Simple(PivotToCentre, () => Scene.Selection.Count == 1);
-        BeginMeasureCommand = RelayCommand.Simple(BeginMeasure, () => Scene.Objects.Count > 0);
+        BeginMeasureCommand = Track(RelayCommand.Simple(BeginMeasure, () => Scene.Objects.Count > 0));
         CancelMeasureCommand = RelayCommand.Simple(() => IsMeasureMode = false);
-        BeginEngraveCommand = RelayCommand.Simple(BeginEngrave, () => Scene.Selection.Count == 1);
+        BeginEngraveCommand = Track(RelayCommand.Simple(BeginEngrave, () => Scene.Selection.Count == 1));
         ApplyEngraveCommand = AsyncRelayCommand.Simple(ApplyEngrave, () => isEngraveMode && engrave.HasFace);
         CancelEngraveCommand = RelayCommand.Simple(() => IsEngraveMode = false);
 
@@ -257,7 +282,10 @@ public sealed class MainViewModel : INotifyPropertyChanged
         SetRotateModeCommand = RelayCommand.Simple(() => GizmoMode = GizmoMode.Rotate);
         SetScaleModeCommand = RelayCommand.Simple(() => GizmoMode = GizmoMode.Scale);
         AlignCommand = new RelayCommand(Align, CanAlign);
-        RoundCommand = RelayCommand.Simple(RoundSelection, () => Scene.Selection.Any(o => o.CanRound));
+        RoundCommand = Track(RelayCommand.Simple(RoundSelection, () => Scene.Selection.Any(o => o.CanRound)));
+        RepeatLastCommand = RelayCommand.Simple(
+            () => lastRepeatable!.Execute(lastRepeatableParameter),
+            () => lastRepeatable?.CanExecute(lastRepeatableParameter) ?? false);
         CopyCommand = RelayCommand.Simple(Copy, () => Scene.Selection.Count > 0);
         CutCommand = RelayCommand.Simple(Cut, () => Scene.Selection.Count > 0);
         PasteCommand = RelayCommand.Simple(Paste, () => clipboard.Count > 0);
@@ -331,6 +359,9 @@ public sealed class MainViewModel : INotifyPropertyChanged
     public System.Windows.Input.ICommand SimplifyCommand { get; }
     public System.Windows.Input.ICommand HollowCommand { get; }
     public System.Windows.Input.ICommand VoronoiCommand { get; }
+
+    /// <summary>Runs whatever tool-launching command last ran, with what it was given.</summary>
+    public System.Windows.Input.ICommand RepeatLastCommand { get; }
 
     private IReadOnlyList<(Vector3 From, Vector3 To)> voronoiOutline = [];
 
@@ -485,20 +516,80 @@ public sealed class MainViewModel : INotifyPropertyChanged
     // what they share and sets all of them to it.
     public float GroupRoll
     {
-        get => aroundSelectionCentre ? 0f : Shared(o => o.RotationX);
+        get => aroundSelectionCentre ? DisplayedGroupTurn(Axis.X, groupRollSinceGrab) : Shared(o => o.RotationX);
         set { if (aroundSelectionCentre) TurnSelectionAbout(Axis.X, value); else TurnGroup(Axis.X, value); }
     }
 
     public float GroupPitch
     {
-        get => aroundSelectionCentre ? 0f : Shared(o => o.RotationY);
+        get => aroundSelectionCentre ? DisplayedGroupTurn(Axis.Y, groupPitchSinceGrab) : Shared(o => o.RotationY);
         set { if (aroundSelectionCentre) TurnSelectionAbout(Axis.Y, value); else TurnGroup(Axis.Y, value); }
     }
 
     public float GroupYaw
     {
-        get => aroundSelectionCentre ? 0f : Shared(o => o.RotationZ);
+        get => aroundSelectionCentre ? DisplayedGroupTurn(Axis.Z, groupYawSinceGrab) : Shared(o => o.RotationZ);
         set { if (aroundSelectionCentre) TurnSelectionAbout(Axis.Z, value); else TurnGroup(Axis.Z, value); }
+    }
+
+    /// <summary>
+    /// The axis a ring is mid-drag on, and how far it has turned so far - on top of whatever the
+    /// box already read, since DragRotate measures the whole drag from where it started rather
+    /// than ticking up from the last mouse move.
+    /// </summary>
+    private Axis? liveGroupTurnAxis;
+    private float liveGroupTurnDegrees;
+
+    private float DisplayedGroupTurn(Axis axis, float settled) =>
+        liveGroupTurnAxis == axis ? GizmoMath.NormaliseDegrees(settled + liveGroupTurnDegrees) : settled;
+
+    /// <summary>
+    /// Zeroes the roll/pitch/yaw readout for the "as one" rotation, so it counts from whatever
+    /// moment counts as fresh: a new selection, or the mode being switched on. The angles
+    /// themselves live nowhere on the objects - each keeps its own - so there is nothing to zero
+    /// but this reading of it.
+    /// </summary>
+    private void ResetGroupTurnSinceGrab()
+    {
+        groupRollSinceGrab = 0f;
+        groupPitchSinceGrab = 0f;
+        groupYawSinceGrab = 0f;
+        liveGroupTurnAxis = null;
+        liveGroupTurnDegrees = 0f;
+        groupTurnBaseline = Scene.Selection.ToList();
+    }
+
+    private void AccumulateGroupTurn(Axis axis, float degrees)
+    {
+        switch (axis)
+        {
+            case Axis.X: groupRollSinceGrab = GizmoMath.NormaliseDegrees(groupRollSinceGrab + degrees); break;
+            case Axis.Y: groupPitchSinceGrab = GizmoMath.NormaliseDegrees(groupPitchSinceGrab + degrees); break;
+            default: groupYawSinceGrab = GizmoMath.NormaliseDegrees(groupYawSinceGrab + degrees); break;
+        }
+    }
+
+    /// <summary>
+    /// A ring drag reporting in - live on every step so the box tracks the turn as it happens,
+    /// and once more, settled, when the mouse lets go.
+    /// </summary>
+    public void NoteGroupTurn(Axis axis, float degrees, bool settled)
+    {
+        if (!float.IsFinite(degrees)) return;
+
+        if (settled)
+        {
+            if (MathF.Abs(degrees) >= 1e-4f) AccumulateGroupTurn(axis, degrees);
+            liveGroupTurnAxis = null;
+            liveGroupTurnDegrees = 0f;
+        }
+        else
+        {
+            liveGroupTurnAxis = axis;
+            liveGroupTurnDegrees = degrees;
+        }
+
+        RaiseGroup();
     }
 
     /// <summary>
@@ -803,6 +894,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
             o.Position = centre + Vector3.Transform(o.Position - centre, turn);
         }
 
+        AccumulateGroupTurn(axis, degrees);
         RaiseGroup();
     }
 
@@ -1415,6 +1507,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
             if (aroundSelectionCentre == value) return;
 
             aroundSelectionCentre = value;
+            if (value) ResetGroupTurnSinceGrab();
             Raise(nameof(AroundSelectionCentre));
             foreach (var name in GroupBoxes) Raise(name);
         }
@@ -1923,8 +2016,15 @@ public sealed class MainViewModel : INotifyPropertyChanged
                 // Measured once per face picked: every drag of the handles asks for the surface.
                 embossProfile ??= embossMesh is { } mesh ? SurfaceProfile.Build(mesh, axis) : null;
 
+                // A single stamp centres on where it was clicked - that is the point of clicking.
+                // Filling the face is asking for the whole barrel regardless of where the click
+                // landed, so layout Y = 0 belongs at the part's own middle instead; anchoring it
+                // to the click left the field as high or low as the click happened to be, with as
+                // much of it run off the top as was left below.
+                float originZ = embossFill ? embossBounds.Center.Z : embossPick.Z;
+
                 return new CylinderSurface(
-                    new Vector3(axis.X, axis.Y, embossPick.Z), radius,
+                    new Vector3(axis.X, axis.Y, originZ), radius,
                     MathF.Atan2(outward.Y, outward.X), embossProfile);
             }
 
@@ -4331,7 +4431,12 @@ public sealed class MainViewModel : INotifyPropertyChanged
             else return;
         }
 
-        var mesh = Primitives.Create(kind);
+        // The old app's cone and cylinder were smooth at a glance; 32 facets on those two read
+        // as a facet count, not a curve. Sphere and torus stay at the default - both use their
+        // segment count twice over (rings, and sides round the tube), so 100 there is 10,000
+        // triangles rather than 100.
+        int segments = kind is PrimitiveKind.Cylinder or PrimitiveKind.Cone ? 100 : Primitives.DefaultSegments;
+        var mesh = Primitives.Create(kind, segments: segments);
         var o = new SceneObject(Scene.UniqueName(kind.ToString()), mesh)
         {
             Colour = NextAutomaticColour(),
@@ -4621,17 +4726,65 @@ public sealed class MainViewModel : INotifyPropertyChanged
     /// </summary>
     private void InsertStair()
     {
-        var dialog = new StairDialog(modelScale);
-        if (dialog.ShowDialog() != true || dialog.Result is not { } s) return;
+        var colour = NextAutomaticColour();
+        SceneObject? shown = null;
+        TransformState? place = null;
 
-        var mesh = StairBuilder.Build(s.Rise, s.Run, s.Width, s.Steps);
-        if (mesh.TriangleCount == 0) return;
+        void OnThePlate(SceneObject o) => o.Position = new Vector3(0, 0, o.Mesh.ComputeBounds().Size.Z / 2f);
 
-        var o = new SceneObject(Scene.UniqueName("Stair"), mesh)
+        var dialog = new StairDialog(modelScale, (settings, mesh) =>
         {
-            Colour = NextAutomaticColour(),
-            Position = new Vector3(0, 0, mesh.ComputeBounds().Size.Z / 2f)
-        };
+            if (settings is null || mesh is null || mesh.TriangleCount == 0)
+            {
+                if (shown is not null)
+                {
+                    place = TransformState.Capture(shown);
+                    Scene.Objects.Remove(shown);
+                }
+
+                shown = null;
+                return;
+            }
+
+            if (shown is null)
+            {
+                shown = new SceneObject("Stair", mesh) { Colour = colour };
+                OnThePlate(shown);
+                Scene.Objects.Add(shown);
+                HoldPreview(shown);
+            }
+            else
+            {
+                // Rebuilt where it stands, its lowest point kept where it was: a longer flight
+                // grows up from where it has been put rather than back into the plate.
+                float low = shown.WorldBounds.Min.Z;
+                shown.Mesh = mesh;
+                shown.PositionZ += low - shown.WorldBounds.Min.Z;
+            }
+        });
+
+        bool accepted = dialog.ShowDialog() == true;
+
+        if (shown is not null)
+        {
+            place = TransformState.Capture(shown);
+            Scene.Objects.Remove(shown);
+        }
+
+        ReleasePreview();
+
+        if (!accepted || dialog.Result is not { } s)
+        {
+            RefreshSelection();
+            return;
+        }
+
+        var built = StairBuilder.Build(s.Rise, s.Run, s.Width, s.Steps);
+        if (built.TriangleCount == 0) return;
+
+        var o = new SceneObject(Scene.UniqueName("Stair"), built) { Colour = colour };
+        if (place is { } where) where.ApplyTo(o);
+        else OnThePlate(o);
 
         Undo.Execute(new AddObjectsCommand("Insert stair", [o]));
         RefreshSelection();
@@ -8207,6 +8360,11 @@ public sealed class MainViewModel : INotifyPropertyChanged
 
         var selection = Scene.Selection;
         Selected = selection.Count == 1 ? selection[0] : null;
+
+        // The "as one" turn readout counts from the moment a selection was made, not from
+        // whatever it happened to read before - so it only resets when the set of objects
+        // actually changes, not on every refresh a move or resize also asks for.
+        if (!selection.SequenceEqual(groupTurnBaseline)) ResetGroupTurnSinceGrab();
 
         // Every box that reads off the selection, because the selection has just changed.
         //

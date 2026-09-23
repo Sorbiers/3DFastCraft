@@ -11,7 +11,8 @@ namespace FastCraft3D.View;
 public readonly record struct StairSettings(float Rise, float Run, float Width, int Steps);
 
 /// <summary>
-/// Asks for a flight of steps, and says what it would be to climb.
+/// Asks for a flight of steps, showing it on the plate as the numbers change, and says what it
+/// would be to climb.
 ///
 /// The numbers are the whole of the job: a riser somewhere between 150 and 190 mm on a going of
 /// 240 or more is a stair, and anything else is a ladder or a ramp. At the model's scale that is
@@ -21,11 +22,14 @@ public readonly record struct StairSettings(float Rise, float Run, float Width, 
 public partial class StairDialog : ToolPanel
 {
     private readonly float scale;
+    private readonly Action<StairSettings?, Mesh?> preview;
 
     public StairSettings? Result { get; private set; }
 
-    public StairDialog(float modelScale)
+    /// <param name="preview">Shows the flight on the plate, or takes it away when given nulls.</param>
+    public StairDialog(float modelScale, Action<StairSettings?, Mesh?> preview)
     {
+        this.preview = preview;
         InitializeComponent();
 
         scale = modelScale <= 0 ? 1f : modelScale;
@@ -41,6 +45,7 @@ public partial class StairDialog : ToolPanel
         if (Read() is not { } s)
         {
             SummaryText.Text = "Fill in the four numbers.";
+            preview(null, null);
             return;
         }
 
@@ -54,6 +59,8 @@ public partial class StairDialog : ToolPanel
                          + real
                          + (check.Advice.Length > 0 ? " " + check.Advice
                             : check.IsClimbable ? " A comfortable flight." : "");
+
+        preview(s, StairBuilder.Build(s.Rise, s.Run, s.Width, s.Steps));
     }
 
     private StairSettings? Read()
@@ -76,5 +83,11 @@ public partial class StairDialog : ToolPanel
 
         Result = settings;
         DialogResult = true;
+    }
+
+    protected override void OnClosed(EventArgs e)
+    {
+        preview(null, null);
+        base.OnClosed(e);
     }
 }

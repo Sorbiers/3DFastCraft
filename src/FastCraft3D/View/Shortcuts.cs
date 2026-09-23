@@ -88,6 +88,7 @@ public static class Shortcuts
         new("Edit", "Show everything hidden", Key.H, ModifierKeys.Alt, Action: KeyAction.ShowAll),
         new("Edit", "Lock the selection, so nothing can select or change it", Key.L, Action: KeyAction.LockSelection),
         new("Edit", "Unlock everything", Key.L, ModifierKeys.Alt, Action: KeyAction.UnlockAll),
+        new("Edit", "Repeat the last tool, with what it was last given", Key.Space, Ctrl, "RepeatLastCommand"),
 
         new("Move, rotate, resize", "Move handles", Key.M, Action: KeyAction.Move),
         new("Move, rotate, resize", "Rotate handles", Key.R, Action: KeyAction.Rotate),

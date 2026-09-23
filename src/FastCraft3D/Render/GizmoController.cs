@@ -83,6 +83,9 @@ public sealed class GizmoController
     private float? contactAhead, contactBehind;
     private bool dragChanged;
 
+    /// <summary>This drag's rotation so far, for GroupRotated once it lets go.</summary>
+    private double lastRotateDegrees;
+
     public GizmoController(Canvas layer, IScreenProjector projector, Scene scene, UndoStack undo)
     {
         this.layer = layer;
@@ -93,6 +96,13 @@ public sealed class GizmoController
 
     /// <summary>Live readout while dragging, for the status bar.</summary>
     public event Action<string>? Feedback;
+
+    /// <summary>
+    /// Fired on every step of a ring drag on several objects "as one", with the axis and the
+    /// total turned so far, and once more with <c>settled</c> true when the mouse lets go - for
+    /// the roll/pitch/yaw readout, which has nothing of its own to read the angle back from.
+    /// </summary>
+    public event Action<Axis, float, bool>? GroupRotated;
 
     public bool IsDragging => active is not null;
 
@@ -637,6 +647,9 @@ public sealed class GizmoController
             undo.Execute(command);
         }
 
+        if (active.Kind == HandleKind.Ring && AroundSelectionCentre && dragObjects.Count > 1)
+            GroupRotated?.Invoke(active.Axis, (float)lastRotateDegrees, true);
+
         active = null;
         dragObjects = [];
         dragBefore = [];
@@ -816,6 +829,7 @@ public sealed class GizmoController
 
         double degrees = GizmoMath.RotationDegrees(
             centre, dragStart, screen, FacingSign(active!.Axis), SnapRotation, RotationSnapDegrees);
+        lastRotateDegrees = degrees;
 
         // Turned about the world axis the ring is drawn on, by composing with what the object
         // already had. Adding the amount to one of the three angles instead is the obvious thing
@@ -845,6 +859,7 @@ public sealed class GizmoController
         }
 
         dragChanged = true;
+        if (asOne) GroupRotated?.Invoke(active.Axis, (float)degrees, false);
         string pivot = dragObjects.Count > 1 ? (asOne ? ", as one" : ", each on its own") : "";
         Feedback?.Invoke(
             $"Rotate {active.Axis} {degrees:+0.#;-0.#;0} deg{(SnapRotation ? " (snapped)" : "")}{pivot}");
