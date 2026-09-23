@@ -879,7 +879,12 @@ public class GearTests
 
         // Nine and a half teeth of run is not a thing: ten of them, 62.8 mm.
         Assert.Contains(result.Notes, n => n.Contains("60 mm became 62.8"));
-        Assert.Equal(62.83f, result.Parts[1].Mesh.ComputeBounds().Size.X - 2f * 25.5f, 0.05f);
+
+        // A run this much longer than the 31.4 mm the sector actually drives leaves the same
+        // amount of slack at each end - the plain arc bulges out over that whole gap at its
+        // middle, not just over the addendum, so the frame widens with the slack rather than
+        // staying a fixed size. See RecipFrame's AddArc.
+        Assert.Equal(124.43f, result.Parts[1].Mesh.ComputeBounds().Size.X - 2f * 25.5f, 0.05f);
     }
 
     [Fact]

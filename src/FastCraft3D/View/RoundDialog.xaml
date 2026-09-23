@@ -17,6 +17,14 @@
                       Checked="OnEdgesChanged" Unchecked="OnEdgesChanged" />
         </StackPanel>
 
+        <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+            <RadioButton x:Name="StyleRound" GroupName="RoundStyle" Content="Round" IsChecked="True"
+                         Margin="0,0,14,0" Checked="OnStyleChanged"
+                         ToolTip="A smooth fillet." />
+            <RadioButton x:Name="StyleBevel" GroupName="RoundStyle" Content="Bevel" Checked="OnStyleChanged"
+                         ToolTip="A single flat face, corner to corner - a chamfer." />
+        </StackPanel>
+
         <StackPanel Orientation="Horizontal">
             <TextBlock Text="Radius" Style="{DynamicResource FieldLabel}" Width="62" />
             <TextBox x:Name="RadiusBox" Width="64" Style="{DynamicResource NumberBox}"
@@ -29,7 +37,7 @@
         <TextBlock x:Name="MaximumText" Foreground="#FF9AA0A8" FontSize="11" HorizontalAlignment="Right" />
 
         <StackPanel Orientation="Horizontal" Margin="0,10,0,0">
-            <Button Content="Round" Style="{DynamicResource PanelButton}" Click="OnAccept" />
+            <Button x:Name="AcceptButton" Content="Round" Style="{DynamicResource PanelButton}" Click="OnAccept" />
             <Button Content="Cancel" Style="{DynamicResource PanelButton}" IsCancel="True" />
         </StackPanel>
 

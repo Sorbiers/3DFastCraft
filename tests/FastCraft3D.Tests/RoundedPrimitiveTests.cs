@@ -229,4 +229,68 @@ public class RoundedPrimitiveTests
 
         Assert.True(health.IsWatertight, health.Describe());
     }
+
+    // --- Bevel: the same sweep, run in one step instead of several --------------------------
+
+    /// <summary>
+    /// A fillet's sweep approaches its true, curved surface as arcSteps grows; a bevel is that
+    /// same sweep with arcSteps fixed at one, which has nothing left to approach - two points and
+    /// the straight line between them is exactly a flat chamfer, not a coarse curve. The volume
+    /// it removes from each edge is a triangular wedge, computed exactly rather than by faceting.
+    /// </summary>
+    [Fact]
+    public void ABevelledBoxCutsAFlatWedgeNotACurve()
+    {
+        // Four vertical wedges, each a right-angled triangle of leg r swept the height of the box.
+        double exact = 20.0 * 20.0 * 20.0 - 4.0 * (4.0 * 4.0 / 2.0) * 20.0;
+        double bevelled = RoundedPrimitives.RoundedBox(20, 20, 20, 4, RoundEdges.Sides, arcSteps: 1)
+            .ComputeSignedVolume();
+
+        Assert.Equal(exact, bevelled, 1);
+    }
+
+    /// <summary>The same check on a cylinder's rim, where the removed wedge is a ring rather than a bar.</summary>
+    [Fact]
+    public void ABevelledCylinderCutsAFlatRingNotACurve()
+    {
+        const double radius = 10.0, height = 20.0, cut = 3.0;
+
+        // The ring a 45-degree wedge of leg `cut` removes from the rim, by Pappus's theorem:
+        // 2*pi times the triangle's own area times the radius of its centroid.
+        double removed = 2.0 * Math.PI * (cut * cut / 2.0) * (radius - cut / 3.0);
+        double exact = Math.PI * radius * radius * height - removed;
+
+        double bevelled = RoundedPrimitives.RoundedCylinder((float)radius, (float)height, (float)cut,
+            RoundEdges.Top, segments: 720, arcSteps: 1).ComputeSignedVolume();
+
+        Assert.Equal(exact, bevelled, 0);
+    }
+
+    [Theory]
+    [InlineData(RoundEdges.Top)]
+    [InlineData(RoundEdges.Bottom)]
+    [InlineData(RoundEdges.Sides)]
+    [InlineData(RoundEdges.Top | RoundEdges.Bottom)]
+    [InlineData(RoundEdges.Top | RoundEdges.Sides)]
+    [InlineData(RoundEdges.Bottom | RoundEdges.Sides)]
+    [InlineData(RoundEdges.All)]
+    public void EveryEdgeCombinationIsWatertightWhenBevelled(RoundEdges edges)
+    {
+        var health = RoundedPrimitives.RoundedBox(20, 30, 40, 4, edges, arcSteps: 1).CheckHealth();
+
+        Assert.True(health.IsWatertight, $"{edges}: {health.Describe()}");
+        Assert.False(health.IsInsideOut, $"{edges} came out inside-out");
+    }
+
+    [Theory]
+    [InlineData(RoundEdges.Top)]
+    [InlineData(RoundEdges.Bottom)]
+    [InlineData(RoundEdges.Top | RoundEdges.Bottom)]
+    public void EveryCylinderRimCombinationIsWatertightWhenBevelled(RoundEdges edges)
+    {
+        var health = RoundedPrimitives.RoundedCylinder(10, 20, 3, edges, arcSteps: 1).CheckHealth();
+
+        Assert.True(health.IsWatertight, $"{edges}: {health.Describe()}");
+        Assert.False(health.IsInsideOut);
+    }
 }

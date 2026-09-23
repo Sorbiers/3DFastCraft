@@ -859,19 +859,24 @@ public static class Gears
     // --- Solids ------------------------------------------------------------------------
 
     /// <summary>
-    /// The closed rack a cut-away gear drives back and forth: a racetrack of teeth facing inward,
-    /// with the gear turning on the spot inside it. The gear's sector pushes one straight run,
-    /// lets go, crosses the end, and pushes the other - so a motor that only turns one way drives
-    /// the frame to and fro.
+    /// The closed track a cut-away gear drives back and forth: a racetrack shape with rack teeth
+    /// along its two straights and the gear turning on the spot inside it. The sector pushes one
+    /// straight, runs out of teeth exactly as it reaches the end, and the bare rim rotates past
+    /// the plain half circle that closes the loop while the frame sits still - then the sector
+    /// picks up the other straight where its first tooth is already waiting. A motor that only
+    /// turns one way drives the frame to and fro.
     ///
-    /// Its pitch line is the path the gear's own pitch circle rolls along: two straights a pitch
-    /// diameter apart, joined by half circles of the gear's own pitch radius, so the gear turns on
-    /// the spot at each end while the frame changes direction. The teeth are a rack's, bent round
-    /// that line and spaced by arc length - which is how these frames are made, and why the ends
-    /// want the backlash that the straights can do without.
+    /// The straights are a pitch diameter apart - the gear's own pitch circle is tangent to both
+    /// at once - and the half circles are swept at the gear's pitch radius too, so a straight
+    /// meets its neighbouring half circle without a step. Teeth are laid out along this whole
+    /// path by arc length starting from the bottom straight, which is what keeps the two straights
+    /// in phase with each other without measuring one against the other directly; the half
+    /// circles are skipped rather than toothed, at a radius opened up by the gear's own dedendum
+    /// plus whatever slack the run has, so nothing there is ever in reach of the gear's teeth. See
+    /// Teeth and Arc below.
     ///
-    /// The ends take exactly half the gear's teeth each, so the gear's count has to be even or the
-    /// teeth come back half a pitch out after a lap.
+    /// The ends divide the gear's own circumference in half between them, so its tooth count has
+    /// to be even or the phase carried round to the second straight lands half a pitch out.
     /// </summary>
     private static Mesh? RecipFrame(GearOptions o, List<string> notes, out string? refusal, out float run)
     {
@@ -907,12 +912,16 @@ public static class Gears
         int alongEach = Math.Max(least, (int)Math.Round(asked / pitch));
         double straight = alongEach * pitch;
         run = (float)straight;
-        double round = 2.0 * Math.PI * r;
-        double total = 2.0 * straight + round;
-        int teeth = 2 * alongEach + o.Teeth;
 
         double rim = Math.Max(o.Rim, 1.0);
         double dedendum = 1.25 * m, addendum = m;
+        double round = 2.0 * Math.PI * r;
+        double total = 2.0 * straight + round;
+
+        // How much slack the run has: the sector drives only travel of it, so this is how much
+        // closer the gear's tip circle swings to a parked end while it waits there than the plain
+        // arc's own middle bulge accounts for by default. See Arc.
+        double slack = straight - travel;
 
         /// Where the pitch line is at arc length s, and which way lies the slot it wraps.
         (Vector2 At, Vector2 In) Path(double s)
@@ -924,22 +933,21 @@ public static class Gears
 
             s -= straight;
             if (s < round / 2.0)
-            {
-                double a = -Math.PI / 2.0 + s / r;
-                var away = new Vector2((float)Math.Cos(a), (float)Math.Sin(a));
-                return (new Vector2((float)(straight / 2.0), 0f) + away * (float)r, -away);
-            }
+                return RoundEnd(s, straight / 2.0, -Math.PI / 2.0);
 
             s -= round / 2.0;
             if (s < straight)
                 return (new Vector2((float)(straight / 2.0 - s), (float)r), new Vector2(0f, -1f));
 
             s -= straight;
-            {
-                double a = Math.PI / 2.0 + s / r;
-                var away = new Vector2((float)Math.Cos(a), (float)Math.Sin(a));
-                return (new Vector2((float)(-straight / 2.0), 0f) + away * (float)r, -away);
-            }
+            return RoundEnd(s, -straight / 2.0, Math.PI / 2.0);
+        }
+
+        (Vector2, Vector2) RoundEnd(double s, double centreX, double startAngle)
+        {
+            double a = startAngle + s / r;
+            var away = new Vector2((float)Math.Cos(a), (float)Math.Sin(a));
+            return (new Vector2((float)centreX, 0f) + away * (float)r, -away);
         }
 
         // A rack's tooth: wide at the root, narrowed to the tip by the pressure angle, thinned by
@@ -969,27 +977,76 @@ public static class Gears
         var inner = new List<Vector2>();
         var outer = new List<Vector2>();
 
-        void Add(double s, double into)
+        void AddTooth(double s, double into)
         {
             var (at, In) = Path(s);
             inner.Add(at + In * (float)into);
             outer.Add(at - In * (float)(dedendum + rim));
         }
 
-        for (int k = 0; k < teeth; k++)
+        // The two straights, each carrying the teeth a lap actually uses. The ends are plain -
+        // see Arc below for why they are not.
+        void Teeth(int startK, int count, double zoneStart, double zoneEnd)
         {
-            double middle = phase + k * pitch;
+            for (int k = startK; k < startK + count; k++)
+            {
+                double middle = phase + k * pitch;
 
-            // The root between this tooth and the one before it, cut into pieces so the ends come
-            // out round rather than as a chord.
-            double from = middle - pitch + halfRoot, to = middle - halfRoot;
-            int pieces = Math.Max(1, (int)Math.Ceiling((to - from) / 0.5));
-            for (int i = 0; i < pieces; i++) Add(from + (to - from) * i / pieces, -dedendum);
+                // The root between this tooth and the one before it, cut into pieces so the ends
+                // come out round rather than as a chord. Held to the straight's own start so the
+                // first tooth's leading edge cannot reach back into the arc before it.
+                double from = Math.Max(middle - pitch + halfRoot, zoneStart), to = middle - halfRoot;
+                int pieces = Math.Max(1, (int)Math.Ceiling((to - from) / 0.5));
+                for (int i = 0; i < pieces; i++) AddTooth(from + (to - from) * i / pieces, -dedendum);
 
-            Add(middle - halfRoot, -dedendum);
-            Add(middle - halfTip, addendum);
-            Add(middle + halfTip, addendum);
+                AddTooth(middle - halfRoot, -dedendum);
+                AddTooth(middle - halfTip, addendum);
+                AddTooth(middle + halfTip, addendum);
+            }
+
+            // Closes the last tooth back down to root depth at the straight's own end, so the
+            // wall meets the plain arc there rather than jumping straight from that last tip -
+            // close in, by the gear - out to wherever the arc's own depth is: a sliver of a face
+            // bridging two very different radii, thin enough that a slicer read it as the wall
+            // interfering with itself. Arc's own depth starts at this same root depth, so the two
+            // sides of the join agree.
+            AddTooth(zoneEnd, -dedendum);
         }
+
+        // The half circles that close the loop are never toothed. The sector has exactly enough
+        // teeth to drive one straight and no more - by the time either end swings round to the
+        // gear the teeth have already run out, and the bare rim rotates past a plain arc while
+        // the frame sits still, which is what carries it from pushing one straight to pushing the
+        // other. Teeth there before this fix went in were never in mesh with anything; worse,
+        // built at the pitch radius they undercut the gear's own tip circle and clipped it
+        // outright.
+        //
+        // The depth bulges from root depth at each end - level with the teeth either side of it,
+        // where a shortened, relieved tooth is already the part of the gear this join has to
+        // clear - out to root depth plus whatever slack the run has, at the middle of the arc,
+        // farthest from the gear and so the one place the extra room is not even needed. A run
+        // opened up well past what the sector drives leaves the frame parked that much nearer the
+        // gear when it stops, and that gap is what the middle has to cover.
+        void AddArc(double s, double from, double to)
+        {
+            var (at, In) = Path(s);
+            double span = to - from;
+            double t = span > 1e-6 ? 1.0 - Math.Abs(2.0 * (s - from) / span - 1.0) : 1.0;
+            double beyond = dedendum + t * slack;
+            inner.Add(at - In * (float)beyond);
+            outer.Add(at - In * (float)(beyond + rim));
+        }
+
+        void Arc(double from, double to)
+        {
+            int pieces = Math.Clamp((int)Math.Ceiling((to - from) / (m * 0.6)), 8, 64);
+            for (int i = 0; i <= pieces; i++) AddArc(from + (to - from) * i / pieces, from, to);
+        }
+
+        Teeth(0, alongEach, 0.0, straight);
+        Arc(straight, straight + round / 2.0);
+        Teeth(alongEach + o.Teeth / 2, alongEach, straight + round / 2.0, straight + round / 2.0 + straight);
+        Arc(straight + round / 2.0 + straight, total);
 
         float height = o.ForMate().Thickness;
         var mesh = new Mesh();
@@ -1007,8 +1064,17 @@ public static class Gears
         }
 
         notes.Add($"Slides {travel:0.#} mm end to end: {kept} teeth of rack, and one turn of the gear takes it there and back.");
+
+        // The sector is in mesh for kept teeth of each straight, twice a turn - once driving each
+        // way - so it moves for 2*kept of the gear's own Teeth, and sits parked at whichever end
+        // it just reached for the rest. Fewer teeth kept means less of a push each time but a
+        // longer pause between them; this is that trade stated as a number, for choosing how many
+        // to keep.
+        double moving = 2.0 * kept / o.Teeth;
+        notes.Add($"Moving for {moving * 100.0:0.#}% of each turn and parked for the other {(1.0 - moving) * 100.0:0.#}%, split evenly between the two ends.");
+
         notes.Add($"Shown at one end of its run, which is where it stands between pushes - so the gear crosses to the other end, not {travel / 2.0:0.#} mm either side of here.");
-        notes.Add($"Frame {straight:0.#} mm between the ends, {teeth} teeth round it, {height:0.#} mm thick.");
+        notes.Add($"Frame {straight:0.#} mm between the ends, {alongEach} teeth along each run, ends left plain, {height:0.#} mm thick.");
 
         if (o.Stroke > 0 && Math.Abs(straight - o.Stroke) > 0.05)
             notes.Add(alongEach == least && o.Stroke < travel - 0.05

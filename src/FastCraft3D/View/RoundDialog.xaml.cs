@@ -77,7 +77,7 @@ public partial class RoundDialog : ToolPanel
         foreach (var o in subjects)
         {
             var size = new Vector3(o.SizeX, o.SizeY, o.SizeZ);
-            rounded.Add(RoundedPrimitives.Create(o.Origin!.Value, size, Radius, edges));
+            rounded.Add(RoundedPrimitives.Create(o.Origin!.Value, size, Radius, edges, ArcSteps));
         }
 
         preview(rounded);
@@ -91,6 +91,16 @@ public partial class RoundDialog : ToolPanel
 
     /// <summary>Which edge groups the user asked for.</summary>
     public RoundEdges Edges { get; private set; } = RoundEdges.All;
+
+    /// <summary>Whether the edges were cut to a single flat face rather than a smooth fillet.</summary>
+    public bool Bevel { get; private set; }
+
+    /// <summary>
+    /// A fillet is swept in several steps so it comes out a curve; a bevel is the same sweep in
+    /// one step, which is exactly a flat face corner to corner - so the two share every line of
+    /// geometry here and differ only in this number.
+    /// </summary>
+    private int ArcSteps => StyleBevel.IsChecked == true ? 1 : 5;
 
     private RoundEdges SelectedEdges()
     {
@@ -131,6 +141,15 @@ public partial class RoundDialog : ToolPanel
         RefreshLimit(preferred: Radius);
         updating = false;
 
+        UpdateSummary();
+        ShowPreview();
+    }
+
+    private void OnStyleChanged(object sender, RoutedEventArgs e)
+    {
+        if (!IsInitialized) return;
+
+        AcceptButton.Content = StyleBevel.IsChecked == true ? "Bevel" : "Round";
         UpdateSummary();
         ShowPreview();
     }
@@ -191,12 +210,13 @@ public partial class RoundDialog : ToolPanel
 
         var first = subjects[0];
         var size = new Vector3(first.SizeX, first.SizeY, first.SizeZ);
-        var preview = RoundedPrimitives.Create(first.Origin!.Value, size, radius, edges);
+        var preview = RoundedPrimitives.Create(first.Origin!.Value, size, radius, edges, ArcSteps);
+        string done = StyleBevel.IsChecked == true ? "bevelling" : "rounding";
 
         SummaryText.Text =
-            $"{first.Name}: {preview.TriangleCount:N0} triangles after rounding.\n" +
+            $"{first.Name}: {preview.TriangleCount:N0} triangles after {done}.\n" +
             "The shape is rebuilt at its current size, so its scale is reset - resizing it "
-            + "unevenly afterwards will stretch the rounded edges.";
+            + "unevenly afterwards will stretch the edges again.";
     }
 
     private void OnAccept(object sender, RoutedEventArgs e)
@@ -210,6 +230,7 @@ public partial class RoundDialog : ToolPanel
         }
 
         Edges = edges;
+        Bevel = StyleBevel.IsChecked == true;
         Result = Radius;
         DialogResult = true;
     }

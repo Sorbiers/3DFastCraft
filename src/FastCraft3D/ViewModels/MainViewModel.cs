@@ -6348,10 +6348,11 @@ public sealed class MainViewModel : INotifyPropertyChanged
         if (!accepted || dialog.Result is not { } radius) return;
 
         var edges = dialog.Edges;
+        int arcSteps = dialog.Bevel ? 1 : 5;
         var produced = roundable.Select(o =>
         {
             var size = new Vector3(o.SizeX, o.SizeY, o.SizeZ);
-            var mesh = RoundedPrimitives.Create(o.Origin!.Value, size, radius, edges);
+            var mesh = RoundedPrimitives.Create(o.Origin!.Value, size, radius, edges, arcSteps);
 
             // Scale is deliberately left at its default: the mesh is already the right size.
             return new SceneObject(o.Name, mesh)
@@ -6364,13 +6365,14 @@ public sealed class MainViewModel : INotifyPropertyChanged
             };
         }).ToList();
 
-        Undo.Execute(new ReplaceObjectsCommand("Round edges", roundable, produced));
+        Undo.Execute(new ReplaceObjectsCommand(dialog.Bevel ? "Bevel edges" : "Round edges", roundable, produced));
         RefreshSelection();
 
         string which = edges == RoundEdges.All ? "all edges" : edges.ToString().ToLowerInvariant();
+        string done = dialog.Bevel ? "Bevelled" : "Rounded";
         Status = skipped == 0
-            ? $"Rounded {which} of {produced.Count} object(s) to {radius:0.##} mm"
-            : $"Rounded {produced.Count} object(s); {skipped} skipped - only a cube or cylinder can be rounded";
+            ? $"{done} {which} of {produced.Count} object(s) to {radius:0.##} mm"
+            : $"{done} {produced.Count} object(s); {skipped} skipped - only a cube or cylinder can be rounded";
     }
 
     /// <summary>
