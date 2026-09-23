@@ -49,6 +49,13 @@ public sealed class SceneRenderer : IDisposable
     private readonly Dictionary<SceneObject, MeshGeometryModel3D> visuals = new();
     private readonly Dictionary<SceneObject, LineGeometryModel3D> outlines = new();
 
+    /// <summary>Each object's own shape, reflected through the plate, while Reflections is on.</summary>
+    private readonly Dictionary<SceneObject, MeshGeometryModel3D> mirrors = new();
+    private bool showReflections;
+
+    /// <summary>Flips a world point through the plate at Z = 0, which is what a floor mirror does.</summary>
+    private static readonly Matrix4x4 MirrorThroughPlate = Matrix4x4.CreateScale(1f, 1f, -1f);
+
     /// <summary>The faces that overhang, drawn over each object while the overhang view is on.</summary>
     private readonly Dictionary<SceneObject, MeshGeometryModel3D> overhangs = new();
     private readonly HashSet<SceneObject> overhangsStale = new();
@@ -520,6 +527,78 @@ public sealed class SceneRenderer : IDisposable
     }
 
     /// <summary>
+    /// Whether the plate reflects what stands on it, the way a glossy print bed does.
+    ///
+    /// Built as a second copy of each object's model, reflected through the plate and given a
+    /// dimmer, part-see-through version of its material.
+    /// </summary>
+    public bool ShowReflections
+    {
+        get => showReflections;
+        set
+        {
+            if (showReflections == value) return;
+
+            Invalidate();
+            showReflections = value;
+
+            foreach (var o in visuals.Keys.ToList()) UpdateMirror(o);
+        }
+    }
+
+    /// <summary>Adds, moves or removes one object's reflection, to match what it is doing now.</summary>
+    private void UpdateMirror(SceneObject o)
+    {
+        if (!visuals.TryGetValue(o, out var visual)) return;
+
+        if (!showReflections || visual.Visibility != Visibility.Visible)
+        {
+            RemoveMirror(o);
+            return;
+        }
+
+        if (!mirrors.TryGetValue(o, out var mirror))
+        {
+            mirror = new MeshGeometryModel3D
+            {
+                // Flipping through the plate flips the winding too, and re-deriving it is not
+                // worth it for a reflection that is never picked or measured against.
+                CullMode = SharpDX.Direct3D11.CullMode.None,
+                IsTransparent = true,
+                IsHitTestVisible = false,
+
+                // A hair further from the camera than the plate itself, the same way the plate
+                // is held off the objects standing on it - otherwise the two fight for pixels
+                // wherever a reflection meets the board it is reflected in.
+                DepthBias = 10
+            };
+            mirrors[o] = mirror;
+            root.Children.Add(mirror);
+        }
+
+        // Its own buffer rather than the visual's, so disposing one can never leave the other
+        // holding a GPU resource that has already gone.
+        mirror.Geometry = MeshConverter.ToGeometry(o.Mesh);
+        mirror.Transform = MeshConverter.ToTransform(o.Transform * MirrorThroughPlate);
+        mirror.Material = MirrorMaterial(o);
+    }
+
+    private void RemoveMirror(SceneObject o)
+    {
+        if (!mirrors.Remove(o, out var mirror)) return;
+        root.Children.Remove(mirror);
+        mirror.Dispose();
+    }
+
+    /// <summary>A dimmer, part-see-through version of the object's own colour.</summary>
+    private static PhongMaterial MirrorMaterial(SceneObject o) => new()
+    {
+        DiffuseColor = new SharpDX.Color4(o.Colour.X, o.Colour.Y, o.Colour.Z, 0.22f),
+        SpecularColor = new SharpDX.Color4(0, 0, 0, 1),
+        AmbientColor = new SharpDX.Color4(o.Colour.X * 0.3f, o.Colour.Y * 0.3f, o.Colour.Z * 0.3f, 1f)
+    };
+
+    /// <summary>
     /// Whether an object is drawn at all. Three things take it off the plate: the user hiding
     /// it, a split standing its halves in for it, and a tool with something else in hand.
     ///
@@ -545,6 +624,9 @@ public sealed class SceneRenderer : IDisposable
         // The outline is a model of its own rather than part of the solid, so left alone it
         // would hang in the air round an object that is no longer drawn.
         if (outlines.TryGetValue(o, out var line)) line.Visibility = visual.Visibility;
+
+        // Likewise the reflection: nothing stood aside or hidden belongs on the plate either way up.
+        UpdateMirror(o);
     }
 
     /// <summary>
@@ -890,6 +972,13 @@ public sealed class SceneRenderer : IDisposable
         // order-independent transparency pass rather than straight into the depth buffer.
         visual.IsTransparent = Faded(o);
 
+        // Left on regardless of the Shadows setting: the viewport's own IsShadowMappingEnabled
+        // is what actually turns the pass on, and unless RenderShadowMap on other objects'
+        // materials is also true a part cannot fall in one another's shadow. Setting both here
+        // means Shadows can be flipped on the fly rather than needing every object rebuilt.
+        visual.IsThrowingShadow = true;
+        ((PhongMaterial)visual.Material).RenderShadowMap = true;
+
         visual.RenderWireframe = wireframe;
         visual.WireframeColor = Color.FromArgb(0x99, 0x1E, 0x26, 0x30);
     }
@@ -954,6 +1043,7 @@ public sealed class SceneRenderer : IDisposable
         Release(o);
         o.PropertyChanged -= OnObjectChanged;
         RemoveOutline(o);
+        RemoveMirror(o);
 
         if (!visuals.Remove(o, out var visual)) return;
         root.Children.Remove(visual);
@@ -972,12 +1062,15 @@ public sealed class SceneRenderer : IDisposable
                 visual.Geometry = MeshConverter.ToGeometry(o.Mesh);
                 RemoveOutline(o); // the old edges describe geometry that no longer exists
                 UpdateOutline(o);
+                UpdateMirror(o); // a fresh buffer, so the reflection's borrowed reference is stale too
                 break;
 
             case nameof(SceneObject.Transform):
                 visual.Transform = MeshConverter.ToTransform(o.Transform);
                 if (outlines.TryGetValue(o, out var line))
                     line.Transform = visual.Transform;
+                if (mirrors.TryGetValue(o, out var mirror))
+                    mirror.Transform = MeshConverter.ToTransform(o.Transform * MirrorThroughPlate);
                 break;
 
             case nameof(SceneObject.IsHidden):
@@ -988,6 +1081,8 @@ public sealed class SceneRenderer : IDisposable
             case nameof(SceneObject.Colour):
                 ApplyLook(o, visual);
                 UpdateOutline(o);
+                if (e.PropertyName == nameof(SceneObject.Colour) && mirrors.TryGetValue(o, out var tinted))
+                    tinted.Material = MirrorMaterial(o);
                 break;
         }
 

@@ -113,6 +113,12 @@ public partial class MainWindow : Window
 
         renderer = new SceneRenderer(ContentGroup, viewModel.Scene, repaint);
 
+        // A setting remembered from last time was applied to the view model above, before there
+        // was a renderer to hear ViewChanged - Reflections restored checked but undrawn, since
+        // nothing had told the renderer about it yet. One catch-up call puts every such setting
+        // on the renderer that is only ever pushed there through that event.
+        ApplyViewSettings();
+
         measure = new MeasureOverlay(MeasureLayer, new Viewport3DXProjector(View));
         viewModel.MeasureChanged += () => measure.Show(viewModel.MeasureFrom, viewModel.MeasureTo);
         viewModel.SketchChanged += () =>
@@ -1622,6 +1628,7 @@ public partial class MainWindow : Window
         renderer.Wireframe = viewModel.ShowWireframe;
         renderer.Xray = viewModel.ShowXray;
         renderer.ShowOutlines = viewModel.ShowOutlines;
+        renderer.ShowReflections = viewModel.ShowReflections;
         RefreshFocus();
         renderer.ShowOverhangs(viewModel.ShowOverhangs, viewModel.OverhangAngle, viewModel.OverhangColour);
 

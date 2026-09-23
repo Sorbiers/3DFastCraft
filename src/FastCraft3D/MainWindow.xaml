@@ -1879,8 +1879,12 @@
                                   ToolTip="The X and Y lines across the plate, paler on the negative side" />
                         <CheckBox Content="Show Z axis" IsChecked="{Binding ShowZAxis, Mode=TwoWay}" Margin="0,0,0,4"
                                   ToolTip="An upright line as tall as the printable height" />
-                        <CheckBox Content="Show grid labels" IsChecked="{Binding ShowGridLabels, Mode=TwoWay}" Margin="0,0,0,8"
+                        <CheckBox Content="Show grid labels" IsChecked="{Binding ShowGridLabels, Mode=TwoWay}" Margin="0,0,0,4"
                                   ToolTip="Distances along the positive X and Y axes, in the current units" />
+                        <CheckBox Content="Shadows" IsChecked="{Binding ShowShadows, Mode=TwoWay}" Margin="0,0,0,4"
+                                  ToolTip="Objects cast a shadow onto the plate and each other. Costs a render pass, so it is worth turning off on a slower machine." />
+                        <CheckBox Content="Reflections" IsChecked="{Binding ShowReflections, Mode=TwoWay}" Margin="0,0,0,8"
+                                  ToolTip="The plate reflects what stands on it, the way a glossy print bed does. Costs a render pass, so it is worth turning off on a slower machine." />
 
                         <Button Content="Close" Style="{StaticResource PanelButton}" HorizontalAlignment="Left"
                                 Command="{Binding CloseGridPanelCommand}" />
@@ -2124,7 +2128,8 @@
                             ShowCoordinateSystem="True"
                             ShowViewCube="True"
                             UseDefaultGestures="True"
-                            ZoomExtentsWhenLoaded="False">
+                            ZoomExtentsWhenLoaded="False"
+                            IsShadowMappingEnabled="{Binding ShowShadows}">
                 <!-- The key follows the camera - see MainWindow.LightTheView. Both lights used
                      to be fixed in the world and both pointed downwards, so an upright wall got
                      almost no light at all and turning round to the far side of a model left you
@@ -2132,6 +2137,10 @@
                 <hx:AmbientLight3D Color="#FF4E5259" />
                 <hx:DirectionalLight3D x:Name="KeyLight" Direction="-0.5,-0.8,-1.0" Color="#FFB4B4B4" />
                 <hx:DirectionalLight3D x:Name="FillLight" Direction="0.55,0.35,0.75" Color="#FF4E5258" />
+
+                <!-- Only costs anything while IsShadowMappingEnabled is on - see ShowShadows. -->
+                <hx:ShadowMap3D Resolution="2048,2048" />
+
                 <hx:GroupModel3D x:Name="PlateGroup" />
                 <hx:GroupModel3D x:Name="ContentGroup" />
                 <hx:GroupModel3D x:Name="OverlayGroup" />

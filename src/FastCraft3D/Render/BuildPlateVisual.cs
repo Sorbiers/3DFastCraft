@@ -108,7 +108,11 @@ public static class BuildPlateVisual
             {
                 DiffuseColor = shade,
                 SpecularColor = new SharpDX.Color4(0, 0, 0, 1),
-                AmbientColor = new SharpDX.Color4(0.55f, 0.55f, 0.58f, 1f)
+                AmbientColor = new SharpDX.Color4(0.55f, 0.55f, 0.58f, 1f),
+
+                // So a part standing on the board shows in shadow when Shadows is on. Off costs
+                // nothing extra - the viewport's own IsShadowMappingEnabled is what runs the pass.
+                RenderShadowMap = true
             },
             // The flag as well as the alpha: it is what puts the board through the ordered
             // transparency pass instead of straight into the depth buffer.

@@ -124,6 +124,8 @@ public sealed class MainViewModel : INotifyPropertyChanged
     private bool showAxes = true;
     private bool showZAxis;
     private bool showGridLabels;
+    private bool showShadows;
+    private bool showReflections;
     private bool showProperties = true;
     private bool isAdvancedMode = true;
     private bool isGridPanelOpen;
@@ -3127,6 +3129,29 @@ public sealed class MainViewModel : INotifyPropertyChanged
     }
 
     /// <summary>
+    /// Objects cast a shadow onto the plate and each other, from the key light. Off by default:
+    /// a shadow pass costs a render of the scene from the light's own view every frame, which is
+    /// wasted while nothing on the plate benefits from it - a couple of primitives read fine
+    /// without it, and it is exactly the kind of thing a slower machine feels first.
+    /// </summary>
+    public bool ShowShadows
+    {
+        get => showShadows;
+        set => SetGrid(ref showShadows, value);
+    }
+
+    /// <summary>
+    /// The plate reflects what stands on it, the way a glossy print bed does. Also off by
+    /// default, and for the same reason as shadows - a live reflection is a second render of the
+    /// scene, doubling the cost of every frame it is on.
+    /// </summary>
+    public bool ShowReflections
+    {
+        get => showReflections;
+        set => SetGrid(ref showReflections, value);
+    }
+
+    /// <summary>
     /// Advanced shows every tool; Classic only the ones 3D Builder had, for anyone who came to carry
     /// on where it left off and finds the rest in the way. Only ribbon buttons are hidden - never a
     /// tool's own settings - and every key works the same in both, so neither a project nor a habit
@@ -3250,10 +3275,13 @@ public sealed class MainViewModel : INotifyPropertyChanged
         ShowGridLabels = settings.ShowGridLabels;
         ShowProperties = !settings.FoldProperties;
         IsAdvancedMode = !settings.ClassicMode;
+        ShowShadows = settings.ShowShadows;
+        ShowReflections = settings.ShowReflections;
     }
 
     public RememberedSettings Remembered =>
-        new(plateWidth, plateDepth, plateHeight, unit.Label, showAxes, showZAxis, showGridLabels, !showProperties, !isAdvancedMode);
+        new(plateWidth, plateDepth, plateHeight, unit.Label, showAxes, showZAxis, showGridLabels, !showProperties,
+            !isAdvancedMode, showShadows, showReflections);
 
     private void SettingChanged()
     {
@@ -4431,11 +4459,11 @@ public sealed class MainViewModel : INotifyPropertyChanged
             else return;
         }
 
-        // The old app's cone and cylinder were smooth at a glance; 32 facets on those two read
-        // as a facet count, not a curve. Sphere and torus stay at the default - both use their
-        // segment count twice over (rings, and sides round the tube), so 100 there is 10,000
-        // triangles rather than 100.
-        int segments = kind is PrimitiveKind.Cylinder or PrimitiveKind.Cone ? 100 : Primitives.DefaultSegments;
+        // The old app's round primitives were smooth at a glance; 32 facets read as a facet
+        // count, not a curve. Torus stays at the default - it uses its segment count twice over
+        // (round the ring and round the tube), so 100 there is 10,000 triangles rather than 100.
+        int segments = kind is PrimitiveKind.Cylinder or PrimitiveKind.Cone or PrimitiveKind.Sphere
+            ? 100 : Primitives.DefaultSegments;
         var mesh = Primitives.Create(kind, segments: segments);
         var o = new SceneObject(Scene.UniqueName(kind.ToString()), mesh)
         {

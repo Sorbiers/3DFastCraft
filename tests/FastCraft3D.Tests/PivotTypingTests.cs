@@ -78,14 +78,19 @@ public class PivotTypingTests
         });
     }
 
+    /// <summary>
+    /// The box used to reset to 0 the moment the turn landed, which left no way to see how far a
+    /// selection had actually been turned since it was grabbed. It now keeps the total until the
+    /// selection changes or "as one" is switched back on.
+    /// </summary>
     [Fact]
-    public void AsOneATurnSwingsThePositionsAndTheBoxReadsZeroAgain()
+    public void AsOneATurnSwingsThePositionsAndTheBoxReadsWhatWasTyped()
     {
         WithTwo((model, a, b) =>
         {
             model.GroupYaw = 90f;
 
-            Assert.Equal(0f, model.GroupYaw, 3);
+            Assert.Equal(90f, model.GroupYaw, 3);
             Assert.Equal(0f, b.PositionX, 2);
             Assert.Equal(20f, MathF.Abs(b.PositionY), 2);
             Assert.Equal(-a.PositionY, b.PositionY, 2);

@@ -16,10 +16,12 @@ namespace FastCraft3D.Io;
 /// the default written here - the section has to come back open.
 /// </param>
 /// <param name="ClassicMode">Only the tools 3D Builder had on the ribbon. Advanced, the default, when missing.</param>
+/// <param name="ShowShadows">Objects cast a shadow onto the plate and each other.</param>
+/// <param name="ShowReflections">The plate reflects what stands on it.</param>
 public readonly record struct RememberedSettings(
     float PlateWidth, float PlateDepth, float PlateHeight, string Unit,
     bool ShowAxes = true, bool ShowZAxis = false, bool ShowGridLabels = false, bool FoldProperties = false,
-    bool ClassicMode = false);
+    bool ClassicMode = false, bool ShowShadows = false, bool ShowReflections = false);
 
 /// <summary>
 /// The printable area, the unit and how the grid is drawn, as last used, remembered between sessions.
