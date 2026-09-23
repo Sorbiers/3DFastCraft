@@ -42,6 +42,19 @@ public sealed class Scene
         return bounds;
     }
 
+    /// <summary>
+    /// The bounds of what is actually on screen - a boolean's consumed history stays in Objects,
+    /// hidden but not gone, so a stale gear rack from three operations ago does not drag Zoom to
+    /// fit out to a size nothing visible occupies.
+    /// </summary>
+    public Bounds ComputeShownBounds()
+    {
+        var bounds = Bounds.Empty;
+        foreach (var o in Shown)
+            bounds = bounds.Union(o.WorldBounds);
+        return bounds;
+    }
+
     public void SelectOnly(SceneObject? target)
     {
         foreach (var o in Objects)

@@ -1379,17 +1379,20 @@ public sealed class MainViewModel : INotifyPropertyChanged
     /// <summary>
     /// On - the default, as in 3D Builder - a click adds or removes just the object clicked and
     /// leaves the rest of the selection alone. Off, a click selects only what was clicked and
-    /// clicking empty space clears the selection.
+    /// clicking empty space clears the selection. The viewer's own, like the grid: remembered
+    /// between sessions, but not a change to the project.
     /// </summary>
     public bool StickySelection
     {
         get => stickySelection;
         set
         {
+            if (stickySelection == value) return;
             Set(ref stickySelection, value);
             Status = value
                 ? "Sticky selection on - clicking an object adds or removes just that object"
                 : "Sticky selection off - clicking an object selects only that object";
+            SettingsChanged?.Invoke();
         }
     }
 
@@ -3277,11 +3280,12 @@ public sealed class MainViewModel : INotifyPropertyChanged
         IsAdvancedMode = !settings.ClassicMode;
         ShowShadows = settings.ShowShadows;
         ShowReflections = settings.ShowReflections;
+        StickySelection = !settings.SingleSelection;
     }
 
     public RememberedSettings Remembered =>
         new(plateWidth, plateDepth, plateHeight, unit.Label, showAxes, showZAxis, showGridLabels, !showProperties,
-            !isAdvancedMode, showShadows, showReflections);
+            !isAdvancedMode, showShadows, showReflections, !stickySelection);
 
     private void SettingChanged()
     {
@@ -4060,7 +4064,10 @@ public sealed class MainViewModel : INotifyPropertyChanged
     public float SplitOffset
     {
         get => splitOffset;
-        set => Set(ref splitOffset, value);
+        // Clamped here rather than trusted to callers: the slider already limits itself through
+        // its own Minimum/Maximum binding, but the gizmo arrows report a raw drag distance and
+        // would otherwise slide the plane past the solid into empty air.
+        set => Set(ref splitOffset, Math.Clamp(value, SplitMinimum, SplitMaximum));
     }
 
     /// <summary>
@@ -4085,6 +4092,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
 
         SplitNormal = face.Normal;
         RaiseSplitAngles();
+        RecomputeSplitRange(SelectionWorldBounds(), splitNormal);
 
         // The offset the split works in is measured along the normal from the plate's origin,
         // which is exactly where the face's own plane sits.
@@ -4101,6 +4109,27 @@ public sealed class MainViewModel : INotifyPropertyChanged
 
     public float SplitMinimum { get; private set; } = -100;
     public float SplitMaximum { get; private set; } = 100;
+
+    /// <summary>
+    /// How far the plane can travel along its own normal and still meet what is selected -
+    /// recomputed whenever the normal changes, since a tilt or a face pick reads a different
+    /// span off the same bounds than the axis it replaced did.
+    /// </summary>
+    private void RecomputeSplitRange(Bounds bounds, Vector3 normal)
+    {
+        var (min, max) = PlaneSplit.OffsetRange(bounds, normal);
+        SplitMinimum = min;
+        SplitMaximum = max;
+        Raise(nameof(SplitMinimum));
+        Raise(nameof(SplitMaximum));
+    }
+
+    private Bounds SelectionWorldBounds()
+    {
+        var bounds = Bounds.Empty;
+        foreach (var o in Scene.Selection) bounds = bounds.Union(o.WorldBounds);
+        return bounds;
+    }
 
     public SplitKeep SplitKeep
     {
@@ -4426,6 +4455,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
 
         splitTurn = angles;
         SplitNormal = Vector3.Transform(PlaneSplit.NormalFor(splitAxis), MeshTransform.Rotation(angles));
+        RecomputeSplitRange(SelectionWorldBounds(), splitNormal);
         SplitOffset = Vector3.Dot(splitNormal, pivot);
 
         RaiseSplitAngles();
@@ -4442,8 +4472,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
     /// <summary>The point of the plane nearest what it is cutting, which is what it turns about.</summary>
     private Vector3 SplitPlanePoint()
     {
-        var bounds = Bounds.Empty;
-        foreach (var o in Scene.Selection) bounds = bounds.Union(o.WorldBounds);
+        var bounds = SelectionWorldBounds();
 
         Vector3 centre = bounds.IsEmpty ? Vector3.Zero : bounds.Center;
         return centre - splitNormal * (Vector3.Dot(splitNormal, centre) - splitOffset);
@@ -7404,20 +7433,10 @@ public sealed class MainViewModel : INotifyPropertyChanged
 
     private void ResetSplitOffset()
     {
-        var selection = Scene.Selection;
-        if (selection.Count == 0) return;
+        if (Scene.Selection.Count == 0) return;
 
-        // Everything selected, so the plane and its handles span the whole group rather than
-        // whichever object happened to be first.
-        var together = Bounds.Empty;
-        foreach (var o in selection) together = together.Union(o.WorldBounds);
-
-        var (min, max) = PlaneSplit.OffsetRange(together, splitNormal);
-        SplitMinimum = min;
-        SplitMaximum = max;
-        SplitOffset = (min + max) / 2f;
-        Raise(nameof(SplitMinimum));
-        Raise(nameof(SplitMaximum));
+        RecomputeSplitRange(SelectionWorldBounds(), splitNormal);
+        SplitOffset = (SplitMinimum + SplitMaximum) / 2f;
     }
 
     /// <summary>

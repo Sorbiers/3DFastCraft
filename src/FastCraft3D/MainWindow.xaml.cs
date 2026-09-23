@@ -1970,7 +1970,18 @@ public partial class MainWindow : Window
         // camera is looking straight down, where up and the view direction are the same line -
         // the camera degenerates and the viewport comes back empty, build plate and all. That is
         // what Zoom to fit did in the Top view.
-        LookFrom(back, camera.UpDirection);
+        LookFrom(back, camera.UpDirection, FrameBounds());
+    }
+
+    /// <summary>What Zoom to fit frames: the selection when there is one, everything on the plate otherwise.</summary>
+    private Bounds FrameBounds()
+    {
+        var selection = viewModel.Scene.Selection;
+        if (selection.Count == 0) return viewModel.Scene.ComputeShownBounds();
+
+        var bounds = Bounds.Empty;
+        foreach (var o in selection) bounds = bounds.Union(o.WorldBounds);
+        return bounds;
     }
 
     /// <summary>
@@ -2100,22 +2111,66 @@ public partial class MainWindow : Window
             : new Media3D.Vector3D(0, 0, 1);
     }
 
-    private void LookFrom(Media3D.Vector3D direction, Media3D.Vector3D up)
+    private void LookFrom(Media3D.Vector3D direction, Media3D.Vector3D up, Bounds? frame = null)
     {
         if (View.Camera is not PerspectiveCamera camera) return;
 
         up = Upright(direction, up);
-
-        var bounds = viewModel.Scene.ComputeBounds();
-        var centre = bounds.IsEmpty ? new Vector3(0, 0, 0) : bounds.Center;
-        double distance = bounds.IsEmpty ? 320 : Math.Max(bounds.Diagonal * 1.8, 60);
-
         direction.Normalize();
+
+        var bounds = frame ?? viewModel.Scene.ComputeShownBounds();
+        var centre = bounds.IsEmpty ? new Vector3(0, 0, 0) : bounds.Center;
+        double distance = bounds.IsEmpty ? 320 : DistanceToFit(bounds, direction, up, camera.FieldOfView);
+
         camera.Position = new Media3D.Point3D(
             centre.X + direction.X * distance,
             centre.Y + direction.Y * distance,
             centre.Z + direction.Z * distance);
         camera.LookDirection = new Media3D.Vector3D(-direction.X * distance, -direction.Y * distance, -direction.Z * distance);
         camera.UpDirection = up;
+    }
+
+    /// <summary>
+    /// How far back the camera has to sit, along this direction, for the box to just fill the
+    /// frame.
+    ///
+    /// A fixed multiple of the box's own diagonal sized for the worst case - every corner as far
+    /// from the middle as the longest one, as if the box might be viewed end-on from any angle at
+    /// once - which is right for nothing shaped less like a sphere than a printed part usually is,
+    /// and left a wide, constant gap around it. Projecting the actual corners onto the screen's
+    /// own right and up axes measures what this particular view really has to fit.
+    /// </summary>
+    private double DistanceToFit(Bounds bounds, Media3D.Vector3D direction, Media3D.Vector3D up, double horizontalFovDegrees)
+    {
+        var forward = Vector3.Normalize(new Vector3((float)-direction.X, (float)-direction.Y, (float)-direction.Z));
+        var rough = new Vector3((float)up.X, (float)up.Y, (float)up.Z);
+        var right = Vector3.Normalize(Vector3.Cross(forward, rough));
+        var screenUp = Vector3.Cross(right, forward);
+
+        var centre = bounds.Center;
+        float halfWidth = 0f, halfHeight = 0f;
+
+        for (int i = 0; i < 8; i++)
+        {
+            var corner = new Vector3(
+                (i & 1) == 0 ? bounds.Min.X : bounds.Max.X,
+                (i & 2) == 0 ? bounds.Min.Y : bounds.Max.Y,
+                (i & 4) == 0 ? bounds.Min.Z : bounds.Max.Z) - centre;
+
+            halfWidth = MathF.Max(halfWidth, MathF.Abs(Vector3.Dot(corner, right)));
+            halfHeight = MathF.Max(halfHeight, MathF.Abs(Vector3.Dot(corner, screenUp)));
+        }
+
+        double aspect = View.ActualWidth > 0 && View.ActualHeight > 0 ? View.ActualWidth / View.ActualHeight : 1.0;
+        double halfHorizontalFov = horizontalFovDegrees * Math.PI / 360.0;
+        double halfVerticalFov = Math.Atan(Math.Tan(halfHorizontalFov) / aspect);
+
+        // A slim margin so the model does not touch the very edge of the view, not the 1.8x
+        // diagonal that used to leave most of the window empty.
+        const double margin = 1.1;
+        double forWidth = halfWidth / Math.Tan(halfHorizontalFov) * margin;
+        double forHeight = halfHeight / Math.Tan(halfVerticalFov) * margin;
+
+        return Math.Max(Math.Max(forWidth, forHeight), 60);
     }
 }

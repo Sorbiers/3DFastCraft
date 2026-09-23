@@ -38,6 +38,9 @@ public sealed class SceneRenderer : IDisposable
 {
     private static readonly Color OutlineColour = Colors.White;
 
+    /// <summary>Matches the repair banner's border, so the same red means the same thing in both places.</summary>
+    private static readonly Color DamagedOutlineColour = Color.FromRgb(0xD6, 0x45, 0x45);
+
     /// <summary>
     /// Above this, tracing the outline would cost more than it is worth on a selection click.
     /// Dense imports fall back to the brightened material alone.
@@ -1098,11 +1101,15 @@ public sealed class SceneRenderer : IDisposable
     }
 
     /// <summary>
-    /// Draws a white line along the shape's own edges while it is selected.
+    /// Draws a line along the shape's own edges while it is selected, or always while it is
+    /// broken - the same red as the repair banner, so an object nobody has clicked on yet is not
+    /// left to guess at from the banner's word "one or more".
     ///
     /// The object keeps its own colour rather than being repainted: the palette already contains
     /// oranges and blues, so a colour swap alone left it genuinely unclear which object was
-    /// selected. An outline traces the thing itself and cannot be confused with a paint job.
+    /// meant. An outline traces the thing itself and cannot be confused with a paint job - and
+    /// for a torn mesh, the boundary of the tear is itself a feature edge, so the red line runs
+    /// right along the hole rather than just round the outside.
     /// </summary>
     private void UpdateOutline(SceneObject o)
     {
@@ -1110,13 +1117,9 @@ public sealed class SceneRenderer : IDisposable
         // outline of the whole shape round them would draw the half that is being taken off.
         if (splitParts.ContainsKey(o)) return;
 
-        if (!showOutlines)
-        {
-            RemoveOutline(o);
-            return;
-        }
+        bool damaged = !o.Health.IsWatertight;
 
-        if (!o.IsSelected)
+        if (!showOutlines || (!o.IsSelected && !damaged))
         {
             RemoveOutline(o);
             return;
@@ -1139,8 +1142,8 @@ public sealed class SceneRenderer : IDisposable
         var outline = new LineGeometryModel3D
         {
             Geometry = builder.ToLineGeometry3D(),
-            Color = OutlineColour,
-            Thickness = 1.4,
+            Color = damaged ? DamagedOutlineColour : OutlineColour,
+            Thickness = damaged ? 2.2 : 1.4,
             Transform = MeshConverter.ToTransform(o.Transform),
             IsHitTestVisible = false // picking must still hit the solid underneath
         };

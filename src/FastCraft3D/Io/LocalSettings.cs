@@ -18,10 +18,16 @@ namespace FastCraft3D.Io;
 /// <param name="ClassicMode">Only the tools 3D Builder had on the ribbon. Advanced, the default, when missing.</param>
 /// <param name="ShowShadows">Objects cast a shadow onto the plate and each other.</param>
 /// <param name="ShowReflections">The plate reflects what stands on it.</param>
+/// <param name="SingleSelection">
+/// Stored as the opposite of sticky selection, for the same reason as FoldProperties: a file
+/// from before this existed has no flag, and the reader fills a missing one with false, so the
+/// default written here has to be the one that reads back as sticky - the 3D Builder behaviour -
+/// rather than sticky itself.
+/// </param>
 public readonly record struct RememberedSettings(
     float PlateWidth, float PlateDepth, float PlateHeight, string Unit,
     bool ShowAxes = true, bool ShowZAxis = false, bool ShowGridLabels = false, bool FoldProperties = false,
-    bool ClassicMode = false, bool ShowShadows = false, bool ShowReflections = false);
+    bool ClassicMode = false, bool ShowShadows = false, bool ShowReflections = false, bool SingleSelection = false);
 
 /// <summary>
 /// The printable area, the unit and how the grid is drawn, as last used, remembered between sessions.
