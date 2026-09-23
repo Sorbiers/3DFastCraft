@@ -154,6 +154,8 @@ public partial class MainWindow : Window
             renderer?.ShowFace(viewModel.CentreFaceA, tint: viewModel.HasCentreFaceA ? AlignFacePickedColour : null);
             renderer?.ShowSecondFace(viewModel.CentreFaceB, tint: viewModel.HasCentreFaceB ? CentreFaceSecondColour : null);
         };
+        viewModel.Applying += OnRecordBefore;
+        viewModel.Undo.Executed += OnRecordAfter;
 
         listSync = new SelectionListSync(ObjectList, viewModel.Scene);
         listSync.ChangedFromList += viewModel.RefreshSelection;
@@ -658,6 +660,60 @@ public partial class MainWindow : Window
         placeGizmo.EndDrag();
         ShowFacePreview();
         e.Handled = true;
+    }
+
+    // --- Recording ---------------------------------------------------------------------
+
+    private int recordSequence;
+
+    /// <summary>The shot taken the instant Apply was clicked, waiting for the label only Executed knows.</summary>
+    private (int Number, System.Drawing.Bitmap Image)? recordPendingBefore;
+
+    /// <summary>
+    /// The instant a tool's Apply button is clicked, before anything it does has run. The tool's
+    /// own panel and preview are still exactly as the user left them - which is the point of a
+    /// "before" shot - so this is captured straight away rather than waited for: nothing has
+    /// changed yet, so whatever is on screen already is already the right frame. Held rather than
+    /// saved outright, since its file name needs the step's label and only Executed knows that.
+    /// </summary>
+    private void OnRecordBefore()
+    {
+        if (!viewModel.IsRecording || viewModel.RecordFolder is null) return;
+
+        recordPendingBefore?.Image.Dispose();
+        recordPendingBefore = WindowCapture.Capture(this) is { } bitmap ? (++recordSequence, bitmap) : null;
+    }
+
+    /// <summary>
+    /// The instant a new undo step commits. Every one gets an "after" shot; one with a "before"
+    /// waiting on it - a tool with an Apply button - gets that saved alongside it, both under the
+    /// step's own label and the same number, so the pair reads as one action.
+    /// </summary>
+    private async void OnRecordAfter(IUndoableCommand command)
+    {
+        if (!viewModel.IsRecording || viewModel.RecordFolder is not { } folder) return;
+
+        string label = MainViewModel.SafeFileName(command.Label);
+        int number;
+
+        if (recordPendingBefore is { } before)
+        {
+            number = before.Number;
+            WindowCapture.SaveBitmap(before.Image, System.IO.Path.Combine(folder, $"{number:000}-before-{label}.png"));
+            before.Image.Dispose();
+            recordPendingBefore = null;
+        }
+        else
+        {
+            number = ++recordSequence;
+        }
+
+        // The scene has just changed; give the viewport an actual paint before a screenshot of
+        // it means anything, and Direct3D's own frame lags a WPF layout pass by a tick or two
+        // beyond that.
+        await System.Windows.Threading.Dispatcher.Yield(DispatcherPriority.Render);
+        await Task.Delay(120);
+        WindowCapture.Save(this, System.IO.Path.Combine(folder, $"{number:000}-after-{label}.png"));
     }
 
     /// <summary>
@@ -1758,6 +1814,15 @@ public partial class MainWindow : Window
 
         if (e.PropertyName is nameof(MainViewModel.SnapStep) && gizmo is not null)
             gizmo.SnapStep = viewModel.SnapStep;
+
+        // A fresh recording starts its own numbering, rather than carrying on from whichever
+        // number an earlier one in the same session left off at.
+        if (e.PropertyName is nameof(MainViewModel.IsRecording) && viewModel.IsRecording)
+        {
+            recordSequence = 0;
+            recordPendingBefore?.Image.Dispose();
+            recordPendingBefore = null;
+        }
 
         if (e.PropertyName is nameof(MainViewModel.SnapRotation))
         {

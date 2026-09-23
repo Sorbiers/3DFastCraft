@@ -1,0 +1,40 @@
+<Window x:Class="FastCraft3D.View.ExportSessionDialog"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Export session" SizeToContent="Height" Width="420"
+        WindowStartupLocation="CenterOwner" ResizeMode="NoResize"
+        ShowInTaskbar="False" Background="#FFF7F7F8">
+
+    <Window.Resources>
+        <Style x:Key="GroupHeader" TargetType="TextBlock">
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Foreground" Value="#FF33373D" />
+            <Setter Property="Margin" Value="0,14,0,6" />
+        </Style>
+        <Style TargetType="RadioButton">
+            <Setter Property="Margin" Value="2,3" />
+            <Setter Property="Foreground" Value="#FF33383F" />
+        </Style>
+    </Window.Resources>
+
+    <StackPanel Margin="18,14,18,14">
+        <TextBlock x:Name="SummaryText" TextWrapping="Wrap" Foreground="#FF3A3F45" />
+
+        <TextBlock Text="Format" Style="{StaticResource GroupHeader}" />
+        <RadioButton x:Name="FormatProject" GroupName="Format" IsChecked="True"
+                     Content="3DFC - the project file, one per step, reopenable and still editable" />
+        <RadioButton x:Name="FormatStl" GroupName="Format"
+                     Content="STL - the model itself after each step, merged and watertight-checked" />
+        <RadioButton x:Name="FormatThreeMf" GroupName="Format"
+                     Content="3MF - parts, names and colours after each step" />
+
+        <TextBlock TextWrapping="Wrap" Margin="0,14,0,0" Foreground="#FF7A8088"
+                   Text="One file per undo step, oldest first, named for what that step did. The plate is left exactly as it is now when this finishes." />
+
+        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,18,0,0">
+            <Button Content="Export..." IsDefault="True" Click="OnExport"
+                    MinWidth="92" Padding="10,6" Margin="0,0,8,0" />
+            <Button Content="Cancel" IsCancel="True" MinWidth="80" Padding="10,6" />
+        </StackPanel>
+    </StackPanel>
+</Window>

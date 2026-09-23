@@ -256,11 +256,11 @@ public sealed class MainViewModel : INotifyPropertyChanged
         ApplyEmbossCommand = AsyncRelayCommand.Simple(ApplyEmboss, () => isEmbossMode && embossFace is not null);
         CancelEmbossCommand = RelayCommand.Simple(() => IsEmbossMode = false);
         BeginAlignFaceCommand = Track(RelayCommand.Simple(BeginAlignFace, () => Scene.Selection.Count > 0));
-        ApplyAlignFaceCommand = RelayCommand.Simple(
+        ApplyAlignFaceCommand = AsyncRelayCommand.Simple(
             ApplyAlignFace, () => alignFacePicked && (alignFaceModeX is not null || alignFaceModeY is not null || alignFaceModeZ is not null));
         CancelAlignFaceCommand = RelayCommand.Simple(() => IsAlignFaceMode = false);
         BeginCentreFaceCommand = Track(RelayCommand.Simple(BeginCentreFace, () => Scene.Selection.Count > 0));
-        ApplyCentreFaceCommand = RelayCommand.Simple(
+        ApplyCentreFaceCommand = AsyncRelayCommand.Simple(
             ApplyCentreFace, () => centreFaceAPicked && centreFaceBPicked && (centreAxisX || centreAxisY || centreAxisZ));
         CancelCentreFaceCommand = RelayCommand.Simple(() => IsCentreFaceMode = false);
         LoadDrawingCommand = RelayCommand.Simple(LoadDrawing);
@@ -311,6 +311,8 @@ public sealed class MainViewModel : INotifyPropertyChanged
         PasteCommand = RelayCommand.Simple(Paste, () => clipboard.Count > 0);
         ImportCommand = RelayCommand.Simple(Import);
         ExportCommand = RelayCommand.Simple(Export, () => Scene.Objects.Count > 0);
+        ExportSessionCommand = AsyncRelayCommand.Simple(ExportSession, () => Undo.History.Count > 0);
+        RecordCommand = RelayCommand.Simple(ToggleRecording);
         PrintDrawingCommand = RelayCommand.Simple(PrintDrawing, () => Scene.Objects.Count > 0);
         SetColourCommand = new RelayCommand(SetColour, _ => Scene.Selection.Count > 0);
         PickColourCommand = RelayCommand.Simple(PickColour, () => Scene.Selection.Count > 0);
@@ -436,6 +438,8 @@ public sealed class MainViewModel : INotifyPropertyChanged
     public System.Windows.Input.ICommand PasteCommand { get; }
     public System.Windows.Input.ICommand ImportCommand { get; }
     public System.Windows.Input.ICommand ExportCommand { get; }
+    public System.Windows.Input.ICommand ExportSessionCommand { get; }
+    public System.Windows.Input.ICommand RecordCommand { get; }
     public System.Windows.Input.ICommand PrintDrawingCommand { get; }
     public System.Windows.Input.ICommand SetColourCommand { get; }
     public System.Windows.Input.ICommand PickColourCommand { get; }
@@ -1891,8 +1895,10 @@ public sealed class MainViewModel : INotifyPropertyChanged
     /// kept - the point is to place the group against the face, not to line its members up
     /// against each other the way Align to does.
     /// </summary>
-    private void ApplyAlignFace()
+    private async Task ApplyAlignFace()
     {
+        await NotifyApplyingAsync();
+
         if (!alignFacePicked || alignFace is not { } face) return;
         if (alignFaceModeX is null && alignFaceModeY is null && alignFaceModeZ is null) return;
 
@@ -2063,8 +2069,10 @@ public sealed class MainViewModel : INotifyPropertyChanged
     /// axes were asked for. The first face belongs to what is about to move, so it moves with
     /// everything else selected; the offset is worked out from where it started.
     /// </summary>
-    private void ApplyCentreFace()
+    private async Task ApplyCentreFace()
     {
+        await NotifyApplyingAsync();
+
         if (!centreFaceAPicked || centreFaceA is not { } faceA) return;
         if (!centreFaceBPicked || centreFaceB is not { } faceB) return;
         if (!centreAxisX && !centreAxisY && !centreAxisZ) return;
@@ -2971,6 +2979,8 @@ public sealed class MainViewModel : INotifyPropertyChanged
 
     private async Task ApplyEmboss()
     {
+        await NotifyApplyingAsync();
+
         if (Scene.Selection.Count != 1) return;
         if (embossMesh is not { } world || EmbossSurface() is not { } surface) return;
 
@@ -3170,6 +3180,8 @@ public sealed class MainViewModel : INotifyPropertyChanged
 
     private async Task ApplyExtrude()
     {
+        await NotifyApplyingAsync();
+
         var selection = Scene.Selection.ToList();
         if (selection.Count == 0 || IsBusy) return;
 
@@ -3244,6 +3256,8 @@ public sealed class MainViewModel : INotifyPropertyChanged
 
     private async Task ApplySubtract()
     {
+        await NotifyApplyingAsync();
+
         await RunBoolean(BooleanOp.Subtract);
         IsSubtractMode = false;
     }
@@ -7698,6 +7712,8 @@ public sealed class MainViewModel : INotifyPropertyChanged
 
     private async Task ApplyEngrave()
     {
+        await NotifyApplyingAsync();
+
         if (Scene.Selection.Count != 1) return;
         if (engrave.Face is not { } face || engrave.WorldMesh is not { } world) return;
 
@@ -7815,6 +7831,8 @@ public sealed class MainViewModel : INotifyPropertyChanged
     /// </summary>
     private async Task ApplySplit()
     {
+        await NotifyApplyingAsync();
+
         var selection = Scene.Selection.ToList();
         if (selection.Count == 0) return;
 
@@ -8162,6 +8180,8 @@ public sealed class MainViewModel : INotifyPropertyChanged
 
     private async Task ApplyConnect()
     {
+        await NotifyApplyingAsync();
+
         var picked = Scene.SelectionInPickOrder.ToList();
         if (picked.Count != 2 || IsBusy) return;
         if (connectContact is not { } contact) return;
@@ -8747,6 +8767,157 @@ public sealed class MainViewModel : INotifyPropertyChanged
         {
             MessageBox.Show(ex.Message, "Could not export", MessageBoxButton.OK, MessageBoxImage.Error);
         }
+    }
+
+    /// <summary>
+    /// Writes the undo history out as a numbered file per step - the plate as it was before
+    /// anything was done, then again after each step in order - so what a tool did can be looked
+    /// at afterwards, or shown, without replaying the session by hand.
+    ///
+    /// Rewinds the real undo stack to reach each state rather than working on a copy: every
+    /// command but the geometry-replacing ones acts on the scene object it was captured against
+    /// directly, not through a scene passed in, so a second scene built to replay into would
+    /// still be mutating the objects the live one is showing. Undo and Redo are already exactly
+    /// this operation, proven correct by being what the app runs on every Ctrl+Z; the plate is
+    /// left exactly as it was found once every step has been redone back onto it.
+    /// </summary>
+    private async Task ExportSession()
+    {
+        var steps = Undo.History.ToList();
+        if (steps.Count == 0)
+        {
+            Status = "Nothing to export yet - no steps taken since the plate was last empty";
+            return;
+        }
+
+        var pick = new ExportSessionDialog(steps.Count) { Owner = Application.Current?.MainWindow };
+        if (pick.ShowDialog() != true || pick.Result is not { } format) return;
+
+        var folder = new OpenFolderDialog { Title = "Choose a folder for the session export" };
+        if (folder.ShowDialog() != true || folder.FolderName is not { } destination) return;
+
+        if (IsBusy) return;
+        var token = StartWork("Exporting session");
+        int digits = (steps.Count + 1).ToString().Length;
+
+        try
+        {
+            for (int i = 0; i < steps.Count; i++) Undo.Undo();
+
+            ExportSessionFrame(destination, 0, digits, "Start", format);
+            for (int i = 0; i < steps.Count && !token.IsCancellationRequested; i++)
+            {
+                Undo.Redo();
+                ExportSessionFrame(destination, i + 1, digits, steps[i].Label, format);
+
+                // Writing a file is fast enough that without this the whole export runs as one
+                // block on the UI thread - the progress dialog would show but never move, and
+                // Abort would do nothing until it was too late to matter.
+                await Task.Yield();
+            }
+
+            Status = token.IsCancellationRequested
+                ? "Export session stopped partway through"
+                : $"Exported {steps.Count + 1} file(s) to {destination}";
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(ex.Message, "Could not export session", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+        finally
+        {
+            EndWork();
+            RefreshSelection();
+        }
+    }
+
+    /// <summary>Writes one step of a session export, in whichever format was asked for.</summary>
+    private void ExportSessionFrame(string folder, int index, int digits, string label, SessionExportFormat format)
+    {
+        string stem = Path.Combine(folder, $"{index.ToString().PadLeft(digits, '0')}-{SafeFileName(label)}");
+
+        switch (format)
+        {
+            case SessionExportFormat.Project:
+                SceneSerializer.SaveSnapshot(stem + SceneSerializer.Extension, Scene);
+                break;
+
+            case SessionExportFormat.ThreeMf:
+                ThreeMf.Write(stem + ".3mf", ExportComposer.ComposeForObj(Scene.Shown));
+                break;
+
+            default:
+                var merged = ExportComposer.MergeForStl(Scene.Shown);
+                StlWriter.Write(stem + ".stl", merged);
+                break;
+        }
+    }
+
+    internal static string SafeFileName(string label)
+    {
+        var invalid = Path.GetInvalidFileNameChars();
+        var cleaned = new string(label.Select(c => invalid.Contains(c) ? '-' : c).ToArray()).Trim();
+        return cleaned.Length == 0 ? "step" : cleaned;
+    }
+
+    // --- Recording ---------------------------------------------------------------------
+
+    private bool isRecording;
+    private string? recordFolder;
+
+    /// <summary>
+    /// Whether a screenshot is saved after every action - and, for a tool with an Apply button,
+    /// one just before it too. The window itself is what MainWindow saves; this only says
+    /// whether it should, and where.
+    /// </summary>
+    public bool IsRecording
+    {
+        get => isRecording;
+        private set
+        {
+            Set(ref isRecording, value);
+            Raise(nameof(RecordButtonLabel));
+        }
+    }
+
+    /// <summary>Where a recording is being saved, or null while nothing is recording.</summary>
+    public string? RecordFolder => recordFolder;
+
+    public string RecordButtonLabel => isRecording ? "Stop record" : "Record";
+
+    private void ToggleRecording()
+    {
+        if (isRecording)
+        {
+            IsRecording = false;
+            recordFolder = null;
+            Status = "Stopped recording";
+            return;
+        }
+
+        var folder = new OpenFolderDialog { Title = "Choose a folder to save screenshots to while recording" };
+        if (folder.ShowDialog() != true || folder.FolderName is not { } chosen) return;
+
+        recordFolder = chosen;
+        IsRecording = true;
+        Status = $"Recording to {chosen} - a screenshot is saved after every action";
+    }
+
+    /// <summary>Raised the instant a tool's Apply button is clicked, before the click does anything at all.</summary>
+    public event Action? Applying;
+
+    /// <summary>
+    /// Called first thing by every Apply method, before it changes anything.
+    ///
+    /// Awaited so that whatever Applying triggers - Record's "before" shot, while recording - has
+    /// time to actually capture the screen before this method goes on to mutate the scene the
+    /// screenshot was meant to be taken of. The wait is skipped outright unless something is
+    /// recording, so a click costs nothing extra the rest of the time.
+    /// </summary>
+    private async Task NotifyApplyingAsync()
+    {
+        Applying?.Invoke();
+        if (isRecording) await Task.Delay(300);
     }
 
     /// <summary>

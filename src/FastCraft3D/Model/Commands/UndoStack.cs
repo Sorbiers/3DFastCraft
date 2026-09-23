@@ -62,6 +62,16 @@ public sealed class UndoStack
     /// </summary>
     public event Action? Trimmed;
 
+    /// <summary>
+    /// Raised just before a new step is applied - not on Undo or Redo, which only ever revisit a
+    /// step already announced once. Recording wants this as the moment for a "before" shot of
+    /// whatever a tool's panel was showing right before its Apply button committed it.
+    /// </summary>
+    public event Action? Executing;
+
+    /// <summary>Raised just after a new step is applied and pushed, with the step itself.</summary>
+    public event Action<IUndoableCommand>? Executed;
+
     public bool CanUndo => done.Count > 0;
     public bool CanRedo => undone.Count > 0;
     public string? NextUndoLabel => done.Count > 0 ? done[^1].Label : null;
@@ -70,8 +80,15 @@ public sealed class UndoStack
     /// <summary>How much the history is holding, for anything that wants to show it.</summary>
     public long Held => held;
 
+    /// <summary>
+    /// Every step currently applied, oldest first - what got the scene from empty to where it is
+    /// now. Exposed read-only so a session export can walk it without being able to disturb it.
+    /// </summary>
+    public IReadOnlyList<IUndoableCommand> History => done;
+
     public void Execute(IUndoableCommand command)
     {
+        Executing?.Invoke();
         command.Apply(scene);
 
         done.Add(command);
@@ -82,6 +99,7 @@ public sealed class UndoStack
 
         Fit();
         Changed?.Invoke();
+        Executed?.Invoke(command);
     }
 
     public void Undo()

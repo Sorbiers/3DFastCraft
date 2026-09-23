@@ -790,6 +790,13 @@
                             Command="{Binding PrintDrawingCommand}" MinWidth="70"
                             AutomationProperties.Name="Blueprint"
                             ToolTip="A blueprint: front, top and right views, and an isometric, with the overall dimensions - to print, or save as a PDF. The selection, or everything when nothing is selected (Ctrl+P)" />
+                    <Separator Margin="8,0" Visibility="{Binding IsAdvancedMode, Converter={StaticResource BoolToVisibility}}" />
+                    <Button Style="{StaticResource ToolButton}" Content="Export session" Visibility="{Binding IsAdvancedMode, Converter={StaticResource BoolToVisibility}}" Tag="{StaticResource IconExportSession}"
+                            Command="{Binding ExportSessionCommand}" MinWidth="96"
+                            ToolTip="Write out every undo step since the plate was last empty, one file per step, oldest first - as .3dfc, .3mf or .stl. Asks for a format and a folder. For a picture of each step, use Record instead." />
+                    <Button Style="{StaticResource ToolButton}" Content="{Binding RecordButtonLabel}" Visibility="{Binding IsAdvancedMode, Converter={StaticResource BoolToVisibility}}" Tag="{StaticResource IconRecord}"
+                            Command="{Binding RecordCommand}" MinWidth="86"
+                            ToolTip="While on, saves a screenshot to a folder you choose after every action - and, for a tool with an Apply button, one just before it too. For building up a set of pictures of the tools as they are used." />
                     <Separator Margin="8,0" />
                     <Button Style="{StaticResource ToolButton}" Content="About" Tag="{StaticResource IconAbout}"
                             Click="OnAbout" ToolTip="Version, licence and where the source lives" />
