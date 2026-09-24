@@ -1,4 +1,4 @@
-<Window x:Class="FastCraft3D.MainWindow"
+﻿<Window x:Class="FastCraft3D.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:hx="http://helix-toolkit.org/wpf/SharpDX"
@@ -1616,7 +1616,60 @@
                                     Visibility="{Binding HasDrawing, Converter={StaticResource BoolToVisibility}}" />
                         </StackPanel>
 
-                        <StackPanel Orientation="Horizontal" Margin="0,0,0,2">
+                        <!-- A texture instead of a stamp. It is not placed and not repeated: it is
+                             the field itself, cut to whatever room it is given, so the rows below
+                             that size a stamp and lay it out have nothing to say about one. -->
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
+                            <TextBlock Text="Texture" Style="{StaticResource FieldLabel}" Width="62"
+                                       ToolTip="Cover the whole face with a pattern instead of stamping something on it. Flat ones - knurling, ribs, honeycomb, pips, checker plate, brick and tile - are cut from outlines and wrap round a part with no seam. Shaped ones - roof tiles, boarding and lap siding - are built as a height over the face instead, which is the only way a lap, a slope or a grain can be said at all; Depth is how far they stand proud." />
+                            <ComboBox Width="130" ItemsSource="{Binding EmbossTextures}"
+                                      SelectedItem="{Binding EmbossTexture, Mode=TwoWay}"
+                                      AutomationProperties.AutomationId="EmbossTexture" />
+                        </StackPanel>
+
+                        <StackPanel Visibility="{Binding UsesTexture, Converter={StaticResource BoolToVisibility}}">
+                            <StackPanel Orientation="Horizontal" Margin="0,0,0,2">
+                                <TextBlock Text="Pitch" Style="{StaticResource FieldLabel}" Width="62"
+                                           ToolTip="Middle to middle of one cell and the next, or the length of one brick, tile or board. A knurl on a knob is about 1 to 2 mm; a grip you can feel through a glove is 3 or more." />
+                                <TextBox AutomationProperties.AutomationId="EmbossTexturePitch" Width="64" Style="{StaticResource NumberBox}" Tag="number"
+                                         Text="{Binding EmbossTexturePitch, StringFormat=N2, UpdateSourceTrigger=LostFocus}" />
+                                <TextBlock Text="mm" Foreground="#FF9AA0A8" VerticalAlignment="Center" />
+                            </StackPanel>
+
+                            <StackPanel Orientation="Horizontal" Margin="0,0,0,2">
+                                <TextBlock Text="Groove" Style="{StaticResource FieldLabel}" Width="62"
+                                           ToolTip="The gap left between one cell and the next, or the joint between two bricks. Under a nozzle width it closes up as it prints." />
+                                <TextBox AutomationProperties.AutomationId="EmbossTextureLine" Width="64" Style="{StaticResource NumberBox}" Tag="number"
+                                         Text="{Binding EmbossTextureLine, StringFormat=N2, UpdateSourceTrigger=LostFocus}" />
+                                <TextBlock Text="mm" Foreground="#FF9AA0A8" VerticalAlignment="Center" />
+                            </StackPanel>
+
+                            <StackPanel Orientation="Horizontal" Margin="0,0,0,2"
+                                        Visibility="{Binding TextureLeans, Converter={StaticResource BoolToVisibility}}">
+                                <TextBlock Text="Lean" Style="{StaticResource FieldLabel}" Width="62"
+                                           ToolTip="How far the grooves lean off the axis. 45 gives the square diamond of an ordinary knurling wheel; less makes them tall, more makes them broad." />
+                                <TextBox AutomationProperties.AutomationId="EmbossTextureAngle" Width="64" Style="{StaticResource NumberBox}" Tag="number"
+                                         Text="{Binding EmbossTextureAngle, StringFormat=N0, UpdateSourceTrigger=LostFocus}" />
+                                <TextBlock Text="deg" Foreground="#FF9AA0A8" VerticalAlignment="Center" />
+                            </StackPanel>
+
+                            <StackPanel Orientation="Horizontal" Margin="0,0,0,2"
+                                        Visibility="{Binding TextureHasCourses, Converter={StaticResource BoolToVisibility}}">
+                                <TextBlock Text="Courses" Style="{StaticResource FieldLabel}" Width="62"
+                                           ToolTip="How many times longer each piece is than it is deep. A brick is about three, a wall tile one, a roof tile one and a half, a floorboard eight or more." />
+                                <TextBox AutomationProperties.AutomationId="EmbossTextureAspect" Width="64" Style="{StaticResource NumberBox}" Tag="number"
+                                         Text="{Binding EmbossTextureAspect, StringFormat=N1, UpdateSourceTrigger=LostFocus}" />
+                                <TextBlock Text="to 1" Foreground="#FF9AA0A8" VerticalAlignment="Center" />
+                            </StackPanel>
+
+                            <CheckBox Content="Run the other way" IsChecked="{Binding EmbossTextureAcross, Mode=TwoWay}"
+                                      AutomationProperties.AutomationId="EmbossTextureAcross" Margin="0,2,0,6"
+                                      Visibility="{Binding TextureRuns, Converter={StaticResource BoolToVisibility}}"
+                                      ToolTip="Ribs run up the face and boards lie along it, which is what each is normally wanted for. This turns them the other way. Courses of brick and tile are level by definition and take no notice." />
+                        </StackPanel>
+
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,2"
+                                    Visibility="{Binding UsesStamp, Converter={StaticResource BoolToVisibility}}">
                             <TextBlock Text="Height" Style="{StaticResource FieldLabel}" Width="62" />
                             <TextBox AutomationProperties.AutomationId="EmbossHeight" Width="64" Style="{StaticResource NumberBox}" Tag="number"
                                      Text="{Binding EmbossHeight, StringFormat=N1, UpdateSourceTrigger=LostFocus}" />
@@ -1650,7 +1703,7 @@
                              drag can be tidied up here and a number can be nudged with the arrows. -->
                         <StackPanel Orientation="Horizontal" Margin="0,0,0,2">
                             <TextBlock Text="Across" Style="{StaticResource FieldLabel}" Width="62"
-                                       ToolTip="How far from the middle, along the lettering" />
+                                       ToolTip="How far from the middle, along the lettering. A texture slides round the part on this one." />
                             <TextBox AutomationProperties.AutomationId="EmbossAcross" Width="64" Style="{StaticResource NumberBox}" Tag="number"
                                      Text="{Binding EmbossAcross, StringFormat=N2, UpdateSourceTrigger=LostFocus}" />
                             <TextBlock Text="mm" Foreground="#FF9AA0A8" VerticalAlignment="Center" />
@@ -1658,13 +1711,13 @@
 
                         <StackPanel Orientation="Horizontal" Margin="0,0,0,2">
                             <TextBlock Text="Up" Style="{StaticResource FieldLabel}" Width="62"
-                                       ToolTip="How far from the middle, across the lettering" />
+                                       ToolTip="How far from the middle, across the lettering. A texture slides up and down the part on this one." />
                             <TextBox AutomationProperties.AutomationId="EmbossUp" Width="64" Style="{StaticResource NumberBox}" Tag="number"
                                      Text="{Binding EmbossUp, StringFormat=N2, UpdateSourceTrigger=LostFocus}" />
                             <TextBlock Text="mm" Foreground="#FF9AA0A8" VerticalAlignment="Center" />
                         </StackPanel>
 
-                        <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,6" Visibility="{Binding UsesStamp, Converter={StaticResource BoolToVisibility}}">
                             <TextBlock Text="Turn" Style="{StaticResource FieldLabel}" Width="62"
                                        ToolTip="Which way up the lettering runs" />
                             <TextBox AutomationProperties.AutomationId="EmbossAngle" Width="64" Style="{StaticResource NumberBox}" Tag="number"
@@ -1674,7 +1727,7 @@
 
                         <!-- Repeating the stamp. The distance is between the edges of one copy
                              and the next, so it means the same thing whatever is being stamped. -->
-                        <StackPanel Orientation="Horizontal" Margin="0,6,0,0">
+                        <StackPanel Orientation="Horizontal" Margin="0,6,0,0" Visibility="{Binding UsesStamp, Converter={StaticResource BoolToVisibility}}">
                             <TextBlock Text="Repeat" Style="{StaticResource FieldLabel}" Width="62"
                                        ToolTip="How many copies of the stamp go across the face and how many rows of them go up it. 1 x 1 is a single stamp. Ignored while Fill the face is on, which works the numbers out for itself." />
                             <TextBox AutomationProperties.AutomationId="EmbossColumns" Width="44" Style="{StaticResource NumberBox}" Tag="number"
@@ -1684,7 +1737,7 @@
                                      Text="{Binding EmbossRows, UpdateSourceTrigger=LostFocus}" />
                         </StackPanel>
 
-                        <StackPanel Orientation="Horizontal">
+                        <StackPanel Orientation="Horizontal" Visibility="{Binding UsesStamp, Converter={StaticResource BoolToVisibility}}">
                             <TextBlock Text="Distance" Style="{StaticResource FieldLabel}" Width="62"
                                        ToolTip="The blank left between one copy and the next, edge to edge." />
                             <TextBox AutomationProperties.AutomationId="EmbossGap" Width="64" Style="{StaticResource NumberBox}" Tag="number"
@@ -1693,6 +1746,7 @@
                         </StackPanel>
 
                         <CheckBox Content="Fill the face" IsChecked="{Binding EmbossFill, Mode=TwoWay}"
+                                  Visibility="{Binding UsesStamp, Converter={StaticResource BoolToVisibility}}"
                                   AutomationProperties.AutomationId="EmbossFill" Margin="0,4,0,8"
                                   ToolTip="Covers the whole face with as many as fit at that distance, instead of the numbers above. Wrapped round a part, it goes the whole way round and the distance takes up the difference so there is no seam." />
 

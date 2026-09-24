@@ -1,4 +1,4 @@
-using System.ComponentModel;
+﻿using System.ComponentModel;
 using System.Diagnostics;
 using System.IO;
 using System.Numerics;
@@ -94,6 +94,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
     private int embossRows = 1;
     private float embossGap = 2f;
     private bool embossFill;
+    private TextureOptions embossTexture = TextureOptions.Default with { Kind = TextureKind.None };
     private bool isPivotMode;
     private bool isAlignFaceMode;
     private FacePatch? alignFace;
@@ -254,7 +255,8 @@ public sealed class MainViewModel : INotifyPropertyChanged
         BeginEmbossCommand = Track(RelayCommand.Simple(BeginEmboss, () => Scene.Selection.Count == 1));
         BeginLayCommand = Track(RelayCommand.Simple(BeginLay, () => Scene.Selection.Count == 1));
         BestFaceCommand = Track(AsyncRelayCommand.Simple(BestFaceDown, () => Scene.Selection.Count == 1));
-        ApplyEmbossCommand = AsyncRelayCommand.Simple(ApplyEmboss, () => isEmbossMode && embossFace is not null);
+        ApplyEmbossCommand = AsyncRelayCommand.Simple(
+            ApplyEmboss, () => isEmbossMode && embossFace is not null && Scene.Selection.Count == 1);
         CancelEmbossCommand = RelayCommand.Simple(() => IsEmbossMode = false);
         BeginAlignFaceCommand = Track(RelayCommand.Simple(BeginAlignFace, () => Scene.Selection.Count > 0));
         ApplyAlignFaceCommand = AsyncRelayCommand.Simple(
@@ -2301,7 +2303,10 @@ public sealed class MainViewModel : INotifyPropertyChanged
 
             Set(ref embossProjection, value);
             Raise(nameof(IsEmbossWrapped));
-            RefreshEmboss();
+
+            // A texture is laid out to the room it has, and wrapping changes that room from one
+            // facet to the whole way round. A word does not care, so this used only to refresh.
+            RefreshLettering();
         }
     }
 
@@ -2386,7 +2391,10 @@ public sealed class MainViewModel : INotifyPropertyChanged
                 // landed, so layout Y = 0 belongs at the part's own middle instead; anchoring it
                 // to the click left the field as high or low as the click happened to be, with as
                 // much of it run off the top as was left below.
-                float originZ = embossFill ? embossBounds.Center.Z : embossPick.Z;
+                // A texture is the whole barrel by definition, so it centres on the part like a
+                // filled field does. Anchored to the click it hung off whichever end was nearer
+                // and left the other bare.
+                float originZ = embossFill || embossTexture.IsOn ? embossBounds.Center.Z : embossPick.Z;
 
                 return new CylinderSurface(
                     new Vector3(axis.X, axis.Y, originZ), radius,
@@ -2416,6 +2424,21 @@ public sealed class MainViewModel : INotifyPropertyChanged
         get
         {
             if (embossFace is null) return "Click the face to letter.";
+
+            if (Profile(coarse: false) is { } relief)
+            {
+                var (wide, tall) = FaceRoom();
+                var cost = ReliefField.Cost(relief, MathF.Max(wide, 0.01f), MathF.Max(tall, 0.01f));
+
+                if (cost.Refusal is { } why) return why;
+
+                string heavy = cost.IsHeavy
+                    ? " - heavy. Simplify afterwards, or use a coarser pitch."
+                    : "";
+
+                return $"{embossTexture.Kind.ToString().ToLowerInvariant()}, "
+                     + $"{embossDepth:0.##} mm of relief, about {cost.Triangles:N0} triangles{heavy}";
+            }
 
             var shapes = EmbossShapes();
             if (shapes.Count == 0) return "Nothing to letter - type something.";
@@ -2693,6 +2716,84 @@ public sealed class MainViewModel : INotifyPropertyChanged
     }
 
     /// <summary>
+    /// Adds a shaped texture to the object: the profile built as a solid and joined on.
+    ///
+    /// One boolean with one connected solid, rather than the several hundred separate pads a flat
+    /// texture comes to - which is what makes a wall of siding cheaper to apply than a word is.
+    /// Cut instead of raised takes the same solid the other way and sinks the shape into the face,
+    /// which is the view from inside the mould and is occasionally what somebody wants.
+    /// </summary>
+    private async Task ApplyProfile(Mesh world, IPlacementSurface surface)
+    {
+        var source = Scene.Selection[0];
+        bool raised = embossRaised;
+
+        if (IsBusy) return;
+
+        var token = StartWork(raised ? "Laying the texture on" : "Cutting the texture in");
+        try
+        {
+            var built = await Task.Run(() => ProfiledSolid(surface, coarse: false), token);
+
+            if (built is null || built.TriangleCount == 0)
+            {
+                // Whatever Cost would have said, said here too, so the reason lands in the one
+                // place somebody looks after pressing a button that appeared to do nothing.
+                var (wide, tall) = FaceRoom();
+                var cost = Profile(coarse: false) is { } relief
+                    ? ReliefField.Cost(relief, MathF.Max(wide, 0.01f), MathF.Max(tall, 0.01f))
+                    : default;
+
+                Status = cost.Refusal ?? "The texture produced no geometry - try a coarser pitch";
+                return;
+            }
+
+            var joined = await Task.Run(
+                () => raised ? LocalCsg.Union(world, built, token) : LocalCsg.Subtract(world, built, token),
+                token);
+
+            if (!joined.CheckHealth().IsWatertight)
+            {
+                Status = $"The texture came out unprintable - {joined.CheckHealth().Describe()}. "
+                       + "Nothing was changed.";
+                MessageBox.Show(
+                    "The texture could not be added cleanly, so the object has been left as it "
+                    + "was." + Environment.NewLine + Environment.NewLine + WayRound(),
+                    "3DFastCraft", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+
+            var textured = new SceneObject(source.Name, joined)
+            {
+                Colour = source.Colour,
+                Filament = source.Filament
+            }.Centred();
+
+            Undo.Execute(new ReplaceObjectsCommand(
+                raised ? "Lay texture" : "Cut texture", [source], [textured]));
+
+            IsEmbossMode = false;
+            RefreshSelection();
+
+            Status = $"{embossTexture.Kind.ToString().ToLowerInvariant()} on {source.Name}"
+                   + $" - {built.TriangleCount:N0} triangles of texture,"
+                   + $" {joined.TriangleCount:N0} in all";
+        }
+        catch (Exception abort) when (WasAborted(abort))
+        {
+            Status = $"{busyTitle} aborted - nothing was changed";
+        }
+        catch (Exception ex)
+        {
+            Status = $"The texture failed: {ex.Message}";
+        }
+        finally
+        {
+            EndWork();
+        }
+    }
+
+    /// <summary>
     /// Letters the object and keeps the lettering as a second part, ready to be given its own
     /// filament.
     ///
@@ -2819,6 +2920,8 @@ public sealed class MainViewModel : INotifyPropertyChanged
         // for the face left the preview blank and said a good drawing had no filled shape in it.
         if (letteringCache is not null) return letteringCache;
 
+        if (embossTexture.IsOn) return letteringCache = Textured();
+
         if (svgFile.Length > 0)
         {
             try
@@ -2858,6 +2961,11 @@ public sealed class MainViewModel : INotifyPropertyChanged
         if (dialog.ShowDialog() != true) return;
 
         svgFile = dialog.FileName;
+
+        // A drawing and a texture are two answers to the same question, and the texture is asked
+        // first, so leaving it on would swallow the file that was just chosen.
+        if (embossTexture.IsOn) EmbossTexture = TextureKind.None;
+
         RefreshDrawing();
 
         if (svgFile.Length > 0 && Lettering().Count == 0)
@@ -2876,6 +2984,190 @@ public sealed class MainViewModel : INotifyPropertyChanged
         RefreshLettering();
     }
 
+    /// <summary>
+    /// How much room a texture has to fill, which is not the question a word asks.
+    ///
+    /// A word is a stamp: laid out at its own size and then placed. A texture is the field itself
+    /// and has to be told how far it runs before it can be laid out at all. On a flat face that is
+    /// the face, less the strip the retiling keeps to hold the face's own outline together;
+    /// wrapped, it is the whole way round the part.
+    ///
+    /// Before a face is picked there is no such figure and the panel still wants to show what the
+    /// pattern looks like, so a patch big enough to show several cells stands in.
+    /// </summary>
+    private List<TextShape> Textured()
+    {
+        const float PatchMm = 24f;
+
+        var (across, up) = FaceRoom();
+        bool wrapped = embossProjection != TextProjection.Planar;
+
+        if (across <= 0.01f || up <= 0.01f)
+        {
+            (across, up) = (PatchMm, PatchMm);
+        }
+        else if (!wrapped)
+        {
+            // Twice the strip the retiling needs, so the field is clear of it either side and the
+            // fast path is not thrown away over a hundredth of a millimetre.
+            float margin = Engraver.RaisedInset * 4f;
+            across = MathF.Max(across - margin, 0.01f);
+            up = MathF.Max(up - margin, 0.01f);
+        }
+
+        return SurfaceTexture.Over(across, up, embossTexture, wrapped);
+    }
+
+    /// <summary>
+    /// Which texture is being laid on, or None while a word or a drawing is being stamped.
+    ///
+    /// A texture, a drawing and typed letters are three answers to one question, so choosing any
+    /// of them puts the others down.
+    /// </summary>
+    public TextureKind EmbossTexture
+    {
+        get => embossTexture.Kind;
+        set
+        {
+            if (embossTexture.Kind == value) return;
+
+            embossTexture = embossTexture with { Kind = value };
+            if (value != TextureKind.None) svgFile = "";
+
+            // Brickwork arrives raised. Cutting the pieces sinks the bricks and leaves the mortar
+            // standing, which is a wall seen from inside its own mould and is not what anybody
+            // picking "Brick" is after; raising them is the same relief the right way round, and it
+            // is also the one case that never reaches the boolean at all on a flat face.
+            if (embossTexture.IsMasonry && !embossRaised) EmbossRaised = true;
+
+            Raise(nameof(EmbossTexture));
+            Raise(nameof(UsesTexture));
+            Raise(nameof(UsesStamp));
+            Raise(nameof(TextureLeans));
+            Raise(nameof(TextureRuns));
+            Raise(nameof(TextureHasCourses));
+            Raise(nameof(EmbossTextureAspect));
+            RefreshDrawing();
+        }
+    }
+
+    public IReadOnlyList<TextureKind> EmbossTextures { get; } =
+    [
+        TextureKind.None, TextureKind.Knurl, TextureKind.Ribs,
+        TextureKind.Hex, TextureKind.Dots, TextureKind.Tread,
+        TextureKind.Brick, TextureKind.RoofTiles, TextureKind.Tiles, TextureKind.Planks,
+        TextureKind.Siding
+    ];
+
+    /// <summary>
+    /// The profile behind a shaped texture, or null while a flat one is being laid.
+    ///
+    /// Siding, roof tiles and boarding are a height over the face rather than a set of outlines -
+    /// a lap, a slope and a grain cannot be said any other way - so they leave the outline path
+    /// entirely and are built and unioned as a solid.
+    /// </summary>
+    /// <param name="coarse">
+    /// For the preview, which is redrawn on every keystroke. A board's grain is sampled to the
+    /// nozzle, and at a nozzle's width a wall of it is a hundred thousand triangles - far too many
+    /// to rebuild while a number is being typed. Three times as coarse is a ninth of the work and
+    /// reads the same at the size a panel shows it.
+    /// </param>
+    private IRelief? Profile(bool coarse) =>
+        embossTexture.IsProfiled
+            ? SurfaceTexture.ProfileOf(embossTexture, embossDepth, coarse ? 1.2f : 0.4f)
+            : null;
+
+    /// <summary>Whether the texture in hand is one with a shape rather than an outline.</summary>
+    public bool UsesProfile => embossTexture.IsProfiled;
+
+    /// <summary>The solid a shaped texture comes to on the face that was picked.</summary>
+    private Mesh? ProfiledSolid(IPlacementSurface surface, bool coarse)
+    {
+        if (Profile(coarse) is not { } relief) return null;
+
+        var (across, up) = FaceRoom();
+        if (across <= 0.01f || up <= 0.01f) return null;
+
+        // Clear of the edge by the same strip a flat texture keeps, so the face is not cut into
+        // right at its outline.
+        float margin = Engraver.RaisedInset * 4f;
+
+        return ReliefField.Build(surface, relief,
+            MathF.Max(across - margin, 0.01f), MathF.Max(up - margin, 0.01f));
+    }
+
+    /// <summary>Whether a texture is being laid rather than a stamp placed.</summary>
+    public bool UsesTexture => embossTexture.IsOn;
+
+    /// <summary>
+    /// The other way round, for the rows a texture has no use for: its own size, where it sits,
+    /// how often it repeats. A field fills what it is given and none of those mean anything to it.
+    /// </summary>
+    public bool UsesStamp => !embossTexture.IsOn;
+
+    public float EmbossTexturePitch
+    {
+        get => embossTexture.PitchMm;
+        set => SetTexture(embossTexture with { PitchMm = value });
+    }
+
+    public float EmbossTextureLine
+    {
+        get => embossTexture.LineMm;
+        set => SetTexture(embossTexture with { LineMm = value });
+    }
+
+    public float EmbossTextureAngle
+    {
+        get => embossTexture.AngleDegrees;
+        set => SetTexture(embossTexture with { AngleDegrees = value });
+    }
+
+    public bool EmbossTextureAcross
+    {
+        get => embossTexture.Across;
+        set => SetTexture(embossTexture with { Across = value });
+    }
+
+    /// <summary>Whether the lean matters: only knurling is built on a slanted lattice.</summary>
+    public bool TextureLeans => embossTexture.Kind == TextureKind.Knurl;
+
+    /// <summary>
+    /// Whether the direction matters. Ribs and boards can run either way; courses of brick and
+    /// tile are level by definition, and a roof laid in vertical columns is not a roof.
+    /// </summary>
+    public bool TextureRuns => embossTexture.Turns;
+
+    /// <summary>Whether the pattern is made of pieces, which have proportions to argue about.</summary>
+    public bool TextureHasCourses => embossTexture.IsMasonry;
+
+    /// <summary>
+    /// How many times longer each piece is than it is deep. Zero takes whatever the pattern
+    /// normally is, which is the only figure most people ever want.
+    /// </summary>
+    public float EmbossTextureAspect
+    {
+        get => embossTexture.Courses;
+        set => SetTexture(embossTexture with { Aspect = value });
+    }
+
+    private void SetTexture(TextureOptions wanted)
+    {
+        if (embossTexture == wanted) return;
+
+        embossTexture = wanted;
+
+        Raise(nameof(EmbossTexturePitch));
+        Raise(nameof(EmbossTextureLine));
+        Raise(nameof(EmbossTextureAngle));
+        Raise(nameof(EmbossTextureAcross));
+        Raise(nameof(TextureLeans));
+        Raise(nameof(TextureRuns));
+        Raise(nameof(TextureHasCourses));
+        Raise(nameof(EmbossTextureAspect));
+        RefreshLettering();
+    }
+
     /// <summary>Whether the lettering is coming from a drawing rather than from the text box.</summary>
     public bool HasDrawing => svgFile.Length > 0;
 
@@ -2886,12 +3178,15 @@ public sealed class MainViewModel : INotifyPropertyChanged
     /// </summary>
     public IReadOnlyList<TextShape> DrawingShapes => Lettering();
 
-    public bool UsesText => svgFile.Length == 0;
+    public bool UsesText => svgFile.Length == 0 && !embossTexture.IsOn;
 
     public string SvgName => Path.GetFileName(svgFile);
 
     /// <summary>What is being stamped, for the messages that have to name it.</summary>
-    private string Stamped() => svgFile.Length > 0 ? SvgName : $"\"{embossText}\"";
+    private string Stamped() =>
+        embossTexture.IsOn ? $"{embossTexture.Kind.ToString().ToLowerInvariant()} texture"
+        : svgFile.Length > 0 ? SvgName
+        : $"\"{embossText}\"";
 
     /// <summary>Throws the laid-out lettering away, for whatever would change how it reads.</summary>
     private void RefreshLettering()
@@ -2902,7 +3197,11 @@ public sealed class MainViewModel : INotifyPropertyChanged
     }
 
     /// <summary>The outlines where they have been put, ready to lay on the surface.</summary>
-    private IReadOnlyList<TextShape> EmbossShapes() => embossPlacement.Apply(Repeated(Lettering()));
+    private IReadOnlyList<TextShape> EmbossShapes() =>
+        // A texture is already the whole field, cut to the room it has, so repeating it would
+        // only tile a tiling. It is still placed, though: sliding a field up or round is the one
+        // adjustment it wants, and the handles in the viewport drive the same two numbers.
+        embossPlacement.Apply(embossTexture.IsOn ? Lettering() : Repeated(Lettering()));
 
     /// <summary>
     /// The stamp laid out over and over: a chosen number across and up, or as many as the face
@@ -3032,6 +3331,10 @@ public sealed class MainViewModel : INotifyPropertyChanged
     {
         if (EmbossSurface() is not { } surface) return null;
 
+        // A shaped texture is its own preview: what is drawn is the very solid that will be
+        // added, only sampled more coarsely so it can be rebuilt as the numbers move.
+        if (embossTexture.IsProfiled) return ProfiledSolid(surface, coarse: true);
+
         var shapes = EmbossShapes();
 
         // Standing proud whichever way it will go: a preview sunk into the object would be
@@ -3079,8 +3382,28 @@ public sealed class MainViewModel : INotifyPropertyChanged
     {
         await NotifyApplyingAsync();
 
-        if (Scene.Selection.Count != 1) return;
-        if (embossMesh is not { } world || EmbossSurface() is not { } surface) return;
+        // Said rather than simply returning. A click that lands on the plate rather than on the
+        // model clears the selection, the panel stays open, and Apply then did nothing at all -
+        // no message, no change, a button that looked live and was not.
+        if (Scene.Selection.Count != 1)
+        {
+            Status = Scene.Selection.Count == 0
+                ? "Nothing is selected - click the object again, then Apply"
+                : "Emboss works on one object at a time - select just the one";
+            return;
+        }
+
+        if (embossMesh is not { } world || EmbossSurface() is not { } surface)
+        {
+            Status = "Pick the face again - the one that was picked has gone";
+            return;
+        }
+
+        if (embossTexture.IsProfiled)
+        {
+            await ApplyProfile(world, surface);
+            return;
+        }
 
         var shapes = EmbossShapes();
         if (shapes.Count == 0)
