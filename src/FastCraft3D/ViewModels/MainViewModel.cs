@@ -7567,7 +7567,14 @@ public sealed class MainViewModel : INotifyPropertyChanged
     /// <summary>
     /// Repairs whatever is broken - the selection if there is one, otherwise everything.
     ///
-    /// Objects the pass cannot help are left exactly as they were and counted, rather than being
+    /// Two passes, quietly, because there is nothing for anyone to choose between them. The local
+    /// one runs first: it welds, caps holes and turns faces round, and is the whole answer for a
+    /// mesh that merely arrived torn. Whatever it cannot close goes to the engine Windows carries,
+    /// which re-solves the shell instead of patching it and so can settle a surface that passes
+    /// through itself. Both are measured; neither result is kept unless it is less broken than
+    /// what went in.
+    ///
+    /// Objects neither pass can help are left exactly as they were and counted, rather than being
     /// quietly replaced by something no better.
     /// </summary>
     private async Task RepairObjects()
@@ -7589,16 +7596,59 @@ public sealed class MainViewModel : INotifyPropertyChanged
         {
             var healed = await Task.Run(() => targets.Select(o => MeshHealer.Heal(o.Mesh, token: token)).ToList());
 
+            // Step two, for whatever the local pass could not close. Nothing is asked here because
+            // there is nothing to decide: the result either comes back measurably less broken, in
+            // which case it is what the object becomes, or it does not and nothing has changed.
+            var mended = new Mesh?[targets.Count];
+            string? windowsProblem = null;
+            int byWindows = 0;
+
+            for (int i = 0; i < targets.Count && WindowsRepair.IsAvailable; i++)
+            {
+                if (healed[i].After.IsWatertight) continue;
+                token.ThrowIfCancellationRequested();
+
+                Progress.Report(WorkProgress.Doing(targets.Count == 1
+                    ? "Asking Windows' own repair engine"
+                    : $"Asking Windows' own repair engine about {targets[i].Name}"));
+
+                var best = healed[i].Improved ? healed[i].Mesh : targets[i].Mesh;
+                var attempt = await WindowsRepair.TryRepairAsync(best, token);
+
+                // Kept in case nothing works: a machine without the engine has to read
+                // differently from a model that is genuinely past mending.
+                windowsProblem ??= attempt.Problem;
+                if (attempt.Mesh is null) continue;
+
+                // Welded before it is judged. What comes back is somebody else's idea of a mesh
+                // and its corners need not be shared, and an unwelded mesh reads as nothing but
+                // open edges - a sound repair would be thrown away for looking like a colander.
+                var judged = await Task.Run(() =>
+                {
+                    var welded = attempt.Mesh.Welded();
+                    return (Mesh: welded, Damage: Damage(welded.CheckHealth()));
+                }, token);
+
+                // Somebody else's engine, so the answer is measured rather than believed - the
+                // same bar the local pass has to clear before its result is kept.
+                if (judged.Damage < Damage(best.CheckHealth()))
+                {
+                    mended[i] = judged.Mesh;
+                    byWindows++;
+                }
+            }
+
             var replaced = new List<SceneObject>();
             var produced = new List<SceneObject>();
             int fixedUp = 0, beyond = 0;
 
             for (int i = 0; i < targets.Count; i++)
             {
-                if (!healed[i].Improved) { beyond++; continue; }
+                var mesh = mended[i] ?? (healed[i].Improved ? healed[i].Mesh : null);
+                if (mesh is null) { beyond++; continue; }
 
                 replaced.Add(targets[i]);
-                produced.Add(new SceneObject(targets[i].Name, healed[i].Mesh)
+                produced.Add(new SceneObject(targets[i].Name, mesh)
                 {
                     Position = targets[i].Position,
                     Rotation = targets[i].Rotation,
@@ -7607,7 +7657,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
                     Origin = targets[i].Origin
                 }.Centred());
 
-                if (healed[i].After.IsWatertight) fixedUp++;
+                if (mesh.CheckHealth().IsWatertight) fixedUp++;
             }
 
             if (replaced.Count == 0)
@@ -7624,12 +7674,26 @@ public sealed class MainViewModel : INotifyPropertyChanged
                     ? $"Cannot mend this one - {worst.Describe()}. It is unchanged."
                     : $"Cannot mend {targets.Count} object(s) - the worst has {worst.Describe()}. They are unchanged.";
 
+                // Only the path where nothing worked says the second pass happened at all. Told
+                // here it saves someone trying the same model in a slicer and finding out the
+                // hard way; said on every success it would be noise about a step they did not ask
+                // for and do not have to think about.
+                string alsoTried =
+                    windowsProblem is not null
+                        ? windowsProblem + Environment.NewLine + Environment.NewLine
+                    : WindowsRepair.IsAvailable
+                        ? "Windows' own repair engine - the one slicers offer as a last resort - "
+                          + "was tried as well, and could not close it either."
+                          + Environment.NewLine + Environment.NewLine
+                        : "";
+
                 MessageBox.Show(
                     $"This model has {worst.Describe().ToLowerInvariant()}, and repairing it would "
                     + "leave it worse than it is, so nothing has been changed." + Environment.NewLine + Environment.NewLine
                     + "Filling holes and turning faces round only works when the damage is local. "
                     + "A mesh whose surface passes through itself has no well-defined inside, and "
                     + "patching it piece by piece tears more than it closes." + Environment.NewLine + Environment.NewLine
+                    + alsoTried
                     + "Rebuild, beside this button, mends it a different way: it works out what "
                     + "is inside the model and what is outside and builds a fresh surface between "
                     + "them, which always succeeds. The cost is that detail finer than its "
@@ -7644,6 +7708,13 @@ public sealed class MainViewModel : INotifyPropertyChanged
             Status = beyond == 0
                 ? $"Repaired {fixedUp} of {replaced.Count} object(s)"
                 : $"Repaired {fixedUp} object(s); {beyond} beyond mending and left alone";
+
+            // Said only when it did something. It is not a setting and not a choice, but it does
+            // explain why a repair that used to fail now takes longer and works.
+            if (byWindows > 0)
+                Status += byWindows == replaced.Count && replaced.Count == 1
+                    ? " - by Windows' own repair engine"
+                    : $" - {byWindows} of them by Windows' own repair engine";
         }
         catch (Exception abort) when (WasAborted(abort))
         {
@@ -7658,6 +7729,14 @@ public sealed class MainViewModel : INotifyPropertyChanged
             EndWork();
         }
     }
+
+    /// <summary>
+    /// How broken a mesh is, in one number, so that two repairs of the same object can be put
+    /// side by side. Triangle count deliberately plays no part: a repair is free to add or drop
+    /// as many as it likes, and only the bad edges say whether it helped.
+    /// </summary>
+    private static int Damage(MeshHealth health) =>
+        health.BoundaryEdges + health.NonManifoldEdges + health.InconsistentEdges;
 
     private void BeginEngrave()
     {

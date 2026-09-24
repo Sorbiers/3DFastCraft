@@ -2,7 +2,12 @@
 
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
-    <TargetFramework>net8.0-windows</TargetFramework>
+    <TargetFramework>net8.0-windows10.0.19041.0</TargetFramework>
+    <!-- The Windows 10 target framework is what turns on the WinRT projections, and the mesh
+         repair engine the app falls back on lives there (Geometry/WindowsRepair.cs). It is only
+         which headers are visible: the floor below keeps the app running on 1809, where that
+         engine has been present since long before. -->
+    <SupportedOSPlatformVersion>10.0.17763.0</SupportedOSPlatformVersion>
     <RootNamespace>FastCraft3D</RootNamespace>
     <AssemblyName>3DFastCraft</AssemblyName>
     <UseWPF>true</UseWPF>
