@@ -61,7 +61,10 @@ public partial class GearDialog : ToolPanel
         KeptTeethBox.Text = (start.KeptTeeth > 0 ? start.KeptTeeth : Math.Max(2, start.Teeth / 4))
             .ToString(CultureInfo.CurrentCulture);
         FrameBox.IsChecked = start.Frame;
-        StrokeBox.Text = Format(start.Stroke);
+        RoundEndsBox.IsChecked = start.FrameEnds == FrameEnds.Round;
+        SquareEndsBox.IsChecked = start.FrameEnds == FrameEnds.Square;
+        ClearanceBox.Text = Format(start.FrameClearance);
+        LockBox.Text = Format(start.LockHeight);
         ConeBox.Text = Format(start.ConeAngle);
         WormDiameterBox.Text = Format(start.WormDiameter);
         UndercutBox.Text = Format(start.Undercut);
@@ -120,7 +123,9 @@ public partial class GearDialog : ToolPanel
             PartnerTeeth = PartnerBox.IsChecked == true ? Whole(PartnerTeethBox, 2 * fallback.Teeth) : 0,
             KeptTeeth = PartialBox.IsChecked == true ? Whole(KeptTeethBox, 0) : 0,
             Frame = FrameBox.IsChecked == true,
-            Stroke = Number(StrokeBox, 0f),
+            FrameEnds = SquareEndsBox.IsChecked == true ? FrameEnds.Square : FrameEnds.Round,
+            FrameClearance = Number(ClearanceBox, fallback.FrameClearance),
+            LockHeight = Number(LockBox, fallback.LockHeight),
             ConeAngle = Number(ConeBox, fallback.ConeAngle),
             WormDiameter = Number(WormDiameterBox, 0f),
 
@@ -178,17 +183,9 @@ public partial class GearDialog : ToolPanel
         KeptText.Text = gear.KeptTeeth > 0 ? $"of {gear.Teeth} ({360f * gear.KeptTeeth / gear.Teeth:0} deg)" : "teeth";
 
         Show(FrameRow, cutAway);
-        Show(StrokeRow, framed);
-
-        // What a run may be, beside the box that asks for it: it cannot be shorter than the push,
-        // and it goes up a whole tooth at a time, so most numbers typed in become another number.
-        if (framed)
-        {
-            float pitch = MathF.PI * gear.Module;
-            float least = Math.Max(2, gear.KeptTeeth) * pitch;
-
-            StrokeText.Text = $"mm - {least:0.#} or more, in {pitch:0.#} steps";
-        }
+        Show(FrameEndsRow, framed);
+        Show(ClearanceRow, framed);
+        Show(LockRow, framed);
 
         // With a mate asked for, a bevel's cones come from the two tooth counts instead.
         Show(ConeRow, gear.Kind == GearKind.Bevel && PartnerBox.IsChecked != true);

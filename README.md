@@ -35,6 +35,16 @@ path from a shape on the plate to a printable part. These are the tools it adds 
 | 12 | **Split with connectors** | Cut a part too big for the plate into halves that go back together one way only: round pins, or pegs standing up out of the lower half. |
 | 13 | **Connect objects** | Pins or pegs through the face two parts rest on each other on, only where both have solid material, each part kept as itself. |
 | 14 | **As one** | Move, turn and resize several objects as one about the middle of the lot, or each on its own - and type `+=5` into any box to change a value by that much. |
+| 15 | **Gears** | Involute gears, ring gears and racks, bevels, worm drives and ratchets - straight, helical or herringbone - each with its partner made already in mesh. |
+| 16 | **Reciprocating frame** | A gear cut away to a sector and the frame it drives to and fro from a motor that only turns one way, made from the motion itself, with a lock that holds it between pushes. |
+| 17 | **Threads and holes** | ISO metric rods, bolts, nuts and threaded holes that screw together printed; screw holes, countersinks, counterbores, nut pockets and heat-set insert pockets, one at a time, in a row or round a bolt circle. |
+| 18 | **Sketch** | An outline drawn on the plate or read from an SVG, extruded up or revolved into a solid. |
+| 19 | **Blueprint** | Front, top, right and isometric views with every straight edge dimensioned and a title block, printed or saved as a PDF. |
+| 20 | **Set pivot** | Measure and turn an object about a point you pick - a shaft hole, a hinge line - rather than the middle of its box. |
+| 21 | **Align to a face** | Line a selection up on the middle of any face, or centre a face of it on a face of something else. |
+| 22 | **Lithophane** | A photograph as a thin plate that shows when a light is behind it, flat or curved round for a shade. |
+| 23 | **Voronoi** | A part cut into a web of struts: an openwork lamp, or a foam through the inside to take weight out. |
+| 24 | **Export session and Record** | Every undo step written out as a file of its own, or a screenshot taken after every action. |
 
 **Almost all of it is vibecoded.** The geometry, the renderer, the interface and the tests were
 written by [Claude Code](https://claude.com/claude-code) from prompts, with only tiny manual
@@ -74,18 +84,22 @@ dotnet test
 
 | Tab | What it does |
 |---|---|
-| **Insert** | Cube, cylinder, cone, sphere, pyramid, wedge, torus, hexagon, tetrahedron; a stair; import an STL, OBJ or 3MF, or another project |
-| **Object** | What a thing is made of: Subtract / Intersect / Merge, split with a plane, duplicate (beside, in place, or repeated along a line or round a circle), delete, colour |
-| **Align** | Where it sits: drop to plate, lay on face, align to another object, mirror, and lining the selection up on X, Y or Z - flush to either edge, centred, or spread evenly |
-| **Edit** | What its surface is: emboss lettering or a drawing, engrave a pattern, smooth, round edges, simplify, hollow, undo, redo |
-| **Tools** | The work around a model: measure, fit check, repair, rebuild, make a mould of it, extrude down, split with connectors, connect objects |
-| **File** | New, open, recent, save, save as, save a version, versions, export STL/OBJ/3MF, about |
-| **View** | Zoom to fit, the six axis views and isometric, wireframe, x-ray, build plate size and visibility, model scale |
+| **Insert** | Cube, cylinder, cone, sphere, pyramid, wedge, torus, hexagon, tetrahedron; a custom shape; text; a lithophane; a sketch; import an STL, OBJ or 3MF, or another project; a fit test; a hole; a thread; a stair; a gear |
+| **Edit** | Everything that changes the selection: undo, redo; copy, cut, paste; duplicate beside or in place, delete; Subtract / Intersect / Merge, split with a plane; set a pivot; round, twist, taper, bend; simplify, smooth, hollow; colour |
+| **Align** | Where it sits: drop to plate, lay on face, align to another object, align to a face, centre face to face, fit to the bed, distribute, mirror, and lining the selection up on X, Y or Z - to either edge, centred, or spread evenly |
+| **Tools** | The work around a model: mould, hull; repair, rebuild; Voronoi, extrude down, split with connectors, connect objects; emboss, engrave; repeat; measure, fit check |
+| **File** | New, open, recent, save, save as, save a version, versions, export STL/OBJ/3MF, blueprint, export session, record, about, shortcuts |
+| **View** | Zoom to fit, the six axis views and isometric, wireframe, x-ray, outline, plate, overhangs, grid; units and model scale |
 
-The middle tabs are split by *what a tool changes*, which is worth knowing when hunting for one:
-**Object** changes what a thing is made of, **Edit** changes its surface, **Align** changes where
-it sits, and **Tools** changes nothing at all - it measures the model, mends it, or makes
-something new from it.
+**Edit** sits second because it is where the work is: whatever changes the selection - what it is
+made of or what its surface is - is there. **Align** changes only where a thing sits, and
+**Tools** measures a model, mends it, or makes something new from it.
+
+**Classic or Advanced**, at the right of the tabs, decides how much of that is shown. Classic
+shows only the tools 3D Builder had, for anyone who wants the old app back and nothing else;
+Advanced, the default, shows everything. Only buttons are hidden, never a setting inside a panel,
+every key works in both, and **F1** lists the keys for whatever is showing. The choice is
+remembered.
 
 **Camera:** left-drag orbits, right-drag pans, the wheel zooms. Dragging horizontally turns the
 scene around the vertical **Z** axis, like a turntable - the plate never rolls onto its side.
@@ -103,11 +117,25 @@ one in object-list order, and clicking empty space clears the selection.
 
 | Menu entry | What it does |
 |---|---|
-| **Group** | Combines the selected objects into one. Their meshes are concatenated, not fused, so Ungroup can tell them apart again. For a true boolean union use **Merge** on the Object tab. |
+| **Group** | Combines the selected objects into one. Their meshes are concatenated, not fused, so Ungroup can tell them apart again. For a true boolean union use **Merge** on the Edit tab. |
 | **Ungroup** | Splits the selection into its separate pieces. Pieces are found geometrically, so this also breaks up an imported STL holding several loose parts. Parts that genuinely touch are one piece and stay together. |
 | **Select all** / **Deselect all** | Everything, or nothing. |
 | **Invert selection** | Swaps what is and is not selected. |
 | **Sticky selection** | The toggle described above. |
+
+Sticky selection is remembered from one run to the next.
+
+**The object list** under the menu has an eye and a padlock on every row. A **hidden** object is
+not drawn, cannot be picked, and is left out of an export of everything - `H` hides the selection
+and `Alt+H` brings everything back. A **locked** one stays in view and in the way, so it still
+stops a dragged part on contact, but it cannot be selected, so nothing can change it by accident -
+`L` locks the selection and `Alt+L` unlocks everything. Both are saved with the project. The dot
+at the start of each row is the object's colour; clicking it opens the colour picker for that
+object, or for the whole selection when it is part of one.
+
+The side panel below the list gives the selection's **Name**, then **Colour**, **Filament**,
+**Position**, **Size** and **Rotation** under one **Properties** heading that folds away when the
+room is wanted for a tool. Whether it is folded is remembered.
 
 Left-drag *on an object* also moves it across the plate; hold **Shift** to constrain to one axis.
 
@@ -137,11 +165,29 @@ A drag works its answer out once, on the way down, so none of that measuring hap
 moves. Something too dense to flatten - an import in the hundreds of thousands of triangles -
 falls back to its bounding box rather than stalling the drag.
 
-Shortcuts: `Ctrl+Z` / `Ctrl+Y` undo & redo, `Delete`, `Ctrl+C` / `Ctrl+V` copy & paste,
-`Ctrl+D` duplicate and `Ctrl+Shift+D` duplicate in place, `Ctrl+A` select all and
-`Ctrl+Shift+A` deselect all, `Ctrl+N/O/S` new/open/save, `Ctrl+I` import, `Ctrl+E` export, and
-`M` / `R` / `S` to switch manipulator mode. Every one of them is named in the tooltip of the
-button it belongs to, so none of them has to be memorised from here.
+**F1** lists every key the app answers to, and the drags worth knowing, from the same table the
+keys are bound from - so the list cannot drift from what the keys do. The ones used most:
+
+| Keys | What they do |
+|---|---|
+| `Ctrl+Z` / `Ctrl+Y` | Undo, redo |
+| `Ctrl+C` / `Ctrl+X` / `Ctrl+V` | Copy, cut, paste - a paste lands exactly where the copy came from |
+| `Ctrl+D` / `Ctrl+Shift+D` | Duplicate beside, duplicate in place |
+| `Delete` | Delete |
+| `Ctrl+A` / `Ctrl+Shift+A` | Select everything, select nothing |
+| `Ctrl+G` / `Ctrl+Shift+G` | Group, ungroup |
+| `H` / `Alt+H`, `L` / `Alt+L` | Hide the selection, show everything; lock the selection, unlock everything |
+| `Ctrl+Space` | Run the last tool again, with what it was last given |
+| `M` / `R` / `S` | Move, rotate or resize handles |
+| `O`, `C` | One way only when resizing; stop on contact when moving |
+| Arrows, `Page Up` / `Page Down` | Nudge the selection along X, Y and Z by the snap step, or 1 mm with snap off; a held key is one undo step |
+| `F`, `1` `2` `3` `4` | Zoom to fit; top, front, right and isometric views |
+| `Ctrl+N` / `Ctrl+O` / `Ctrl+S` / `Ctrl+Shift+S` | New, open, save, save as |
+| `Ctrl+I` / `Ctrl+E` / `Ctrl+P` | Import, export, blueprint |
+| `Esc` | Put down the tool in hand |
+
+Every one of them is also named in the tooltip of the button it belongs to. A greyed-out button
+still shows its tooltip, and one that needs a selection says what it needs.
 
 ### Colour
 
@@ -149,7 +195,7 @@ New shapes are handed a colour in turn from a six-colour cycle, so a scene stays
 anyone having to paint anything.
 
 To change one, select the objects and click a swatch in the **Colour** grid on the right - the
-whole selection is painted in a single undo step. **Colour...** on the Object tab (or **Custom...**
+whole selection is painted in a single undo step. **Colour** on the Edit tab (or **Custom...**
 under the grid) opens a picker with a saturation/value square, a hue strip, and hex and RGB
 boxes; it opens on the colour the selection already has, so a small adjustment starts from
 where you are.
@@ -158,6 +204,11 @@ Colour is a property of the object, so it survives duplication, booleans, splitt
 rounding, and it is saved in the project file. It reaches **OBJ** exports as a `.mtl` sidecar.
 **STL has no notion of colour** - an STL export carries geometry only, which is what slicers
 read anyway.
+
+**Filament** is a separate number: which spool prints the part on a printer with more than one -
+an AMS slot, an MMU tool. It is not the colour, because two parts of the same shade are not
+thereby the same material. It goes into an exported 3MF, on the object and in the sidecar the
+PrusaSlicer family reads; STL and OBJ have nowhere to put it.
 
 ### Repairing a model
 
@@ -168,6 +219,9 @@ out inside out, and caps the holes. A shell enclosed by another is left facing i
 that is a cavity and turning it outward would fill in the hollow.
 
 It repairs the selection, or everything if nothing is selected.
+
+A damaged object is outlined in **red** from the moment it is loaded or made, the outline tracing
+the tear itself, so it is plain which part the banner is about and where it is broken.
 
 What it will not do is guess. A mesh that overlaps itself cannot be mended by patching it
 locally - the tools that manage it voxelise the model and rebuild the surface, which would
@@ -195,11 +249,30 @@ the whole point is to read it.
 **Wireframe** draws every triangle edge, which is how you see what an import actually costs and
 where a boolean has left a mess. **X-ray** fades everything that is not selected, so a part
 buried inside another can be seen and worked on - only the unselected fade, since the point is to
-look past them at what is selected.
+look past them at what is selected. While a tool has the plate to itself - a split, a preview -
+X-ray brings the rest back, drawn through rather than taken away.
 
-The **build plate** takes any size from 20 to 2000 mm, with the common beds offered, and can be
-hidden altogether. It is rebuilt rather than stretched when the size changes: its squares are
-10 mm so the board doubles as a ruler.
+**Outline** turns off the white line round a selected object. On a dense mesh every feature edge
+is an edge, so the outline covers the very surface it is meant to bound - a lithophane comes back
+as a white haze of its own picture.
+
+**Overhangs** marks in colour every face leaning further from upright than an angle you set -
+what the slicer will want to hold up with support. Faces lying flat on the bed are left out, since
+the bed holds them up, and the area marked is given on the status line. The angle and the colour
+are set in a side panel while it is on; the colour is mostly self-lit, so a face turned away from
+the light still reads as the colour picked.
+
+**Grid** opens the plate's settings. The **printable area** is your printer's build volume as
+width, depth and height - a guide rather than a limit: **Fit** and **Distribute** use it, and
+nothing else is held to it. The X and Y axes can be drawn across the plate, paler on the negative
+side so which way is plus reads from any angle; an upright Z axis as tall as the printable height;
+and distances along the axes in the current units. **Shadows** and **Reflections** are here too -
+objects casting shadows onto the plate and each other, and the plate reflecting what stands on it
+as a glossy bed does. Each costs a second render pass, so both start off. The printable area is
+kept in the project; the rest is remembered on the machine.
+
+**Plate** hides the build plate altogether. Its squares are 10 mm, so the board doubles as a
+ruler.
 
 ### Smoothing
 
@@ -343,16 +416,25 @@ dense imports (over 200k triangles) skip the outline and use the colour lift alo
 The status bar always shows the selected object's size, triangle count, volume, and whether it
 is watertight.
 
-**Split**, **Engrave** and **Emboss** take the object over while they run: the manipulator bar and
+**Keep on bed**, in the Move and Resize bars, stops anything going below the plate: a part standing
+on it grows upward only, dragged or typed alike. It starts on for resizing and off for moving.
+
+The arrow keys nudge the selection along X and Y, and **Page Up** / **Page Down** along Z, by the
+snap step or a millimetre with snap off. Holding a key down is still one undo step.
+
+**Split**, **Engrave**, **Emboss** and the other tools that ask in the side panel take the object over while they run: the manipulator bar and
 its handles stand down, and the tool's own handles have the object to themselves. Starting one
 puts the others away, since each means something different by a click on the model. Cancel or
 apply, and the manipulator comes back.
 
 ### Repeating along a line
 
-**Repeat...** on the Object tab takes the selection, copies it *n* times with a step in X, Y and
+**Repeat** on the Tools tab takes the selection, copies it *n* times with a step in X, Y and
 Z, and optionally grows each copy by a fixed amount as it goes. One operation, one undo entry -
 a flight of steps, a row of dowels, a run of courses.
+
+**In a grid** is the third way it repeats: rows, columns and layers, spaced either by the gap
+between copies or from centre to centre, the whole selection repeated as one block.
 
 The subtlety is which face stays put. Resizing works about the centre, so a run of growing copies
 stepped by their centres leaves half of each increment as a gap. Where the run is travelling, the
@@ -389,8 +471,9 @@ rosette.
 
 ### A stair
 
-**Stair...** on the Insert tab takes a rise, a run, a width and a number of risers, and builds
-the flight as **one closed profile swept sideways** rather than a stack of boxes. That matters
+**Stair** on the Insert tab takes a rise, a run, a width and a number of risers, shows the
+flight on the plate as the numbers change, and builds it as **one closed profile swept sideways**
+rather than a stack of boxes. That matters
 for what comes next: a stack of boxes has a coplanar seam at every tread, and coplanar seams are
 what the boolean struggles with.
 
@@ -474,11 +557,12 @@ hole, it does not shift it. Zero subtracts exactly as before.
 part in its own right, and the alternative - modelling it twice, once to cut with and once to
 print - is precisely how the two stop matching.
 
-**A tolerance is refused on anything with a sloped face.** Growing each dimension by twice the
-tolerance is the true offset for a cube, a cylinder and a sphere and for nothing else - on a cone
-or a pyramid the sloped surface ends up nearer than asked, by a factor of the cosine of the
-slope, and a gap quietly smaller than the number typed is the one direction that jams a printed
-part. Better to say so than to under-deliver silently.
+**On anything but a cube, a cylinder or a sphere, it asks first.** Growing each dimension by twice
+the tolerance is the true offset for those three and for nothing else - on a cone or a pyramid the
+sloped surface ends up nearer than asked, by a factor of the cosine of the slope, and a gap
+quietly smaller than the number typed is the one direction that jams a printed part. On something
+roughly round about its own middle - a gear about its axis - it is a fair approximation all the
+same, so rather than refusing, the app says which it is and leaves the choice to you.
 
 A **group** may take one if every member could on its own - a row of dowel pins being the usual
 case. Each piece is grown about its own centre rather than the group being scaled as one lump,
@@ -539,18 +623,31 @@ honest answer rather than something that half-works everywhere.
 Because the shape is rebuilt at its current size, its scale resets in the process; resizing it
 unevenly afterwards will stretch the rounded edges.
 
+**Bevel** instead of round gives each edge a single flat face - a chamfer. It is the same swept
+profile run in one step rather than several, so it is exactly a chamfer rather than a coarse
+curve.
+
 Closing, opening or starting a new model with unsaved changes asks first, and cancelling the
 prompt cancels the whole action — including the window close.
 
 ### Emboss: lettering and drawings
 
-**Emboss...** on the Edit tab raises words off a face or cuts them into it. Select the object,
+**Emboss** on the Tools tab raises words off a face or cuts them into it. Select the object,
 press it, click the face, and type: the lettering appears on the face as you set it up, with the
 font, height and depth alongside.
 
 Letters are real outlines rather than a bitmap, so an O has a proper hole in it and the result is
 a few hundred triangles rather than tens of thousands. **Raised instead of cut** stands the
-lettering proud of the face rather than sinking it in.
+lettering proud of the face rather than sinking it in. The panel offers every installed font with
+a sample of the text in it, bold, italic and letter spacing.
+
+**Keep as its own part** is for printing the lettering in another filament. Cut in, the object
+gets the recess and the letters come back as the plug that fills it flush - the very solid that
+cut it, so the two fit by construction. Raised, they stand on it as a part of their own. Either
+way the letters go onto the next filament up, and the pair export to a 3MF that says so.
+
+For lettering that is an object of its own - a sign, a name tag - use **Text** on the Insert tab
+instead; see [Text](#text) below.
 
 #### A drawing instead of words
 
@@ -608,7 +705,7 @@ starting point.
 
 ### Engraving a pattern
 
-**Engrave...** on the Edit tab puts a repeating pattern on one flat face - brickwork on a
+**Engrave** on the Tools tab puts a repeating pattern on one flat face - brickwork on a
 wall, boards on a shed, lap siding on a gable.
 
 Select the object, press **Engrave...**, then **click the face** you want. It highlights in
@@ -722,7 +819,7 @@ place, so an interrupted save cannot destroy the scene and its whole history tog
 
 ### Splitting
 
-Select one or more objects and press **Split** on the Object tab. Everything else on the plate
+Select one or more objects and press **Split** on the Edit tab. Everything else on the plate
 stands down while you aim: a plane is aimed by eye, and on a plate of any depth the thing being
 cut is behind something else. So does the rest of the app - the ribbon, the object list and the
 property boxes grey out until you press **Split** or **Cancel** - because nothing should be able
@@ -748,6 +845,9 @@ the face the cut exposes closed over or left open to look into. That preview is 
 not an impression of it: the same code, on a throttle set by how long the last one took, so a
 light model follows the plane about and a heavy one catches up a few times a second.
 
+The arrows and the rings keep the plane on the solid: however far it is dragged or tilted, it
+stops at the last place it still cuts something, rather than sliding off into empty air.
+
 The plane belongs to the scene rather than to an object, so it cuts **everything selected** in
 one stroke and one undo step - which is how an assembly gets sliced in half. Its travel and its
 handles are sized to the whole selection, and objects the plane misses are left alone rather than
@@ -765,6 +865,14 @@ Both halves are always kept.
 - **Pegs on one half** - pegs standing up out of the *lower* half and sockets in the upper one.
   Nothing loose to lose. Always the lower half: pegs on the upper one hang off its underside and
   cannot be printed without supports.
+- **Brick studs** - studs on the lower half and a shallow brick underside in the upper one, on the
+  8 mm grid, cut from the studs' own cells as a real brick's is. The halves hold by grip, as bricks
+  do, and each takes real bricks along the join. A stud goes only where the other half can take its
+  socket, and the narrowest wall that takes one is the real 7.55 mm. The grid repeats, so line the
+  edges up by eye.
+
+Pins and pegs can be **round** or **square**; a square one gets a square socket, and is kept further
+from the edge for its corners.
 
 They run **square to the cut**, **vertical** or **horizontal** - vertical keeps the top half of a
 tilted cut lifting straight off. A direction that would run along the cut rather than through it
@@ -785,6 +893,14 @@ its own share of the face, and from there out towards the edge until the wall le
 is the **From edge** asked for. Four on a square land towards its corners, three on a disc go
 evenly round it, one stays in the middle. Registration is better the further apart they are.
 
+While the panel is open every connector is marked on the cut face and the half above it is
+faded, so what the settings do can be seen before anything is cut.
+
+**Fit test** on the Insert tab is for choosing the fit before trusting a big print to it: four
+small 2x2 brick plates at -0.2, -0.1, 0 and +0.1 mm, marked with one to four notches. Print them
+in your filament and press each onto real bricks - or onto its twin, for two halves as Split
+with connectors makes them - and type the fit that holds firmly but still comes apart by hand.
+
 If not one connector fits anywhere, **nothing is split**, and the message gives the two numbers
 that matter: how thick the solid would have to be, and how thick the cut face actually gets. A
 hollow box with 3 mm walls will not take a 5 mm pin, and it says so rather than splitting plain
@@ -798,10 +914,12 @@ go through the face they share, with the same settings and the same rules. A con
 where **both** parts have material: on a floor resting on a basement, that is the basement's walls.
 Each part is kept as itself, with its name and colour.
 
-The shared face is found from the two parts' boxes, so it works for parts square to the plate, no
-more than 0.5 mm apart; parts turned at an angle get no shared face rather than a wrong one. A
-joint thinner than a printable pin - under 3 mm of wall, as at the joints of a 1:87 house - gets a
-message rather than a pin cut through its side.
+The shared face is found from the two parts' boxes where it can be, for parts square to the plate
+and no more than 0.5 mm apart. Where the boxes find nothing - a can standing in a dish, a lid in a
+pot's mouth, a spigot in its counterbore, anything sitting down into a recess of the other - the
+flat faces are read off both shapes themselves and matched up. Parts turned at an angle get no
+shared face rather than a wrong one. A joint thinner than a printable pin - under 3 mm of wall, as
+at the joints of a 1:87 house - gets a message rather than a pin cut through its side.
 
 ### Extrude down
 
@@ -826,14 +944,229 @@ two things you meant: **open as a project**, putting its plate up in place of th
 way throws out work that was never saved. Opening is only offered for a single project file;
 everything else can still be imported, and several files land in one undo step.
 
-### Making a hole
+### Holes
 
-Insert a cube. Insert a cylinder, set its size to 10 × 10 × 40 mm so it passes right through.
-Select both (`Ctrl+A`) and press **Subtract**. The status bar should read
-*"Watertight — ready to print"*.
+**Hole** on the Insert tab makes a screw hole - **plain**, **countersunk** for a flat head, or
+**counterbored** for a socket cap to sit below the surface, with a **nut pocket** at the far end if
+asked - or a pocket for a **heat-set insert**, the brass thread pressed in with a soldering iron
+that survives being undone many times. M2 to M8.
 
-Boolean order follows the object list: the first selected object is the one the others are cut
-out of.
+It comes as one hole, a **row** along the cutter's own X, or a **bolt circle**, all set out round the
+same handles, so moving or turning the cutter moves the lot. **All the way through** is measured to
+the far side along each hole's own axis, not the part's diagonal. **Clearance** goes on every
+diameter, since printed holes come out small - but not on an insert's pocket, which should be
+tight.
+
+With one part selected the cutter starts sunk into its top, and **Cut** takes the holes out where
+the cutter stands. **Add** puts the cutter on the plate instead, to Subtract later from this part
+or another. A cut that would not leave the part closed is refused.
+
+By hand, a hole is a cylinder and **Subtract**: the last object picked is the cutter, so select the
+part, then the cylinder, and press it. The status bar should then read *"Watertight - ready to
+print"*.
+
+### Threads
+
+**Thread** on the Insert tab makes a **threaded rod**, a **bolt** with a hexagon or round head, a
+**nut**, or a **hole cutter** to take a threaded hole out of a part - ISO metric coarse M3 to M20,
+which fills in the pitch and the ISO 4032 nut's size, or **Custom** for any diameter and pitch.
+
+The profile is the ISO 68-1 basic one, right-handed, with its depth fading in over a pitch at each
+end so the thread starts cleanly. **Clearance** is on the diameter, half off the rod and half on
+the nut, so a printed rod and a printed nut of the same size screw together; 0.2 suits a well set
+up printer, and 0.3 to 0.4 is the next thing to try if they bind. A bolt is made head down, still
+right-handed.
+
+With a part selected, a hole cutter starts sunk into its top and **Cut** takes the threaded hole out
+where it stands. It is built as a surface of its own rather than with a boolean, so it closes by
+construction and follows the numbers as they are typed. The panel says when a pitch under 1 mm will
+be hard for a filament printer, when a nut was widened to keep its wall, and when a clearance is too
+wide for the threads to engage.
+
+### Gears
+
+**Gear** on the Insert tab makes a **gear**, a **ring gear**, a **rack**, a **bevel**, a **worm** and
+its wheel, or a **ratchet** and its pawl, with the result on the plate as the numbers change. Spur
+gears, rings and racks can have **straight**, **helical** or **herringbone** teeth.
+
+The teeth are not drawn from the involute formula but generated the way a gear is cut: by rolling
+the standard rack round the pitch circle and keeping what it never reaches. Above the base circle
+that gives the involute anyway; below it, it gives the curved root a real cutter leaves, and on a
+small pinion the undercut that lets its partner's tips pass. A gear drawn from the formula alone has
+straight roots, and a pinion of a dozen teeth jams against them. The solid is built straight to a
+closed surface, with no boolean but the set-screw hole.
+
+| Setting | Meaning |
+|---|---|
+| **Module** | The size of a tooth: the pitch diameter is the module times the teeth. Gears mesh only with the same module; 1 to 2 prints well on a 0.4 mm nozzle |
+| **Pressure angle** | 20 degrees almost everywhere; two gears must share it |
+| **Backlash** | The play between two meshing gears, along the pitch circle. Each is thinned by half of it |
+| **Bore** | Round, D-shaped for a motor shaft, or hexagonal for a hex shaft or a nut pressed in |
+| **Hub** | A collar on top round the bore, with a hole across it for a grub screw onto the flat |
+| **Chamfer** | Draws the bottom edge of the teeth in, against the first layer spreading |
+
+**A partner in mesh.** Ask for a meshing gear and it is made at the right distance and turned into
+mesh - beside a gear, inside a ring or on a rack - leaning the other way for helical teeth, with the
+backlash shared between the two. It can have its own thickness and shaft: a pinion on a 3 mm arbor
+often drives a wheel on a 5 mm one. A bevel pair meets at a right angle, a worm's wheel is helical
+at the worm's lead angle and as wide as the worm asks for, and a ratchet's pawl comes with its pivot
+placed. A pair is shown as it goes together and made as it prints, which for a bevel, a worm and a
+pawl are not the same place.
+
+The gear marks its own bore and puts its pivot there, so it is measured and turned about its shaft
+rather than about the outline of its teeth.
+
+#### Cut away, and the frame it drives
+
+**Cut away to** keeps teeth on part of the rim only and takes the rest down to the roots: the
+gear that drives something one way, lets go, and catches it again. The first and last teeth are
+shortened, to come back into mesh cleanly.
+
+**Reciprocating frame** makes its mate the closed frame such a gear drives to and fro - the usual way
+to get a back-and-forth stroke from a motor that only turns one way. The gear turns on the spot
+inside it: it pushes one run, the frame parks while the bare rim goes by, and then it pushes the
+other run back.
+
+The frame is **generated rather than drawn**, the way the teeth are: the gear is run through a
+whole turn of the motion it is meant to give, and the frame is everything it never reaches, less a
+clearance. There is no phase between the two runs to get wrong, so an odd tooth count works as well
+as an even one, and only the teeth that are actually used are cut. How far it slides comes from the
+involute rather than a count of teeth: a sector stays in mesh past its last tooth by its contact
+ratio, and that tooth's tip then drags the rack on until it slips off - five teeth of module 2
+slide 42.7 mm, not the 31.4 that five pitches would say. A sector so long that it leaves the frame
+no time parked is refused, with the most teeth that fit.
+
+A parked frame would still slide back freely along the path it came by, so there is a **lock**, in a
+layer of its own on top of both parts: a disc on the gear, and on the frame a rail either side of
+the path with a pocket round each end. The disc's lobes sit in the pocket while the frame is parked
+and hand it from one to the other, and notches in the disc let the rails through during a push -
+the Geneva drive's trick, applied to a slide. The rails are drawn and the disc is generated from
+them, which is what keeps the rails' corners whole to hold with.
+
+| Setting | Meaning |
+|---|---|
+| **Ends** | **Round** or **square** outside; the inside is made from the gear's path either way |
+| **Clearance** | The gap left all round - teeth, ends and lock alike - for the printer's slop. 0.2 to 0.3 mm suits a 0.4 mm nozzle |
+| **Lock** | How tall the lock layer is; 0 for none, and then nothing but friction holds the frame while it is parked |
+
+The panel says how far it slides, what share of each turn it moves and parks for, and how tightly
+the lock holds it. The gear prints teeth down with its lock on top; the frame prints with its lock
+side down and is turned over to go round the gear, so neither needs support. It is made to turn
+anticlockwise, seen from above as it prints. Its arms are a plain bar: add one with a cube and
+**Merge**.
+
+### Sketch
+
+**Sketch** on the Insert tab draws an outline on the plate, seen from above, and makes a solid of
+it. **Line**, **arcs** that join the lines, smooth **curves** through clicked points, **freehand**
+strokes trimmed where they overrun their start, **rectangles** and **circles** - snapped to a 0.5,
+1 or 5 mm grid, or not at all.
+
+An outline inside another becomes a hole in it, decided by which lies inside which rather than by
+which way it was drawn; outlines that cross are refused, since a crossing has no inside. Any point
+that was clicked can be dragged afterwards, and an outline that the move makes cross itself or
+another is put back. **Enter** or the right button closes the outline, **Backspace** takes back the
+last point, and **Load SVG** brings in a drawing's filled shapes at a width you give, its corner on
+the origin so it revolves cleanly.
+
+**Extrude** stands the outlines up to a height; **Revolve** turns them about Y, standing up, or
+about X, lying along it, through part of a turn or the whole of it. Both are built as closed
+surfaces with no boolean.
+
+### Text
+
+**Text** on the Insert tab is lettering as an object of its own - a sign, a name tag, a keychain -
+in any installed font, bold or italic, with a height, a depth and extra spacing between the letters.
+It lies flat on the plate to read from above, which is how lettering prints best, stands up to read
+from the front, runs **round a circle** on the plate - a clock face, a coaster, a ring of words - or
+wraps **round a cylinder** with each letter keeping its width, for a cup or a napkin ring. Round a
+circle can face in, running round the bottom, for the other half of a badge or a seal.
+
+To put letters on a face that is already there, use **Emboss** or **Engrave**.
+
+### Custom shapes
+
+**Custom** on the Insert tab is a cube, cylinder, cone, sphere or torus with its size, its number of
+segments and the roundness of its edges chosen before it is made - more segments for a smoother
+curve. Cylinders, cones and spheres from the ordinary buttons come with 100 segments already.
+
+### Twist, taper and bend
+
+Three tools on the Edit tab reshape a part as a whole, each previewed on the plate as it is set:
+**Twist** turns it about its upright axis by more the higher up it goes - twisted columns, vases,
+spirals; **Taper** narrows or widens it towards the top - spires, flared vases; **Bend** curves it
+over towards X or Y as if round a pipe - arches, horns, hooks. The bottom stays put in all three.
+
+### Hull
+
+**Hull** on the Tools tab wraps the selection in one skin, as cling film pulled tight round it: two
+cylinders make a slot, a row of spheres a rounded bar. It replaces what was selected.
+
+### Lithophane
+
+**Lithophane** on the Insert tab is a photograph carried as thickness in a thin plate: thin where the
+picture is white and thick where it is dark, so it shows only when it is lit from behind. It is
+still marked **beta** - check what it gives you before printing it.
+
+Because a lithophane unlit is a grey slab, the panel shows a second preview lit from behind, from a
+tone chain that inverts the way light fades through plastic, so what it shows is what a lamp will
+make of it. **Brightness**, **contrast**, **gamma** and **negative** adjust the picture; **thinnest**
+and **thickest** set the range, 0.8 mm suiting most printers at the thin end; a **frame** round the
+edge stops the light and stiffens the plate; and it can be **flat** or **curved** round a cylinder
+for a shade with the lamp inside. From the layer height you print at, it says how many greys will
+survive. While the panel is open the plate shows the lithophane and nothing else.
+
+### Voronoi
+
+**Voronoi** on the Tools tab cuts the selection into a web of struts along the walls of a Voronoi
+tessellation - also **beta**. **Shell** keeps a web following the surface with nothing behind it:
+the openwork lamp, the vase, the bust. **Lattice** runs struts every way through the solid under a
+skin, a foam that takes weight out of a part that still has to be stiff.
+
+Set how many **cells**, how wide the **struts** are - two nozzle widths is the floor - and how much
+of the bottom stays **solid** so it stands and has a first layer to print on. It is worked out on a
+voxel grid, so it always comes back watertight, and anything finer than about three voxels comes
+out lumpy; **Smooth the voxel steps off** takes the grid's ripple away without moving the shape.
+
+### Setting a pivot
+
+An object is measured and turned about the middle of its box - which is the wrong place for a gear,
+whose shaft is at its centre, or for a door, which swings on its hinge. **Set pivot** on the Edit tab
+lets you click the point instead: a shaft hole, a corner, a hinge line. The position boxes then read
+that point, a turn goes round it, and lining it up with another part compares it rather than the
+middle of the box. **Pivot to centre** puts it back. The pivot is kept with the project.
+
+### Aligning to a face
+
+**Align to face** on the Align tab lines a selection up on a face: pick a face on any object, then
+choose for X, Y and Z whether the selection's near edge, middle or far edge should land on the
+middle of that face. **Centre face to face** picks a face on the selection and then one on something
+else, and moves the selection so the two faces' middles meet on the axes you tick - how a lid is
+centred on an opening or a flange on its mate. The face under the pointer lights up as you pick,
+and both stay marked, green on the selection and amber on the other. In both, the selection moves
+together, keeping its own arrangement, and nothing is turned or resized.
+
+The axis buttons further along the Align tab match everything to **the last object picked**, the
+same one Subtract and Align to treat as the anchor. With one object selected they align it to the
+bed instead.
+
+### Fitting the bed
+
+**Fit** on the Align tab shrinks the selection to the printable area from **Grid**, 20 mm clear of the
+edge, stands it in the middle of the bed and zooms to it, saying by how much it was scaled. It only
+ever shrinks: nothing is made bigger. **Distribute** sets the selection out in rows across the bed a
+gap you choose apart, moving as the gap is typed, packed into whichever width comes out closest to
+square rather than always filling the bed's whole width.
+
+### Blueprint
+
+**Blueprint** on the File tab (`Ctrl+P`) lays out a drawing of the selection, or of everything: front,
+top and right views and an isometric, first or third angle, with hidden lines dashed and lines that
+coincide drawn once. Every straight edge square to an axis is dimensioned in a chain along each
+view, with the overall size stacked further out; a curved or slanted edge - a hole, a fillet - is
+left alone rather than dimensioned wrongly. It is laid out at a standard scale, or real size, in the
+current units, with a title block, and printed as vectors - to paper, or to a PDF through Microsoft
+Print to PDF.
 
 ### Making a mould
 
@@ -916,6 +1249,25 @@ The window is genuinely blocked, not merely dimmed. The panel takes the mouse; t
 shut separately, because a shortcut does not need the pointer - `Ctrl+Z` during a rebuild would
 otherwise undo the step the rebuild is about to replace.
 
+### If the app does not close properly
+
+A copy of the scene is kept while you work, and taken away when you save or confirm closing. So
+whatever is left behind is the work of a run that never got to close - a crash, a power cut - and
+the next start offers it back. Two copies of the app open at once do not offer each other's live
+work.
+
+### Export session and Record
+
+**Export session** on the File tab writes out every undo step since the plate was last empty, one
+file per step, oldest first and named for what that step did - as `.3dfc`, `.3mf` or `.stl`. It
+does it by stepping back through the real undo history and forward again, and leaves the plate
+exactly as it found it.
+
+**Record** takes a screenshot after every action, to a folder you choose, until it is turned off -
+and for a tool with an Apply button, one just before it too, so the tool's panel is caught as it was
+set rather than after it has done its work. The two share a number and the step's own name. It is
+for building up a set of pictures of the tools in use.
+
 ## Formats
 
 | Format | Notes |
@@ -923,7 +1275,7 @@ otherwise undo the step the rebuild is about to replace.
 | `.stl` (binary, default) | Smallest and fastest. Objects merge into one triangle soup — STL has no notion of separate parts. |
 | `.stl` (ASCII) | Human-readable, roughly five times larger. |
 | `.obj` | Keeps objects named and separate, and writes a `.mtl` sidecar with colours. |
-| `.3mf` | 3D Builder's own format and what slicers prefer: separate parts, names, colours and units in one file. |
+| `.3mf` | 3D Builder's own format and what slicers prefer: separate parts, names, colours, units and each part's filament in one file, with a picture of the contents so Windows shows a thumbnail. |
 | `.3dfc` | The project format: GZip-compressed JSON that keeps objects and transforms editable. |
 
 **Import** takes all four. An STL, OBJ or 3MF arrives as new objects on the plate - a 3MF with its
@@ -949,9 +1301,12 @@ watertight before anything is written. Exporting warns — but does not block �
 The modelling core (`Geometry`, `Model`, `Io`) contains no renderer types at all; only
 `Render/` knows about Direct3D. That separation is what keeps the viewport swappable.
 
-**Boolean operations** use a hand-written BSP-tree CSG engine (`Geometry/Csg/`). No maintained
-CSG library exists on NuGet, and it backs the boolean menu, the moulds and the guarantee that
-results stay closed.
+**Boolean operations** go to [Manifold](https://github.com/elalish/manifold) first, through the
+ManifoldRust package, and fall back to a hand-written BSP-tree CSG engine (`Geometry/Csg/`) when
+the native library will not load or a solid is not closed. Manifold does not slice the solid along
+the tool's planes, which is what made the BSP engine tear fine detail against a curved surface -
+and slow: it answers a heart embossed on a cylinder in milliseconds where the BSP took half a
+second and tore. The BSP engine remains for everything Manifold declines.
 
 **Splitting with a plane does not use it.** It did - the cut was a boolean against an oversized
 half-space box, so the cut faces came out capped for free - and on anything dense that went badly:
@@ -1056,8 +1411,9 @@ primitives headed to a slicer.
 
 ## Known limits
 
-- Boolean operations on imported meshes above ~200k triangles are slow (the app warns on
-  import). The GPU renders them fine; the BSP tree is the bottleneck. **Abort** stops one that is
+- Boolean operations on imported meshes above ~200k triangles can be slow, above all when
+  Manifold declines them and they fall to the BSP engine (the app warns on import). The GPU
+  renders them fine; the boolean is the bottleneck. **Abort** stops one that is
   taking longer than it is worth, and leaves the model untouched.
 - `SharpDX` 4.2.0 is unmaintained upstream. It works on Windows 11 and is fully managed, but it
   is the one long-term liability — the renderer-agnostic core is the insurance.
@@ -1095,19 +1451,26 @@ primitives headed to a slicer.
   about twenty-six megabytes, so it is around twenty of those. Whatever was just done is always
   undoable however big it is. When older steps are let go, a notice offers to save a version -
   which is what still gets you back afterwards.
-- No 3MF, and no printer integration.
+- **Lithophane** and **Voronoi** are marked beta: new, and still being proved out. Check what they
+  give you before printing it.
+- No printer integration.
 
 ## Layout
 
 ```
 src/FastCraft3D/
-  Geometry/   meshes, primitives, transforms, repair, plane split, Csg/ (the BSP engine),
-              Engraving/ (patterns, lettering, the surfaces they are laid on)
+  Geometry/   meshes, primitives, transforms, repair, plane split, gears and their frames,
+              threads, lithophanes, Voronoi, hulls,
+              Csg/ (booleans: Manifold where it loads, the BSP engine where it does not),
+              Engraving/ (patterns, lettering, the surfaces they are laid on),
+              Sketches/ (outlines and the solids made from them), Drawings/ (blueprints),
+              Moulding/
   Text/       the one place that asks the operating system about fonts
-  Model/      scene objects, scene, Commands/ (undo-redo)
-  Io/         STL, OBJ, SVG outlines, .3dfc project files, export composition
-  Render/     the only Direct3D-aware layer, plus the on-screen manipulator
-  View/       dialogs, the object list and its selection mirroring into the scene
+  Model/      scene objects, scene, bed placement, Commands/ (undo-redo)
+  Io/         STL, OBJ, 3MF, SVG outlines, pictures, .3dfc project files, export composition,
+              crash recovery, settings remembered on the machine
+  Render/     the only Direct3D-aware layer, plus the on-screen manipulators
+  View/       dialogs, tool panels, the key table, the object list and its selection mirroring
   ViewModels/ commands and application state
 tests/FastCraft3D.Tests/   geometry, CSG, IO, workflow and manipulator cover
 tools/      verify-stl.py and fit-check.py - checking an export by measurement rather than by eye

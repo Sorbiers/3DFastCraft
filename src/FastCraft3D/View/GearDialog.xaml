@@ -105,15 +105,32 @@
         <StackPanel x:Name="FrameRow" Orientation="Horizontal" Margin="0,0,0,3">
             <CheckBox x:Name="FrameBox" Content="Reciprocating frame" VerticalAlignment="Center" Checked="OnChoice" Unchecked="OnChoice"
                       AutomationProperties.AutomationId="GearFrame"
-                      ToolTip="Makes the mate the closed rack the cut-away gear drives back and forth: the gear turns on the spot inside it, pushing one run, crossing the end, then pushing the other" />
+                      ToolTip="Makes the mate the closed frame the cut-away gear drives back and forth: the gear turns on the spot inside it, pushing one run, parking, then pushing the other. How far it slides is set by the teeth kept - more teeth, more travel - and the figures below say how far." />
         </StackPanel>
 
-        <StackPanel x:Name="StrokeRow" Orientation="Horizontal" Margin="0,0,0,3">
-            <TextBlock Text="Stroke" Style="{DynamicResource FieldLabel}" Width="86"
-                       ToolTip="How far the frame slides, end to end. 0 for what the sector drives, which is also the shortest that works and the only length it actually uses - a longer frame is slack, not more travel. More travel is more teeth in the sector. Runs go up in whole teeth; the figures beside the box say which." />
-            <TextBox x:Name="StrokeBox" Width="60" Style="{DynamicResource NumberBox}" Tag="number" TextChanged="OnChanged"
-                     AutomationProperties.AutomationId="GearStroke" />
-            <TextBlock x:Name="StrokeText" Text="mm" Foreground="#FF9AA0A8" VerticalAlignment="Center" />
+        <StackPanel x:Name="FrameEndsRow" Orientation="Horizontal" Margin="0,0,0,3">
+            <TextBlock Text="Ends" Style="{DynamicResource FieldLabel}" Width="86"
+                       ToolTip="The frame's outside. The inside is made from the gear's own path either way." />
+            <RadioButton x:Name="RoundEndsBox" GroupName="FrameEnds" Content="Round" Margin="0,0,10,0" VerticalAlignment="Center"
+                         Checked="OnChoice" AutomationProperties.AutomationId="GearFrameRound" />
+            <RadioButton x:Name="SquareEndsBox" GroupName="FrameEnds" Content="Square" VerticalAlignment="Center"
+                         Checked="OnChoice" AutomationProperties.AutomationId="GearFrameSquare" />
+        </StackPanel>
+
+        <StackPanel x:Name="ClearanceRow" Orientation="Horizontal" Margin="0,0,0,3">
+            <TextBlock Text="Clearance" Style="{DynamicResource FieldLabel}" Width="86"
+                       ToolTip="The gap left all round between the frame and the gear - teeth, ends and lock alike - for the printer's slop. 0.2 to 0.3 suits a 0.4 mm nozzle; more is looser and rattles." />
+            <TextBox x:Name="ClearanceBox" Width="60" Style="{DynamicResource NumberBox}" Tag="number" TextChanged="OnChanged"
+                     AutomationProperties.AutomationId="GearFrameClearance" />
+            <TextBlock Text="mm" Foreground="#FF9AA0A8" VerticalAlignment="Center" />
+        </StackPanel>
+
+        <StackPanel x:Name="LockRow" Orientation="Horizontal" Margin="0,0,0,3">
+            <TextBlock Text="Lock" Style="{DynamicResource FieldLabel}" Width="86"
+                       ToolTip="A layer this tall on top of the gear and the frame that holds the frame still while it is parked between pushes. 0 for none, and then nothing but friction holds it." />
+            <TextBox x:Name="LockBox" Width="60" Style="{DynamicResource NumberBox}" Tag="number" TextChanged="OnChanged"
+                     AutomationProperties.AutomationId="GearLockHeight" />
+            <TextBlock Text="mm" Foreground="#FF9AA0A8" VerticalAlignment="Center" />
         </StackPanel>
 
         <StackPanel x:Name="ConeRow" Orientation="Horizontal" Margin="0,0,0,3">
