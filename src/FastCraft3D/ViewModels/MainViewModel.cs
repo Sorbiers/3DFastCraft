@@ -253,6 +253,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
         VoronoiCommand = Track(AsyncRelayCommand.Simple(VoronoiSelection, () => Scene.Selection.Count > 0));
         BeginEmbossCommand = Track(RelayCommand.Simple(BeginEmboss, () => Scene.Selection.Count == 1));
         BeginLayCommand = Track(RelayCommand.Simple(BeginLay, () => Scene.Selection.Count == 1));
+        BestFaceCommand = Track(AsyncRelayCommand.Simple(BestFaceDown, () => Scene.Selection.Count == 1));
         ApplyEmbossCommand = AsyncRelayCommand.Simple(ApplyEmboss, () => isEmbossMode && embossFace is not null);
         CancelEmbossCommand = RelayCommand.Simple(() => IsEmbossMode = false);
         BeginAlignFaceCommand = Track(RelayCommand.Simple(BeginAlignFace, () => Scene.Selection.Count > 0));
@@ -402,6 +403,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
     public System.Windows.Input.ICommand PivotToCentreCommand { get; }
     public System.Windows.Input.ICommand BeginEmbossCommand { get; }
     public System.Windows.Input.ICommand BeginLayCommand { get; }
+    public System.Windows.Input.ICommand BestFaceCommand { get; }
     public System.Windows.Input.ICommand ApplyEmbossCommand { get; }
     public System.Windows.Input.ICommand CancelEmbossCommand { get; }
     public System.Windows.Input.ICommand BeginAlignFaceCommand { get; }
@@ -2560,7 +2562,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
     }
 
     /// <summary>Turns <paramref name="facing"/>, an outward direction in world space, to point straight down.</summary>
-    private void Lay(SceneObject target, Vector3 facing)
+    private void Lay(SceneObject target, Vector3 facing, string? said = null, string label = "Lay on face")
     {
         var before = new[] { TransformState.Capture(target) };
 
@@ -2570,12 +2572,108 @@ public sealed class MainViewModel : INotifyPropertyChanged
         // Tipping it over will have left it through the bed or above it.
         target.Position = target.Position with { Z = target.Position.Z - target.WorldBounds.Min.Z };
 
-        if (TransformCommand.CreateIfChanged("Lay on face", [target], before) is { } command)
+        if (TransformCommand.CreateIfChanged(label, [target], before) is { } command)
             Undo.Execute(command);
 
         IsLayMode = false;
         RefreshSelection();
-        Status = $"{target.Name} laid on the picked face";
+        Status = said ?? $"{target.Name} laid on the picked face";
+    }
+
+    /// <summary>
+    /// Stands the part on <paramref name="facing"/> from where it was, recording nothing.
+    ///
+    /// The preview behind Best face down, and the same arithmetic <see cref="Lay"/> commits. It
+    /// works from a captured state rather than from where the object is now, so that hovering one
+    /// face after another does not compound: every turn is measured from where the part started.
+    /// </summary>
+    private static void TurnOnto(SceneObject target, TransformState from, Vector3 facing)
+    {
+        var turn = MeshTransform.TurnFromTo(facing, -Vector3.UnitZ);
+        target.Rotation = MeshTransform.EulerFrom(MeshTransform.Rotation(from.Rotation) * turn);
+
+        // Measured after the turn, and from the starting position, since tipping it over will
+        // have left it through the bed or above it.
+        target.Position = from.Position;
+        target.Position = from.Position with { Z = from.Position.Z - target.WorldBounds.Min.Z };
+    }
+
+    /// <summary>
+    /// Works out every way up the part could be printed, and what each would cost.
+    ///
+    /// Lay on face answers "stand it on this one". This answers the question before it, which is
+    /// the one people actually have: which face. The parts were all here already - the hull's
+    /// resting faces, the overhang measure, the turn itself - and what was missing was only
+    /// putting a number against each and saying them in an order.
+    ///
+    /// Nothing is decided for the user. Support, height and footing disagree on plenty of parts,
+    /// and which is short - filament, time or nerve - is not something this can know.
+    /// </summary>
+    private async Task BestFaceDown()
+    {
+        if (Scene.Selection.Count != 1 || IsBusy) return;
+
+        var target = Scene.Selection.First();
+        var world = target.ToWorldMesh();
+        float angle = overhangAngle;
+
+        var token = StartWork($"Weighing up {target.Name}");
+        List<StandingChoice> choices;
+        try
+        {
+            choices = await Task.Run(() => BestFace.Rank(world, RestingFaces.Find(world), angle, token: token), token);
+        }
+        catch (Exception abort) when (WasAborted(abort))
+        {
+            Status = "Best face down stopped - nothing was changed";
+            return;
+        }
+        catch (Exception ex)
+        {
+            Status = $"Best face down failed: {ex.Message}";
+            return;
+        }
+        finally
+        {
+            EndWork();
+        }
+
+        if (choices.Count == 0)
+        {
+            Status = $"{target.Name} has no face it would stay on - its weight falls outside every one";
+            return;
+        }
+
+        var before = TransformState.Capture(target);
+        var panel = new BestFaceDialog(target.Name, choices, choice =>
+        {
+            if (choice is null) before.ApplyTo(target);
+            else TurnOnto(target, before, choice.Normal);
+
+            RefreshSelection();
+        });
+
+        bool accepted = panel.ShowDialog() == true && panel.Result is not null;
+
+        // Whatever the hovering left on the plate, the undo step has to start from where the user
+        // did - the same rule the smoothing preview follows.
+        before.ApplyTo(target);
+        RefreshSelection();
+
+        if (!accepted)
+        {
+            Status = "Best face down cancelled";
+            return;
+        }
+
+        var picked = panel.Result!;
+        string cost = picked.SupportMm2 < 1.0
+            ? "nothing to support"
+            : $"{picked.SupportMm2 / 100.0:0.#} cm² to support";
+
+        Lay(target, picked.Normal,
+            said: $"{target.Name} stood on its best face - {cost}, {picked.HeightMm:0.#} mm tall",
+            label: "Best face down");
     }
 
     private void BeginEmboss()
@@ -3440,12 +3538,73 @@ public sealed class MainViewModel : INotifyPropertyChanged
         if (dialog.ShowDialog() == true && dialog.Result is { } picked) OverhangColour = picked;
     }
 
+    private string betterFaceNote = "";
+    private int overhangRun;
+
+    /// <summary>
+    /// Whether standing the part another way up would need less support, said under the angle.
+    ///
+    /// The overhang figure on its own is a verdict with nothing to do about it. This is the part
+    /// worth knowing: one number, and where the tool that acts on it lives. Only for a single
+    /// object, because turning one part over is a thing a person does and turning a plateful is
+    /// not.
+    /// </summary>
+    public string BetterFaceNote
+    {
+        get => betterFaceNote;
+        private set
+        {
+            Set(ref betterFaceNote, value);
+            Raise(nameof(HasBetterFaceNote));
+        }
+    }
+
+    public bool HasBetterFaceNote => betterFaceNote.Length > 0;
+
     private void DescribeOverhangs()
     {
         double area = Scene.Shown.Sum(o => Overhangs.Area(o.ToWorldMesh(), overhangAngle));
         Status = area < 1.0
             ? $"No overhangs steeper than {overhangAngle:0} degrees - nothing needs support"
             : $"{area / 100.0:0.#} cm² steeper than {overhangAngle:0} degrees from upright will need support or a bridge";
+
+        SayWhatTurningWouldSave(area);
+    }
+
+    /// <summary>
+    /// Away from the window, since it is the hull and a pass over every triangle for each face -
+    /// and stamped with a run number, because the angle box can be changed faster than this
+    /// answers and a late reply must not overwrite a later question.
+    /// </summary>
+    private async void SayWhatTurningWouldSave(double asItStands)
+    {
+        int run = ++overhangRun;
+        BetterFaceNote = "";
+
+        if (asItStands < 1.0 || Scene.Shown.Count != 1) return;
+
+        var world = Scene.Shown[0].ToWorldMesh();
+        float angle = overhangAngle;
+
+        List<StandingChoice> choices;
+        try
+        {
+            choices = await Task.Run(() => BestFace.Rank(world, RestingFaces.Find(world), angle));
+        }
+        catch
+        {
+            // An aid to the figure above, not the figure itself. If it cannot be worked out, the
+            // panel simply does not offer it.
+            return;
+        }
+
+        if (run != overhangRun || !showOverhangs || choices.Count == 0) return;
+
+        double saved = asItStands - choices[0].SupportMm2;
+
+        BetterFaceNote = saved < 10.0
+            ? "No face it can stand on would need much less support than this one."
+            : $"Another face would need {saved / 100.0:0.#} cm² less support - Best face down, on the Align tab.";
     }
 
     /// <summary>

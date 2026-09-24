@@ -623,6 +623,10 @@
                     <Button Style="{StaticResource ToolButton}" Content="Lay on face" Visibility="{Binding IsAdvancedMode, Converter={StaticResource BoolToVisibility}}" Tag="{StaticResource IconLayOnFace}"
                             Command="{Binding BeginLayCommand}" MinWidth="86"
                             ToolTip="Pick a face and the object is tipped over to stand on it - the flat side down, for printing. Needs exactly one object selected." />
+                    <Button Style="{StaticResource ToolButton}" Content="Best face down" Visibility="{Binding IsAdvancedMode, Converter={StaticResource BoolToVisibility}}" Tag="{StaticResource IconBestFace}"
+                            Command="{Binding BestFaceCommand}" MinWidth="106"
+                            AutomationProperties.AutomationId="BestFaceDown"
+                            ToolTip="Work out every way up the part could be printed and put them in order - how much support each would need, how tall it would stand, how much of it touches the bed and how easily it is knocked over. Hover one to see it, click to stand it there. Needs exactly one object selected." />
                     <Button Style="{StaticResource ToolButton}" Content="Align to" Visibility="{Binding IsAdvancedMode, Converter={StaticResource BoolToVisibility}}" Tag="{StaticResource IconAlignCentre}"
                             Command="{Binding AlignToSelectionCommand}" MinWidth="72"
                             ToolTip="Move the first object you picked so its bounding box is centred on the second's. Two objects: the first moves, the second stays. Nothing is rotated or resized. Needs exactly two objects selected." />
@@ -1904,6 +1908,17 @@
                             <ComboBox Width="70" ItemsSource="{Binding OverhangAngles}" SelectedItem="{Binding OverhangAngle, Mode=TwoWay}"
                                       ItemStringFormat="{}{0:0}°" AutomationProperties.AutomationId="OverhangAngle" />
                         </StackPanel>
+
+                        <!-- What turning the part over would save. Only when there is one object
+                             and something to save by it; worked out away from the window, so it
+                             appears a moment after the figure on the status line. -->
+                        <Border Margin="0,0,0,8" Padding="7,5" CornerRadius="3" Background="White"
+                                BorderBrush="#FFD5DEEA" BorderThickness="1"
+                                AutomationProperties.AutomationId="BetterFaceNote"
+                                Visibility="{Binding HasBetterFaceNote, Converter={StaticResource BoolToVisibility}}">
+                            <TextBlock Text="{Binding BetterFaceNote}" TextWrapping="Wrap"
+                                       Foreground="#FF3A3F45" FontSize="11" />
+                        </Border>
 
                         <TextBlock Text="Colour" Style="{StaticResource FieldLabel}" HorizontalAlignment="Left" Margin="0,0,0,4" />
                         <ItemsControl ItemsSource="{Binding OverhangSwatches}" Margin="0,0,0,6">
