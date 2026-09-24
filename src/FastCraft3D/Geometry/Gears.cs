@@ -79,7 +79,7 @@ public sealed record GearOptions
     /// </summary>
     public float Backlash { get; init; } = 0.15f;
 
-    /// <summary>A ring's material outside the roots of its teeth; a rack's below them.</summary>
+    /// <summary>A ring's material outside the roots of its teeth; a rack's below them; a frame's outside its inside.</summary>
     public float Rim { get; init; } = 3f;
 
     public BoreShape Bore { get; init; } = BoreShape.Round;
@@ -111,13 +111,25 @@ public sealed record GearOptions
     public int KeptTeeth { get; init; }
 
     /// <summary>
-    /// Makes the cut-away gear's mate the closed rack it drives back and forth rather than
-    /// another gear. See <see cref="Gears"/>.
+    /// Makes the cut-away gear's mate the closed frame it drives back and forth rather than
+    /// another gear. See <see cref="Gears.PlanFrame"/>.
     /// </summary>
     public bool Frame { get; init; }
 
-    /// <summary>How far the frame travels; nought for twice the gear's pitch diameter.</summary>
-    public float Stroke { get; init; }
+    /// <summary>The frame's outside; its inside is made from the gear's path either way.</summary>
+    public FrameEnds FrameEnds { get; init; } = FrameEnds.Round;
+
+    /// <summary>
+    /// The gap left all round between a frame and its gear - flanks, tips, ends and lock alike -
+    /// for the printer's slop. The gear's own backlash is on top of this.
+    /// </summary>
+    public float FrameClearance { get; init; } = 0.25f;
+
+    /// <summary>
+    /// How tall the lock is that stands on top of a framed gear and holds the frame while it is
+    /// parked; nought for none. The frame gets a matching layer of the same height.
+    /// </summary>
+    public float LockHeight { get; init; } = 3f;
 
     /// <summary>A bevel's pitch cone angle. A pair whose angles add up to 90 meets at a right angle.</summary>
     public float ConeAngle { get; init; } = 45f;
@@ -200,7 +212,8 @@ public sealed record GearOptions
             PartnerTeeth = PartnerTeeth <= 0 ? 0 : Math.Clamp(PartnerTeeth, 6, 400),
             KeptTeeth = KeptTeeth <= 0 ? 0 : Math.Clamp(KeptTeeth, 1, Math.Clamp(Teeth, least, 400)),
             ConeAngle = Clamp(ConeAngle, 5f, 85f, 45f),
-            Stroke = Clamp(Stroke, 0f, 1000f, 0f),
+            FrameClearance = Clamp(FrameClearance, 0.1f, 1f, 0.25f),
+            LockHeight = Clamp(LockHeight, 0f, 50f, 3f),
             WormDiameter = Clamp(WormDiameter, 0f, 500f, 0f),
             Undercut = Clamp(Undercut, 0f, 20f, 4f)
         };
@@ -245,7 +258,7 @@ public sealed record GearResult(IReadOnlyList<GearPart> Parts, IReadOnlyList<str
 /// the roots - so the solid is closed by construction. Helical teeth are the same outline turned a
 /// little for each layer; the bore and any rim stay put, so a shaft still goes straight through.
 /// </summary>
-public static class Gears
+public static partial class Gears
 {
     /// <summary>Points up each side of a tooth. The flank is a gentle curve, and chords this short are well under a hundredth of a millimetre off it.</summary>
     private const int Levels = 20;
@@ -280,29 +293,31 @@ public static class Gears
         {
             case GearKind.Gear:
             {
-                var gear = External(o, o.Teeth, 1, 0f, notes, out string? refusal, token, partial: true);
+                bool framed = o.Frame && o.KeptTeeth > 0 && o.KeptTeeth < o.Teeth;
+                string? why = null;
+                var plan = framed ? PlanFrame(o, out why) : null;
+
+                // A framed gear is built turned to where it is shown parked, with its lock on top.
+                var lockDisc = plan?.Lock?.Select(p => Rotated(p, (float)plan.Shown)).ToList();
+                float lockHeight = lockDisc is null ? 0f : o.LockHeight;
+
+                var gear = External(o, o.Teeth, 1, (float)(plan?.Shown ?? 0.0), notes, out string? refusal, token,
+                                    partial: true, lockDisc: lockDisc, lockHeight: lockHeight);
                 if (gear is null) return new([], notes, refusal);
                 parts.Add(new($"Gear {o.Teeth}T", gear, Anchors: Bore(o, gear)));
 
-                if (o.Frame && o.KeptTeeth > 0 && o.KeptTeeth < o.Teeth)
+                if (framed)
                 {
-                    var frame = RecipFrame(o, notes, out string? why, out float run);
-
-                    if (frame is null) notes.Add(why!);
+                    if (plan is null) notes.Add(why!);
                     else
                     {
                         // Beside the gear to print; round it to be looked at, which is where it
-                        // works: the gear turns on the spot and the frame slides past it.
-                        //
-                        // Shown with the gear at one end of the run rather than halfway along it.
-                        // Halfway is a position the thing passes through and never stops at, and
-                        // it reads as the rest position - so the stated travel, tried from there,
-                        // ran the gear half a stroke out through the end cap.
-                        var box = frame.ComputeBounds();
-                        float aside = m * (o.Teeth + 2) / 2f + 3f - box.Min.X;
-
-                        parts.Add(new("Frame", Moved(frame, new Vector3(aside, 0f, 0f)),
-                                      Matrix4x4.CreateTranslation(run / 2f - aside, 0f, 0f)));
+                        // works: the gear turns on the spot and the frame slides past it. Shown
+                        // parked at one end rather than halfway along, since halfway is a place it
+                        // passes through and never stops at.
+                        var (print, inMesh) = FrameSolid(plan, o, lockHeight, m * (o.Teeth + 2) / 2f);
+                        parts.Add(new("Frame", print, inMesh));
+                        notes.AddRange(plan.Notes);
                     }
                 }
                 else if (o.PartnerTeeth > 0)
@@ -859,240 +874,6 @@ public static class Gears
     // --- Solids ------------------------------------------------------------------------
 
     /// <summary>
-    /// The closed track a cut-away gear drives back and forth: a racetrack shape with rack teeth
-    /// along its two straights and the gear turning on the spot inside it. The sector pushes one
-    /// straight, runs out of teeth exactly as it reaches the end, and the bare rim rotates past
-    /// the plain half circle that closes the loop while the frame sits still - then the sector
-    /// picks up the other straight where its first tooth is already waiting. A motor that only
-    /// turns one way drives the frame to and fro.
-    ///
-    /// The straights are a pitch diameter apart - the gear's own pitch circle is tangent to both
-    /// at once - and the half circles are swept at the gear's pitch radius too, so a straight
-    /// meets its neighbouring half circle without a step. Teeth are laid out along this whole
-    /// path by arc length starting from the bottom straight, which is what keeps the two straights
-    /// in phase with each other without measuring one against the other directly; the half
-    /// circles are skipped rather than toothed, at a radius opened up by the gear's own dedendum
-    /// plus whatever slack the run has, so nothing there is ever in reach of the gear's teeth. See
-    /// Teeth and Arc below.
-    ///
-    /// The ends divide the gear's own circumference in half between them, so its tooth count has
-    /// to be even or the phase carried round to the second straight lands half a pitch out.
-    /// </summary>
-    private static Mesh? RecipFrame(GearOptions o, List<string> notes, out string? refusal, out float run)
-    {
-        refusal = null;
-        run = 0f;
-
-        double m = o.Module, r = m * o.Teeth / 2.0, pitch = Math.PI * m;
-
-        if (o.Teeth % 2 != 0)
-        {
-            refusal = $"A frame needs an even number of teeth on the gear: {o.Teeth} leaves the ends half a tooth out.";
-            return null;
-        }
-
-        // What the gear actually drives: its sector pushes one tooth of rack per tooth it has,
-        // so the frame travels that far and then waits while the blank goes by.
-        int kept = Math.Clamp(o.KeptTeeth, 1, o.Teeth);
-        double travel = kept * pitch;
-
-        if (2 * kept > o.Teeth)
-        {
-            refusal = $"A sector of {kept} teeth is more than half of {o.Teeth}: it would take both runs at once."
-                    + $" Cut it to {o.Teeth / 2} teeth or fewer.";
-            return null;
-        }
-
-        // The straights cannot be shorter than the push: the gear would still be driving when
-        // the rack ran out under it, and the sector would climb the end cap. Whole teeth, since
-        // the rack is bent round the path by arc length and a part tooth at the join is a tooth
-        // the gear catches on.
-        double asked = o.Stroke > 0 ? o.Stroke : travel;
-        int least = Math.Max(2, kept);
-        int alongEach = Math.Max(least, (int)Math.Round(asked / pitch));
-        double straight = alongEach * pitch;
-        run = (float)straight;
-
-        double rim = Math.Max(o.Rim, 1.0);
-        double dedendum = 1.25 * m, addendum = m;
-        double round = 2.0 * Math.PI * r;
-        double total = 2.0 * straight + round;
-
-        // How much slack the run has: the sector drives only travel of it, so this is how much
-        // closer the gear's tip circle swings to a parked end while it waits there than the plain
-        // arc's own middle bulge accounts for by default. See Arc.
-        double slack = straight - travel;
-
-        /// Where the pitch line is at arc length s, and which way lies the slot it wraps.
-        (Vector2 At, Vector2 In) Path(double s)
-        {
-            s = ((s % total) + total) % total;
-
-            if (s < straight)
-                return (new Vector2((float)(s - straight / 2.0), (float)-r), new Vector2(0f, 1f));
-
-            s -= straight;
-            if (s < round / 2.0)
-                return RoundEnd(s, straight / 2.0, -Math.PI / 2.0);
-
-            s -= round / 2.0;
-            if (s < straight)
-                return (new Vector2((float)(straight / 2.0 - s), (float)r), new Vector2(0f, -1f));
-
-            s -= straight;
-            return RoundEnd(s, -straight / 2.0, Math.PI / 2.0);
-        }
-
-        (Vector2, Vector2) RoundEnd(double s, double centreX, double startAngle)
-        {
-            double a = startAngle + s / r;
-            var away = new Vector2((float)Math.Cos(a), (float)Math.Sin(a));
-            return (new Vector2((float)centreX, 0f) + away * (float)r, -away);
-        }
-
-        // A rack's tooth: wide at the root, narrowed to the tip by the pressure angle, thinned by
-        // half the backlash as the gear's own teeth are.
-        double lean = Math.Tan(Radians(o.PressureAngle));
-        double halfPitch = pitch / 4.0 - o.Backlash / 4.0;
-        double halfRoot = halfPitch + dedendum * lean;
-        double halfTip = Math.Max(halfPitch - addendum * lean, 0.05 * m);
-
-        // A space faces the gear where the gear has a tooth, or the two drive into each other
-        // instead of meshing.
-        //
-        // The gear's teeth are centred on its own angle nought and it meets the bottom run at the
-        // bottom of its pitch circle, so the tooth nearest that contact sits a distance
-        // -r * nearest along the rack from it. The frame's teeth are laid out by arc length from
-        // s = 0, which Path puts at the left end of the bottom run - and that is where the gear
-        // is shown, so the two measurements start from the same place and the phase is only the
-        // half pitch that puts a space against a tooth.
-        //
-        // It matters where the gear is shown, which is not obvious: at half stroke the extra
-        // straight/2 would be half a pitch whenever the run is an odd number of teeth, and the
-        // frame's teeth would come out on the gear's instead of between them.
-        double toGear = -Math.PI / 2.0;
-        double nearest = toGear - Math.Round(toGear / (2.0 * Math.PI / o.Teeth)) * (2.0 * Math.PI / o.Teeth);
-        double phase = pitch / 2.0 - r * nearest;
-
-        var inner = new List<Vector2>();
-        var outer = new List<Vector2>();
-
-        void AddTooth(double s, double into)
-        {
-            var (at, In) = Path(s);
-            inner.Add(at + In * (float)into);
-            outer.Add(at - In * (float)(dedendum + rim));
-        }
-
-        // The two straights, each carrying the teeth a lap actually uses. The ends are plain -
-        // see Arc below for why they are not.
-        void Teeth(int startK, int count, double zoneStart, double zoneEnd)
-        {
-            for (int k = startK; k < startK + count; k++)
-            {
-                double middle = phase + k * pitch;
-
-                // The root between this tooth and the one before it, cut into pieces so the ends
-                // come out round rather than as a chord. Held to the straight's own start so the
-                // first tooth's leading edge cannot reach back into the arc before it.
-                double from = Math.Max(middle - pitch + halfRoot, zoneStart), to = middle - halfRoot;
-                int pieces = Math.Max(1, (int)Math.Ceiling((to - from) / 0.5));
-                for (int i = 0; i < pieces; i++) AddTooth(from + (to - from) * i / pieces, -dedendum);
-
-                AddTooth(middle - halfRoot, -dedendum);
-                AddTooth(middle - halfTip, addendum);
-                AddTooth(middle + halfTip, addendum);
-            }
-
-            // Closes the last tooth back down to root depth at the straight's own end, so the
-            // wall meets the plain arc there rather than jumping straight from that last tip -
-            // close in, by the gear - out to wherever the arc's own depth is: a sliver of a face
-            // bridging two very different radii, thin enough that a slicer read it as the wall
-            // interfering with itself. Arc's own depth starts at this same root depth, so the two
-            // sides of the join agree.
-            AddTooth(zoneEnd, -dedendum);
-        }
-
-        // The half circles that close the loop are never toothed. The sector has exactly enough
-        // teeth to drive one straight and no more - by the time either end swings round to the
-        // gear the teeth have already run out, and the bare rim rotates past a plain arc while
-        // the frame sits still, which is what carries it from pushing one straight to pushing the
-        // other. Teeth there before this fix went in were never in mesh with anything; worse,
-        // built at the pitch radius they undercut the gear's own tip circle and clipped it
-        // outright.
-        //
-        // The depth bulges from root depth at each end - level with the teeth either side of it,
-        // where a shortened, relieved tooth is already the part of the gear this join has to
-        // clear - out to root depth plus whatever slack the run has, at the middle of the arc,
-        // farthest from the gear and so the one place the extra room is not even needed. A run
-        // opened up well past what the sector drives leaves the frame parked that much nearer the
-        // gear when it stops, and that gap is what the middle has to cover.
-        void AddArc(double s, double from, double to)
-        {
-            var (at, In) = Path(s);
-            double span = to - from;
-            double t = span > 1e-6 ? 1.0 - Math.Abs(2.0 * (s - from) / span - 1.0) : 1.0;
-            double beyond = dedendum + t * slack;
-            inner.Add(at - In * (float)beyond);
-            outer.Add(at - In * (float)(beyond + rim));
-        }
-
-        void Arc(double from, double to)
-        {
-            int pieces = Math.Clamp((int)Math.Ceiling((to - from) / (m * 0.6)), 8, 64);
-            for (int i = 0; i <= pieces; i++) AddArc(from + (to - from) * i / pieces, from, to);
-        }
-
-        Teeth(0, alongEach, 0.0, straight);
-        Arc(straight, straight + round / 2.0);
-        Teeth(alongEach + o.Teeth / 2, alongEach, straight + round / 2.0, straight + round / 2.0 + straight);
-        Arc(straight + round / 2.0 + straight, total);
-
-        float height = o.ForMate().Thickness;
-        var mesh = new Mesh();
-
-        Wall(mesh, inner, 0f, inner, height, outward: false);
-        Wall(mesh, outer, 0f, outer, height, outward: true);
-
-        for (int i = 0; i < inner.Count; i++)
-        {
-            int j = (i + 1) % inner.Count;
-            Face(mesh, inner[i], outer[i], outer[j], 0f, up: false);
-            Face(mesh, inner[i], outer[j], inner[j], 0f, up: false);
-            Face(mesh, inner[i], outer[i], outer[j], height, up: true);
-            Face(mesh, inner[i], outer[j], inner[j], height, up: true);
-        }
-
-        notes.Add($"Slides {travel:0.#} mm end to end: {kept} teeth of rack, and one turn of the gear takes it there and back.");
-
-        // The sector is in mesh for kept teeth of each straight, twice a turn - once driving each
-        // way - so it moves for 2*kept of the gear's own Teeth, and sits parked at whichever end
-        // it just reached for the rest. Fewer teeth kept means less of a push each time but a
-        // longer pause between them; this is that trade stated as a number, for choosing how many
-        // to keep.
-        double moving = 2.0 * kept / o.Teeth;
-        notes.Add($"Moving for {moving * 100.0:0.#}% of each turn and parked for the other {(1.0 - moving) * 100.0:0.#}%, split evenly between the two ends.");
-
-        notes.Add($"Shown at one end of its run, which is where it stands between pushes - so the gear crosses to the other end, not {travel / 2.0:0.#} mm either side of here.");
-        notes.Add($"Frame {straight:0.#} mm between the ends, {alongEach} teeth along each run, ends left plain, {height:0.#} mm thick.");
-
-        if (o.Stroke > 0 && Math.Abs(straight - o.Stroke) > 0.05)
-            notes.Add(alongEach == least && o.Stroke < travel - 0.05
-                ? $"A {o.Stroke:0.#} mm run is shorter than the {travel:0.#} mm the sector drives, so it was opened to that."
-                : $"Runs go up in whole teeth, so {o.Stroke:0.#} mm became {straight:0.#}.");
-
-        // A run longer than the push is slack, not travel: the sector lets go after its own teeth
-        // have gone by, whatever is left of the rack.
-        if (straight > travel + 0.05)
-            notes.Add($"The sector drives {travel:0.#} mm of that {straight:0.#} mm run, so the frame never reaches the far end."
-                    + " A longer frame is slack, not more travel - more teeth in the sector is more travel.");
-
-        notes.Add("Its arms are a plain bar: add one with Cube and Merge.");
-
-        return mesh.Welded();
-    }
-
-    /// <summary>
     /// A straight bevel gear: the tooth section at the heel, run in straight lines towards the
     /// cone's apex, so the teeth shrink along the face exactly as the pitch cone does.
     ///
@@ -1279,7 +1060,7 @@ public static class Gears
         }
 
         var middle = new Middle(bore, boreReach, hubRadius, hub ? Circle(hubRadius) : null,
-                                (float)(length + o.HubHeight));
+                                (float)(length + o.HubHeight), (float)length);
 
         return SetScrewed(mesh, o, middle, notes, token);
     }
@@ -1476,8 +1257,10 @@ public static class Gears
         return gear;
     }
 
+    /// <param name="lockDisc">A framed gear's lock, standing <paramref name="lockHeight"/> on top of the teeth; see <see cref="PlanFrame"/>.</param>
     private static Mesh? External(GearOptions o, int teeth, int hand, float phase, List<string> notes,
-                                  out string? refusal, CancellationToken token, bool partial = false)
+                                  out string? refusal, CancellationToken token, bool partial = false,
+                                  IReadOnlyList<Vector2>? lockDisc = null, float lockHeight = 0f)
     {
         refusal = null;
         double m = o.Module, r = m * teeth / 2.0;
@@ -1499,13 +1282,15 @@ public static class Gears
         {
             notes.Add($"{kept} of {teeth} teeth, a {360.0 * kept / teeth:0.#} degree sector; the rest at the roots.");
             notes.Add("The first and last are shortened, to come back into mesh cleanly.");
-            notes.Add("No locking arc: nothing holds the follower between engagements.");
+            if (lockDisc is null)
+                notes.Add("No locking arc: nothing holds the follower between engagements.");
         }
 
         if (teeth < 17 && !notes.Any(n => n.StartsWith("Under 17", StringComparison.Ordinal)))
             notes.Add("Under 17 teeth the roots undercut, as a cut gear's do.");
 
-        var middle = Fitting(o, profile.BandReach, $"the roots of a {teeth}-tooth gear", out refusal);
+        if (lockDisc is null) lockHeight = 0f;
+        var middle = Fitting(o, profile.BandReach, $"the roots of a {teeth}-tooth gear", out refusal, lockHeight);
         if (middle is null) return null;
 
         var bore = middle.Bore;
@@ -1524,14 +1309,25 @@ public static class Gears
             Wall(mesh, loops[i], layers[i].Z, loops[i + 1], layers[i + 1].Z, outward: true);
 
         if (bore is not null) Wall(mesh, bore, 0f, bore, top, outward: false);
-        if (hubCircle is not null) Wall(mesh, hubCircle, h, hubCircle, top, outward: true);
+        if (hubCircle is not null) Wall(mesh, hubCircle, middle.HubBase, hubCircle, top, outward: true);
 
         var gone = mutilated ? What : (Func<int, Tooth>?)null;
         var bottom = layers[0].Chamfered ? chamfered! : profile;
         Zip(mesh, Band(loops[0], bottom, teeth, gone), bore, 0f, up: false);
         ExternalTeeth(mesh, loops[0], bottom, teeth, 0f, up: false, gone);
 
-        Zip(mesh, Band(loops[^1], profile, teeth, gone), hubCircle ?? bore, h, up: true);
+        var band = Band(loops[^1], profile, teeth, gone);
+        if (lockDisc is null)
+        {
+            Zip(mesh, band, hubCircle ?? bore, h, up: true);
+        }
+        else
+        {
+            Zip(mesh, band, lockDisc, h, up: true);
+            Wall(mesh, lockDisc, h, lockDisc, middle.HubBase, outward: true);
+            Zip(mesh, lockDisc, hubCircle ?? bore, middle.HubBase, up: true);
+        }
+
         ExternalTeeth(mesh, loops[^1], profile, teeth, h, up: true, gone);
 
         if (hubCircle is not null) Zip(mesh, hubCircle, bore, top, up: true);
@@ -1539,9 +1335,10 @@ public static class Gears
         return SetScrewed(mesh.Welded(), o, middle, notes, token);
     }
 
-    /// <param name="Top">The height of the whole part: its thickness, and its hub on top of that.</param>
+    /// <param name="Top">The height of the whole part: its thickness, anything standing on it, and its hub on top of that.</param>
+    /// <param name="HubBase">Where the hub starts: the top of the teeth, or of a lock standing on them.</param>
     private sealed record Middle(
-        List<Vector2>? Bore, double BoreReach, double HubRadius, List<Vector2>? HubCircle, float Top)
+        List<Vector2>? Bore, double BoreReach, double HubRadius, List<Vector2>? HubCircle, float Top, float HubBase)
     {
         public bool HasHub => HubCircle is not null;
     }
@@ -1550,9 +1347,9 @@ public static class Gears
     /// The hole through a disc and the collar round it, with what would leave the part too thin to
     /// hold refused. <paramref name="band"/> is how near the middle the material reaches - the
     /// roots of a gear, the roots of a ratchet - and <paramref name="what"/> names it in the
-    /// refusal.
+    /// refusal. <paramref name="raise"/> is anything standing between the teeth and the hub.
     /// </summary>
-    private static Middle? Fitting(GearOptions o, double band, string what, out string? refusal)
+    private static Middle? Fitting(GearOptions o, double band, string what, out string? refusal, float raise = 0f)
     {
         refusal = null;
 
@@ -1576,7 +1373,7 @@ public static class Gears
         }
 
         return new(bore, boreReach, hubRadius, hub ? Circle(hubRadius) : null,
-                   o.Thickness + (hub ? o.HubHeight : 0f));
+                   o.Thickness + raise + (hub ? o.HubHeight : 0f), o.Thickness + raise);
     }
 
     /// <summary>The hole across a hub for a grub screw, or a note saying why there is none.</summary>
@@ -1607,7 +1404,7 @@ public static class Gears
         var rod = MeshTransform.Transformed(
             Primitives.Prism(o.SetScrew / 2f, (float)(outer - inner), 24),
             Matrix4x4.CreateRotationY(MathF.PI / 2f)
-            * Matrix4x4.CreateTranslation((float)((inner + outer) / 2.0), 0f, o.Thickness + o.HubHeight / 2f));
+            * Matrix4x4.CreateTranslation((float)((inner + outer) / 2.0), 0f, middle.HubBase + o.HubHeight / 2f));
 
         // Turned so the hole meets a D-shaped bore's flat, which sits on +X.
         var drilled = LocalCsg.Subtract(mesh, rod, token);
@@ -1975,6 +1772,9 @@ public static class Gears
 
     private static Mesh Moved(Mesh mesh, Vector3 by) =>
         MeshTransform.Transformed(mesh, Matrix4x4.CreateTranslation(by));
+
+    private static Vector2 Rotated(Vector2 p, float angle) =>
+        new(p.X * MathF.Cos(angle) - p.Y * MathF.Sin(angle), p.X * MathF.Sin(angle) + p.Y * MathF.Cos(angle));
 
     private static Vector2 Polar(double radius, double angle) =>
         new((float)(radius * Math.Cos(angle)), (float)(radius * Math.Sin(angle)));

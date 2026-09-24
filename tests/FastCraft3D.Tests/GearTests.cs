@@ -799,6 +799,25 @@ public class GearTests
         Bore = BoreShape.Round, BoreSize = 5f
     };
 
+    /// <summary>The frames the drive tests run, by name, so each shows up as its own case.</summary>
+    private static GearOptions Framed(string which) => which switch
+    {
+        "five of twenty" => Reciprocator,
+        "six of twenty, module 1.5" => Reciprocator with { Module = 1.5f, KeptTeeth = 6, Thickness = 8f },
+        "three of sixteen" => Reciprocator with { Module = 1.5f, Teeth = 16, KeptTeeth = 3 },
+        "five of nineteen" => Reciprocator with { Module = 1.5f, Teeth = 19, KeptTeeth = 5 },
+        "square ends" => Reciprocator with { FrameEnds = FrameEnds.Square },
+        "no lock" => Reciprocator with { LockHeight = 0f },
+        _ => throw new ArgumentException(which)
+    };
+
+    private static FramePlan Plan(GearOptions options)
+    {
+        var plan = Gears.PlanFrame(options, out string? why);
+        Assert.True(plan is not null, why);
+        return plan!;
+    }
+
     [Fact]
     public void ACutAwayGearCanBeGivenTheFrameItDrives()
     {
@@ -809,127 +828,338 @@ public class GearTests
         Assert.Equal("Frame", result.Parts[1].Name);
         foreach (var part in result.Parts) Closed(part.Mesh);
 
-        // 20 teeth of module 2: a 20 mm pitch radius and a 6.28 mm pitch. Five teeth of sector
-        // drive five teeth of rack, so the ends sit that far apart and the frame is that much
-        // longer than it is tall.
-        var box = result.Parts[1].Mesh.ComputeBounds();
-        float across = 2f * (20f + 1.25f * 2f + 3f);
-
-        Assert.Equal(across, box.Size.Y, 0.05f);
-        Assert.Equal(across + 5f * MathF.PI * 2f, box.Size.X, 0.05f);
-        Assert.Equal(6f, box.Size.Z, 0.001f);
+        // Six millimetres of teeth, and the three millimetre lock standing on them - on the gear
+        // and on the frame alike.
+        Assert.Equal(9f, result.Parts[0].Mesh.ComputeBounds().Size.Z, 0.001f);
+        Assert.Equal(9f, result.Parts[1].Mesh.ComputeBounds().Size.Z, 0.001f);
     }
 
     /// <summary>
-    /// The one thing a frame has to get right. Its teeth are laid out by arc length from the
-    /// middle of the bottom run, and the phase left that starting point out - so with an odd
-    /// number of teeth along each run the frame's teeth came out on the gear's instead of between
-    /// them, and the two drove into each other. Five of twenty is that case.
+    /// The frame this replaced took the travel to be the sector's teeth times the pitch. Driven, it
+    /// jammed both ways round: the sector stays in mesh past that by its contact ratio, and its
+    /// last tip then drags the rack on until it slips off, so the frame ran off the end of one run
+    /// or met the other half a tooth out. The travel now comes from the involute and the drag, and
+    /// the frame is generated from the motion rather than drawn, so whatever the gear does, the
+    /// frame has room for.
     /// </summary>
+    [Theory]
+    [InlineData("five of twenty")]
+    [InlineData("six of twenty, module 1.5")]
+    [InlineData("three of sixteen")]
+    [InlineData("five of nineteen")]
+    [InlineData("square ends")]
+    public void AFrameIsDrivenTwoWholeTurnsWithoutJamming(string which)
+    {
+        var options = Framed(which);
+        var plan = Plan(options);
+        var run = new Drive(plan).Run(turns: 2.0);
+
+        Assert.True(run.Jammed is null, $"jammed {run.Jammed:0.#} degrees in");
+
+        // The gear pushes a frame that lags it by the clearance, so it falls a little short of the
+        // travel stated - by the play along the run at most.
+        double play = 2.0 * options.FrameClearance / Math.Cos(options.PressureAngle * Math.PI / 180.0);
+        Assert.InRange(run.Travel, plan.Travel - play - 0.05, plan.Travel + 0.05);
+    }
+
     [Fact]
-    public void TheFramesTeethLandBetweenTheGearsRatherThanOnThem()
+    public void TheTravelItStatesIsWhatTheSectorDrives()
     {
         var result = Gears.Build(Reciprocator);
-        var gear = result.Parts[0];
-        var frame = result.Parts[1];
 
-        // Where the two actually run together, which is what the preview shows.
-        var shown = MeshTransform.Transformed(frame.Mesh, frame.InMesh!.Value);
-        double clash = CsgSolid.Intersect(gear.Mesh, shown).ComputeSignedVolume();
-
-        Assert.True(clash < 1.0, $"they overlap by {clash:0.#} mm3 - the teeth are driving into each other");
+        // Five teeth of a 6.28 mm pitch, but not five pitches: the sector stays in mesh for its
+        // contact ratio past the fifth tooth, and the last tip drags the rack another 7 mm on
+        // before it slips off. Worked out, 42.7 mm; the drive test above checks the gear gets it.
+        Assert.Contains(result.Notes, n => n.Contains("Slides 42.7 mm each way"));
     }
 
     /// <summary>
-    /// The stated travel has to be what a hand actually gets: shifting the frame by it should
-    /// carry the gear from one end of the run to the other. Shown at half stroke it carried the
-    /// gear half a stroke out through the end cap instead, which is what it looked like.
+    /// What the lock is for. A generated frame fits its gear everywhere but back along the path the
+    /// gear came by, which is clear by definition - so without a lock a parked frame slides several
+    /// millimetres, and the next push meets it wherever it was left.
     /// </summary>
     [Fact]
-    public void MovingTheFrameByTheStatedTravelTakesTheGearToTheOtherEnd()
+    public void AParkedFrameIsHeldByItsLockAndSlidesFreelyWithoutOne()
+    {
+        var locked = new Drive(Plan(Reciprocator)).Run(turns: 1.0, measurePlay: true);
+        var loose = new Drive(Plan(Framed("no lock"))).Run(turns: 1.0, measurePlay: true);
+
+        Assert.Null(locked.Jammed);
+        Assert.Null(loose.Jammed);
+        Assert.True(locked.ParkedPlay < 1.5, $"a locked frame parked could slide {locked.ParkedPlay:0.##} mm");
+        Assert.True(loose.ParkedPlay > 4.0, $"an unlocked one only {loose.ParkedPlay:0.##} mm - is the lock still needed?");
+    }
+
+    [Fact]
+    public void AGearWithAnOddNumberOfTeethDrivesAFrame()
+    {
+        // The frame this replaced laid its second run a half turn of arc length after the first and
+        // needed an even count for that to land on a tooth. A generated frame has no such count.
+        var result = Gears.Build(Framed("five of nineteen"));
+
+        Assert.Equal(2, result.Parts.Count);
+        foreach (var part in result.Parts) Closed(part.Mesh);
+    }
+
+    [Fact]
+    public void ASectorThatLeavesTheFrameNoTimeParkedIsRefused()
+    {
+        // Each tooth on a twenty-tooth gear is 18 degrees more of pushing, and the push has 54
+        // degrees of approach and drag besides. Eight teeth would push for the whole half turn.
+        var result = Gears.Build(Reciprocator with { KeptTeeth = 8 });
+
+        Assert.Single(result.Parts);
+        Assert.Contains(result.Notes, n => n.Contains("Keep 7 or fewer"));
+    }
+
+    [Fact]
+    public void AFrameNeedsStraightTeeth()
+    {
+        var result = Gears.Build(Reciprocator with { Form = ToothForm.Helical });
+
+        Assert.Single(result.Parts);
+        Assert.Contains(result.Notes, n => n.Contains("straight teeth"));
+    }
+
+    /// <summary>
+    /// Both parts are laid out to print without support. The gear stands on its teeth with the lock
+    /// inside the roots on top; the frame stands on its lock layer, whose inside is the smaller of
+    /// its two, so the tooth layer above rests on it everywhere.
+    /// </summary>
+    [Fact]
+    public void NeitherPartOverhangsAsItPrints()
+    {
+        var result = Gears.Build(Reciprocator);
+
+        foreach (var part in result.Parts)
+        {
+            var mesh = part.Mesh;
+            for (int t = 0; t + 2 < mesh.Indices.Count; t += 3)
+            {
+                var a = mesh.Positions[mesh.Indices[t]];
+                var b = mesh.Positions[mesh.Indices[t + 1]];
+                var c = mesh.Positions[mesh.Indices[t + 2]];
+                var normal = Vector3.Cross(b - a, c - a);
+                if (normal.Z >= -0.5f * normal.Length()) continue;
+
+                Assert.True(MathF.Max(a.Z, MathF.Max(b.Z, c.Z)) < 0.01f,
+                    $"{part.Name} has a face looking down at {a.Z:0.##} mm");
+            }
+        }
+    }
+
+    [Fact]
+    public void TheFrameIsPrintedBesideTheGearAndShownRoundIt()
     {
         var result = Gears.Build(Reciprocator);
         var gear = result.Parts[0];
-        var frame = result.Parts[1];
-
-        var shown = MeshTransform.Transformed(frame.Mesh, frame.InMesh!.Value);
-        var pushed = MeshTransform.Transformed(shown, Matrix4x4.CreateTranslation(-31.416f, 0f, 0f));
-
-        double clash = CsgSolid.Intersect(gear.Mesh, pushed).ComputeSignedVolume();
-        Assert.True(clash < 1.0, $"the gear is {clash:0.#} mm3 into the frame at the end of its run");
-
-        var box = pushed.ComputeBounds();
-        Assert.True(box.Min.X < 0f && box.Max.X > 0f, "the gear should still be inside the frame");
-    }
-
-    [Fact]
-    public void ARunShorterThanTheSectorDrivesIsOpenedUpToIt()
-    {
-        var result = Gears.Build(Reciprocator with { Stroke = 5f });
-
-        // Five teeth at a 6.283 mm pitch: nothing shorter than 31.4 mm can take the push.
-        Assert.Contains(result.Notes, n => n.Contains("was opened to that"));
-        Assert.Contains(result.Notes, n => n.Contains("Frame 31.4 mm between the ends"));
-    }
-
-    [Fact]
-    public void ARunGoesUpInWholeTeeth()
-    {
-        var result = Gears.Build(Reciprocator with { Stroke = 60f });
-
-        // Nine and a half teeth of run is not a thing: ten of them, 62.8 mm.
-        Assert.Contains(result.Notes, n => n.Contains("60 mm became 62.8"));
-
-        // A run this much longer than the 31.4 mm the sector actually drives leaves the same
-        // amount of slack at each end - the plain arc bulges out over that whole gap at its
-        // middle, not just over the addendum, so the frame widens with the slack rather than
-        // staying a fixed size. See RecipFrame's AddArc.
-        Assert.Equal(124.43f, result.Parts[1].Mesh.ComputeBounds().Size.X - 2f * 25.5f, 0.05f);
-    }
-
-    [Fact]
-    public void TheFrameSaysHowFarItTravels()
-    {
-        var notes = Gears.Build(Reciprocator).Notes;
-
-        // Five teeth at a 6.283 mm pitch: 31.4 mm from one end of the run to the other.
-        Assert.Contains(notes, n => n.Contains("Slides 31.4 mm end to end"));
-    }
-
-    [Fact]
-    public void TheFrameIsShownRoundTheGearAndPrintedBesideIt()
-    {
-        var result = Gears.Build(Reciprocator);
         var frame = result.Parts[1];
 
         Assert.NotNull(frame.InMesh);
-        Assert.True(frame.Mesh.ComputeBounds().Min.X > result.Parts[0].Mesh.ComputeBounds().Max.X,
+        Assert.True(frame.Mesh.ComputeBounds().Min.X > gear.Mesh.ComputeBounds().Max.X,
             "it should stand beside the gear to print");
 
-        // Round it to be looked at, with the gear at one end of the run rather than halfway
-        // along it - halfway is a place the thing passes through and never stands at.
+        // Round it to be looked at, parked at one end, and its lock layer level with the gear's.
         var shown = MeshTransform.Transformed(frame.Mesh, frame.InMesh!.Value).ComputeBounds();
-        Assert.Equal(31.416f / 2f, shown.Center.X, 0.05f);
+        Assert.True(shown.Min.X < -20f && shown.Max.X > 22f, "the frame should close round the gear");
+        Assert.Equal(gear.Mesh.ComputeBounds().Max.Z, shown.Max.Z, 0.01f);
         Assert.Equal(0f, shown.Center.Y, 0.01f);
-        Assert.True(shown.Min.X < 0f && shown.Max.X > 0f, "the frame should still close round the gear");
+    }
+
+    /// <summary>The one thing a frame has to get right where it is shown: its teeth between the gear's rather than on them.</summary>
+    [Fact]
+    public void TheFrameAndGearAreClearOfEachOtherWhereTheyAreShown()
+    {
+        var result = Gears.Build(Reciprocator);
+        var gear = result.Parts[0];
+        var frame = result.Parts[1];
+
+        var shown = MeshTransform.Transformed(frame.Mesh, frame.InMesh!.Value);
+        double clash = Overlap(gear.Mesh, shown);
+
+        Assert.True(clash < 0.01, $"they overlap by {clash:0.###} mm3");
     }
 
     [Fact]
-    public void AFrameForASectorOverHalfTheGearIsRefused()
+    public void SquareEndsMakeARectangularFrame()
     {
-        var result = Gears.Build(Reciprocator with { KeptTeeth = 14 });
+        var result = Gears.Build(Framed("square ends"));
+        var frame = result.Parts[1].Mesh;
+        Closed(frame);
 
-        // Fourteen of twenty would have the sector in both runs at once.
-        Assert.Single(result.Parts);
-        Assert.Contains(result.Notes, n => n.Contains("both runs at once"));
+        // Every corner of its box is solid, which no round-ended frame's is.
+        var box = frame.ComputeBounds();
+        foreach (var corner in new[]
+                 {
+                     new Vector2(box.Min.X, box.Min.Y), new Vector2(box.Max.X, box.Min.Y),
+                     new Vector2(box.Min.X, box.Max.Y), new Vector2(box.Max.X, box.Max.Y)
+                 })
+            Assert.Contains(frame.Positions, p => Vector2.Distance(new Vector2(p.X, p.Y), corner) < 0.01f);
     }
 
-    [Fact]
-    public void AFrameNeedsAnEvenNumberOfTeethOnItsGear()
+    /// <summary>
+    /// Turns a gear in a frame the way a motor would: the gear turns in small steps, and the frame
+    /// slides along X only when the gear would otherwise run into it, and only as far as clears it.
+    /// A step that no push either way clears is a jam. All in the flat, from the frame's outlines.
+    /// </summary>
+    private sealed class Drive
     {
-        var result = Gears.Build(Reciprocator with { Teeth = 21, KeptTeeth = 5 });
+        private const double Step = 0.5 * Math.PI / 180.0;
 
-        Assert.Single(result.Parts);
-        Assert.Contains(result.Notes, n => n.Contains("even number of teeth"));
+        private readonly FramePlan plan;
+        private readonly Vector2[] gear;
+        private readonly Vector2[]? lockDisc;
+        private readonly Segments cavity;
+        private readonly Segments? lockCavity;
+        private double x;
+
+        public Drive(FramePlan plan)
+        {
+            this.plan = plan;
+            gear = plan.Gear.ToArray();
+            lockDisc = plan.Lock?.ToArray();
+            cavity = new Segments(plan.Cavity);
+            lockCavity = plan.LockCavity is null ? null : new Segments(plan.LockCavity);
+        }
+
+        /// <param name="Jammed">How far round the gear had turned when it jammed, in degrees; null if it never did.</param>
+        /// <param name="Travel">How far the frame was carried from one end to the other.</param>
+        /// <param name="ParkedPlay">The most the frame could be slid, both ways added, while it was meant to be parked.</param>
+        public sealed record Result(double? Jammed, double Travel, double ParkedPlay);
+
+        public Result Run(double turns, bool measurePlay = false)
+        {
+            // Started parked, halfway through a dwell.
+            double start = plan.Shown;
+            x = plan.Slide(start);
+            double least = x, most = x, play = 0.0;
+            int steps = (int)Math.Round(turns * 2.0 * Math.PI / Step);
+
+            for (int s = 1; s <= steps; s++)
+            {
+                double psi = start + s * Step;
+                if (Hits(psi, x))
+                {
+                    double? forward = Clear(psi, +1), back = Clear(psi, -1);
+                    if (forward is null && back is null) return new((s * Step) * 180.0 / Math.PI, most - least, play);
+                    x += forward is not null && (back is null || forward <= back) ? forward.Value : -back!.Value;
+                }
+
+                least = Math.Min(least, x);
+                most = Math.Max(most, x);
+
+                // Away from the ends of a dwell, where the lock is handing over to the teeth.
+                if (measurePlay && s % 8 == 0 && plan.Parked(psi - 3.0 * Math.PI / 180.0) && plan.Parked(psi + 3.0 * Math.PI / 180.0))
+                    play = Math.Max(play, Free(psi, +1) + Free(psi, -1));
+            }
+
+            return new(null, most - least, play);
+        }
+
+        /// <summary>The least slide that clears the gear, or null if nothing within a couple of millimetres does.</summary>
+        private double? Clear(double psi, int sign)
+        {
+            double d = 0.002;
+            while (d <= 2.0 && Hits(psi, x + sign * d)) d *= 1.6;
+            if (d > 2.0) return null;
+
+            double low = d / 1.6, high = d;
+            for (int i = 0; i < 14; i++)
+            {
+                double middle = (low + high) / 2.0;
+                if (Hits(psi, x + sign * middle)) low = middle; else high = middle;
+            }
+
+            return high;
+        }
+
+        /// <summary>How far the frame could be slid one way before it touches.</summary>
+        private double Free(double psi, int sign)
+        {
+            double d = 0.01;
+            while (d <= 8.0 && !Hits(psi, x + sign * d)) d *= 1.5;
+            if (d > 8.0) return 8.0;
+
+            double low = d / 1.5, high = d;
+            for (int i = 0; i < 12; i++)
+            {
+                double middle = (low + high) / 2.0;
+                if (Hits(psi, x + sign * middle)) high = middle; else low = middle;
+            }
+
+            return low;
+        }
+
+        /// <summary>Whether the gear, turned by psi, runs into the frame slid along by frameX.</summary>
+        private bool Hits(double psi, double frameX)
+        {
+            // The gear's centre sits at minus the frame's slide in the frame's own coordinates.
+            float cos = (float)Math.Cos(psi), sin = (float)Math.Sin(psi), gx = (float)-frameX;
+            return cavity.Crossed(gear, cos, sin, gx) || (lockDisc is not null && lockCavity!.Crossed(lockDisc, cos, sin, gx));
+        }
+    }
+
+    /// <summary>
+    /// A loop's edges in a grid, for asking quickly whether another loop crosses it. The gear is
+    /// always inside the frame's hole and goes round its own centre, so if no edge of one crosses
+    /// an edge of the other, it is clear.
+    /// </summary>
+    private sealed class Segments
+    {
+        private const float Cell = 0.5f;
+        private readonly Vector2[] points;
+        private readonly Dictionary<(int, int), List<int>> cells = new();
+
+        public Segments(IReadOnlyList<Vector2> loop)
+        {
+            points = loop.ToArray();
+            for (int i = 0; i < points.Length; i++)
+            {
+                var a = points[i];
+                var b = points[(i + 1) % points.Length];
+                foreach (var key in Covered(a, b))
+                {
+                    if (!cells.TryGetValue(key, out var list)) cells[key] = list = [];
+                    list.Add(i);
+                }
+            }
+        }
+
+        public bool Crossed(Vector2[] loop, float cos, float sin, float gx)
+        {
+            Vector2 At(int i) => new(gx + cos * loop[i].X - sin * loop[i].Y, sin * loop[i].X + cos * loop[i].Y);
+
+            var previous = At(loop.Length - 1);
+            for (int i = 0; i < loop.Length; i++)
+            {
+                var here = At(i);
+                foreach (var key in Covered(previous, here))
+                {
+                    if (!cells.TryGetValue(key, out var list)) continue;
+                    foreach (int k in list)
+                        if (Cross(previous, here, points[k], points[(k + 1) % points.Length])) return true;
+                }
+
+                previous = here;
+            }
+
+            return false;
+        }
+
+        private static IEnumerable<(int, int)> Covered(Vector2 a, Vector2 b)
+        {
+            int x0 = (int)MathF.Floor(MathF.Min(a.X, b.X) / Cell), x1 = (int)MathF.Floor(MathF.Max(a.X, b.X) / Cell);
+            int y0 = (int)MathF.Floor(MathF.Min(a.Y, b.Y) / Cell), y1 = (int)MathF.Floor(MathF.Max(a.Y, b.Y) / Cell);
+            for (int x = x0; x <= x1; x++)
+                for (int y = y0; y <= y1; y++)
+                    yield return (x, y);
+        }
+
+        private static bool Cross(Vector2 a, Vector2 b, Vector2 c, Vector2 d)
+        {
+            static float Side(Vector2 p, Vector2 q, Vector2 r) => (q.X - p.X) * (r.Y - p.Y) - (q.Y - p.Y) * (r.X - p.X);
+            float d1 = Side(c, d, a), d2 = Side(c, d, b), d3 = Side(a, b, c), d4 = Side(a, b, d);
+            return d1 * d2 < 0 && d3 * d4 < 0;
+        }
     }
 }
