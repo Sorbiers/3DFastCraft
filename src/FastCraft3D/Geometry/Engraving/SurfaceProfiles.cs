@@ -21,6 +21,21 @@ public static class SurfaceProfiles
     private const float StepMm = 2e-3f;
 
     /// <summary>
+    /// The heads of the courses over a face this tall: where <c>Height</c>'s own repeat begins,
+    /// which is the only lattice the sample lines may be put on. See
+    /// <see cref="ReliefField.Lattice"/> for what happens when they are walked from the edge of the
+    /// face instead.
+    ///
+    /// It costs the tidiness the old walk was after - a whole course at the top of the face, the
+    /// part one at the bottom where a wall meets the ground - because the part course now falls
+    /// wherever the middle of the face lands in the repeat. That was never true of what was built
+    /// anyway: <c>Height</c> has always measured from the middle, so the walk from the top was
+    /// describing a course the field did not have.
+    /// </summary>
+    private static float[] Heads(float courseMm, float upMm) =>
+        ReliefField.Lattice(courseMm / 2f, courseMm, -upMm / 2f - courseMm, upMm / 2f + courseMm);
+
+    /// <summary>
     /// Vinyl siding: strips running the whole way across, each sloping out as it goes down and
     /// stepping back at its bottom edge.
     ///
@@ -35,9 +50,7 @@ public static class SurfaceProfiles
         {
             var at = new List<float>();
 
-            // Down the face from the top, so the course at the eaves is a whole one and whatever is
-            // left over is cut off at the bottom where a wall meets the ground.
-            for (float head = upMm / 2f; head > -upMm / 2f - courseMm; head -= courseMm)
+            foreach (float head in Heads(courseMm, upMm))
             {
                 at.Add(head);
                 at.Add(head - StepMm);
@@ -71,16 +84,17 @@ public static class SurfaceProfiles
             var at = new List<float>();
             float half = jointMm / 2f;
 
-            // Joints for both parities of course, since alternate courses are staggered by half a
-            // tile and one list of samples has to serve them both.
-            for (float shift = 0; shift < tileMm; shift += tileMm / 2f)
-                for (float u = -acrossMm / 2f + shift; u <= acrossMm / 2f + tileMm; u += tileMm)
-                {
-                    at.Add(u - half);
-                    at.Add(u - half + StepMm);
-                    at.Add(u + half - StepMm);
-                    at.Add(u + half);
-                }
+            // Joints for both parities of course at once. Alternate courses are staggered by half a
+            // tile, so between them the joints fall every half tile - on the lattice Height reckons
+            // them from, which is the middle of the face and not its edge.
+            foreach (float u in ReliefField.Lattice(
+                0f, tileMm / 2f, -acrossMm / 2f - tileMm, acrossMm / 2f + tileMm))
+            {
+                at.Add(u - half);
+                at.Add(u - half + StepMm);
+                at.Add(u + half - StepMm);
+                at.Add(u + half);
+            }
 
             return [.. at];
         }
@@ -89,7 +103,7 @@ public static class SurfaceProfiles
         {
             var at = new List<float>();
 
-            for (float head = upMm / 2f; head > -upMm / 2f - courseMm; head -= courseMm)
+            foreach (float head in Heads(courseMm, upMm))
             {
                 at.Add(head);
                 at.Add(head - StepMm);
@@ -150,16 +164,17 @@ public static class SurfaceProfiles
             var lines = new List<float>(ReliefField.Evenly(acrossMm, Ripple * GrainRun / 4f));
             if (Run <= 0) return [.. lines];
 
-            // The end joints, for both parities of course, since alternate courses are set over
-            // by half a board and one list of samples serves them both.
-            for (float shift = 0; shift < Run; shift += Run / 2f)
-                for (float u = -acrossMm / 2f + shift; u <= acrossMm / 2f + Run; u += Run)
-                {
-                    lines.Add(u - jointMm / 2f);
-                    lines.Add(u - jointMm / 2f + StepMm);
-                    lines.Add(u + jointMm / 2f - StepMm);
-                    lines.Add(u + jointMm / 2f);
-                }
+            // The end joints, for both parities of course at once: alternate courses are set over
+            // by half a board, so between them the joints fall every half board's length - on the
+            // lattice Height reckons them from.
+            foreach (float u in ReliefField.Lattice(
+                0f, Run / 2f, -acrossMm / 2f - Run, acrossMm / 2f + Run))
+            {
+                lines.Add(u - jointMm / 2f);
+                lines.Add(u - jointMm / 2f + StepMm);
+                lines.Add(u + jointMm / 2f - StepMm);
+                lines.Add(u + jointMm / 2f);
+            }
 
             return [.. lines];
         }
@@ -169,13 +184,14 @@ public static class SurfaceProfiles
             var lines = new List<float>(ReliefField.Evenly(upMm, Ripple / 2.5f));
 
             // And the board joints on top of the even sampling, so an edge is an edge and not
-            // wherever the nearest sample happened to fall.
-            for (float head = upMm / 2f; head > -upMm / 2f - boardMm; head -= boardMm)
+            // wherever the nearest sample happened to fall - which is what it was, since the walk
+            // started at the top of the face rather than on the lattice Height repeats on.
+            foreach (float edge in Heads(boardMm, upMm))
             {
-                lines.Add(head - jointMm / 2f);
-                lines.Add(head - jointMm / 2f + StepMm);
-                lines.Add(head + jointMm / 2f - StepMm);
-                lines.Add(head + jointMm / 2f);
+                lines.Add(edge - jointMm / 2f);
+                lines.Add(edge - jointMm / 2f + StepMm);
+                lines.Add(edge + jointMm / 2f - StepMm);
+                lines.Add(edge + jointMm / 2f);
             }
 
             return [.. lines];

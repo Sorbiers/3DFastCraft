@@ -90,10 +90,28 @@ public static class ReliefField
     }
 
     /// <summary>
+    /// How far a cut bites in where the profile lies flush with the face - the joints between the
+    /// tiles, the head of each course. Without it those parts of the cutter share a plane with the
+    /// very face they are being taken out of, which is the one thing the boolean handles worst.
+    /// The same hair, and for the same reason, as <see cref="GrooveSolid.Sink"/>.
+    /// </summary>
+    public const float BiteMm = 0.02f;
+
+    /// <summary>
     /// The solid, ready to be unioned onto the object. Empty when the profile asks for more samples
     /// than the field is worth.
     /// </summary>
-    public static Mesh Build(IPlacementSurface surface, IRelief relief, float acrossMm, float upMm)
+    /// <param name="sunk">
+    /// For a cut rather than a raised texture: the field mirrored about the face, so subtracting it
+    /// sinks the relief into the object instead of standing it off.
+    ///
+    /// It used to build the same outward field either way and subtract that, which removes the
+    /// <see cref="SinkMm"/> slab under the field and nothing else - a flat rectangular recess a
+    /// third of a millimetre deep with no pattern in it whatsoever. From the outside: a Cut that
+    /// left the object looking untouched.
+    /// </param>
+    public static Mesh Build(
+        IPlacementSurface surface, IRelief relief, float acrossMm, float upMm, bool sunk = false)
     {
         var us = Trimmed(relief.Across(acrossMm), acrossMm);
         var vs = Trimmed(relief.Up(upMm), upMm);
@@ -114,7 +132,11 @@ public static class ReliefField
                 for (int i = 0; i < w; i++)
                 {
                     var at = new Vector2(us[i], vs[j]);
-                    float out_ = pass == 0 ? MathF.Max(relief.Height(at), 0f) : -SinkMm;
+                    float stands = MathF.Max(relief.Height(at), 0f);
+
+                    float out_ = pass == 0
+                        ? (sunk ? -stands - BiteMm : stands)
+                        : (sunk ? SinkMm : -SinkMm);
 
                     positions.Add(surface.At(at, out_));
                 }
@@ -155,6 +177,13 @@ public static class ReliefField
             Quad(Face(w - 1, j), Back(w - 1, j), Back(w - 1, j + 1), Face(w - 1, j + 1));
         }
 
+        // Sunk, the field is the mirror of the raised one about the face, and a mirrored solid is
+        // inside out - which a boolean reads as the whole of space except the cutter. Turning every
+        // triangle round puts the normals back outward.
+        if (sunk)
+            for (int t = 0; t + 2 < indices.Count; t += 3)
+                (indices[t + 1], indices[t + 2]) = (indices[t + 2], indices[t + 1]);
+
         return new Mesh(positions, indices);
     }
 
@@ -193,6 +222,36 @@ public static class ReliefField
         var at = new float[count + 1];
 
         for (int i = 0; i <= count; i++) at[i] = -extentMm / 2f + extentMm * i / count;
+
+        return at;
+    }
+
+    /// <summary>
+    /// Every <c>origin + k * step</c> over a span: the lines a repeating profile actually changes
+    /// on, which is where its sample lines have to go.
+    ///
+    /// Walking them from the edge of the face instead is what all three profiles did first, and it
+    /// is not a near miss - it is the worst case there is. The lines then repeat with the profile's
+    /// own period at a different phase, so every course is sampled at the same point of its ramp
+    /// and the ramp vanishes: roof tiles came out as flat columns with no courses in them, siding
+    /// as a dead flat wall, and not one sample row of a board landed in a joint. A face is not
+    /// obliged to be a whole number of courses tall, so there is no edge to anchor to; the profile
+    /// is the only thing that knows where its own repeat begins.
+    /// </summary>
+    public static float[] Lattice(float originMm, float stepMm, float fromMm, float toMm)
+    {
+        if (stepMm <= 1e-4f || toMm < fromMm) return [];
+
+        int first = (int)MathF.Floor((fromMm - originMm) / stepMm);
+        int last = (int)MathF.Ceiling((toMm - originMm) / stepMm);
+
+        // Past this the field is refused for being too fine anyway, and the cap is what stops a
+        // silly step from asking for the array before anyone gets to say so.
+        int count = Math.Min(last - first + 1, 4 * MostSamples);
+        if (count < 1) return [];
+
+        var at = new float[count];
+        for (int k = 0; k < count; k++) at[k] = originMm + (first + k) * stepMm;
 
         return at;
     }

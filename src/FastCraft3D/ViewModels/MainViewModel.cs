@@ -2733,7 +2733,8 @@ public sealed class MainViewModel : INotifyPropertyChanged
         var token = StartWork(raised ? "Laying the texture on" : "Cutting the texture in");
         try
         {
-            var built = await Task.Run(() => ProfiledSolid(surface, coarse: false), token);
+            var built = await Task.Run(
+                () => ProfiledSolid(surface, coarse: false, sunk: !raised), token);
 
             if (built is null || built.TriangleCount == 0)
             {
@@ -3081,7 +3082,12 @@ public sealed class MainViewModel : INotifyPropertyChanged
     public bool UsesProfile => embossTexture.IsProfiled;
 
     /// <summary>The solid a shaped texture comes to on the face that was picked.</summary>
-    private Mesh? ProfiledSolid(IPlacementSurface surface, bool coarse)
+    /// <param name="sunk">
+    /// For a cut: the field mirrored about the face, so taking it away sinks the tiles into the
+    /// object. The preview asks for the raised one whichever way it is going, since a preview sunk
+    /// into the object would be hidden by the very face it is being placed on.
+    /// </param>
+    private Mesh? ProfiledSolid(IPlacementSurface surface, bool coarse, bool sunk = false)
     {
         if (Profile(coarse) is not { } relief) return null;
 
@@ -3093,7 +3099,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
         float margin = Engraver.RaisedInset * 4f;
 
         return ReliefField.Build(surface, relief,
-            MathF.Max(across - margin, 0.01f), MathF.Max(up - margin, 0.01f));
+            MathF.Max(across - margin, 0.01f), MathF.Max(up - margin, 0.01f), sunk);
     }
 
     /// <summary>Whether a texture is being laid rather than a stamp placed.</summary>

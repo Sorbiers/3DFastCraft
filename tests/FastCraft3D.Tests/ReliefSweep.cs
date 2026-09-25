@@ -111,6 +111,82 @@ public class ReliefSweep(ITestOutputHelper log)
         Assert.InRange(cost.Triangles, built.TriangleCount / 2, built.TriangleCount * 2);
     }
 
+    /// <summary>
+    /// The sample lines have to land on both ends of each course's ramp.
+    ///
+    /// They are put where the profile changes, and the profile repeats with the course - so lines
+    /// walked from the edge of the face repeat with the same period at a different phase, hit the
+    /// same point of every ramp, and the relief flattens out altogether. Roof tiles came back as
+    /// columns with no courses in them, siding as a dead flat wall standing 1.02 mm off a face
+    /// that had been asked for 1.2, and not one sample row of a board landed in a joint.
+    ///
+    /// The sweep above missed all three because it measures the deepest point of the field and
+    /// nothing else, and the deepest point was right. What was wrong was that the field never
+    /// came back to the face in between.
+    /// </summary>
+    [Theory]
+    [InlineData(TextureKind.RoofTiles, 4f)]
+    [InlineData(TextureKind.Siding, 10f)]
+    [InlineData(TextureKind.Planks, 12f)]
+    public void TheSamplesLandOnBothEndsOfEveryCoursesRamp(TextureKind kind, float pitch)
+    {
+        const float Depth = 0.8f;
+        const float Extent = 19.8f;   // a 20 mm cube's face, less the margin the tool keeps
+
+        var relief = SurfaceTexture.ProfileOf(new TextureOptions(kind, pitch, 0.5f, 45f), Depth)!;
+
+        // Up a line that is clear of the joints on either parity of course: they fall every half a
+        // piece, so a quarter of the way along one is clear of all of them.
+        float clear = pitch / 4f;
+
+        var rows = Inside(relief.Up(Extent), Extent);
+        var heights = rows.Select(v => relief.Height(new Vector2(clear, v))).ToList();
+
+        log.WriteLine($"{kind}: {rows.Count} rows, {heights.Min():0.###} .. {heights.Max():0.###} mm");
+
+        Assert.True(heights.Min() <= Depth * 0.1f,
+            $"{kind} never comes back to the face - the shallowest row is {heights.Min():0.###} mm "
+            + "of relief, so the lap between one course and the next is not sampled at all");
+
+        Assert.True(heights.Max() >= Depth * 0.6f,
+            $"{kind} never reaches its own depth - the deepest row is {heights.Max():0.###} mm "
+            + $"where {Depth:0.##} mm was asked for");
+
+        Assert.True(Steps(rows, v => relief.Height(new Vector2(clear, v)), Depth),
+            $"{kind} has no sharp course edge in it. The pairs of rows a couple of microns apart "
+            + "are what a lap is made of, and both of each pair came back at the same height - so "
+            + "the rows are not where the profile changes.");
+
+        // And the same across the face, where a piece has ends to stagger. Measured along the row
+        // standing furthest out, which is well inside a course rather than on the edge of one.
+        if (kind == TextureKind.Siding) return;
+
+        float deepest = rows[heights.IndexOf(heights.Max())];
+
+        Assert.True(
+            Steps(Inside(relief.Across(Extent), Extent),
+                  u => relief.Height(new Vector2(u, deepest)), Depth),
+            $"{kind} has no sharp joint between one piece and the next across the face");
+    }
+
+    private static List<float> Inside(float[] lines, float extentMm) =>
+        lines.Where(v => MathF.Abs(v) <= extentMm / 2f).OrderBy(v => v).ToList();
+
+    /// <summary>
+    /// Whether some pair of neighbouring lines a couple of microns apart stands at two quite
+    /// different heights - which is the whole of what a sharp edge is, and what the profile puts
+    /// those pairs there for.
+    /// </summary>
+    private static bool Steps(List<float> lines, Func<float, float> height, float depthMm)
+    {
+        for (int i = 0; i + 1 < lines.Count; i++)
+            if (lines[i + 1] - lines[i] < 0.01f &&
+                MathF.Abs(height(lines[i + 1]) - height(lines[i])) > depthMm * 0.5f)
+                return true;
+
+        return false;
+    }
+
     private static string Judge(Mesh built, long promised, float depthMm, float upMm)
     {
         if (built.TriangleCount == 0)
