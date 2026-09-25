@@ -41,7 +41,15 @@ public readonly record struct TileCourses(
 /// </summary>
 public sealed class TileRoom
 {
-    /// <summary>How far clear of an opening a tile stops, so it does not butt the reveal.</summary>
+    /// <summary>
+    /// How far clear of an opening a raised tile stops, so it does not butt the reveal.
+    ///
+    /// A cutter is given the negative of the engraver's overshoot instead, and the difference is
+    /// the whole of why a cut used to tear. Stopping short of an opening leaves the material
+    /// between the cut and the reveal standing as a rib a fifth of a millimetre wide and as deep
+    /// as the cut - a seven to one knife edge the boolean cannot resolve. Running past it instead
+    /// takes a hair off the reveal, which nobody will see.
+    /// </summary>
     public const float ClearanceMm = 0.2f;
 
     /// <summary>
@@ -78,7 +86,7 @@ public sealed class TileRoom
         Holes = [];
     }
 
-    private TileRoom(FacePatch face, Vector2 middle)
+    private TileRoom(FacePatch face, Vector2 middle, float clearanceMm)
     {
         this.face = face;
         this.middle = middle;
@@ -93,10 +101,10 @@ public sealed class TileRoom
                 if (hole.Count < 3) continue;
 
                 cleared.Add(new Rect2(
-                    hole.Min(p => p.X) - middle.X - ClearanceMm,
-                    hole.Min(p => p.Y) - middle.Y - ClearanceMm,
-                    hole.Max(p => p.X) - middle.X + ClearanceMm,
-                    hole.Max(p => p.Y) - middle.Y + ClearanceMm));
+                    hole.Min(p => p.X) - middle.X - clearanceMm,
+                    hole.Min(p => p.Y) - middle.Y - clearanceMm,
+                    hole.Max(p => p.X) - middle.X + clearanceMm,
+                    hole.Max(p => p.Y) - middle.Y + clearanceMm));
             }
 
         Holes = cleared;
@@ -110,9 +118,10 @@ public sealed class TileRoom
     /// round a barrel there is no patch to ask, so a barrel with a window in it still gets tiled
     /// over. Worth fixing the day anybody puts one there.
     /// </summary>
-    public static TileRoom? Of(IPlacementSurface? surface, Mesh? solid = null)
+    public static TileRoom? Of(
+        IPlacementSurface? surface, Mesh? solid = null, float clearanceMm = ClearanceMm)
     {
-        if (surface is PlanarSurface flat) return new TileRoom(flat.Face, flat.Middle);
+        if (surface is PlanarSurface flat) return new TileRoom(flat.Face, flat.Middle, clearanceMm);
 
         return surface is not null && solid is not null && solid.TriangleCount > 0
             ? new TileRoom(surface, solid)
@@ -257,8 +266,14 @@ public static class TileSolid
     /// one call and the joints of the next agree about where a course begins - the same rule the
     /// profiles had to learn.
     /// </summary>
+    /// <param name="cutting">
+    /// Whether these are a cutter rather than something to stand on the face. A cutter may hang
+    /// over an edge or an opening - that is the point of it - so it is not asked to sit wholly on
+    /// wall the way a raised piece is.
+    /// </param>
     public static List<Rect2> Pieces(
-        in TileCourses courses, float acrossMm, float upMm, TileRoom? room = null)
+        in TileCourses courses, float acrossMm, float upMm, TileRoom? room = null,
+        bool cutting = false)
     {
         var made = new List<Rect2>();
 
@@ -286,7 +301,7 @@ public static class TileSolid
 
             if (!courses.Ends)
             {
-                Keep(made, new Rect2(field.MinU, low, field.MaxU, high), field, room);
+                Keep(made, new Rect2(field.MinU, low, field.MaxU, high), field, room, cutting);
                 continue;
             }
 
@@ -298,7 +313,7 @@ public static class TileSolid
             {
                 if (made.Count >= MostTiles) return made;
 
-                Keep(made, new Rect2(start + half, low, start + tile - half, high), field, room);
+                Keep(made, new Rect2(start + half, low, start + tile - half, high), field, room, cutting);
             }
         }
 
@@ -312,7 +327,8 @@ public static class TileSolid
     /// Cut off rather than thrown away, because that is what a tiler does at a verge: a course
     /// ends in a cut tile, not in a gap the size of a whole one.
     /// </summary>
-    private static void Keep(List<Rect2> made, Rect2 piece, Rect2 field, TileRoom? room)
+    private static void Keep(
+        List<Rect2> made, Rect2 piece, Rect2 field, TileRoom? room, bool cutting)
     {
         var cut = piece.ClippedTo(field);
         if (cut.IsEmpty) return;
@@ -332,8 +348,10 @@ public static class TileSolid
             if (part.Width < LeastMm - 1e-3f || part.Height < LeastMm - 1e-3f) continue;
 
             // And the outline itself, which catches a gable end or a face with a corner off it as
-            // well as anything the bounding boxes above did not already take out.
-            if (room is not null && !room.Holds(part)) continue;
+            // well as anything the bounding boxes above did not already take out. Not asked of a
+            // cutter: one hanging over an opening removes nothing, and one that stopped short of
+            // the edge would leave a rib of material standing there.
+            if (!cutting && room is not null && !room.Holds(part)) continue;
 
             made.Add(part);
         }
@@ -430,7 +448,7 @@ public static class TileSolid
     {
         var mesh = new Mesh();
 
-        foreach (var piece in Pieces(courses, acrossMm, upMm, room ?? TileRoom.Of(surface)))
+        foreach (var piece in Pieces(courses, acrossMm, upMm, room ?? TileRoom.Of(surface), sunk))
             AddSlab(mesh, surface, courses, piece, sunk);
 
         return mesh.Welded();

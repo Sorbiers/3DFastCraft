@@ -2440,12 +2440,10 @@ public sealed class MainViewModel : INotifyPropertyChanged
 
             if (SurfaceTexture.CoursesOf(embossTexture, embossDepth) is { } courses)
             {
-                var (wide, tall) = FieldRoom();
-
                 // With the room, so the figure counts what will actually be laid: a course that
                 // runs across a window is broken at the reveal and comes to two pieces, not one.
-                int slabs = TileSolid.Pieces(
-                    courses, wide, tall, TileRoom.Of(EmbossSurface(), embossMesh)).Count;
+                var (wide, tall, room) = TileField(EmbossSurface(), !embossRaised);
+                int slabs = TileSolid.Pieces(courses, wide, tall, room, !embossRaised).Count;
 
                 if (slabs == 0) return "The face is smaller than one course of this - try a finer pitch.";
 
@@ -3131,18 +3129,44 @@ public sealed class MainViewModel : INotifyPropertyChanged
     /// </param>
     private Mesh? ProfiledSolid(IPlacementSurface surface, bool coarse, bool sunk = false)
     {
-        var (wide, tall) = FieldRoom();
-        if (wide <= 0.01f || tall <= 0.01f) return null;
-
         // Tiles and siding are built as the slabs they are. Only boarding is still a sampled
         // field, because only its grain is genuinely a height that changes everywhere.
         if (SurfaceTexture.CoursesOf(embossTexture, embossDepth) is { } courses)
-            return TileSolid.Build(
-                surface, courses, wide, tall, sunk, TileRoom.Of(surface, embossMesh));
+        {
+            var (across, up, room) = TileField(surface, sunk);
+
+            return across <= 0.01f || up <= 0.01f
+                ? null
+                : TileSolid.Build(surface, courses, across, up, sunk, room);
+        }
+
+        var (wide, tall) = FieldRoom();
+        if (wide <= 0.01f || tall <= 0.01f) return null;
 
         return Profile(coarse) is { } relief
             ? ReliefField.Build(surface, relief, wide, tall, sunk)
             : null;
+    }
+
+    /// <summary>
+    /// The rectangle a laid texture covers, and where it is allowed to stand.
+    ///
+    /// Raised, it keeps clear of the outline by the same strip a flat texture keeps, so nothing is
+    /// laid right at the edge of the face. Cut, it does the opposite and runs past: a cut that
+    /// stops short leaves the material between it and the edge standing as a rib a fifth of a
+    /// millimetre wide and as deep as the cut, and a seven to one knife edge is what the boolean
+    /// tears on. The same overshoot the engraver has always used, for the same reason.
+    /// </summary>
+    private (float Across, float Up, TileRoom? Room) TileField(IPlacementSurface? surface, bool sunk)
+    {
+        var (across, up) = FaceRoom();
+        if (across <= 0.01f || up <= 0.01f) return (0f, 0f, null);
+
+        float margin = sunk ? -Engraver.EdgeOvershoot : Engraver.RaisedInset * 4f;
+        float clearance = sunk ? -Engraver.EdgeOvershoot : TileRoom.ClearanceMm;
+
+        return (MathF.Max(across - margin, 0.01f), MathF.Max(up - margin, 0.01f),
+                TileRoom.Of(surface, embossMesh, clearance));
     }
 
     /// <summary>

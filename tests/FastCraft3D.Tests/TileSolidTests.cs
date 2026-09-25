@@ -247,6 +247,42 @@ public class TileSolidTests(ITestOutputHelper log)
     }
 
     /// <summary>
+    /// A cutter runs past an edge where a raised piece keeps clear of one.
+    ///
+    /// Stopping short is what tore. The material between a cut and the edge it stopped at stands
+    /// as a rib a fifth of a millimetre wide and as deep as the cut - seven to one on an ordinary
+    /// course of siding - and the boolean cannot resolve a knife edge like that. Running past
+    /// takes a hair off the reveal instead, which is what the engraver has always done.
+    /// </summary>
+    [Fact]
+    public void ACutterOvershootsWhereARaisedPieceKeepsClear()
+    {
+        var wall = LocalCsg.Subtract(Primitives.Box(60f, 8f, 60f), Primitives.Box(24f, 40f, 24f));
+        var flat = new PlanarSurface(FacePatch.Find(wall, new Vector3(0f, -4f, 20f), -Vector3.UnitY)!);
+
+        var courses = SurfaceTexture.CoursesOf(
+            new TextureOptions(TextureKind.Siding, 10f, 0.6f, 45f), 0.8f)!.Value;
+
+        var raised = TileSolid.Pieces(courses, 56f, 56f, TileRoom.Of(flat, wall));
+        var cut = TileSolid.Pieces(
+            courses, 56f, 56f, TileRoom.Of(flat, wall, -Engraver.EdgeOvershoot), cutting: true);
+
+        // How near the window's own edge the pieces on its left-hand side come.
+        static float Nearest(List<Rect2> pieces) => pieces
+            .Where(p => p.MinV < 12f && p.MaxV > -12f && p.MaxU <= 0f)
+            .Max(p => p.MaxU);
+
+        log.WriteLine($"raised stops at {Nearest(raised):0.###}, cut reaches {Nearest(cut):0.###}, "
+                    + "where the window's edge is -12");
+
+        Assert.True(Nearest(raised) <= -12f - TileRoom.ClearanceMm + 1e-3f,
+            $"a raised piece comes to {Nearest(raised):0.###}, inside the window's edge at -12");
+
+        Assert.True(Nearest(cut) >= -12f + Engraver.EdgeOvershoot - 1e-3f,
+            $"a cutter stops at {Nearest(cut):0.###} and leaves a rib standing to the window at -12");
+    }
+
+    /// <summary>
     /// And wrapped round a tower, where there is no face patch to ask and the wall has to be
     /// found by asking the solid itself.
     /// </summary>
