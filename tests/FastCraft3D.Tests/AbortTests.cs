@@ -16,6 +16,7 @@ namespace FastCraft3D.Tests;
 /// Cancelling has to be cooperative, so what these check is that the token is actually looked at
 /// inside the work rather than only on the way in.
 /// </summary>
+[Collection("Timing")]
 public class AbortTests
 {
     /// <summary>A token that was cancelled before the work ever started.</summary>

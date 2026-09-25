@@ -25,6 +25,8 @@ public sealed class SceneObject : INotifyPropertyChanged
     private Vector3 scale = Vector3.One;
     private Vector3 colour = new(0.30f, 0.55f, 0.85f);
     private List<Anchor> anchors = [];
+    private Recipe? recipe;
+    private Mesh? recipeMesh;
     private int filament = 1;
     private string name = "Object";
     private bool isSelected;
@@ -54,6 +56,26 @@ public sealed class SceneObject : INotifyPropertyChanged
         }
     }
 
+    /// <summary>
+    /// How a generator made this part, while the mesh is still the one it made. See
+    /// <see cref="Geometry.Recipe"/>.
+    ///
+    /// Tied to the mesh itself rather than cleared by whatever changes it. A boolean, a smooth or
+    /// a split puts a different mesh here and the recipe stops answering; a preview that swaps a
+    /// mesh in and puts the old one back, and an undo that brings back the old object, find it
+    /// answering again - with nothing in any of those places having to remember it.
+    /// </summary>
+    public Recipe? Recipe
+    {
+        get => ReferenceEquals(recipeMesh, mesh) ? recipe : null;
+        set
+        {
+            recipe = value;
+            recipeMesh = value is null ? null : mesh;
+            Raise(nameof(Recipe));
+        }
+    }
+
     /// <summary>Local-space geometry, centred on its own origin.</summary>
     public Mesh Mesh
     {
@@ -77,6 +99,7 @@ public sealed class SceneObject : INotifyPropertyChanged
                 size.Z > 1e-5f ? size.Z : 1f);
             LocalCentre = value.ComputeBounds().Center;
             Raise(nameof(Mesh));
+            Raise(nameof(Recipe));
             RaiseDerived();
         }
     }
@@ -515,9 +538,13 @@ public sealed class SceneObject : INotifyPropertyChanged
         if (origin.LengthSquared() < 1e-10f) return this;
 
         var marked = anchors.Select(a => a.Moved(-origin)).ToList();
+        var made = Recipe;
 
         Mesh = MeshTransform.Transformed(mesh, Matrix4x4.CreateTranslation(-origin));
         Anchors = marked;
+
+        // The same shape moved in its own coordinates, so still what the generator made.
+        if (made is not null) Recipe = made with { Origin = made.Origin - origin };
 
         // Shifting the geometry one way and the translation the other leaves the object where it
         // was, whatever turn and scale sit between the two.
@@ -537,7 +564,8 @@ public sealed class SceneObject : INotifyPropertyChanged
         colour = colour,
         filament = filament,
         anchors = [.. anchors],
-        PivotIsOwn = PivotIsOwn
+        PivotIsOwn = PivotIsOwn,
+        Recipe = Recipe
     };
 
     private void RaiseTransform()

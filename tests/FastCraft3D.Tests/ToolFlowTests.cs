@@ -1,4 +1,4 @@
-using System.Diagnostics;
+﻿using System.Diagnostics;
 using System.Numerics;
 using System.Runtime.ExceptionServices;
 using System.Windows;
@@ -55,10 +55,28 @@ public class ToolFlowTests
             panel.Dispatcher.BeginInvoke(new Action(() =>
             {
                 whileOpen(panel);
-                var pressed = (Button)panel.FindName(button)!;
+
+                // A panel of its own names its buttons; a generator's panel is built in code, and
+                // its buttons carry an automation name instead.
+                var pressed = panel.FindName(button) as Button ?? Named<Button>(panel, button);
                 pressed.RaiseEvent(new RoutedEventArgs(ButtonBase.ClickEvent, pressed));
             }), DispatcherPriority.Background);
         };
+    }
+
+    /// <summary>A control in a generator's panel, by its automation name or id.</summary>
+    private static T Named<T>(DependencyObject root, string name) where T : FrameworkElement =>
+        Descendants(root).OfType<T>().First(e =>
+            System.Windows.Automation.AutomationProperties.GetName(e) == name
+            || System.Windows.Automation.AutomationProperties.GetAutomationId(e) == name);
+
+    private static IEnumerable<DependencyObject> Descendants(DependencyObject root)
+    {
+        foreach (var child in LogicalTreeHelper.GetChildren(root).OfType<DependencyObject>())
+        {
+            yield return child;
+            foreach (var below in Descendants(child)) yield return below;
+        }
     }
 
     /// <summary>Runs the dispatcher until something is so, for the part of a tool that finishes after an await.</summary>
@@ -189,8 +207,10 @@ public class ToolFlowTests
     [Fact]
     public void AThreadIsMadeWhereItsPreviewWasMovedAndTurned() => WithModel(model =>
     {
-        AnswerPanel(model, "AddButton", () =>
+        AnswerPanel(model, "GeneratorInsert", () =>
         {
+            // The preview is built off the UI thread once the panel settles.
+            PumpUntil(() => model.Scene.Selection.Count == 1);
             var preview = Assert.Single(model.Scene.Selection);
             preview.Position += new Vector3(-30, 10, 0);
             preview.Rotation = new Vector3(90, 0, 0);
@@ -213,12 +233,14 @@ public class ToolFlowTests
         model.RefreshSelection();
         double before = cube.ToWorldMesh().ComputeSignedVolume();
 
-        AnswerPanel(model, "CutButton", panel =>
+        AnswerPanel(model, "GeneratorCut", panel =>
         {
-            var cut = (Button)panel.FindName("CutButton")!;
+            PumpUntil(() => model.Scene.Selection.Count == 1 && model.Scene.Selection[0] != cube);
+            var cut = Named<Button>(panel, "GeneratorCut");
             Assert.NotEqual(Visibility.Visible, cut.Visibility);
 
-            ((ComboBox)panel.FindName("KindBox")!).SelectedIndex = (int)ThreadKind.HoleCutter;
+            Named<ComboBox>(panel, "fastener.thread.Kind").SelectedIndex = (int)ThreadKind.HoleCutter;
+            PumpUntil(() => cut.Visibility == Visibility.Visible && cut.IsEnabled);
             Assert.Equal(Visibility.Visible, cut.Visibility);
 
             // Sunk into the middle of the top, its mouth just proud of it.

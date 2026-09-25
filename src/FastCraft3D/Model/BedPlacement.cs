@@ -1,4 +1,4 @@
-using System.Numerics;
+﻿using System.Numerics;
 using FastCraft3D.Geometry;
 
 namespace FastCraft3D.Model;
@@ -43,6 +43,42 @@ public static class BedPlacement
         if (size.Y > room.Y) ratio = MathF.Min(ratio, room.Y / size.Y);
         if (size.Z > room.Z) ratio = MathF.Min(ratio, room.Z / size.Z);
         return ratio;
+    }
+
+    /// <summary>
+    /// The middle of the nearest clear place for a footprint of <paramref name="size"/>, going out
+    /// from the middle of the plate, <paramref name="gap"/> from anything already there. With no
+    /// room left on the plate, beside everything, off its edge: a full plate is not the insert's
+    /// to refuse, and on top of another part is the one place it must not go.
+    ///
+    /// Every insert used to go to the middle of the plate, and the second of two parts made the
+    /// same way landed exactly inside the first.
+    /// </summary>
+    public static Vector2 Clear(Vector2 size, IReadOnlyList<Bounds> taken, float width, float depth, float gap = 5f)
+    {
+        bool Free(Vector2 c) => taken.All(b =>
+            b.IsEmpty
+            || c.X + size.X / 2f + gap <= b.Min.X || c.X - size.X / 2f - gap >= b.Max.X
+            || c.Y + size.Y / 2f + gap <= b.Min.Y || c.Y - size.Y / 2f - gap >= b.Max.Y);
+
+        if (Free(Vector2.Zero)) return Vector2.Zero;
+
+        // Rings of candidates outward from the middle, nearest first, as far as the plate goes.
+        const float step = 5f;
+        float reach = MathF.Max(width, depth);
+        for (float r = step; r <= reach; r += step)
+        {
+            int around = Math.Max(8, (int)(2 * MathF.PI * r / step));
+            var ring = Enumerable.Range(0, around)
+                .Select(i => r * new Vector2(MathF.Cos(2 * MathF.PI * i / around), MathF.Sin(2 * MathF.PI * i / around)))
+                .Where(c => MathF.Abs(c.X) + size.X / 2f <= width / 2f && MathF.Abs(c.Y) + size.Y / 2f <= depth / 2f);
+
+            foreach (var c in ring)
+                if (Free(c)) return c;
+        }
+
+        float right = taken.Where(b => !b.IsEmpty).Select(b => b.Max.X).DefaultIfEmpty(0f).Max();
+        return new Vector2(right + gap + size.X / 2f, 0f);
     }
 
     /// <summary>

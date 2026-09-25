@@ -17,6 +17,7 @@ namespace FastCraft3D.Tests;
 /// These call the BSP route directly. The ordinary route asks Manifold first and seldom gets here,
 /// but this is still what runs on a PC Manifold cannot load on.
 /// </summary>
+[Collection("Timing")]
 public class LocalCsgTests(ITestOutputHelper output)
 {
     private static Mesh Bore(Vector3 at, float side, float length) =>

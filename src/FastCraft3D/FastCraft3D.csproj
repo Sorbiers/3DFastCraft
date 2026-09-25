@@ -17,14 +17,19 @@
     <RuntimeIdentifier>win-x64</RuntimeIdentifier>
     <SelfContained>false</SelfContained>
     <ApplicationIcon>Assets/app.ico</ApplicationIcon>
-    <Version>3.3.0</Version>
+    <!-- A beta: the generator library is new. The stable 3.3.0 stays the site's download. -->
+    <Version>4.0.0-beta</Version>
     <Product>3DFastCraft</Product>
   </PropertyGroup>
 
   <ItemGroup>
     <PackageReference Include="HelixToolkit.SharpDX.Core.Wpf" Version="2.27.3" />
-    <PackageReference Include="ManifoldRust" Version="0.5.0" />
     <PackageReference Include="System.Drawing.Common" Version="8.0.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\FastCraft3D.Geometry\FastCraft3D.Geometry.csproj" />
+    <ProjectReference Include="..\FastCraft3D.Generators\FastCraft3D.Generators.csproj" />
   </ItemGroup>
 
   <!-- The Visual C++ runtime manifold_rs.dll links against. Self-contained .NET does not supply

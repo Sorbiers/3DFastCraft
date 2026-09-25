@@ -14,6 +14,7 @@ namespace FastCraft3D.Tests;
 /// properties, so on a mould of a scan that was four seconds twelve times over, on the UI thread.
 /// The app went to Not Responding and stayed there.
 /// </summary>
+[Collection("Timing")]
 public class SceneObjectCacheTests
 {
     private static SceneObject Dense() =>

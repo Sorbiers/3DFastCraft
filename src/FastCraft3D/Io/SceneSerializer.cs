@@ -1,4 +1,4 @@
-using System.IO;
+﻿using System.IO;
 using System.IO.Compression;
 using System.Numerics;
 using System.Text.Json;
@@ -206,6 +206,9 @@ public static class SceneSerializer
         PiecesTakeClearance = o.PiecesTakeClearance,
         Hidden = o.IsHidden ? true : null,
         Locked = o.IsLocked ? true : null,
+        Recipe = o.Recipe is { } r
+            ? new RecipeDto { Generator = r.Generator, Version = r.Version, Settings = r.Settings, Role = r.Role, Set = r.Set, Origin = ToArray(r.Origin) }
+            : null,
         Vertices = Flatten(o.Mesh.Positions),
         Triangles = o.Mesh.Indices.ToArray()
     };
@@ -228,7 +231,10 @@ public static class SceneSerializer
             IsPristine = origin is not null && (o.Pristine ?? IsConvex(mesh)),
             PiecesTakeClearance = o.PiecesTakeClearance,
             IsHidden = o.Hidden == true,
-            IsLocked = o.Locked == true
+            IsLocked = o.Locked == true,
+            Recipe = o.Recipe is { Generator: { } generator, Settings: { } settings } r
+                ? new Recipe(generator, r.Version, settings, r.Role, r.Set, r.Origin is { Length: 3 } ? ToVector(r.Origin) : Vector3.Zero)
+                : null
         };
     }
 
@@ -343,8 +349,22 @@ public static class SceneSerializer
 
         public bool? Locked { get; set; }
 
+        /// <summary>How a generator made it. Null for everything else, so older files read as they did.</summary>
+        public RecipeDto? Recipe { get; set; }
+
         public float[]? Vertices { get; set; }
         public int[]? Triangles { get; set; }
+    }
+
+    /// <summary>See <see cref="Geometry.Recipe"/>. Field by field, as the anchors are, so a field added later reads back as its default.</summary>
+    private sealed class RecipeDto
+    {
+        public string? Generator { get; set; }
+        public int Version { get; set; }
+        public string? Settings { get; set; }
+        public string? Role { get; set; }
+        public string? Set { get; set; }
+        public float[]? Origin { get; set; }
     }
 
     /// <summary>

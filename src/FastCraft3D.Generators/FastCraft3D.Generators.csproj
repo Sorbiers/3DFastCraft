@@ -1,0 +1,27 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- The library of generators: the contract, every generator, and the panel that shows one.
+       Kept out of the app so the library can grow without the app growing with it; the app
+       only lists what is here and puts what it makes on the plate. -->
+  <PropertyGroup>
+    <TargetFramework>net8.0-windows10.0.19041.0</TargetFramework>
+    <SupportedOSPlatformVersion>10.0.17763.0</SupportedOSPlatformVersion>
+    <RootNamespace>FastCraft3D.Generators</RootNamespace>
+    <AssemblyName>FastCraft3D.Generators</AssemblyName>
+    <UseWPF>true</UseWPF>
+    <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <SelfContained>false</SelfContained>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\FastCraft3D.Geometry\FastCraft3D.Geometry.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="FastCraft3D.Tests" />
+  </ItemGroup>
+
+</Project>

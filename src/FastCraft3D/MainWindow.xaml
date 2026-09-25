@@ -527,6 +527,9 @@
                     <Button Style="{StaticResource ToolButton}" Content="Gear" Visibility="{Binding IsAdvancedMode, Converter={StaticResource BoolToVisibility}}" Tag="{StaticResource IconGear}"
                             Command="{Binding InsertGearCommand}" MinWidth="64"
                             ToolTip="An involute gear, ring gear or rack - straight, helical or herringbone - with a bore, a hub and a set-screw hole, and a partner made already in mesh with it" />
+                    <Button Style="{StaticResource ToolButton}" Content="Library" Visibility="{Binding IsExtendedMode, Converter={StaticResource BoolToVisibility}}" Tag="{StaticResource IconLibrary}"
+                            Command="{Binding OpenLibraryCommand}" MinWidth="64" AutomationProperties.AutomationId="Library"
+                            ToolTip="BETA - parts made to your numbers: boxes, and more to come. Pick one, set its sizes with the preview on the plate, and insert it." />
                 </WrapPanel>
             </TabItem>
 
@@ -2160,6 +2163,15 @@
                                              Style="{StaticResource NumberBox}" Tag="number"
                                              Text="{Binding ObjectFilament, UpdateSourceTrigger=LostFocus}" />
                                     <TextBlock Text="of 16" Foreground="#FF9AA0A8" VerticalAlignment="Center" Margin="6,0,0,0" />
+                                </StackPanel>
+
+                                <!-- A part a generator made opens again in it, filled in as it
+                                     was made. See ViewModels/MainViewModel.Generators. -->
+                                <StackPanel DataContext="{Binding Selected.Recipe}" Style="{StaticResource OneObjectOnly}" Margin="0,10,0,0">
+                                    <Button Content="Edit settings" Style="{StaticResource PanelButton}" HorizontalAlignment="Left"
+                                            Command="{Binding DataContext.EditGeneratedCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                            AutomationProperties.AutomationId="EditGenerated"
+                                            ToolTip="Open the settings this part was made with, change them, and make it again where it stands" />
                                 </StackPanel>
 
                                 <StackPanel DataContext="{Binding Selected}" Style="{StaticResource OneObjectOnly}">

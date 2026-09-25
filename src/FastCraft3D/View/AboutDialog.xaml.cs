@@ -15,10 +15,10 @@ public partial class AboutDialog : Window
     {
         InitializeComponent();
 
-        var version = Assembly.GetEntryAssembly()?.GetName().Version;
-        VersionLine.Text = version is null
+        string version = ViewModels.MainViewModel.Version;
+        VersionLine.Text = version.Length == 0
             ? "Version unknown"
-            : $"Version {version.Major}.{version.Minor}.{version.Build}"
+            : $"Version {version}"
               + $"   -   .NET {Environment.Version}"
               + $"   -   {(Environment.Is64BitProcess ? "64-bit" : "32-bit")}";
 

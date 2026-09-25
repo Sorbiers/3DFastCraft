@@ -1,4 +1,4 @@
-using System.IO;
+﻿using System.IO;
 using System.Numerics;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
@@ -15,6 +15,10 @@ namespace FastCraft3D.Io;
 ///
 /// A 3MF without one gets the blank page icon in Explorer, which is why every file from a slicer
 /// or from 3D Builder shows a picture of the model and ours did not.
+///
+/// Kept in the generator library, under the namespace it had in the app, because the library's
+/// catalogue draws its pictures with it and the library cannot reach into the app; the app's 3MF
+/// writer reaches it here instead.
 /// </summary>
 public static class MeshThumbnail
 {

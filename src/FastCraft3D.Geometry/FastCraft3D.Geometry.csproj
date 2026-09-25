@@ -1,0 +1,31 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Meshes, booleans and every builder, with nothing of the window in them. A project of its
+       own so the generator library can build on it while the app references both: with the
+       geometry inside the app, the two would have had to reference each other. The Windows 10
+       target is for WindowsRepair, which calls the WinRT mesh repair engine. -->
+  <PropertyGroup>
+    <TargetFramework>net8.0-windows10.0.19041.0</TargetFramework>
+    <SupportedOSPlatformVersion>10.0.17763.0</SupportedOSPlatformVersion>
+    <RootNamespace>FastCraft3D.Geometry</RootNamespace>
+    <AssemblyName>FastCraft3D.Geometry</AssemblyName>
+    <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <SelfContained>false</SelfContained>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="ManifoldRust" Version="0.5.0" />
+  </ItemGroup>
+
+  <!-- A handful of helpers are internal and were reached from the app and the tests while they
+       all lived in one assembly. -->
+  <ItemGroup>
+    <InternalsVisibleTo Include="3DFastCraft" />
+    <InternalsVisibleTo Include="FastCraft3D.Generators" />
+    <InternalsVisibleTo Include="FastCraft3D.Tests" />
+  </ItemGroup>
+
+</Project>

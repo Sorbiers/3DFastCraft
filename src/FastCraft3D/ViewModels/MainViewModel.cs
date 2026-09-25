@@ -35,7 +35,7 @@ public readonly record struct PatternChoice(PatternKind Kind, string Label)
     public override string ToString() => Label;
 }
 
-public sealed class MainViewModel : INotifyPropertyChanged
+public sealed partial class MainViewModel : INotifyPropertyChanged
 {
     private int colourCursor;
     private string status = "Ready";
@@ -188,8 +188,8 @@ public sealed class MainViewModel : INotifyPropertyChanged
         Scene.Objects.CollectionChanged += (_, _) => RaiseHiddenAndLocked();
 
         InsertCommand = Track(new RelayCommand(p => Insert(p)));
-        InsertStairCommand = Track(RelayCommand.Simple(InsertStair));
-        InsertThreadCommand = Track(AsyncRelayCommand.Simple(InsertThread));
+        InsertStairCommand = Track(RelayCommand.Simple(() => InsertGenerated("building.stair")));
+        InsertThreadCommand = Track(RelayCommand.Simple(() => InsertGenerated("fastener.thread")));
         InsertFitTestCommand = Track(RelayCommand.Simple(InsertFitTest));
         InsertCustomCommand = Track(RelayCommand.Simple(InsertCustom));
         InsertTextCommand = Track(RelayCommand.Simple(InsertText));
@@ -204,7 +204,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
         SketchExtrudeCommand = RelayCommand.Simple(ExtrudeSketch, () => sketch.Loops.Count > 0);
         SketchRevolveCommand = RelayCommand.Simple(RevolveSketch, () => sketch.Loops.Count > 0);
         DoneSketchCommand = RelayCommand.Simple(() => IsSketchMode = false);
-        InsertGearCommand = Track(RelayCommand.Simple(InsertGear));
+        InsertGearCommand = Track(RelayCommand.Simple(() => InsertGenerated("mechanism.gear")));
         DeleteCommand = RelayCommand.Simple(Delete, () => Scene.Selection.Count > 0);
         DuplicateCommand = new RelayCommand(p => Duplicate(offset: !Equals(p, "InPlace")),
             _ => Scene.Selection.Count > 0);
@@ -1371,13 +1371,21 @@ public sealed class MainViewModel : INotifyPropertyChanged
     /// <summary>
     /// The version, from the assembly rather than a constant here, so there is one place to
     /// change it and no way for the two to disagree. Three parts, matching what the release is
-    /// called - the fourth is always zero and would be nothing but noise.
+    /// called - the fourth is always zero and would be nothing but noise - and "beta" after them
+    /// when it is one: read from the informational version, since the assembly's own version has
+    /// no room for a word, and without the commit the SDK adds after a plus.
     /// </summary>
     public static string Version
     {
         get
         {
-            var version = System.Reflection.Assembly.GetEntryAssembly()?.GetName().Version;
+            var assembly = System.Reflection.Assembly.GetEntryAssembly();
+            string? full = assembly?.GetCustomAttributes(typeof(System.Reflection.AssemblyInformationalVersionAttribute), false)
+                .OfType<System.Reflection.AssemblyInformationalVersionAttribute>().FirstOrDefault()?.InformationalVersion;
+
+            if (full is not null) return full.Split('+')[0].Replace('-', ' ');
+
+            var version = assembly?.GetName().Version;
             return version is null ? "" : $"{version.Major}.{version.Minor}.{version.Build}";
         }
     }
@@ -5794,84 +5802,6 @@ public sealed class MainViewModel : INotifyPropertyChanged
               + $"x {overlap.Z:0.##} mm, {Math.Abs(volume) / 1000.0:0.###} cm3 of shared material.";
     }
 
-    /// <summary>
-    /// Inserts a straight flight of steps.
-    ///
-    /// Its own tool rather than another primitive because the numbers are the whole of the job:
-    /// rise, run and how many risers that divides into, with the dialog saying in real
-    /// millimetres whether the result is a stair or a ladder. Built as one closed solid, so it
-    /// carries none of the coplanar seams a stack of boxes does.
-    /// </summary>
-    private void InsertStair()
-    {
-        var colour = NextAutomaticColour();
-        SceneObject? shown = null;
-        TransformState? place = null;
-
-        void OnThePlate(SceneObject o) => o.Position = new Vector3(0, 0, o.Mesh.ComputeBounds().Size.Z / 2f);
-
-        var dialog = new StairDialog(modelScale, (settings, mesh) =>
-        {
-            if (settings is null || mesh is null || mesh.TriangleCount == 0)
-            {
-                if (shown is not null)
-                {
-                    place = TransformState.Capture(shown);
-                    Scene.Objects.Remove(shown);
-                }
-
-                shown = null;
-                return;
-            }
-
-            if (shown is null)
-            {
-                shown = new SceneObject("Stair", mesh) { Colour = colour };
-                OnThePlate(shown);
-                Scene.Objects.Add(shown);
-                HoldPreview(shown);
-            }
-            else
-            {
-                // Rebuilt where it stands, its lowest point kept where it was: a longer flight
-                // grows up from where it has been put rather than back into the plate.
-                float low = shown.WorldBounds.Min.Z;
-                shown.Mesh = mesh;
-                shown.PositionZ += low - shown.WorldBounds.Min.Z;
-            }
-        });
-
-        bool accepted = dialog.ShowDialog() == true;
-
-        if (shown is not null)
-        {
-            place = TransformState.Capture(shown);
-            Scene.Objects.Remove(shown);
-        }
-
-        ReleasePreview();
-
-        if (!accepted || dialog.Result is not { } s)
-        {
-            RefreshSelection();
-            return;
-        }
-
-        var built = StairBuilder.Build(s.Rise, s.Run, s.Width, s.Steps);
-        if (built.TriangleCount == 0) return;
-
-        var o = new SceneObject(Scene.UniqueName("Stair"), built) { Colour = colour };
-        if (place is { } where) where.ApplyTo(o);
-        else OnThePlate(o);
-
-        Undo.Execute(new AddObjectsCommand("Insert stair", [o]));
-        RefreshSelection();
-
-        var check = StairBuilder.Measure(s.Rise, s.Run, s.Steps, modelScale);
-        Status = $"Inserted a flight of {s.Steps} - {check.RiserMm:0.#} mm risers on "
-               + $"{check.GoingMm:0.#} mm treads{(check.IsClimbable ? "" : ", which is steep")}";
-    }
-
     /// <summary>The last lithophane made, so the next starts where the last was left.</summary>
     private LithophaneOptions lastLithophane = new();
 
@@ -5963,164 +5893,6 @@ public sealed class MainViewModel : INotifyPropertyChanged
         catch (Exception ex)
         {
             Status = $"The lithophane could not be built: {ex.Message}";
-        }
-        finally
-        {
-            EndWork();
-        }
-    }
-
-    /// <summary>The last thread added, so a nut made after its rod starts at the same size.</summary>
-    private ThreadOptions lastThread = ThreadOptions.Default;
-
-    /// <summary>
-    /// Inserts a threaded rod, a bolt, a nut, or a cutter for a threaded hole, shown on the plate while
-    /// its size is chosen - the same preview as Custom, added and taken away outside the undo history.
-    ///
-    /// With one part selected, a hole cutter starts sunk into the middle of its top, and Cut takes
-    /// the threaded hole out of the part where the cutter was left. The cut is refused rather than
-    /// kept if the part comes back with holes in its surface.
-    /// </summary>
-    private async Task InsertThread()
-    {
-        if (IsBusy) return;
-
-        var selection = Scene.Selection.ToList();
-        var target = selection.Count == 1 ? selection[0] : null;
-        var colour = NextAutomaticColour();
-        SceneObject? shown = null;
-        ThreadKind? shownKind = null;
-
-        // Read as the preview is taken away, which the panel does as it closes: see InsertHole.
-        TransformState? place = null;
-
-        void OnThePlate(SceneObject o)
-        {
-            o.Rotation = Vector3.Zero;
-            o.Position = new Vector3(0, 0, o.Mesh.ComputeBounds().Size.Z / 2f);
-        }
-
-        // Upright in the middle of the part's top, its top end a little proud of the surface so the
-        // hole opens cleanly rather than leaving a skin.
-        void IntoTheTarget(SceneObject o)
-        {
-            var part = target!.WorldBounds;
-            o.Rotation = Vector3.Zero;
-            o.Position = new Vector3(part.Center.X, part.Center.Y, part.Max.Z + HoleCutter.Overshoot - o.Mesh.ComputeBounds().Max.Z);
-        }
-
-        var dialog = new ThreadDialog(lastThread, target?.Name, (options, mesh) =>
-        {
-            if (mesh is null || options is not { } asked)
-            {
-                if (shown is not null)
-                {
-                    place = TransformState.Capture(shown);
-                    Scene.Objects.Remove(shown);
-                }
-
-                shown = null;
-                return;
-            }
-
-            bool cutter = asked.Kind == ThreadKind.HoleCutter;
-
-            if (shown is null)
-            {
-                shown = new SceneObject("Thread", mesh) { Colour = colour };
-                if (cutter && target is not null) IntoTheTarget(shown);
-                else OnThePlate(shown);
-                Scene.Objects.Add(shown);
-                HoldPreview(shown);
-            }
-            else if (target is not null && shownKind != asked.Kind && (cutter || shownKind == ThreadKind.HoleCutter))
-            {
-                // A cutter goes into the part it is for, and anything else comes back out of it.
-                shown.Mesh = mesh;
-                if (cutter) IntoTheTarget(shown);
-                else OnThePlate(shown);
-            }
-            else if (cutter)
-            {
-                // A cutter is rebuilt with its top end - the hole's mouth - kept where it was, along
-                // its own axis, so a longer one goes deeper into the part however it has been turned.
-                float mouth = shown.Mesh.ComputeBounds().Max.Z;
-                shown.Mesh = mesh;
-                float moved = mouth - mesh.ComputeBounds().Max.Z;
-                shown.Position += Vector3.TransformNormal(new Vector3(0, 0, moved), MeshTransform.Rotation(shown.Rotation));
-            }
-            else
-            {
-                // Rebuilt where it stands, its lowest point kept where it was: a longer rod grows
-                // up from where it has been put rather than into the plate or off wherever it went.
-                float low = shown.WorldBounds.Min.Z;
-                shown.Mesh = mesh;
-                shown.PositionZ += low - shown.WorldBounds.Min.Z;
-            }
-
-            shownKind = asked.Kind;
-        });
-
-        bool accepted = dialog.ShowDialog() == true && dialog.Result is not null;
-
-        if (shown is not null)
-        {
-            place = TransformState.Capture(shown);
-            Scene.Objects.Remove(shown);
-        }
-
-        ReleasePreview();
-
-        if (!accepted || dialog.Result is not { } thread)
-        {
-            Scene.SelectOnly(target);
-            RefreshSelection();
-            return;
-        }
-
-        lastThread = thread;
-
-        var built = Threads.Build(thread);
-        var o = new SceneObject(Scene.UniqueName(thread.Name), built) { Colour = colour };
-        if (place is { } where) where.ApplyTo(o);
-        else OnThePlate(o);
-
-        if (!dialog.Cuts || target is null)
-        {
-            Undo.Execute(new AddObjectsCommand($"Insert {thread.Name}", [o]));
-            RefreshSelection();
-            Status = $"Inserted the {thread.Name} - {built.TriangleCount:N0} triangles";
-            return;
-        }
-
-        Scene.SelectOnly(target);
-        RefreshSelection();
-
-        var token = StartWork($"Cutting the {thread.SizeName} thread");
-        try
-        {
-            var world = target.ToWorldMesh();
-            var cutterWorld = o.ToWorldMesh();
-            var result = await Task.Run(() => MeshHealer.Heal(LocalCsg.Subtract(world, cutterWorld, token), token: token).Mesh);
-
-            if (result.TriangleCount == 0 || !result.CheckHealth().IsWatertight)
-            {
-                Status = $"The {thread.SizeName} thread would not cut cleanly into {target.Name} - nothing was changed";
-                return;
-            }
-
-            var cut = new SceneObject(target.Name, result) { Colour = target.Colour }.Centred();
-            Undo.Execute(new ReplaceObjectsCommand("Threaded hole", [target], [cut]));
-            RefreshSelection();
-            Status = $"Cut the {thread.SizeName} threaded hole into {target.Name}";
-        }
-        catch (Exception abort) when (WasAborted(abort))
-        {
-            Status = $"{busyTitle} aborted - nothing was changed";
-        }
-        catch (Exception ex)
-        {
-            Status = $"The thread could not be cut: {ex.Message}";
         }
         finally
         {
@@ -6849,110 +6621,6 @@ public sealed class MainViewModel : INotifyPropertyChanged
         Undo.Execute(new AddObjectsCommand("Insert text", [o]));
         RefreshSelection();
         Status = $"Inserted {o.Name} - {built.TriangleCount:N0} triangles";
-    }
-
-    /// <summary>What the gear panel was last left at, so a second gear starts from the first.</summary>
-    private GearOptions lastGear = new();
-
-    /// <summary>
-    /// Makes a gear, a ring gear or a rack, and a partner in mesh with it if asked, from the panel.
-    ///
-    /// Shown on the plate while the numbers are set, as a custom shape is, and put down as one undo
-    /// step when added. A pair is placed in mesh and moved together to the middle of the bed, so
-    /// it can be printed as it stands.
-    /// </summary>
-    private void InsertGear()
-    {
-        var colours = new[] { NextAutomaticColour(), NextAutomaticColour() };
-        var shown = new List<SceneObject>();
-
-        List<SceneObject> Place(GearResult result, bool together)
-        {
-            var objects = result.Parts
-                .Select((part, i) => new SceneObject(
-                        part.Name,
-                        together && part.InMesh is { } shownAt ? MeshTransform.Transformed(part.Mesh, shownAt) : part.Mesh)
-                    {
-                        Colour = colours[i % colours.Length],
-
-                        // Where the tool put the shaft hole, moved with the mesh when the pair is
-                        // shown as it goes together rather than as it prints.
-                        Anchors = part.Anchors is not { Count: > 0 } marked ? []
-                            : together && part.InMesh is { } shown
-                                ? marked.Select(a => a.Through(shown)).ToList()
-                                : marked
-                    })
-                .Select(o => together ? o.Centred() : OnItsAxis(o))
-                .ToList();
-
-            // Only shifts the lot onto the bed, so a pair made in mesh stays in it.
-            BedPlacement.Fit(objects, 1f);
-            return objects;
-        }
-
-        // A gear's own origin is its shaft, so its X and Y read where the shaft is and every
-        // move, align and turn goes by that rather than by the outline of its teeth. Up and down
-        // it is still the middle of the part, which the axis says nothing about. Only for the
-        // parts as they print: the preview lies them out as the pair goes together, and the marks
-        // are tilted with it.
-        static SceneObject OnItsAxis(SceneObject o)
-        {
-            var axis = o.Anchors.FirstOrDefault(a => a.Kind == AnchorKind.Bore);
-            if (axis.Size <= 0f) return o.Centred();
-
-            return o.CentredOn(new Vector3(axis.At.X, axis.At.Y, o.Mesh.ComputeBounds().Center.Z));
-        }
-
-        void Clear()
-        {
-            // The plate goes back to showing everything as the preview comes off it.
-            PreviewOnly = null;
-            foreach (var o in shown) Scene.Objects.Remove(o);
-            shown.Clear();
-        }
-
-        var dialog = new GearDialog(lastGear, options =>
-        {
-            Clear();
-            if (options is null) return null;
-
-            var result = Gears.Build(options);
-
-            // Shown as the pair goes together, which for a bevel is not how it prints.
-            foreach (var o in Place(result, together: true))
-            {
-                Scene.Objects.Add(o);
-                shown.Add(o);
-            }
-
-            // Whatever else is on the plate stands aside while the gear is being chosen: a pair
-            // laid out to be looked at is hard enough to read without a scene behind it.
-            if (shown.Count > 0) PreviewOnly = shown.ToList();
-            return result;
-        });
-
-        bool accepted = dialog.ShowDialog() == true;
-        Clear();
-
-        if (!accepted || dialog.Result is not { } chosen) return;
-        lastGear = chosen;
-
-        var made = Gears.Build(chosen);
-        if (made.Parts.Count == 0)
-        {
-            Status = made.Refusal ?? "No gear was made";
-            return;
-        }
-
-        var parts = Place(made, together: false);
-        foreach (var o in parts) o.Name = Scene.UniqueName(o.Name);
-
-        Undo.Execute(new AddObjectsCommand(parts.Count == 1 ? "Insert gear" : "Insert gears", parts));
-        RefreshSelection();
-        Status = parts.Count == 1 ? $"Inserted {parts[0].Name}"
-               : made.Parts.Any(p => p.InMesh is not null)
-                   ? $"Inserted {parts[0].Name} and {parts[1].Name}, side by side to print"
-                   : $"Inserted {parts[0].Name} and {parts[1].Name}, in mesh";
     }
 
     // --- The pivot ------------------------------------------------------------------------

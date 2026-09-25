@@ -413,11 +413,11 @@ function Add-Stair($w, [string]$name, [double]$rise, [double]$run, [double]$widt
                    [double]$cx, [double]$cy, [double]$cz, [double]$rz) {
   Invoke-Tool $w "Insert" "Stair" | Out-Null
   $d = Get-Dialog "Stair"
-  Set-DialogField $d "StairRise" $rise
-  Set-DialogField $d "StairRun" $run
-  Set-DialogField $d "StairWidth" $width
-  Set-DialogField $d "StairSteps" $steps
-  Invoke-DialogButton $d "StairAccept"
+  Set-DialogField $d "building.stair.Rise" $rise
+  Set-DialogField $d "building.stair.Run" $run
+  Set-DialogField $d "building.stair.Width" $width
+  Set-DialogField $d "building.stair.Steps" $steps
+  Invoke-DialogButton $d "GeneratorInsert"
   Start-Sleep -Milliseconds 800
 
   Set-Field $w "ObjectName" $name

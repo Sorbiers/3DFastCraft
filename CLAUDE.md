@@ -47,8 +47,11 @@ candidate and keep it only if the result is measurably better.
 ## Layout
 
 ```
+src/FastCraft3D.Geometry/     meshes, primitives, transforms, repair, sweeps, Csg/, Engraving/
+                              (its own project; no WPF, no Model)
+src/FastCraft3D.Generators/   the generator library: contract, generators, their panel - see
+                              docs/plan-generators.md. The app only lists them and inserts parts
 src/FastCraft3D/
-  Geometry/   meshes, primitives, transforms, repair, sweeps, Csg/, Engraving/
   Model/      scene objects, scene, Commands/ (undo-redo)
   Io/         STL, OBJ, .3dfc project files
   Render/     the only Direct3D-aware layer, plus the on-screen manipulators
@@ -58,7 +61,9 @@ tools/ui/     PowerShell for driving the running app - see the drive-app skill
 tests/FastCraft3D.Tests/
 ```
 
-`Geometry/`, `Model/` and `Io/` must never reference renderer types.
+`FastCraft3D.Geometry`, `Model/` and `Io/` must never reference renderer types. New generators go in
+`FastCraft3D.Generators`, never in the app: the app's side is `ViewModels/MainViewModel.Generators.cs`
+and should not grow.
 
 ## Style
 
