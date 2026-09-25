@@ -10,10 +10,11 @@ namespace FastCraft3D.Geometry.Engraving;
 /// which is a knife edge no printer will lay and a joint that vanishes where it matters most.
 /// </param>
 /// <param name="JointMm">The gap left between one slab and the next.</param>
-/// <param name="RollDegrees">
-/// How far each slab is rolled, tail standing further off the face than head. Four degrees is what
-/// reads as a lapped roof at the sizes anyone models one.
+/// <param name="SlopeDegrees">
+/// How far each slab is tilted. Four degrees is what reads as a lapped roof at the sizes anyone
+/// models one; nought lays the tiles flat.
 /// </param>
+/// <param name="Slope">Which way that tilt runs.</param>
 /// <param name="Stagger">Whether alternate courses are set over by half a tile.</param>
 /// <param name="Ends">
 /// Whether a course is cut into tiles at all. Siding is one strip the whole way across - having no
@@ -21,7 +22,24 @@ namespace FastCraft3D.Geometry.Engraving;
 /// </param>
 public readonly record struct TileCourses(
     float TileMm, float CourseMm, float ThickMm, float JointMm,
-    float RollDegrees = 4f, bool Stagger = true, bool Ends = true);
+    float SlopeDegrees = 4f, TileSlope Slope = TileSlope.Roll,
+    bool Stagger = true, bool Ends = true);
+
+/// <summary>Which way a piece is tilted.</summary>
+public enum TileSlope
+{
+    /// <summary>
+    /// Up the course: the tail stands off the face and the head tucks under the course above,
+    /// which is how a roof is laid and how siding laps.
+    /// </summary>
+    Roll,
+
+    /// <summary>
+    /// Along the piece: one end stands off and the other lies down, so a course reads as a row
+    /// of shingles leaning the same way rather than as a lapped one.
+    /// </summary>
+    Pitch
+}
 
 /// <summary>
 /// Roof tiles and lap siding built as what they are: flat rectangular slabs, each rolled a few
@@ -54,8 +72,8 @@ public static class TileSolid
     /// <summary>Below this a slab is not a slab, and the printer will not lay it either.</summary>
     public const float LeastMm = TextureOptions.LeastPadMm;
 
-    /// <summary>Past this the roll is a fin rather than a tile.</summary>
-    public const float MostRollDegrees = 30f;
+    /// <summary>Past this the tilt is a fin rather than a tile.</summary>
+    public const float MostSlopeDegrees = 45f;
 
     /// <summary>And a cap, so a silly pitch is refused rather than asking for the memory.</summary>
     public const int MostTiles = 20_000;
@@ -63,13 +81,35 @@ public static class TileSolid
     /// <summary>How far a slab's top may chord off a curved surface before it is split.</summary>
     private const float MostSagMm = 0.05f;
 
-    /// <summary>How much further the tail stands off the face than the head.</summary>
-    public static float RiseOf(in TileCourses courses) =>
-        courses.CourseMm *
-        MathF.Tan(Math.Clamp(courses.RollDegrees, 0f, MostRollDegrees) * MathF.PI / 180f);
+    /// <summary>
+    /// How much further one edge of this piece stands off the face than the other.
+    ///
+    /// Measured on the piece rather than on a whole tile, so a tile cut at a verge keeps the plane
+    /// of the ones beside it instead of standing up to the same height over a shorter run.
+    /// </summary>
+    public static float RiseOn(in TileCourses courses, Rect2 piece)
+    {
+        float extent = courses.Slope == TileSlope.Pitch ? piece.Width : piece.Height;
+        float rise = extent * MathF.Tan(Math.Clamp(courses.SlopeDegrees, 0f, MostSlopeDegrees)
+                                        * MathF.PI / 180f);
 
-    /// <summary>What the whole thing stands off the face at its furthest, for the panel to report.</summary>
-    public static float ReliefOf(in TileCourses courses) => courses.ThickMm + RiseOf(courses);
+        // A piece that rises further than a course is deep is a fin, not a tile - and it is also
+        // what a strip of siding pitched a few degrees would otherwise become, since a strip runs
+        // the whole way across and a few degrees of that is a wedge the height of the wall.
+        return MathF.Min(rise, MathF.Max(courses.CourseMm, 0.1f));
+    }
+
+    /// <summary>What a whole piece stands off the face at its furthest, for the panel to report.</summary>
+    public static float ReliefOf(in TileCourses courses)
+    {
+        float extent = MathF.Max(
+            courses.Slope == TileSlope.Pitch && courses.Ends
+                ? courses.TileMm - courses.JointMm
+                : courses.CourseMm - courses.JointMm,
+            0.1f);
+
+        return courses.ThickMm + RiseOn(courses, new Rect2(0f, 0f, extent, extent));
+    }
 
     /// <summary>
     /// Where every slab sits on the face.
@@ -153,36 +193,43 @@ public static class TileSolid
     {
         var mesh = new Mesh();
 
-        float thick = MathF.Max(courses.ThickMm, 0.05f);
-        float rise = RiseOf(courses);
-
         foreach (var piece in Pieces(courses, acrossMm, upMm))
-            AddSlab(mesh, surface, piece, thick, rise, sunk);
+            AddSlab(mesh, surface, courses, piece, sunk);
 
         return mesh.Welded();
     }
 
     /// <summary>
-    /// One slab: a box whose top is rolled about the course, standing <paramref name="thickMm"/>
-    /// off the face at its head and that much again plus <paramref name="riseMm"/> at its tail.
+    /// One slab: a box of one thickness whose top is tilted, standing furthest off the face at
+    /// whichever edge <see cref="TileCourses.Slope"/> names.
     /// </summary>
     private static void AddSlab(
-        Mesh mesh, IPlacementSurface surface, Rect2 piece, float thickMm, float riseMm, bool sunk)
+        Mesh mesh, IPlacementSurface surface, in TileCourses courses, Rect2 piece, bool sunk)
     {
         float[] us = Spans(surface, piece);
+
+        float thick = MathF.Max(courses.ThickMm, 0.05f);
+        float rise = RiseOn(courses, piece);
+        bool pitched = courses.Slope == TileSlope.Pitch;
 
         // Sunk, the slab is its own mirror about the face: the boolean then takes it away and
         // leaves the tile cut into the surface rather than standing off it.
         float turn = sunk ? -1f : 1f;
-
-        float head = turn * thickMm;                // at MaxV, tucked under the course above
-        float tail = turn * (thickMm + riseMm);     // at MinV, standing furthest out
         float foot = -turn * SinkMm;
 
-        // Which height goes with which edge is said here and nowhere else. Deciding it from the
-        // coordinate - v at the head or not - is the shape of question that has already cost this
-        // file twice, since it is exact arithmetic on a value that need not be exact.
-        Vector3 Top(float u, float v, float height) => surface.At(new Vector2(u, v), height);
+        // A plane over the piece rather than a height per edge. Read at a corner it gives that
+        // corner exactly, so nothing here turns on which side of a boundary a coordinate falls -
+        // the question that has already cost this tool twice.
+        float Height(float u, float v)
+        {
+            float along = pitched
+                ? (piece.Width > 1e-6f ? (u - piece.MinU) / piece.Width : 0f)
+                : (piece.Height > 1e-6f ? (piece.MaxV - v) / piece.Height : 0f);
+
+            return turn * (thick + rise * Math.Clamp(along, 0f, 1f));
+        }
+
+        Vector3 Top(float u, float v) => surface.At(new Vector2(u, v), Height(u, v));
 
         Vector3 Bottom(float u, float v) => surface.At(new Vector2(u, v), foot);
 
@@ -207,28 +254,28 @@ public static class TileSolid
             float u0 = us[i], u1 = us[i + 1];
 
             // Wound anticlockwise seen from outside the face, so the top looks outward.
-            Quad(Top(u0, piece.MinV, tail), Top(u1, piece.MinV, tail),
-                 Top(u1, piece.MaxV, head), Top(u0, piece.MaxV, head));
+            Quad(Top(u0, piece.MinV), Top(u1, piece.MinV),
+                 Top(u1, piece.MaxV), Top(u0, piece.MaxV));
 
             Quad(Bottom(u0, piece.MaxV), Bottom(u1, piece.MaxV),
                  Bottom(u1, piece.MinV), Bottom(u0, piece.MinV));
 
             // The tail wall and the head wall, which follow the split along with the top.
-            Quad(Top(u0, piece.MinV, tail), Bottom(u0, piece.MinV),
-                 Bottom(u1, piece.MinV), Top(u1, piece.MinV, tail));
+            Quad(Top(u0, piece.MinV), Bottom(u0, piece.MinV),
+                 Bottom(u1, piece.MinV), Top(u1, piece.MinV));
 
-            Quad(Top(u1, piece.MaxV, head), Bottom(u1, piece.MaxV),
-                 Bottom(u0, piece.MaxV), Top(u0, piece.MaxV, head));
+            Quad(Top(u1, piece.MaxV), Bottom(u1, piece.MaxV),
+                 Bottom(u0, piece.MaxV), Top(u0, piece.MaxV));
         }
 
         // And the two ends, which do not.
         float left = us[0], right = us[^1];
 
-        Quad(Top(left, piece.MaxV, head), Bottom(left, piece.MaxV),
-             Bottom(left, piece.MinV), Top(left, piece.MinV, tail));
+        Quad(Top(left, piece.MaxV), Bottom(left, piece.MaxV),
+             Bottom(left, piece.MinV), Top(left, piece.MinV));
 
-        Quad(Top(right, piece.MinV, tail), Bottom(right, piece.MinV),
-             Bottom(right, piece.MaxV), Top(right, piece.MaxV, head));
+        Quad(Top(right, piece.MinV), Bottom(right, piece.MinV),
+             Bottom(right, piece.MaxV), Top(right, piece.MaxV));
     }
 
     /// <summary>

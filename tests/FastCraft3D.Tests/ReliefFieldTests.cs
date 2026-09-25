@@ -30,9 +30,9 @@ public class ReliefFieldTests(ITestOutputHelper log)
 
     public static TheoryData<string, IRelief> Profiles => new()
     {
-        { "siding", new SurfaceProfiles.Siding(6f, 1.2f) },
-        { "roof", new SurfaceProfiles.Pantile(8f, 5f, 1.4f, 0.6f) },
-        { "boards", new SurfaceProfiles.Boarding(9f, 1f, 0.5f, 0.4f) }
+        { "boards", new SurfaceProfiles.Boarding(9f, 1f, 0.5f, 0.4f) },
+        { "fine boards", new SurfaceProfiles.Boarding(4f, 0.6f, 0.4f, 0.4f) },
+        { "long boards", new SurfaceProfiles.Boarding(12f, 1.4f, 0.6f, 0.4f, 40f) }
     };
 
     [Theory]
@@ -67,61 +67,30 @@ public class ReliefFieldTests(ITestOutputHelper log)
     }
 
     /// <summary>
-    /// A ramp is two lines. Siding is nothing but ramps, so a wall of it costs a few hundred
-    /// triangles however big the wall is - and laid on an even grid instead it cost as many as a
-    /// grain does, for a shape with no detail in it at all.
+    /// A grain is the one profile that has to be sampled evenly, and it is held to what a nozzle
+    /// will lay rather than to how fine the maths could go.
+    ///
+    /// This used to compare it against siding and a roof, which cost almost nothing because a ramp
+    /// is two lines however long it is. Those two are slabs now and have no samples at all, so
+    /// what is left to check is that the grain is sampled to the nozzle and stays on the right
+    /// side of what a face is worth.
     /// </summary>
     [Fact]
-    public void ASlopeCostsNothingAndAGrainCostsWhatItMust()
+    public void AGrainCostsWhatItMustAndNoMore()
     {
-        var siding = ReliefField.Cost(new SurfaceProfiles.Siding(6f, 1.2f), 120f, 80f);
-        var roof = ReliefField.Cost(new SurfaceProfiles.Pantile(8f, 5f, 1.4f, 0.6f), 120f, 80f);
         var boards = ReliefField.Cost(new SurfaceProfiles.Boarding(9f, 1f, 0.5f, 0.4f), 120f, 80f);
+        var coarse = ReliefField.Cost(new SurfaceProfiles.Boarding(9f, 1f, 0.5f, 1.2f), 120f, 80f);
 
-        log.WriteLine($"on a 120 x 80 face: siding {siding.Triangles:N0}, roof {roof.Triangles:N0}, " +
-                      $"boards {boards.Triangles:N0} triangles");
+        log.WriteLine($"on a 120 x 80 face: boards {boards.Triangles:N0}, " +
+                      $"at a coarse nozzle {coarse.Triangles:N0} triangles");
 
-        Assert.Equal(2, siding.Across);
-        Assert.True(siding.Triangles < 400, $"{siding.Triangles} triangles for a wall of ramps");
-        Assert.True(roof.Triangles < 60_000, $"{roof.Triangles} triangles for a roof");
+        Assert.True(boards.CanBuild, boards.Refusal);
+        Assert.True(boards.Triangles > 10_000, $"{boards.Triangles} triangles is no grain at all");
 
-        // The grain is the one that has to be sampled, and it should be the dearest by a long way.
-        Assert.True(boards.Triangles > roof.Triangles, "boarding came out cheaper than a plain roof");
-    }
-
-    /// <summary>
-    /// The profile is what the samples say it is. A lap that slopes out going down and steps back
-    /// at the foot of the course is the whole of what makes siding read as siding.
-    /// </summary>
-    [Fact]
-    public void SidingSlopesOutGoingDownAndStepsBackAtEachCourse()
-    {
-        var siding = new SurfaceProfiles.Siding(courseMm: 6f, depthMm: 1.2f);
-
-        float head = siding.Height(new Vector2(0, 3f));
-        float middle = siding.Height(new Vector2(0, 0f));
-        float foot = siding.Height(new Vector2(0, -2.99f));
-        float below = siding.Height(new Vector2(0, -3.01f));
-
-        Assert.True(head < 0.05f, $"the head of a course stands {head:0.##} mm proud");
-        Assert.True(middle > head && foot > middle, "the course does not slope out going down");
-        Assert.True(foot > 1.1f, $"the foot of a course reaches only {foot:0.##} mm");
-        Assert.True(below < 0.05f, $"the course below starts {below:0.##} mm proud - there is no step");
-    }
-
-    /// <summary>A tile is a rectangle with a joint each side, and the joints do not line up.</summary>
-    [Fact]
-    public void RoofTilesAreStaggeredAndJointedRightThrough()
-    {
-        var roof = new SurfaceProfiles.Pantile(tileMm: 8f, courseMm: 5f, depthMm: 1.4f, jointMm: 0.6f);
-
-        // A joint sits at every whole tile in an unstaggered course, and half a tile over in the
-        // course below it.
-        Assert.True(roof.Height(new Vector2(0f, 2f)) < 0.01f, "no joint where one was laid");
-        Assert.True(roof.Height(new Vector2(4f, 2f)) > 0.1f, "the middle of a tile is jointed");
-
-        Assert.True(roof.Height(new Vector2(4f, -3f)) < 0.01f, "the course below is not staggered");
-        Assert.True(roof.Height(new Vector2(0f, -3f)) > 0.1f, "the course below is jointed in line");
+        // A coarser nozzle is what the preview asks for, and it has to be markedly cheaper or
+        // there was no point asking.
+        Assert.True(coarse.Triangles < boards.Triangles / 2,
+            $"a coarse grain cost {coarse.Triangles:N0} against {boards.Triangles:N0}");
     }
 
     /// <summary>

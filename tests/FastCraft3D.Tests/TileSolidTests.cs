@@ -89,9 +89,10 @@ public class TileSolidTests(ITestOutputHelper log)
     public void ATileIsAPlateOfOneThicknessRolledUp()
     {
         var courses = Roof(0.2f);
+        var whole = new Rect2(0f, 0f, courses.TileMm - courses.JointMm, courses.CourseMm - courses.JointMm);
 
-        float rise = TileSolid.RiseOf(courses);
-        float expected = courses.CourseMm * MathF.Tan(SurfaceTexture.RollDegrees * MathF.PI / 180f);
+        float rise = TileSolid.RiseOn(courses, whole);
+        float expected = whole.Height * MathF.Tan(courses.SlopeDegrees * MathF.PI / 180f);
 
         log.WriteLine($"course {courses.CourseMm:0.###} mm, thickness {courses.ThickMm:0.##} mm, "
                     + $"rise {rise:0.###} mm, relief {TileSolid.ReliefOf(courses):0.###} mm");
@@ -99,6 +100,51 @@ public class TileSolidTests(ITestOutputHelper log)
         Assert.Equal(expected, rise, 4);
         Assert.True(rise > 0, "the tiles are not rolled at all");
         Assert.Equal(courses.ThickMm + rise, TileSolid.ReliefOf(courses), 4);
+    }
+
+    /// <summary>
+    /// The slope runs whichever way it is asked to: up the course, so the tail laps the course
+    /// below, or along the piece, so a course reads as shingles all leaning the same way.
+    /// </summary>
+    [Fact]
+    public void TheSlopeRunsWhicheverWayItIsAskedTo()
+    {
+        var rolled = Roof();
+        var pitched = rolled with { Slope = TileSlope.Pitch };
+
+        // A tile is longer than it is deep, so at the same angle pitching it lifts the far end
+        // over a longer run and therefore further.
+        var whole = new Rect2(0f, 0f, rolled.TileMm - rolled.JointMm, rolled.CourseMm - rolled.JointMm);
+
+        float up = TileSolid.RiseOn(rolled, whole);
+        float along = TileSolid.RiseOn(pitched, whole);
+
+        log.WriteLine($"rolled rises {up:0.###} mm over {whole.Height:0.##} mm, "
+                    + $"pitched {along:0.###} mm over {whole.Width:0.##} mm");
+
+        Assert.True(along > up, "pitching a tile that is longer than it is deep rises no further");
+
+        // And nought degrees lays them flat, which is a plain tiled surface and a fair thing to ask for.
+        Assert.Equal(0f, TileSolid.RiseOn(rolled with { SlopeDegrees = 0f }, whole), 5);
+    }
+
+    /// <summary>
+    /// A piece cut at a verge keeps the plane of the ones beside it. Measured over its own extent
+    /// rather than over a whole tile's, so it does not stand up to the same height over a shorter
+    /// run and leave a step down the edge of the face.
+    /// </summary>
+    [Fact]
+    public void ACutTileKeepsThePlaneOfTheOnesBesideIt()
+    {
+        var courses = Roof();
+
+        var whole = new Rect2(0f, 0f, 9f, courses.CourseMm - courses.JointMm);
+        var cut = whole with { MaxV = whole.MinV + whole.Height / 2f };
+
+        float slopeOfWhole = TileSolid.RiseOn(courses, whole) / whole.Height;
+        float slopeOfCut = TileSolid.RiseOn(courses, cut) / cut.Height;
+
+        Assert.Equal(slopeOfWhole, slopeOfCut, 4);
     }
 
     [Fact]

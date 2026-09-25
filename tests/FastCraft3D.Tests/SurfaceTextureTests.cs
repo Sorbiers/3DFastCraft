@@ -524,12 +524,19 @@ public class SurfaceTextureTests
         Assert.True((o with { Kind = TextureKind.Planks }).IsProfiled);
         Assert.True((o with { Kind = TextureKind.Siding }).IsProfiled);
 
-        // A shaped one lays no outlines at all, and has a profile where a flat one has none.
+        // A shaped one lays no outlines at all.
         Assert.Empty(SurfaceTexture.Over(60f, 60f, o with { Kind = TextureKind.Siding }, false));
         Assert.NotEmpty(SurfaceTexture.Over(60f, 60f, o, false));
 
+        // And of the three, only boarding is still a sampled field. Tiles and siding are slabs,
+        // so they have courses to lay where a flat one has neither.
         Assert.Null(SurfaceTexture.ProfileOf(o, 0.8f));
-        Assert.NotNull(SurfaceTexture.ProfileOf(o with { Kind = TextureKind.Siding }, 0.8f));
+        Assert.NotNull(SurfaceTexture.ProfileOf(o with { Kind = TextureKind.Planks }, 0.8f));
+        Assert.Null(SurfaceTexture.ProfileOf(o with { Kind = TextureKind.Siding }, 0.8f));
+
+        Assert.Null(SurfaceTexture.CoursesOf(o, 0.8f));
+        Assert.NotNull(SurfaceTexture.CoursesOf(o with { Kind = TextureKind.Siding }, 0.8f));
+        Assert.NotNull(SurfaceTexture.CoursesOf(o with { Kind = TextureKind.RoofTiles }, 0.8f));
     }
 
     [Fact]

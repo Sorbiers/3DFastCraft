@@ -1662,6 +1662,24 @@
                                 <TextBlock Text="to 1" Foreground="#FF9AA0A8" VerticalAlignment="Center" />
                             </StackPanel>
 
+                            <StackPanel Orientation="Horizontal" Margin="0,0,0,2"
+                                        Visibility="{Binding TextureTilts, Converter={StaticResource BoolToVisibility}}">
+                                <TextBlock Text="Slope" Style="{StaticResource FieldLabel}" Width="62"
+                                           ToolTip="How far each piece is tilted. Four degrees reads as a lapped roof at model sizes; zero lays the pieces flat." />
+                                <TextBox AutomationProperties.AutomationId="EmbossTextureSlope" Width="64" Style="{StaticResource NumberBox}" Tag="number"
+                                         Text="{Binding EmbossTextureSlope, StringFormat=N1, UpdateSourceTrigger=LostFocus}" />
+                                <TextBlock Text="deg" Foreground="#FF9AA0A8" VerticalAlignment="Center" />
+                            </StackPanel>
+
+                            <StackPanel Orientation="Horizontal" Margin="0,0,0,2"
+                                        Visibility="{Binding TextureTilts, Converter={StaticResource BoolToVisibility}}">
+                                <TextBlock Text="Tilt" Style="{StaticResource FieldLabel}" Width="62"
+                                           ToolTip="Roll lifts the tail of each piece so it laps the course below, which is how a roof is laid. Pitch lifts one end instead, so a course reads as shingles leaning the same way." />
+                                <ComboBox Width="90" AutomationProperties.AutomationId="EmbossTextureSlopeWay"
+                                          ItemsSource="{Binding EmbossTextureSlopeWays}"
+                                          SelectedItem="{Binding EmbossTextureSlopeWay, Mode=TwoWay}" />
+                            </StackPanel>
+
                             <CheckBox Content="Run the other way" IsChecked="{Binding EmbossTextureAcross, Mode=TwoWay}"
                                       AutomationProperties.AutomationId="EmbossTextureAcross" Margin="0,2,0,6"
                                       Visibility="{Binding TextureRuns, Converter={StaticResource BoolToVisibility}}"

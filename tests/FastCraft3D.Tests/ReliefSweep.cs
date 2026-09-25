@@ -7,9 +7,13 @@ using Xunit.Abstractions;
 namespace FastCraft3D.Tests;
 
 /// <summary>
-/// Every shaped texture, over the settings and faces anybody would put them on, judged on the
-/// three things that decide whether the tool works at all: does something come back, is it closed,
-/// and does the panel's figure match what is actually built.
+/// Boarding, over the settings and faces anybody would put it on, judged on the three things that
+/// decide whether the tool works at all: does something come back, is it closed, and does the
+/// panel's figure match what is actually built.
+///
+/// It swept roof tiles and siding too until those became slabs. What is left is the one texture
+/// that is still a sampled field, and it is the one that most needs sweeping - a grain is the only
+/// profile here with no lines of its own.
 ///
 /// The same sweep the flat textures get, and for the same reason - three faults in a row there
 /// were all one fault, and each got through because it was tested on the one case in front of me.
@@ -30,7 +34,7 @@ public class ReliefSweep(ITestOutputHelper log)
     [Fact]
     public void EverySettingBuildsSomethingClosed()
     {
-        TextureKind[] kinds = [TextureKind.Siding, TextureKind.RoofTiles, TextureKind.Planks];
+        TextureKind[] kinds = [TextureKind.Planks];
         float[] pitches = [1f, 2f, 5f, 10f, 20f, 40f];
         float[] grooves = [0.2f, 0.6f, 1.5f];
         float[] depths = [0.2f, 0.8f, 2f];
@@ -87,15 +91,16 @@ public class ReliefSweep(ITestOutputHelper log)
     }
 
     /// <summary>
-    /// The settings off the screenshot that said nothing worked: lap siding, 10 mm courses, on the
-    /// face of an ordinary cube.
+    /// Boarding on the face of an ordinary cube, which is the case the panel's figure has to
+    /// match: it is quoted before anything is built, and a figure for a thing that never appears
+    /// is a tool that does nothing and says nothing.
     /// </summary>
     [Theory]
     [InlineData(0.6f, 0.8f)]
     [InlineData(0.2f, 0.4f)]
-    public void SidingOnACubeBuildsAndSaysWhatItCost(float groove, float depth)
+    public void BoardingOnACubeBuildsAndSaysWhatItCost(float groove, float depth)
     {
-        var o = new TextureOptions(TextureKind.Siding, 10f, groove, 45f);
+        var o = new TextureOptions(TextureKind.Planks, 10f, groove, 45f);
         var relief = SurfaceTexture.ProfileOf(o, depth)!;
 
         var cost = ReliefField.Cost(relief, 38f, 38f);
@@ -107,7 +112,6 @@ public class ReliefSweep(ITestOutputHelper log)
         Assert.True(built.TriangleCount > 0, "nothing came back for a plain cube");
         Assert.True(built.CheckHealth().IsWatertight, built.CheckHealth().Describe());
 
-        // Four courses on a 38 mm face at a 10 mm pitch, so the figure is not a wild guess either.
         Assert.InRange(cost.Triangles, built.TriangleCount / 2, built.TriangleCount * 2);
     }
 
@@ -125,9 +129,8 @@ public class ReliefSweep(ITestOutputHelper log)
     /// came back to the face in between.
     /// </summary>
     [Theory]
-    [InlineData(TextureKind.RoofTiles, 4f)]
-    [InlineData(TextureKind.Siding, 10f)]
     [InlineData(TextureKind.Planks, 12f)]
+    [InlineData(TextureKind.Planks, 20f)]
     public void TheSamplesLandOnBothEndsOfEveryCoursesRamp(TextureKind kind, float pitch)
     {
         const float Depth = 0.8f;
@@ -157,10 +160,8 @@ public class ReliefSweep(ITestOutputHelper log)
             + "are what a lap is made of, and both of each pair came back at the same height - so "
             + "the rows are not where the profile changes.");
 
-        // And the same across the face, where a piece has ends to stagger. Measured along the row
+        // And the same across the face, where a board has ends to stagger. Measured along the row
         // standing furthest out, which is well inside a course rather than on the edge of one.
-        if (kind == TextureKind.Siding) return;
-
         float deepest = rows[heights.IndexOf(heights.Max())];
 
         Assert.True(

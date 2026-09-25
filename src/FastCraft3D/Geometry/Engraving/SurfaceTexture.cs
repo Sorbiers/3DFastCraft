@@ -66,13 +66,21 @@ public enum TextureKind
 /// takes whatever the pattern normally is - three for brick, one for a wall tile, eight for a
 /// floorboard. Laying a roof as brick is how the first one came out with 39 x 13 cm tiles.
 /// </param>
+/// <param name="SlopeDegrees">
+/// How far each piece of a laid texture is tilted - a roof tile, a strip of siding. Four degrees
+/// is what reads as a lapped roof; nought lays the pieces flat. It means nothing to the textures
+/// cut from flat outlines.
+/// </param>
+/// <param name="Slope">Which way that tilt runs: up the course, or along the piece.</param>
 public readonly record struct TextureOptions(
     TextureKind Kind = TextureKind.Knurl,
     float PitchMm = 2f,
     float LineMm = 0.6f,
     float AngleDegrees = 45f,
     bool Across = false,
-    float Aspect = 0f)
+    float Aspect = 0f,
+    float SlopeDegrees = 4f,
+    TileSlope Slope = TileSlope.Roll)
 {
     /// <summary>
     /// Two nozzle widths. A pad narrower than this is not a pad, it is a smear, and the printer
@@ -142,7 +150,8 @@ public readonly record struct TextureOptions(
         {
             PitchMm = Math.Max(PitchMm, line + LeastPadMm),
             LineMm = line,
-            AngleDegrees = Math.Clamp(AngleDegrees, 15f, 75f)
+            AngleDegrees = Math.Clamp(AngleDegrees, 15f, 75f),
+            SlopeDegrees = Math.Clamp(SlopeDegrees, 0f, TileSolid.MostSlopeDegrees)
         };
     }
 }
@@ -184,14 +193,6 @@ public static class SurfaceTexture
     /// a coarse one and get a field a fraction of the size to draw while the numbers are moving.
     /// </param>
     /// <summary>
-    /// How far each tile is rolled, tail standing further off the face than head.
-    ///
-    /// Not a setting, because nobody asked for one and every roof wants the same answer: enough
-    /// that a course throws a shadow on the one below, not so much that the tiles read as fins.
-    /// </summary>
-    public const float RollDegrees = 4f;
-
-    /// <summary>
     /// The courses a slab-built texture comes to on a face, or null when this one is a sampled
     /// field instead.
     /// </summary>
@@ -209,9 +210,9 @@ public static class SurfaceTexture
         // Siding is one strip the whole way across, so its course is the pitch itself rather than
         // the pitch divided by how long a piece is - there are no pieces.
         return o.Kind == TextureKind.Siding
-            ? new TileCourses(o.PitchMm, o.PitchMm, thickMm, o.LineMm, RollDegrees,
+            ? new TileCourses(o.PitchMm, o.PitchMm, thickMm, o.LineMm, o.SlopeDegrees, o.Slope,
                               Stagger: false, Ends: false)
-            : new TileCourses(o.PitchMm, course, thickMm, o.LineMm, RollDegrees,
+            : new TileCourses(o.PitchMm, course, thickMm, o.LineMm, o.SlopeDegrees, o.Slope,
                               Stagger: true, Ends: true);
     }
 
@@ -223,8 +224,7 @@ public static class SurfaceTexture
 
         return o.Kind switch
         {
-            TextureKind.Siding => new SurfaceProfiles.Siding(o.PitchMm, depth),
-            TextureKind.RoofTiles => new SurfaceProfiles.Pantile(o.PitchMm, course, depth, o.LineMm),
+            // Tiles and siding are not here: they are slabs, built by TileSolid.
             TextureKind.Planks =>
                 new SurfaceProfiles.Boarding(course, depth, o.LineMm, nozzleMm, o.PitchMm),
             _ => null

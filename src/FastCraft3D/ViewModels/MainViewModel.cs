@@ -2310,8 +2310,21 @@ public sealed class MainViewModel : INotifyPropertyChanged
         }
     }
 
-    public IReadOnlyList<TextProjection> EmbossProjections { get; } =
-        [TextProjection.Planar, TextProjection.Cylindrical, TextProjection.Spherical];
+    /// <summary>
+    /// The ways this can be laid on the object.
+    ///
+    /// A laid texture cannot go over a ball, and the reason is the sphere's rather than the
+    /// texture's. Across is arc length on the ring a piece sits on, so a field a whole
+    /// circumference wide laps itself away from the equator - twice round by sixty degrees of
+    /// latitude - and the tiles pile on top of each other. Overlapping solids are the one thing
+    /// the boolean cannot be handed. Fixing it means the surface saying how much room each course
+    /// has and every course being clipped to its own ring, which is a good deal more than a ball
+    /// of tiles is worth.
+    /// </summary>
+    public IReadOnlyList<TextProjection> EmbossProjections =>
+        embossTexture.IsProfiled
+            ? [TextProjection.Planar, TextProjection.Cylindrical]
+            : [TextProjection.Planar, TextProjection.Cylindrical, TextProjection.Spherical];
 
     /// <summary>Whether the lettering is being wrapped rather than laid flat.</summary>
     public bool IsEmbossWrapped => embossProjection != TextProjection.Planar;
@@ -3054,13 +3067,25 @@ public sealed class MainViewModel : INotifyPropertyChanged
             // is also the one case that never reaches the boolean at all on a flat face.
             if (embossTexture.IsMasonry && !embossRaised) EmbossRaised = true;
 
+            // Said rather than silently corrected. The wrap is a setting somebody chose, and a
+            // combo box quietly changing under them while the model does not is worse than being
+            // told which way it went.
+            if (embossTexture.IsProfiled && embossProjection == TextProjection.Spherical)
+            {
+                EmbossProjection = TextProjection.Cylindrical;
+                Status = $"{value.ToString().ToLowerInvariant()} cannot be wrapped over a ball - "
+                       + "the courses lap themselves away from the equator. Wrapped round instead.";
+            }
+
             Raise(nameof(EmbossTexture));
             Raise(nameof(UsesTexture));
             Raise(nameof(UsesStamp));
             Raise(nameof(TextureLeans));
             Raise(nameof(TextureRuns));
             Raise(nameof(TextureHasCourses));
+            Raise(nameof(TextureTilts));
             Raise(nameof(EmbossTextureAspect));
+            Raise(nameof(EmbossProjections));
             RefreshDrawing();
         }
     }
@@ -3175,6 +3200,28 @@ public sealed class MainViewModel : INotifyPropertyChanged
     public bool TextureHasCourses => embossTexture.IsMasonry;
 
     /// <summary>
+    /// Whether the pieces are laid at an angle, which only the ones built as slabs are. A flat pad
+    /// has one height and nothing to tilt.
+    /// </summary>
+    public bool TextureTilts => embossTexture.IsLaid;
+
+    /// <summary>How far each piece is tilted, in degrees. Nought lays them flat.</summary>
+    public float EmbossTextureSlope
+    {
+        get => embossTexture.SlopeDegrees;
+        set => SetTexture(embossTexture with { SlopeDegrees = value });
+    }
+
+    public TileSlope EmbossTextureSlopeWay
+    {
+        get => embossTexture.Slope;
+        set => SetTexture(embossTexture with { Slope = value });
+    }
+
+    public IReadOnlyList<TileSlope> EmbossTextureSlopeWays { get; } =
+        [TileSlope.Roll, TileSlope.Pitch];
+
+    /// <summary>
     /// How many times longer each piece is than it is deep. Zero takes whatever the pattern
     /// normally is, which is the only figure most people ever want.
     /// </summary>
@@ -3197,7 +3244,10 @@ public sealed class MainViewModel : INotifyPropertyChanged
         Raise(nameof(TextureLeans));
         Raise(nameof(TextureRuns));
         Raise(nameof(TextureHasCourses));
+        Raise(nameof(TextureTilts));
         Raise(nameof(EmbossTextureAspect));
+        Raise(nameof(EmbossTextureSlope));
+        Raise(nameof(EmbossTextureSlopeWay));
         RefreshLettering();
     }
 

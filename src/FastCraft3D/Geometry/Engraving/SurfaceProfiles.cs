@@ -3,14 +3,13 @@
 namespace FastCraft3D.Geometry.Engraving;
 
 /// <summary>
-/// The three textures that have a shape rather than an outline: lap siding, roof tiles and sawn
-/// boarding.
+/// Sawn boarding: the one texture that really is a height rather than a shape.
 ///
-/// Each is a course of something repeated up the face, and each says where it changes direction so
-/// that <see cref="ReliefField"/> can put its samples there. A ramp is two lines however long it
-/// is; a step is two lines a hair apart, which is what makes it sharp; a grain has no lines of its
-/// own and has to be sampled evenly, which is why it is the only one of the three that costs
-/// anything.
+/// Roof tiles and lap siding used to live here too, sampled as fields. They are flat plates laid
+/// at an angle, which is a thing with corners rather than a function to read off a grid, and both
+/// faults they shipped were sampling faults rather than tile faults - see <see cref="TileSolid"/>,
+/// which builds them as the slabs they are. A grain is the case the grid was right for: it has no
+/// lines of its own and has to be sampled evenly, which is why it is the one that costs anything.
 /// </summary>
 public static class SurfaceProfiles
 {
@@ -53,97 +52,6 @@ public static class SurfaceProfiles
     {
         into.Add(edgeMm - StepMm);
         into.Add(edgeMm + StepMm);
-    }
-
-    /// <summary>
-    /// Vinyl siding: strips running the whole way across, each sloping out as it goes down and
-    /// stepping back at its bottom edge.
-    ///
-    /// The strip is the full width of the face - there are no ends to stagger, which is exactly
-    /// what makes siding siding rather than boarding.
-    /// </summary>
-    public sealed class Siding(float courseMm, float depthMm) : IRelief
-    {
-        public float[] Across(float acrossMm) => [-acrossMm / 2f, acrossMm / 2f];
-
-        public float[] Up(float upMm)
-        {
-            var at = new List<float>();
-
-            foreach (float head in Heads(courseMm, upMm))
-                Straddle(at, head);
-
-            return [.. at];
-        }
-
-        public float Height(Vector2 at)
-        {
-            float down = (courseMm / 2f - at.Y) % courseMm;
-            if (down < 0) down += courseMm;
-
-            // Flush at the head of the course and standing furthest out at its foot.
-            return depthMm * (down / courseMm);
-        }
-    }
-
-    /// <summary>
-    /// Roof tiles: flat rectangular tiles, each sloping out from head to tail, laid in courses that
-    /// lap the course below and staggered by half a tile.
-    ///
-    /// No round tail and no texture on the tile - what reads as a roof at this size is the lap and
-    /// the slope, and a tile is a rectangle with a joint either side of it.
-    /// </summary>
-    public sealed class Pantile(float tileMm, float courseMm, float depthMm, float jointMm) : IRelief
-    {
-        public float[] Across(float acrossMm)
-        {
-            var at = new List<float>();
-            float half = jointMm / 2f;
-
-            // Joints for both parities of course at once. Alternate courses are staggered by half a
-            // tile, so between them the joints fall every half tile - on the lattice Height reckons
-            // them from, which is the middle of the face and not its edge.
-            foreach (float u in ReliefField.Lattice(
-                0f, tileMm / 2f, -acrossMm / 2f - tileMm, acrossMm / 2f + tileMm))
-            {
-                Straddle(at, u - half);
-                Straddle(at, u + half);
-            }
-
-            return [.. at];
-        }
-
-        public float[] Up(float upMm)
-        {
-            var at = new List<float>();
-
-            foreach (float head in Heads(courseMm, upMm))
-                Straddle(at, head);
-
-            return [.. at];
-        }
-
-        public float Height(Vector2 at)
-        {
-            float down = (courseMm / 2f - at.Y) % courseMm;
-            if (down < 0) down += courseMm;
-
-            float slope = depthMm * (down / courseMm);
-
-            // Alternate courses are set over by half a tile, which is what stops the joints running
-            // in a line down the roof.
-            int course = (int)MathF.Floor((courseMm / 2f - at.Y) / courseMm);
-            float shift = ((course % 2) + 2) % 2 == 1 ? tileMm / 2f : 0f;
-
-            float along = (at.X - shift) % tileMm;
-            if (along < 0) along += tileMm;
-
-            // The joint between one tile and the next, cut to the depth of the lap so that it reads
-            // as a gap right through the course rather than as a scratch on it.
-            bool inJoint = along < jointMm / 2f || along > tileMm - jointMm / 2f;
-
-            return inJoint ? 0f : slope;
-        }
     }
 
     /// <summary>
