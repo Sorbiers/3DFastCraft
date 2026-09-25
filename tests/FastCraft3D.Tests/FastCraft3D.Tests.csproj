@@ -1,4 +1,4 @@
-<Project Sdk="Microsoft.NET.Sdk">
+﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <TargetFramework>net8.0-windows10.0.19041.0</TargetFramework>
@@ -19,6 +19,14 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\FastCraft3D\FastCraft3D.csproj" />
+  </ItemGroup>
+
+  <!-- The ribbon's markup, read by RibbonDividerTests. Carried into the test assembly rather
+       than found on disk, so the check works wherever the tests are run from and cannot pass
+       by quietly failing to find the file. -->
+  <ItemGroup>
+    <EmbeddedResource Include="..\..\src\FastCraft3D\MainWindow.xaml"
+                      LogicalName="MainWindow.xaml" />
   </ItemGroup>
 
 </Project>

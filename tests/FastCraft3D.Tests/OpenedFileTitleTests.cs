@@ -1,4 +1,4 @@
-using System.IO;
+﻿using System.IO;
 using System.Numerics;
 using System.Runtime.ExceptionServices;
 using FastCraft3D.Geometry;
@@ -11,9 +11,15 @@ namespace FastCraft3D.Tests;
 /// <summary>
 /// What the window is called. A model opened by double-clicking it in Windows is the thing being
 /// worked on even though it is not a project, and the title said "Untitled" for all of them.
+///
+/// A project nobody has named yet now carries the name it was given when it was started, which
+/// is the one Save will offer - so the title bar and the save dialog are not two answers.
 /// </summary>
 public class OpenedFileTitleTests : IDisposable
 {
+    /// <summary>Two lower-case words and the day, as ProjectNames makes them.</summary>
+    private const string Named = @"^[a-z]+-[a-z]+_\d{8}";
+
     private readonly string folder = Path.Combine(Path.GetTempPath(), "3dfc-title-" + Guid.NewGuid().ToString("N"));
 
     public OpenedFileTitleTests() => Directory.CreateDirectory(folder);
@@ -48,7 +54,7 @@ public class OpenedFileTitleTests : IDisposable
 
         WithModel(model =>
         {
-            Assert.StartsWith("Untitled", model.WindowTitle);
+            Assert.Matches(Named, model.WindowTitle);
 
             model.OpenFromWindows([path]);
 
@@ -56,9 +62,9 @@ public class OpenedFileTitleTests : IDisposable
             Assert.DoesNotContain("*", model.WindowTitle);
             Assert.Single(model.Scene.Objects);
 
-            // And a new scene is untitled again.
+            // And a new scene is a new project, with a name of its own again.
             model.NewCommand.Execute(null);
-            Assert.StartsWith("Untitled", model.WindowTitle);
+            Assert.Matches(Named, model.WindowTitle);
         });
     }
 }

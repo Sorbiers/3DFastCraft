@@ -138,7 +138,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
     private bool showShadows;
     private bool showReflections;
     private bool showProperties = true;
-    private bool isAdvancedMode = true;
+    private UiLevel uiLevel = UiLevel.Advanced;
     private bool isGridPanelOpen;
     private bool isShortcutsPanelOpen;
     private float modelScale = 1f;
@@ -1349,9 +1349,13 @@ public sealed class MainViewModel : INotifyPropertyChanged
     {
         get
         {
+            // The invented name rather than "Untitled", which named none of several open
+            // windows - the same complaint that put the opened file's name here in the first
+            // place. It is the name Save will offer, so the title bar is not a different answer
+            // from the save dialog.
             string name = projectPath is not null ? Path.GetFileNameWithoutExtension(projectPath)
                         : openedFrom is not null ? Path.GetFileName(openedFrom)
-                        : "Untitled";
+                        : inventedName ??= ProjectNames.Suggest();
 
             return $"{name}{(isDirty ? " *" : string.Empty)} - 3DFastCraft {Version}";
         }
@@ -4149,41 +4153,59 @@ public sealed class MainViewModel : INotifyPropertyChanged
     }
 
     /// <summary>
-    /// Advanced shows every tool; Classic only the ones 3D Builder had, for anyone who came to carry
-    /// on where it left off and finds the rest in the way. Only ribbon buttons are hidden - never a
-    /// tool's own settings - and every key works the same in both, so neither a project nor a habit
-    /// depends on the mode. The viewer's own, like the grid: remembered, not saved with a project.
+    /// How much of the ribbon is shown. Only ribbon buttons are ever hidden - never a tool's own
+    /// settings - and every key works the same at all three levels, so neither a project nor a
+    /// habit depends on the mode. The viewer's own, like the grid: remembered, not saved with a
+    /// project.
     /// </summary>
-    public bool IsAdvancedMode
+    public UiLevel UiLevel
     {
-        get => isAdvancedMode;
+        get => uiLevel;
         set
         {
-            if (isAdvancedMode == value) return;
-            Set(ref isAdvancedMode, value);
+            if (uiLevel == value) return;
+
+            Set(ref uiLevel, value);
+            Raise(nameof(IsAdvancedMode));
+            Raise(nameof(IsExtendedMode));
             Raise(nameof(UiMode));
             Raise(nameof(ShortcutGroups));
 
             // Otherwise the red stays drawn over the model with no button left to turn it off.
-            if (!value && ShowOverhangs) ShowOverhangs = false;
+            if (value == UiLevel.Classic && ShowOverhangs) ShowOverhangs = false;
             SettingsChanged?.Invoke();
         }
     }
 
+    /// <summary>
+    /// Whether the working set is shown. True at Extended as well, since Extended is Advanced and
+    /// more - which is what lets every button already marked this way stay exactly as it is.
+    /// </summary>
+    public bool IsAdvancedMode
+    {
+        get => uiLevel >= UiLevel.Advanced;
+        set => UiLevel = value ? UiLevel.Advanced : UiLevel.Classic;
+    }
+
+    /// <summary>Whether the specialised and experimental tools are shown as well.</summary>
+    public bool IsExtendedMode => uiLevel == UiLevel.Extended;
+
     public IReadOnlyList<UiModeChoice> UiModes { get; } =
     [
-        new(false, "Classic mode", "#FF3FA34D", "The tools 3D Builder had"),
-        new(true, "Advanced mode", "#FFD9482B", "Every tool")
+        new(UiLevel.Classic, "Classic mode", "#FF3FA34D", "The tools 3D Builder had"),
+        new(UiLevel.Advanced, "Advanced mode", "#FFD9482B", "The working set - sketches, holes, threads, gears"),
+        new(UiLevel.Extended, "Extended mode", "#FF7A4FD6", "And the specialised and experimental ones")
     ];
 
     public UiModeChoice UiMode
     {
-        get => UiModes[isAdvancedMode ? 1 : 0];
-        set { if (value is not null) IsAdvancedMode = value.Advanced; }
+        get => UiModes[(int)uiLevel];
+        set { if (value is not null) UiLevel = value.Level; }
     }
 
     /// <summary>What F1 lists: in Classic, not the keys of tools it does not show - though they still work.</summary>
-    public IReadOnlyList<ShortcutGroup> ShortcutGroups => isAdvancedMode ? Shortcuts.Groups : Shortcuts.ClassicGroups;
+    public IReadOnlyList<ShortcutGroup> ShortcutGroups =>
+        IsAdvancedMode ? Shortcuts.Groups : Shortcuts.ClassicGroups;
 
     /// <summary>
     /// Whether the selection's colour, position, size and rotation are open in the side panel.
@@ -4271,7 +4293,9 @@ public sealed class MainViewModel : INotifyPropertyChanged
         ShowZAxis = settings.ShowZAxis;
         ShowGridLabels = settings.ShowGridLabels;
         ShowProperties = !settings.FoldProperties;
-        IsAdvancedMode = !settings.ClassicMode;
+        UiLevel = settings.ClassicMode ? UiLevel.Classic
+               : settings.ExtendedMode ? UiLevel.Extended
+               : UiLevel.Advanced;
         ShowShadows = settings.ShowShadows;
         ShowReflections = settings.ShowReflections;
         StickySelection = !settings.SingleSelection;
@@ -4279,7 +4303,8 @@ public sealed class MainViewModel : INotifyPropertyChanged
 
     public RememberedSettings Remembered =>
         new(plateWidth, plateDepth, plateHeight, unit.Label, showAxes, showZAxis, showGridLabels, !showProperties,
-            !isAdvancedMode, showShadows, showReflections, !stickySelection);
+            uiLevel == UiLevel.Classic, showShadows, showReflections, !stickySelection,
+            uiLevel == UiLevel.Extended);
 
     private void SettingChanged()
     {
@@ -9050,6 +9075,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
         Undo.Clear();
         projectPath = null;
         openedFrom = null;
+        inventedName = null; // a new project, so a new name for it
         ModelScale = 1f; // the scale was the last project's, not this one's
         IsDirty = false;
         RefreshSelection();
@@ -9390,10 +9416,20 @@ public sealed class MainViewModel : INotifyPropertyChanged
     /// What a file is offered as: the project's own name once it has one, and otherwise dated, so
     /// one export is not left waiting to be overwritten by the next.
     /// </summary>
+    /// <summary>
+    /// The name this scene has been carrying since it was started, for anything that has to
+    /// suggest one.
+    ///
+    /// Invented once and kept, not made up afresh each time it is asked for. Save, Export and the
+    /// drawing's title block all ask, and a name that changed between them would be three names
+    /// for one thing - which was the old timestamp's real fault, not its ugliness.
+    /// </summary>
+    private string? inventedName;
+
     private string SuggestedName() =>
         projectPath is not null ? Path.GetFileNameWithoutExtension(projectPath)
         : openedFrom is not null ? Path.GetFileNameWithoutExtension(openedFrom)
-        : $"model_{DateTime.Now:yyyyMMdd_HHmmss}";
+        : inventedName ??= ProjectNames.Suggest();
 
     /// <summary>
     /// A three-view drawing of the selection, or of everything when nothing is selected - as Export

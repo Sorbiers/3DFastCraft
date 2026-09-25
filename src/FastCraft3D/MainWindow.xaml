@@ -503,7 +503,7 @@
                     <Button Style="{StaticResource ToolButton}" Content="Text" Tag="{StaticResource IconText3D}"
                             Command="{Binding InsertTextCommand}" MinWidth="58"
                             ToolTip="Lettering as an object of its own - a sign, a name tag, a keychain - in any installed font, lying on the plate or standing up. To put letters on a face that is already there, use Emboss or Engrave." />
-                    <Button Style="{StaticResource ToolButton}" Content="Lithophane" Visibility="{Binding IsAdvancedMode, Converter={StaticResource BoolToVisibility}}" Tag="{StaticResource IconLithophane}"
+                    <Button Style="{StaticResource ToolButton}" Content="Lithophane" Visibility="{Binding IsExtendedMode, Converter={StaticResource BoolToVisibility}}" Tag="{StaticResource IconLithophane}"
                             Command="{Binding InsertLithophaneCommand}" MinWidth="86"
                             ToolTip="BETA - new, and still being proved out; check what it gives you before printing it. A photograph as a thin translucent plate: thin where the picture is white, thick where it is dark, so it shows only when it is lit from behind. Flat, or curved round for a lamp shade." />
                     <Button Style="{StaticResource ToolButton}" Content="Sketch" Visibility="{Binding IsAdvancedMode, Converter={StaticResource BoolToVisibility}}" Tag="{StaticResource IconSketchLine}"
@@ -512,7 +512,7 @@
                     <Button Style="{StaticResource ToolButton}" Content="Import" Tag="{StaticResource IconImport}"
                             Command="{Binding ImportCommand}" ToolTip="Bring in an STL, an OBJ, or another 3DFastCraft project - its objects join what is already on the plate (Ctrl+I)" />
                     <Separator Margin="8,0" Visibility="{Binding IsAdvancedMode, Converter={StaticResource BoolToVisibility}}" />
-                    <Button Style="{StaticResource ToolButton}" Content="Fit test" Visibility="{Binding IsAdvancedMode, Converter={StaticResource BoolToVisibility}}" Tag="{StaticResource IconFitTest}"
+                    <Button Style="{StaticResource ToolButton}" Content="Fit test" Visibility="{Binding IsExtendedMode, Converter={StaticResource BoolToVisibility}}" Tag="{StaticResource IconFitTest}"
                             Command="{Binding InsertFitTestCommand}" MinWidth="64"
                             ToolTip="Four small 2x2 brick plates at Fit -0.2, -0.1, 0 and +0.1 mm, marked with one to four notches, each with studs on top and the underside below. Print them in your filament and press each onto real bricks. Without real bricks, stack one plate on another: the pair grips like the sum of their two Fits. To test two printed halves exactly as Split with connectors makes them - the same Fit on both - print the set twice and try each plate on its twin. Type the Fit that holds firmly but still comes apart by hand." />
                     <Button Style="{StaticResource ToolButton}" Content="Hole" Visibility="{Binding IsAdvancedMode, Converter={StaticResource BoolToVisibility}}" Tag="{StaticResource IconHole}"
@@ -558,7 +558,7 @@
                     <Button Style="{StaticResource ToolButton}" Content="Duplicate" Tag="{StaticResource IconDuplicate}"
                             Command="{Binding DuplicateCommand}"
                             ToolTip="Copy the selection and set it beside the original (Ctrl+D)" />
-                    <Button Style="{StaticResource ToolButton}" Content="In place" Visibility="{Binding IsAdvancedMode, Converter={StaticResource BoolToVisibility}}" Tag="{StaticResource IconDuplicate}"
+                    <Button Style="{StaticResource ToolButton}" Content="In place" Visibility="{Binding IsExtendedMode, Converter={StaticResource BoolToVisibility}}" Tag="{StaticResource IconDuplicate}"
                             Command="{Binding DuplicateCommand}" CommandParameter="InPlace" MinWidth="64"
                             ToolTip="Copy the selection without moving it - what you want before a boolean or a mirror (Ctrl+Shift+D)" />
                     <Button Style="{StaticResource ToolButton}" Content="Delete" Tag="{StaticResource IconDelete}"
@@ -578,11 +578,11 @@
                     <Button Style="{StaticResource ToolButton}" Content="Split" Tag="{StaticResource IconSplit}"
                             Command="{Binding BeginSplitCommand}"
                             ToolTip="Cut the selected object in two with a plane, or with a face you pick" />
-                    <Separator Visibility="{Binding IsAdvancedMode, Converter={StaticResource BoolToVisibility}}" Margin="8,0" />
-                    <Button Style="{StaticResource ToolButton}" Content="Set pivot" Visibility="{Binding IsAdvancedMode, Converter={StaticResource BoolToVisibility}}" Tag="{StaticResource IconPivot}"
+                    <Separator Visibility="{Binding IsExtendedMode, Converter={StaticResource BoolToVisibility}}" Margin="8,0" />
+                    <Button Style="{StaticResource ToolButton}" Content="Set pivot" Visibility="{Binding IsExtendedMode, Converter={StaticResource BoolToVisibility}}" Tag="{StaticResource IconPivot}"
                             Command="{Binding SetPivotCommand}" MinWidth="80"
                             ToolTip="Click a point on the object to measure and turn it about - a shaft hole, a corner, a hinge line. The position boxes then read that point, a turn goes round it, and lining it up with another part compares it rather than the middle of its box. Kept with the project. Needs exactly one object selected." />
-                    <Button Style="{StaticResource ToolButton}" Content="Pivot to centre" Visibility="{Binding IsAdvancedMode, Converter={StaticResource BoolToVisibility}}" Tag="{StaticResource IconPivotCentre}"
+                    <Button Style="{StaticResource ToolButton}" Content="Pivot to centre" Visibility="{Binding IsExtendedMode, Converter={StaticResource BoolToVisibility}}" Tag="{StaticResource IconPivotCentre}"
                             Command="{Binding PivotToCentreCommand}" MinWidth="104"
                             ToolTip="Puts the pivot back in the middle of the object's box, where it starts out. Needs exactly one object selected." />
                     <Separator Visibility="{Binding IsAdvancedMode, Converter={StaticResource BoolToVisibility}}" Margin="8,0" />
@@ -630,10 +630,10 @@
                     <Button Style="{StaticResource ToolButton}" Content="Align to" Visibility="{Binding IsAdvancedMode, Converter={StaticResource BoolToVisibility}}" Tag="{StaticResource IconAlignCentre}"
                             Command="{Binding AlignToSelectionCommand}" MinWidth="72"
                             ToolTip="Move the first object you picked so its bounding box is centred on the second's. Two objects: the first moves, the second stays. Nothing is rotated or resized. Needs exactly two objects selected." />
-                    <Button Style="{StaticResource ToolButton}" Content="Align to face" Visibility="{Binding IsAdvancedMode, Converter={StaticResource BoolToVisibility}}" Tag="{StaticResource IconAlignToFace}"
+                    <Button Style="{StaticResource ToolButton}" Content="Align to face" Visibility="{Binding IsExtendedMode, Converter={StaticResource BoolToVisibility}}" Tag="{StaticResource IconAlignToFace}"
                             Command="{Binding BeginAlignFaceCommand}" MinWidth="86"
                             ToolTip="Pick a face on any object, then choose for X, Y and Z whether the selection's near edge, middle or far edge should land on the middle of that face. The whole selection moves together, keeping its own arrangement - nothing is rotated or resized." />
-                    <Button Style="{StaticResource ToolButton}" Content="Centre face to face" Visibility="{Binding IsAdvancedMode, Converter={StaticResource BoolToVisibility}}" Tag="{StaticResource IconCentreFaceToFace}"
+                    <Button Style="{StaticResource ToolButton}" Content="Centre face to face" Visibility="{Binding IsExtendedMode, Converter={StaticResource BoolToVisibility}}" Tag="{StaticResource IconCentreFaceToFace}"
                             Command="{Binding BeginCentreFaceCommand}" MinWidth="96"
                             ToolTip="Pick a face on the selected object(s), then a face on a different, unselected one, then choose which axes should match. The whole selection moves together so the two faces' middles coincide on those axes - the way you'd centre a lid on an opening or a flange on its mate." />
                     <Separator Margin="8,0" Visibility="{Binding IsAdvancedMode, Converter={StaticResource BoolToVisibility}}" />
@@ -720,7 +720,7 @@
                             Command="{Binding RebuildCommand}" MinWidth="82"
                             ToolTip="Rebuild the surface from scratch. Mends anything, including a model that passes through itself - at the cost of fine detail." />
                     <Separator Margin="8,0" />
-                    <Button Style="{StaticResource ToolButton}" Content="Voronoi" Visibility="{Binding IsAdvancedMode, Converter={StaticResource BoolToVisibility}}" Tag="{StaticResource IconVoronoi}"
+                    <Button Style="{StaticResource ToolButton}" Content="Voronoi" Visibility="{Binding IsExtendedMode, Converter={StaticResource BoolToVisibility}}" Tag="{StaticResource IconVoronoi}"
                             Command="{Binding VoronoiCommand}" MinWidth="82"
                             ToolTip="BETA - new, and still being proved out; check what it gives you before printing it. Cut the selection into a web of struts along the walls of a Voronoi tessellation - the openwork lamp or vase, or a foam through the inside of a part to take weight out of it. Worked out on a voxel grid, so it comes back watertight; detail finer than a voxel is gone. Needs something selected." />
                     <Button Style="{StaticResource ToolButton}" Content="Extrude down" Tag="{StaticResource IconExtrudeDown}"
@@ -736,9 +736,9 @@
                     <Button Style="{StaticResource ToolButton}" Content="Emboss" Tag="{StaticResource IconText}"
                             Command="{Binding BeginEmbossCommand}" MinWidth="78"
                             ToolTip="Raise lettering or a drawing off a face, or cut it in. Needs exactly one object selected." />
-                    <Button Style="{StaticResource ToolButton}" Content="Engrave" Tag="{StaticResource IconEngrave}"
+                    <Button Style="{StaticResource ToolButton}" Content="Engrave" Visibility="{Binding IsExtendedMode, Converter={StaticResource BoolToVisibility}}" Tag="{StaticResource IconEngrave}"
                             Command="{Binding BeginEngraveCommand}" MinWidth="82"
-                            ToolTip="Put brick, roof tiles, planks or grain on one flat face - cut in, or standing proud. Needs exactly one object selected." />
+                            ToolTip="LEGACY. Put brick, roof tiles, planks or grain on one flat face - cut in, or standing proud. Flat faces only, and one pattern at a time. Texture, in Emboss, does the same patterns and a good many more, wraps them round a curve, and has the shaped ones - lap siding, roof tiles and sawn boarding - that this cannot do at all. Kept because it is what the models made with it were made with." />
                     <Separator Visibility="{Binding IsAdvancedMode, Converter={StaticResource BoolToVisibility}}" Margin="8,0" />
                     <Button Style="{StaticResource ToolButton}" Content="Repeat" Visibility="{Binding IsAdvancedMode, Converter={StaticResource BoolToVisibility}}" Tag="{StaticResource IconRepeat}"
                             Command="{Binding RepeatCommand}" MinWidth="76"
@@ -794,11 +794,11 @@
                             Command="{Binding PrintDrawingCommand}" MinWidth="70"
                             AutomationProperties.Name="Blueprint"
                             ToolTip="A blueprint: front, top and right views, and an isometric, with the overall dimensions - to print, or save as a PDF. The selection, or everything when nothing is selected (Ctrl+P)" />
-                    <Separator Margin="8,0" Visibility="{Binding IsAdvancedMode, Converter={StaticResource BoolToVisibility}}" />
-                    <Button Style="{StaticResource ToolButton}" Content="Export session" Visibility="{Binding IsAdvancedMode, Converter={StaticResource BoolToVisibility}}" Tag="{StaticResource IconExportSession}"
+                    <Separator Margin="8,0" Visibility="{Binding IsExtendedMode, Converter={StaticResource BoolToVisibility}}" />
+                    <Button Style="{StaticResource ToolButton}" Content="Export session" Visibility="{Binding IsExtendedMode, Converter={StaticResource BoolToVisibility}}" Tag="{StaticResource IconExportSession}"
                             Command="{Binding ExportSessionCommand}" MinWidth="96"
                             ToolTip="Write out every undo step since the plate was last empty, one file per step, oldest first - as .3dfc, .3mf or .stl. Asks for a format and a folder. For a picture of each step, use Record instead." />
-                    <Button Style="{StaticResource ToolButton}" Content="{Binding RecordButtonLabel}" Visibility="{Binding IsAdvancedMode, Converter={StaticResource BoolToVisibility}}" Tag="{StaticResource IconRecord}"
+                    <Button Style="{StaticResource ToolButton}" Content="{Binding RecordButtonLabel}" Visibility="{Binding IsExtendedMode, Converter={StaticResource BoolToVisibility}}" Tag="{StaticResource IconRecord}"
                             Command="{Binding RecordCommand}" MinWidth="86"
                             ToolTip="While on, saves a screenshot to a folder you choose after every action - and, for a tool with an Apply button, one just before it too. For building up a set of pictures of the tools as they are used." />
                     <Separator Margin="8,0" />
@@ -828,7 +828,7 @@
                     <ToggleButton Style="{StaticResource ToolToggle}" Content="X-ray" Tag="{StaticResource IconXray}"
                                   IsChecked="{Binding ShowXray}"
                                   ToolTip="Fade everything that is not selected, to see a part buried inside another. While a tool has the plate to itself - a split, a preview - it also brings the rest back, drawn through rather than taken away" />
-                    <ToggleButton Style="{StaticResource ToolToggle}" Content="Outline" Tag="{StaticResource IconOutline}"
+                    <ToggleButton Style="{StaticResource ToolToggle}" Content="Outline" Visibility="{Binding IsExtendedMode, Converter={StaticResource BoolToVisibility}}" Tag="{StaticResource IconOutline}"
                                   IsChecked="{Binding ShowOutlines}" MinWidth="76"
                                   AutomationProperties.Name="Outline"
                                   ToolTip="The white line round a selected object's own edges. Turn it off on a dense mesh, where it traces every feature edge and covers the surface it is meant to bound" />
@@ -1422,7 +1422,17 @@
                         BorderBrush="#FFB8D2F0" BorderThickness="1" CornerRadius="3"
                         Visibility="{Binding IsEngraveMode, Converter={StaticResource BoolToVisibility}}">
                     <StackPanel>
-                        <TextBlock Text="Engrave a pattern" FontWeight="SemiBold" Margin="0,0,0,6" />
+                        <!-- Superseded, not broken. The mark is the same one a beta tool carries,
+                             in the other direction: said plainly rather than left to be worked out
+                             from a tooltip nobody opens. -->
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
+                            <TextBlock Text="Engrave a pattern" FontWeight="SemiBold" VerticalAlignment="Center" />
+                            <Border Margin="8,0,0,0" Padding="6,1" CornerRadius="8"
+                                    Background="#FFE4E7EC" BorderBrush="#FFA9B0BC" BorderThickness="1"
+                                    ToolTip="Superseded by Texture, in Emboss, which does these patterns and more, wraps them round a curve, and has the shaped ones this cannot do. Kept because the models made with it were made with it.">
+                                <TextBlock Text="legacy" FontSize="10" FontWeight="SemiBold" Foreground="#FF525A66" />
+                            </Border>
+                        </StackPanel>
 
                         <TextBlock Text="{Binding EngraveSummary}" TextWrapping="Wrap"
                                    Foreground="#FF3A4550" Margin="0,0,0,8" />
@@ -2772,7 +2782,7 @@
               Focusable="False"
               ItemsSource="{Binding UiModes}" SelectedItem="{Binding UiMode, Mode=TwoWay}"
               AutomationProperties.AutomationId="UiMode"
-              ToolTip="Classic shows the tools 3D Builder had. Advanced shows every tool - sketches, holes, threads, gears, blueprints and more. Keys work the same in both.">
+              ToolTip="Classic shows the tools 3D Builder had. Advanced adds the working set - sketches, holes, threads, gears, blueprints and more. Extended adds the specialised and the experimental on top of that: the lithophane, the pivot, the session recorder, Voronoi and the legacy Engrave. Keys work the same at all three, and no tool&apos;s own settings are ever hidden - only its button.">
         <ComboBox.ItemTemplate>
             <DataTemplate>
                 <StackPanel Orientation="Horizontal" ToolTip="{Binding Hint}">

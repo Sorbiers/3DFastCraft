@@ -1,4 +1,4 @@
-using System.IO;
+﻿using System.IO;
 using System.Text.Json;
 
 namespace FastCraft3D.Io;
@@ -16,6 +16,12 @@ namespace FastCraft3D.Io;
 /// the default written here - the section has to come back open.
 /// </param>
 /// <param name="ClassicMode">Only the tools 3D Builder had on the ribbon. Advanced, the default, when missing.</param>
+/// <param name="ExtendedMode">
+/// The specialised and experimental tools as well. Kept as its own flag beside ClassicMode
+/// rather than as one number saying which of the three: a file written before this existed has
+/// no field, the reader fills a missing one with false, and false here has to go on meaning
+/// Advanced - which is where everybody already was.
+/// </param>
 /// <param name="ShowShadows">Objects cast a shadow onto the plate and each other.</param>
 /// <param name="ShowReflections">The plate reflects what stands on it.</param>
 /// <param name="SingleSelection">
@@ -27,7 +33,8 @@ namespace FastCraft3D.Io;
 public readonly record struct RememberedSettings(
     float PlateWidth, float PlateDepth, float PlateHeight, string Unit,
     bool ShowAxes = true, bool ShowZAxis = false, bool ShowGridLabels = false, bool FoldProperties = false,
-    bool ClassicMode = false, bool ShowShadows = false, bool ShowReflections = false, bool SingleSelection = false);
+    bool ClassicMode = false, bool ShowShadows = false, bool ShowReflections = false,
+    bool SingleSelection = false, bool ExtendedMode = false);
 
 /// <summary>
 /// The printable area, the unit and how the grid is drawn, as last used, remembered between sessions.
