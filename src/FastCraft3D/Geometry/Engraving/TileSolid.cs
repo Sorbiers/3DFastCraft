@@ -271,9 +271,15 @@ public static class TileSolid
     /// over an edge or an opening - that is the point of it - so it is not asked to sit wholly on
     /// wall the way a raised piece is.
     /// </param>
+    /// <param name="shiftMm">
+    /// How far the whole pattern is moved over the face, which is what the panel's Across and Up
+    /// mean for something that fills the face rather than being stamped on it. It moves the
+    /// lattice, not the field: the pieces still stop at the same edges, they are simply cut
+    /// differently there.
+    /// </param>
     public static List<Rect2> Pieces(
         in TileCourses courses, float acrossMm, float upMm, TileRoom? room = null,
-        bool cutting = false)
+        bool cutting = false, Vector2 shiftMm = default)
     {
         var made = new List<Rect2>();
 
@@ -288,7 +294,7 @@ public static class TileSolid
         // The course boundaries, and one course clear of the face either way so a part course at
         // the edge is a cut tile rather than a gap.
         float[] bottoms = ReliefField.Lattice(
-            -course / 2f, course, -upMm / 2f - course, upMm / 2f + course);
+            -course / 2f + shiftMm.Y, course, -upMm / 2f - course, upMm / 2f + course);
 
         for (int row = 0; row < bottoms.Length; row++)
         {
@@ -296,24 +302,24 @@ public static class TileSolid
 
             // Which way the stagger falls has to follow the course's own index, not its place in
             // this list, or the face's size decides the bond.
-            int index = (int)MathF.Round((bottoms[row] + course / 2f) / course);
+            int index = (int)MathF.Round((bottoms[row] - shiftMm.Y + course / 2f) / course);
             bool over = courses.Stagger && ((index % 2) + 2) % 2 == 1;
 
             if (!courses.Ends)
             {
-                Keep(made, new Rect2(field.MinU, low, field.MaxU, high), field, room, cutting);
+                Keep(made, new Rect2(field.MinU, low, field.MaxU, high), field, room, cutting, half * 2f);
                 continue;
             }
 
             float shift = over ? tile / 2f : 0f;
             float[] starts = ReliefField.Lattice(
-                shift, tile, -acrossMm / 2f - tile, acrossMm / 2f + tile);
+                shift + shiftMm.X, tile, -acrossMm / 2f - tile, acrossMm / 2f + tile);
 
             foreach (float start in starts)
             {
                 if (made.Count >= MostTiles) return made;
 
-                Keep(made, new Rect2(start + half, low, start + tile - half, high), field, room, cutting);
+                Keep(made, new Rect2(start + half, low, start + tile - half, high), field, room, cutting, half * 2f);
             }
         }
 
@@ -328,7 +334,7 @@ public static class TileSolid
     /// ends in a cut tile, not in a gap the size of a whole one.
     /// </summary>
     private static void Keep(
-        List<Rect2> made, Rect2 piece, Rect2 field, TileRoom? room, bool cutting)
+        List<Rect2> made, Rect2 piece, Rect2 field, TileRoom? room, bool cutting, float gapMm)
     {
         var cut = piece.ClippedTo(field);
         if (cut.IsEmpty) return;
@@ -339,7 +345,7 @@ public static class TileSolid
             return;
         }
 
-        List<Rect2> parts = room is null ? [cut] : Without(cut, room.Holes);
+        List<Rect2> parts = room is null ? [cut] : Without(cut, room.Holes, gapMm);
 
         foreach (var part in parts)
         {
@@ -397,7 +403,14 @@ public static class TileSolid
     /// strips around the hole. A course of siding running across a window comes back as the piece
     /// to its left and the piece to its right, which is what a siding fitter would have.
     /// </summary>
-    public static List<Rect2> Without(Rect2 piece, IReadOnlyList<Rect2> holes)
+    /// <param name="gapMm">
+    /// What to leave between two parts that would otherwise meet. A piece bitten out of one
+    /// corner comes back as an upright part beside the opening and a short part over it, and those
+    /// two share a wall exactly - which is the one thing the boolean cannot be asked to union, and
+    /// which welding turns into an edge with four triangles on it. Round a window it reads as the
+    /// butt joint a fitter would leave there anyway.
+    /// </param>
+    public static List<Rect2> Without(Rect2 piece, IReadOnlyList<Rect2> holes, float gapMm = 0f)
     {
         var parts = new List<Rect2> { piece };
 
@@ -405,7 +418,7 @@ public static class TileSolid
         {
             var left = new List<Rect2>(parts.Count + 3);
 
-            foreach (var part in parts) Split(part, hole, left);
+            foreach (var part in parts) Split(part, hole, left, gapMm);
 
             parts = left;
             if (parts.Count == 0) break;
@@ -414,7 +427,7 @@ public static class TileSolid
         return parts;
     }
 
-    private static void Split(Rect2 part, Rect2 hole, List<Rect2> into)
+    private static void Split(Rect2 part, Rect2 hole, List<Rect2> into, float gapMm)
     {
         // Clear of the opening altogether, so it survives whole.
         if (hole.MaxU <= part.MinU || hole.MinU >= part.MaxU ||
@@ -424,11 +437,17 @@ public static class TileSolid
             return;
         }
 
-        if (hole.MinU > part.MinU) into.Add(new Rect2(part.MinU, part.MinV, hole.MinU, part.MaxV));
-        if (hole.MaxU < part.MaxU) into.Add(new Rect2(hole.MaxU, part.MinV, part.MaxU, part.MaxV));
+        bool beside = hole.MinU > part.MinU, after = hole.MaxU < part.MaxU;
 
-        // And the strips above and below, which only span what the two beside it did not.
-        float low = MathF.Max(part.MinU, hole.MinU), high = MathF.Min(part.MaxU, hole.MaxU);
+        if (beside) into.Add(new Rect2(part.MinU, part.MinV, hole.MinU, part.MaxV));
+        if (after) into.Add(new Rect2(hole.MaxU, part.MinV, part.MaxU, part.MaxV));
+
+        // And the strips above and below, which only span what the two beside it did not - held
+        // off them by the gap, since a part that met one of them wall to wall is what tore.
+        float low = MathF.Max(part.MinU, hole.MinU) + (beside ? gapMm : 0f);
+        float high = MathF.Min(part.MaxU, hole.MaxU) - (after ? gapMm : 0f);
+
+        if (high - low < 1e-4f) return;
 
         if (hole.MinV > part.MinV) into.Add(new Rect2(low, part.MinV, high, hole.MinV));
         if (hole.MaxV < part.MaxV) into.Add(new Rect2(low, hole.MaxV, high, part.MaxV));
@@ -444,11 +463,12 @@ public static class TileSolid
     /// </param>
     public static Mesh Build(
         IPlacementSurface surface, in TileCourses courses, float acrossMm, float upMm,
-        bool sunk = false, TileRoom? room = null)
+        bool sunk = false, TileRoom? room = null, Vector2 shiftMm = default)
     {
         var mesh = new Mesh();
 
-        foreach (var piece in Pieces(courses, acrossMm, upMm, room ?? TileRoom.Of(surface), sunk))
+        foreach (var piece in Pieces(
+            courses, acrossMm, upMm, room ?? TileRoom.Of(surface), sunk, shiftMm))
             AddSlab(mesh, surface, courses, piece, sunk);
 
         return mesh.Welded();

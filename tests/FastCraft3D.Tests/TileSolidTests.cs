@@ -208,6 +208,66 @@ public class TileSolidTests(ITestOutputHelper log)
     }
 
     /// <summary>
+    /// And no two of them may meet wall to wall either.
+    ///
+    /// A hole that bites one corner of a piece leaves an upright part beside the opening and a
+    /// short part over it, and those share a face exactly. Two boxes meeting that way are the one
+    /// thing the boolean cannot be asked to union, and welding turns the shared edge into one with
+    /// four triangles on it - so a wall with a window came back unprintable, raised or cut, while
+    /// the same siding on a plain cube was fine. The gap reads as the butt joint a fitter leaves
+    /// at a reveal.
+    /// </summary>
+    [Fact]
+    public void TwoPartsOfABittenPieceNeverShareAWall()
+    {
+        // A course straddling the top edge of a window, which is the case that tore.
+        var strip = new Rect2(-28f, 6f, 28f, 15.4f);
+        var window = new Rect2(-12.2f, -12.2f, 12.2f, 12.2f);
+
+        Assert.Equal(3, TileSolid.Without(strip, [window]).Count);
+
+        const float Gap = 0.6f;
+        var parts = TileSolid.Without(strip, [window], Gap);
+
+        log.WriteLine($"{parts.Count} parts: {string.Join(", ", parts)}");
+
+        for (int i = 0; i < parts.Count; i++)
+            for (int j = i + 1; j < parts.Count; j++)
+            {
+                Rect2 a = parts[i], b = parts[j];
+
+                bool sideBySide =
+                    MathF.Abs(a.MaxU - b.MinU) < Gap - 1e-3f || MathF.Abs(b.MaxU - a.MinU) < Gap - 1e-3f;
+
+                bool alsoOverlapUp =
+                    MathF.Min(a.MaxV, b.MaxV) - MathF.Max(a.MinV, b.MinV) > 1e-6f;
+
+                Assert.False(sideBySide && alsoOverlapUp, $"{a} meets {b} wall to wall");
+            }
+    }
+
+    /// <summary>
+    /// Across and Up move the pattern. A stamp is placed somewhere on the face; a texture fills
+    /// it, so the only thing those two can mean is where the courses start - which is what
+    /// somebody lining a joint up with a window wants from them.
+    /// </summary>
+    [Fact]
+    public void AcrossAndUpMoveTheLattice()
+    {
+        var courses = Roof();
+
+        var where = TileSolid.Pieces(courses, 60f, 60f);
+        var moved = TileSolid.Pieces(
+            courses, 60f, 60f, null, false, new Vector2(0f, courses.CourseMm / 3f));
+
+        float Lowest(List<Rect2> pieces) => pieces.Min(p => p.MinV);
+
+        log.WriteLine($"courses start at {Lowest(where):0.###}, moved to {Lowest(moved):0.###}");
+
+        Assert.NotEqual(Lowest(where), Lowest(moved), 3);
+    }
+
+    /// <summary>
     /// And the same on a real wall with a window cut through it, which is where it was noticed:
     /// the siding ran straight across the opening, because building the geometry knows nothing
     /// about the hole unless it is told.

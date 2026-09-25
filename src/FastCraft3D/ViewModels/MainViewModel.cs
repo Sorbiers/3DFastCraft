@@ -2341,6 +2341,9 @@ public sealed class MainViewModel : INotifyPropertyChanged
             Raise(nameof(EmbossAcross));
             Raise(nameof(EmbossUp));
             Raise(nameof(EmbossAngle));
+
+            // Which redraws the preview as well as the summary, so a texture laid out to where it
+            // starts comes back rebuilt rather than merely re-labelled.
             RefreshEmboss();
         }
     }
@@ -2443,7 +2446,8 @@ public sealed class MainViewModel : INotifyPropertyChanged
                 // With the room, so the figure counts what will actually be laid: a course that
                 // runs across a window is broken at the reveal and comes to two pieces, not one.
                 var (wide, tall, room) = TileField(EmbossSurface(), !embossRaised);
-                int slabs = TileSolid.Pieces(courses, wide, tall, room, !embossRaised).Count;
+                int slabs = TileSolid.Pieces(
+                    courses, wide, tall, room, !embossRaised, embossPlacement.OffsetMm).Count;
 
                 if (slabs == 0) return "The face is smaller than one course of this - try a finer pitch.";
 
@@ -3135,9 +3139,13 @@ public sealed class MainViewModel : INotifyPropertyChanged
         {
             var (across, up, room) = TileField(surface, sunk);
 
+            // Across and Up move the lattice. A stamp is placed somewhere on the face; a texture
+            // fills it, so the only thing those two numbers can mean here is where the courses
+            // start - which is what somebody lining a joint up with a window wants from them.
             return across <= 0.01f || up <= 0.01f
                 ? null
-                : TileSolid.Build(surface, courses, across, up, sunk, room);
+                : TileSolid.Build(
+                    surface, courses, across, up, sunk, room, embossPlacement.OffsetMm);
         }
 
         var (wide, tall) = FieldRoom();
