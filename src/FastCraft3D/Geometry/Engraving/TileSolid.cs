@@ -157,7 +157,7 @@ public sealed class TileRoom
         // A hair inside the nominal surface, so a point on a wall reads as material and one over
         // an opening does not.
         return solid is not null && wrapped is not null &&
-               solid.Contains(wrapped.At(at, -SinkMm / 2f));
+               solid.Contains(wrapped.At(at, -TileSolid.SinkMm / 2f));
     }
 }
 
