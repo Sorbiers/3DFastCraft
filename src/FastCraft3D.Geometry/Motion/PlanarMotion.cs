@@ -268,7 +268,12 @@ public static class PlanarMotion
     /// </summary>
     private sealed class Field
     {
-        private const float Cell = 0.5f;
+        // Two millimetres. An edge is filed in every cell its box covers, and a thinned outline has
+        // long straight edges: at half a millimetre one of them covered hundreds of cells, and
+        // filing the field three times a degree was nine tenths of the Geneva's second-long build.
+        // The size cannot change an answer - two edges that cross share the cell they cross in -
+        // only how many pairs are tried: 880 ms at 0.5, 250 at 1, 116 at 2, 132 at 4.
+        private const float Cell = 2f;
         private readonly List<(int Layer, string Name, Vector2 A, Vector2 B)> edges = [];
         private readonly Dictionary<(int, int, int), List<int>> cells = [];
 

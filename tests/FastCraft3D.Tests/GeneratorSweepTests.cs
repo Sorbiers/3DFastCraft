@@ -286,11 +286,17 @@ internal static class Sweep
             if (!health.IsWatertight) return Say($"{part.Name} is not closed: {health.Describe()}");
             if (part.Mesh.ComputeSignedVolume() <= 0) return Say($"{part.Name} is inside out");
 
-            // A cutter hangs from its mouth; anything else stands on the plate.
+            // A cutter hangs from its mouth; nothing else goes below the plate. A part may stand
+            // on another printed with it - a window's frame on its glass - so standing on the plate
+            // is asked of the set, below.
             var bounds = part.Mesh.ComputeBounds();
             if (part.Cutter && MathF.Abs(bounds.Max.Z) > 1e-3f) return Say($"{part.Name} is a cutter whose mouth is at Z = {bounds.Max.Z:0.###}, not 0");
-            if (!part.Cutter && MathF.Abs(bounds.Min.Z) > 1e-3f) return Say($"{part.Name} stands at Z = {bounds.Min.Z:0.###}, not on the plate");
+            if (!part.Cutter && bounds.Min.Z < -1e-3f) return Say($"{part.Name} goes below the plate, to Z = {bounds.Min.Z:0.###}");
         }
+
+        var printed = made.Parts.Where(p => !p.Cutter).ToList();
+        if (printed.Count > 0 && printed.Min(p => p.Mesh.ComputeBounds().Min.Z) is var lowest && MathF.Abs(lowest) > 1e-3f)
+            return Say($"the set stands at Z = {lowest:0.###}, not on the plate");
 
         var again = g.Make(settings, printer);
         if (again.Parts.Count != made.Parts.Count

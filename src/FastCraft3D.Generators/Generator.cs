@@ -28,9 +28,10 @@ public sealed record Printer(float Nozzle = 0.4f, float Layer = 0.2f, float XyCl
 /// <summary>One part a generator made.</summary>
 /// <param name="Name">What the object is called on the plate.</param>
 /// <param name="Mesh">
-/// The way up it prints, standing on Z = 0, where it goes as the set prints: every part of a set
-/// is in the one frame, so a gear pair comes out in mesh and a lid beside its box, and they are
-/// put on the plate as they stand.
+/// The way up it prints, where it goes as the set prints: every part of a set is in the one
+/// frame, so a gear pair comes out in mesh and a lid beside its box, and they are put on the plate
+/// as they stand. The set stands on Z = 0; a part may stand on another printed with it - a
+/// window's frame on its glass - but nothing goes below the plate.
 /// </param>
 /// <param name="Assembled">
 /// Where the part goes when the set is looked at together rather than printed, or null when that
@@ -56,7 +57,17 @@ public sealed record GeneratedPart(
     IReadOnlyList<Anchor>? Anchors = null,
     string? Role = null,
     bool Cutter = false,
-    Vector3 Pivot = default);
+    Vector3 Pivot = default)
+{
+    /// <summary>
+    /// Which filament prints it, where that is part of the design - a window's glass in a clear
+    /// one - or nought to leave it to the app, as every other part.
+    /// </summary>
+    public int Filament { get; init; }
+
+    /// <summary>The colour it is shown in, where that says what it is - glass pale blue - or null for the app's own.</summary>
+    public Vector3? Colour { get; init; }
+}
 
 /// <summary>Named settings shipped with a generator, for the sizes people make most: "AA battery", "M3".</summary>
 public sealed record Preset(string Name, object Settings);

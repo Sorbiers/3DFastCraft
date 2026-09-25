@@ -47,7 +47,7 @@ public sealed partial class MainViewModel
     private void OpenLibrary()
     {
         var view = new LibraryView(GeneratorRegistry.All, LibraryMemory.Shared, LibraryPictures.Shared);
-        var panel = new ToolPanel { Title = "Library", Content = view };
+        var panel = new ToolPanel { Title = "Library", IsBeta = true, Content = view };
 
         Generator? chosen = null;
         view.Chosen += generator =>
@@ -509,7 +509,8 @@ public sealed partial class MainViewModel
             var at = assembled ? part.Assembled : null;
             var o = new SceneObject(part.Name, at is { } m ? MeshTransform.Transformed(part.Mesh, m) : part.Mesh)
             {
-                Colour = colour(i),
+                Colour = part.Colour ?? colour(i),
+                Filament = part.Filament > 0 ? part.Filament : 1,
                 Anchors = part.Anchors is not { Count: > 0 } marked ? []
                     : at is { } moved ? marked.Select(a => a.Through(moved)).ToList() : marked
             };
@@ -552,7 +553,8 @@ public sealed partial class MainViewModel
 
             var o = new SceneObject(old?.Name ?? part.Name, part.Mesh)
             {
-                Colour = old?.Colour ?? nextColour(),
+                Colour = old?.Colour ?? part.Colour ?? nextColour(),
+                Filament = part.Filament > 0 ? part.Filament : 1,
                 Anchors = part.Anchors?.ToList() ?? [],
 
                 // Always, so the generator's origin is known through the pivot's move; a preview's

@@ -101,6 +101,17 @@ public class MotionFilmTests
     }
 
     [Fact]
+    public void MotionWorkTurnsTheHourHandATwelfthOfTheWayForATurnOfTheMinuteHand()
+    {
+        var (film, _) = Turned(new MotionWork(), new MotionWork().Default);
+
+        // Clockwise, and the hands behind their pipes by what the flats leave them to play.
+        Assert.InRange(Degrees(film, 2), -31, -29);
+        Assert.InRange(Degrees(film, 3), -361, -340);
+        Assert.InRange(Degrees(film, 4), -31, -20);
+    }
+
+    [Fact]
     public void ASolidMovedIntoPlaceStillCutsIntoWholeOutlines()
     {
         // The Geneva's wheel, moved beside its driver, once came back as twenty-three fragments,

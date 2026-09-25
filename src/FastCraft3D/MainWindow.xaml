@@ -529,7 +529,7 @@
                             ToolTip="An involute gear, ring gear or rack - straight, helical or herringbone - with a bore, a hub and a set-screw hole, and a partner made already in mesh with it" />
                     <Button Style="{StaticResource ToolButton}" Content="Library" Visibility="{Binding IsExtendedMode, Converter={StaticResource BoolToVisibility}}" Tag="{StaticResource IconLibrary}"
                             Command="{Binding OpenLibraryCommand}" MinWidth="64" AutomationProperties.AutomationId="Library"
-                            ToolTip="BETA - parts made to your numbers: boxes, and more to come. Pick one, set its sizes with the preview on the plate, and insert it." />
+                            ToolTip="BETA - new, and still being proved out; check what it gives you before printing it. Parts made to your numbers: boxes, organisers, hinges, clips, fasteners, gears and mechanisms, windows, doors and roofs. Pick one, set its sizes with the preview on the plate, and insert it." />
                 </WrapPanel>
             </TabItem>
 

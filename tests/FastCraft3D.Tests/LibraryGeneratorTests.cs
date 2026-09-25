@@ -161,6 +161,117 @@ public class LibraryGeneratorTests
     }
 
     [Fact]
+    public void AWindowsGlassIsAPartOfItsOwnOnTheClearFilamentFillingEveryPane()
+    {
+        var window = new FastCraft3D.Generators.Buildings.Window();
+        var s = window.Default with { Columns = 3, Rows = 2, GlassThickness = 0.4f };
+        var made = window.Make(s, Printer.Default);
+
+        var glass = Assert.Single(made.Parts, p => p.Role == "glass");
+        Assert.Equal(2, glass.Filament);
+        Assert.NotNull(glass.Colour);
+
+        double panes = FastCraft3D.Generators.Buildings.Window.Panes(s).Sum(p => (p.X1 - p.X0) * (p.Y1 - p.Y0));
+        Assert.Equal(panes * 0.4, glass.Mesh.ComputeSignedVolume(), 2);
+        Assert.Equal(0f, glass.Mesh.ComputeBounds().Min.Z, 4);
+
+        Assert.DoesNotContain(window.Make(s with { Glass = false }, Printer.Default).Parts, p => p.Role == "glass");
+    }
+
+    [Fact]
+    public void AWindowSaysItsRealSizeAtTheModelsScale()
+    {
+        var window = new FastCraft3D.Generators.Buildings.Window();
+        var said = window.Readouts(window.Default with { Width = 14, Height = 16 }, 87f);
+
+        Assert.Contains("At 1:87, a window 1218 x 1392 mm.", said);
+    }
+
+    [Fact]
+    public void ADoorIsGlazedOnlyInTheTopPanelsAsked()
+    {
+        var door = new FastCraft3D.Generators.Buildings.Door();
+        var s = door.Default with { Leaf = FastCraft3D.Generators.Buildings.DoorLeaf.Glazed, Panels = 3, Glazed = 1 };
+        var made = door.Make(s, Printer.Default);
+
+        var glass = Assert.Single(made.Parts, p => p.Role == "glass");
+        var top = FastCraft3D.Generators.Buildings.Door.Panels(s)[0];
+        var bounds = glass.Mesh.ComputeBounds();
+        Assert.Equal(top.Y0, bounds.Min.Y, 3);
+        Assert.Equal(top.Y1, bounds.Max.Y, 3);
+
+        Assert.DoesNotContain(door.Make(door.Default, Printer.Default).Parts, p => p.Role == "glass");
+    }
+
+    [Fact]
+    public void ADoorTooLowForPeopleAtTheModelsScaleSaysSo()
+    {
+        var door = new FastCraft3D.Generators.Buildings.Door();
+
+        Assert.Contains(door.Readouts(door.Default with { Height = 18 }, 87f), line => line.Contains("people would stoop"));
+        Assert.DoesNotContain(door.Readouts(door.Default with { Height = 25 }, 87f), line => line.Contains("stoop"));
+    }
+
+    [Fact]
+    public void ARoofSitsOnItsWallsWithItsEavesOverhangingAndItsRidgeWhereThePitchPutsIt()
+    {
+        var roof = new FastCraft3D.Generators.Buildings.Roof();
+        var s = roof.Default with { Width = 60, Length = 80, Pitch = 40, Eaves = 3, Verge = 2, Fascia = 1.5f,
+            Hollow = false, Covering = FastCraft3D.Generators.Buildings.RoofCovering.Smooth, Ridge = false };
+        var bounds = Assert.Single(roof.Make(s, Printer.Default).Parts).Mesh.ComputeBounds();
+
+        Assert.Equal(66f, bounds.Size.X, 2);
+        Assert.Equal(84f, bounds.Size.Y, 2);
+        Assert.Equal(0f, bounds.Min.Z, 3);
+        Assert.Equal(1.5f + 33f * MathF.Tan(40f * MathF.PI / 180f), bounds.Max.Z, 2);
+    }
+
+    [Fact]
+    public void AHipRoofIsTheGableCutBackAtBothEnds()
+    {
+        var roof = new FastCraft3D.Generators.Buildings.Roof();
+        var gable = roof.Default with { Hollow = false, Covering = FastCraft3D.Generators.Buildings.RoofCovering.Smooth, Ridge = false, Verge = 3 };
+        double Volume(FastCraft3D.Generators.Buildings.RoofShape shape) =>
+            roof.Make(gable with { Shape = shape }, Printer.Default).Parts[0].Mesh.ComputeSignedVolume();
+
+        double full = Volume(FastCraft3D.Generators.Buildings.RoofShape.Gable);
+        Assert.True(Volume(FastCraft3D.Generators.Buildings.RoofShape.HalfHip) < full);
+        Assert.True(Volume(FastCraft3D.Generators.Buildings.RoofShape.Hip) < Volume(FastCraft3D.Generators.Buildings.RoofShape.HalfHip));
+    }
+
+    [Fact]
+    public void AHollowRoofIsAShellAndItsTilesAreLaidOnIt()
+    {
+        var roof = new FastCraft3D.Generators.Buildings.Roof();
+        var smooth = roof.Default with { Covering = FastCraft3D.Generators.Buildings.RoofCovering.Smooth, Ridge = false };
+        double Volume(FastCraft3D.Generators.Buildings.Roof.Settings s) => roof.Make(s, Printer.Default).Parts[0].Mesh.ComputeSignedVolume();
+
+        double solid = Volume(smooth with { Hollow = false });
+        double shell = Volume(smooth);
+        Assert.True(shell < solid / 3, $"the shell is {shell:0} mm3 of {solid:0}");
+        Assert.True(Volume(smooth with { Covering = FastCraft3D.Generators.Buildings.RoofCovering.Tiles }) > shell);
+    }
+
+    [Fact]
+    public void ARoofSaysHowHighItsRidgeIsAtTheModelsScale()
+    {
+        var roof = new FastCraft3D.Generators.Buildings.Roof();
+        Assert.Contains(roof.Readouts(roof.Default, 87f), line => line.Contains("m at 1:87"));
+    }
+
+    [Theory]
+    [InlineData(MotionTeeth.Small)]
+    [InlineData(MotionTeeth.Standard)]
+    [InlineData(MotionTeeth.Large)]
+    public void MotionWorkIsTwelveToOneWithBothPairsTheSameDistanceApart(MotionTeeth set)
+    {
+        var (cannon, minute, pinion, hour) = MotionWork.Teeth(set);
+
+        Assert.Equal(12.0, (double)minute / cannon * hour / pinion, 9);
+        Assert.Equal(cannon + minute, pinion + hour);
+    }
+
+    [Fact]
     public void ChoosingAWasherSizeFillsInItsIsoNumbers()
     {
         var washer = new Washer();
