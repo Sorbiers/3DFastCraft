@@ -2378,13 +2378,13 @@ public sealed class MainViewModel : INotifyPropertyChanged
     /// <summary>
     /// How much of the surface the thing being placed covers, as a half-size.
     ///
-    /// Lettering is as big as its own outlines. A laid texture has none - it fills the face - so
-    /// it is the face's own room instead, and it matters because the handles take an extent of
-    /// nothing as nothing to place and hide themselves. That is why a texture could only be moved
-    /// by typing in the two fields.
+    /// Lettering is as big as its own outlines, and so is a flat texture - it is laid as outlines
+    /// too, which is why the grip has always worked on brick. A laid texture has none at all: it
+    /// is built as slabs, so its extent came to nothing, and the handles take an extent of nothing
+    /// as nothing to place and hide themselves. That is why a roof could only be moved by typing
+    /// in the two fields.
     ///
-    /// The flat textures are still the lettering's answer, and so still get no handles: their
-    /// layout takes no offset yet, and a grip that moved nothing would be worse than none.
+    /// So it is the face's own room instead, which is what a texture covers.
     /// </summary>
     public Vector2 EmbossExtent
     {
