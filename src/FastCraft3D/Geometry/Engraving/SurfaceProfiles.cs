@@ -36,6 +36,26 @@ public static class SurfaceProfiles
         ReliefField.Lattice(courseMm / 2f, courseMm, -upMm / 2f - courseMm, upMm / 2f + courseMm);
 
     /// <summary>
+    /// The pair of sample lines either side of a place the profile jumps - and never the line
+    /// itself.
+    ///
+    /// A sample sitting exactly on a joint edge or a course head is on the knife edge of the
+    /// modulo that decides which side of it that point is on, and which way it falls is the last
+    /// bit of a float. On a 77 mm cube at a 10 mm pitch the column at x = -9.9 - the far edge of
+    /// the joint at x = -10 - came out a hair inside the joint, so the joint was taken to run the
+    /// whole 4.8 mm to the next column and the tile ramped across it. Half a tile folded along its
+    /// diagonal, which is what the big triangular facets were: 32 mm2 of it, against the 0.03 mm2
+    /// the joint walls themselves come to.
+    ///
+    /// It widens a joint by two microns either side, which is a two-hundredth of a nozzle.
+    /// </summary>
+    private static void Straddle(List<float> into, float edgeMm)
+    {
+        into.Add(edgeMm - StepMm);
+        into.Add(edgeMm + StepMm);
+    }
+
+    /// <summary>
     /// Vinyl siding: strips running the whole way across, each sloping out as it goes down and
     /// stepping back at its bottom edge.
     ///
@@ -51,11 +71,7 @@ public static class SurfaceProfiles
             var at = new List<float>();
 
             foreach (float head in Heads(courseMm, upMm))
-            {
-                at.Add(head);
-                at.Add(head - StepMm);
-                at.Add(head - courseMm + StepMm);
-            }
+                Straddle(at, head);
 
             return [.. at];
         }
@@ -90,10 +106,8 @@ public static class SurfaceProfiles
             foreach (float u in ReliefField.Lattice(
                 0f, tileMm / 2f, -acrossMm / 2f - tileMm, acrossMm / 2f + tileMm))
             {
-                at.Add(u - half);
-                at.Add(u - half + StepMm);
-                at.Add(u + half - StepMm);
-                at.Add(u + half);
+                Straddle(at, u - half);
+                Straddle(at, u + half);
             }
 
             return [.. at];
@@ -104,11 +118,7 @@ public static class SurfaceProfiles
             var at = new List<float>();
 
             foreach (float head in Heads(courseMm, upMm))
-            {
-                at.Add(head);
-                at.Add(head - StepMm);
-                at.Add(head - courseMm + StepMm);
-            }
+                Straddle(at, head);
 
             return [.. at];
         }
@@ -170,10 +180,8 @@ public static class SurfaceProfiles
             foreach (float u in ReliefField.Lattice(
                 0f, Run / 2f, -acrossMm / 2f - Run, acrossMm / 2f + Run))
             {
-                lines.Add(u - jointMm / 2f);
-                lines.Add(u - jointMm / 2f + StepMm);
-                lines.Add(u + jointMm / 2f - StepMm);
-                lines.Add(u + jointMm / 2f);
+                Straddle(lines, u - jointMm / 2f);
+                Straddle(lines, u + jointMm / 2f);
             }
 
             return [.. lines];
@@ -188,10 +196,8 @@ public static class SurfaceProfiles
             // started at the top of the face rather than on the lattice Height repeats on.
             foreach (float edge in Heads(boardMm, upMm))
             {
-                lines.Add(edge - jointMm / 2f);
-                lines.Add(edge - jointMm / 2f + StepMm);
-                lines.Add(edge + jointMm / 2f - StepMm);
-                lines.Add(edge + jointMm / 2f);
+                Straddle(lines, edge - jointMm / 2f);
+                Straddle(lines, edge + jointMm / 2f);
             }
 
             return [.. lines];
