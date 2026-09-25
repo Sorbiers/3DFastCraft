@@ -25,6 +25,83 @@ public readonly record struct TileCourses(
     float SlopeDegrees = 4f, TileSlope Slope = TileSlope.Roll,
     bool Stagger = true, bool Ends = true);
 
+/// <summary>
+/// What of the face a tile is allowed to stand on: the openings cut through it, and its outline.
+///
+/// A window is a hole in the wall, not a hole in the tiling, so a course running across one has to
+/// be broken at the reveal. Subtracting a tool from the object would have got that for free, which
+/// is the fair case against building the geometry; building it means saying so. What building it
+/// buys in return is the rest of this file - no boolean per tile, and no sampling.
+///
+/// An opening is cleared by its bounding rectangle. A window is a rectangle, and where one is not,
+/// clearing its box leaves a little more bare wall rather than a tile hanging over an opening,
+/// which is the right way round to be wrong.
+/// </summary>
+public sealed class TileRoom
+{
+    /// <summary>How far clear of an opening a tile stops, so it does not butt the reveal.</summary>
+    public const float ClearanceMm = 0.2f;
+
+    private readonly FacePatch face;
+    private readonly FaceOutline outline;
+    private readonly Vector2 middle;
+
+    private TileRoom(FacePatch face, Vector2 middle)
+    {
+        this.face = face;
+        this.middle = middle;
+
+        outline = FaceOutline.Of(face);
+
+        var cleared = new List<Rect2>();
+
+        foreach (var (_, holes) in outline.Shapes)
+            foreach (var hole in holes)
+            {
+                if (hole.Count < 3) continue;
+
+                cleared.Add(new Rect2(
+                    hole.Min(p => p.X) - middle.X - ClearanceMm,
+                    hole.Min(p => p.Y) - middle.Y - ClearanceMm,
+                    hole.Max(p => p.X) - middle.X + ClearanceMm,
+                    hole.Max(p => p.Y) - middle.Y + ClearanceMm));
+            }
+
+        Holes = cleared;
+    }
+
+    /// <summary>The openings, in the layout's own frame.</summary>
+    public IReadOnlyList<Rect2> Holes { get; }
+
+    /// <summary>
+    /// The room a laid texture has, or null when it is not going onto a face at all - wrapped
+    /// round a barrel there is no patch to ask, so a barrel with a window in it still gets tiled
+    /// over. Worth fixing the day anybody puts one there.
+    /// </summary>
+    public static TileRoom? Of(IPlacementSurface? surface) =>
+        surface is PlanarSurface flat ? new TileRoom(flat.Face, flat.Middle) : null;
+
+    /// <summary>Whether the whole of this piece has wall under it.</summary>
+    public bool Holds(Rect2 piece)
+    {
+        Vector2[] corners =
+        [
+            new(piece.MinU, piece.MinV), new(piece.MaxU, piece.MinV),
+            new(piece.MaxU, piece.MaxV), new(piece.MinU, piece.MaxV)
+        ];
+
+        foreach (var corner in corners)
+        {
+            var on = corner + middle;
+
+            if (!outline.Contains(on)) return false;
+            if (!face.Clears(on, 0f)) return false;
+        }
+
+        return true;
+    }
+}
+
 /// <summary>Which way a piece is tilted.</summary>
 public enum TileSlope
 {
@@ -118,7 +195,8 @@ public static class TileSolid
     /// one call and the joints of the next agree about where a course begins - the same rule the
     /// profiles had to learn.
     /// </summary>
-    public static List<Rect2> Pieces(in TileCourses courses, float acrossMm, float upMm)
+    public static List<Rect2> Pieces(
+        in TileCourses courses, float acrossMm, float upMm, TileRoom? room = null)
     {
         var made = new List<Rect2>();
 
@@ -146,7 +224,7 @@ public static class TileSolid
 
             if (!courses.Ends)
             {
-                Keep(made, new Rect2(field.MinU, low, field.MaxU, high), field);
+                Keep(made, new Rect2(field.MinU, low, field.MaxU, high), field, room);
                 continue;
             }
 
@@ -158,7 +236,7 @@ public static class TileSolid
             {
                 if (made.Count >= MostTiles) return made;
 
-                Keep(made, new Rect2(start + half, low, start + tile - half, high), field);
+                Keep(made, new Rect2(start + half, low, start + tile - half, high), field, room);
             }
         }
 
@@ -172,15 +250,67 @@ public static class TileSolid
     /// Cut off rather than thrown away, because that is what a tiler does at a verge: a course
     /// ends in a cut tile, not in a gap the size of a whole one.
     /// </summary>
-    private static void Keep(List<Rect2> made, Rect2 piece, Rect2 field)
+    private static void Keep(List<Rect2> made, Rect2 piece, Rect2 field, TileRoom? room)
     {
         var cut = piece.ClippedTo(field);
+        if (cut.IsEmpty) return;
 
-        // A thousandth of slack, because a width worked out as one subtraction of two large
-        // numbers loses its last bit as the pieces get further from the middle of the face.
-        if (cut.Width < LeastMm - 1e-3f || cut.Height < LeastMm - 1e-3f) return;
+        List<Rect2> parts = room is null ? [cut] : Without(cut, room.Holes);
 
-        made.Add(cut);
+        foreach (var part in parts)
+        {
+            // A thousandth of slack, because a width worked out as one subtraction of two large
+            // numbers loses its last bit as the pieces get further from the middle of the face.
+            if (part.Width < LeastMm - 1e-3f || part.Height < LeastMm - 1e-3f) continue;
+
+            // And the outline itself, which catches a gable end or a face with a corner off it as
+            // well as anything the bounding boxes above did not already take out.
+            if (room is not null && !room.Holds(part)) continue;
+
+            made.Add(part);
+        }
+    }
+
+    /// <summary>
+    /// What is left of a piece once the openings are taken out of it: nothing, itself, or the
+    /// strips around the hole. A course of siding running across a window comes back as the piece
+    /// to its left and the piece to its right, which is what a siding fitter would have.
+    /// </summary>
+    public static List<Rect2> Without(Rect2 piece, IReadOnlyList<Rect2> holes)
+    {
+        var parts = new List<Rect2> { piece };
+
+        foreach (var hole in holes)
+        {
+            var left = new List<Rect2>(parts.Count + 3);
+
+            foreach (var part in parts) Split(part, hole, left);
+
+            parts = left;
+            if (parts.Count == 0) break;
+        }
+
+        return parts;
+    }
+
+    private static void Split(Rect2 part, Rect2 hole, List<Rect2> into)
+    {
+        // Clear of the opening altogether, so it survives whole.
+        if (hole.MaxU <= part.MinU || hole.MinU >= part.MaxU ||
+            hole.MaxV <= part.MinV || hole.MinV >= part.MaxV)
+        {
+            into.Add(part);
+            return;
+        }
+
+        if (hole.MinU > part.MinU) into.Add(new Rect2(part.MinU, part.MinV, hole.MinU, part.MaxV));
+        if (hole.MaxU < part.MaxU) into.Add(new Rect2(hole.MaxU, part.MinV, part.MaxU, part.MaxV));
+
+        // And the strips above and below, which only span what the two beside it did not.
+        float low = MathF.Max(part.MinU, hole.MinU), high = MathF.Min(part.MaxU, hole.MaxU);
+
+        if (hole.MinV > part.MinV) into.Add(new Rect2(low, part.MinV, high, hole.MinV));
+        if (hole.MaxV < part.MaxV) into.Add(new Rect2(low, hole.MaxV, high, part.MaxV));
     }
 
     /// <summary>
@@ -193,7 +323,7 @@ public static class TileSolid
     {
         var mesh = new Mesh();
 
-        foreach (var piece in Pieces(courses, acrossMm, upMm))
+        foreach (var piece in Pieces(courses, acrossMm, upMm, TileRoom.Of(surface)))
             AddSlab(mesh, surface, courses, piece, sunk);
 
         return mesh.Welded();

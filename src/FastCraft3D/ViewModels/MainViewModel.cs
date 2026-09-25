@@ -2441,7 +2441,10 @@ public sealed class MainViewModel : INotifyPropertyChanged
             if (SurfaceTexture.CoursesOf(embossTexture, embossDepth) is { } courses)
             {
                 var (wide, tall) = FieldRoom();
-                int slabs = TileSolid.Pieces(courses, wide, tall).Count;
+
+                // With the room, so the figure counts what will actually be laid: a course that
+                // runs across a window is broken at the reveal and comes to two pieces, not one.
+                int slabs = TileSolid.Pieces(courses, wide, tall, TileRoom.Of(EmbossSurface())).Count;
 
                 if (slabs == 0) return "The face is smaller than one course of this - try a finer pitch.";
 

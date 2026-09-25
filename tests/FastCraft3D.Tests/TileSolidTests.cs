@@ -1,5 +1,6 @@
 ﻿using System.Numerics;
 using FastCraft3D.Geometry;
+using FastCraft3D.Geometry.Csg;
 using FastCraft3D.Geometry.Engraving;
 using Xunit;
 using Xunit.Abstractions;
@@ -170,6 +171,79 @@ public class TileSolidTests(ITestOutputHelper log)
         Assert.NotEmpty(pieces);
         Assert.All(pieces, p => Assert.True(p.Width > 59f,
             $"a course of siding is {p.Width:0.##} mm wide where the face is 60"));
+    }
+
+    /// <summary>
+    /// A course running across an opening comes back as the pieces either side of it.
+    ///
+    /// Four ways round, because a hole can take a bite out of a piece from any side and the one
+    /// that matters - a window in the middle of a wall - is the one that leaves two.
+    /// </summary>
+    [Fact]
+    public void AnOpeningBreaksThePieceThatRunsAcrossIt()
+    {
+        var course = new Rect2(-30f, 0f, 30f, 5f);
+
+        // A window well inside the run: the course survives as the piece each side of it.
+        var split = TileSolid.Without(course, [new Rect2(-5f, -2f, 5f, 8f)]);
+        Assert.Equal(2, split.Count);
+        Assert.Equal(-30f, split.Min(r => r.MinU), 3);
+        Assert.Equal(30f, split.Max(r => r.MaxU), 3);
+        Assert.All(split, r => Assert.True(r.MaxU <= -5f + 1e-3f || r.MinU >= 5f - 1e-3f,
+            $"{r} reaches into the opening"));
+
+        // Swallowed whole, and untouched, and cut back at one end.
+        Assert.Empty(TileSolid.Without(course, [new Rect2(-40f, -2f, 40f, 8f)]));
+        Assert.Single(TileSolid.Without(course, [new Rect2(40f, 40f, 50f, 50f)]));
+        Assert.Single(TileSolid.Without(course, [new Rect2(10f, -2f, 40f, 8f)]));
+
+        // No two of the parts may overlap, whatever the hole did to it.
+        var bitten = TileSolid.Without(course, [new Rect2(-5f, 2f, 5f, 8f)]);
+        for (int i = 0; i < bitten.Count; i++)
+            for (int j = i + 1; j < bitten.Count; j++)
+                Assert.False(
+                    MathF.Min(bitten[i].MaxU, bitten[j].MaxU) - MathF.Max(bitten[i].MinU, bitten[j].MinU) > 1e-6f &&
+                    MathF.Min(bitten[i].MaxV, bitten[j].MaxV) - MathF.Max(bitten[i].MinV, bitten[j].MinV) > 1e-6f,
+                    $"{bitten[i]} overlaps {bitten[j]}");
+    }
+
+    /// <summary>
+    /// And the same on a real wall with a window cut through it, which is where it was noticed:
+    /// the siding ran straight across the opening, because building the geometry knows nothing
+    /// about the hole unless it is told.
+    /// </summary>
+    [Fact]
+    public void SidingStopsAtAWindowInsteadOfRunningAcrossIt()
+    {
+        // A 24 mm window punched right through a 60 mm wall, the way the tool makes one.
+        var wall = LocalCsg.Subtract(Primitives.Box(60f, 8f, 60f), Primitives.Box(24f, 40f, 24f));
+
+        // Picked well above the opening, since the middle of the wall is now fresh air.
+        var face = FacePatch.Find(wall, new Vector3(0f, -4f, 20f), -Vector3.UnitY)!;
+        var flat = new PlanarSurface(face);
+
+        var room = TileRoom.Of(flat);
+        Assert.NotNull(room);
+        Assert.NotEmpty(room!.Holes);
+
+        var courses = SurfaceTexture.CoursesOf(
+            new TextureOptions(TextureKind.Siding, 7f, 0.4f, 45f), 0.2f)!.Value;
+
+        var over = TileSolid.Pieces(courses, 56f, 56f);
+        var clear = TileSolid.Pieces(courses, 56f, 56f, room);
+
+        log.WriteLine($"{over.Count} pieces laid over the window, {clear.Count} laid clear of it");
+
+        Assert.True(clear.Count > over.Count,
+            "a course broken at the reveal should come back as more pieces, not fewer");
+
+        // Nothing may stand over the opening.
+        var hole = room.Holes[0];
+
+        Assert.All(clear, p => Assert.False(
+            MathF.Min(p.MaxU, hole.MaxU) - MathF.Max(p.MinU, hole.MinU) > 1e-3f &&
+            MathF.Min(p.MaxV, hole.MaxV) - MathF.Max(p.MinV, hole.MinV) > 1e-3f,
+            $"{p} stands over the window at {hole}"));
     }
 
     /// <summary>
