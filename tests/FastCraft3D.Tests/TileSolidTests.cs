@@ -247,6 +247,42 @@ public class TileSolidTests(ITestOutputHelper log)
     }
 
     /// <summary>
+    /// And wrapped round a tower, where there is no face patch to ask and the wall has to be
+    /// found by asking the solid itself.
+    /// </summary>
+    [Fact]
+    public void TilesStopAtAWindowRoundATowerToo()
+    {
+        const float Radius = 20f;
+
+        // A window punched right through the tower, so it opens at both ends of the X axis - and
+        // the layout's origin, which is the angle the wrap starts from, sits in one of them.
+        var tower = LocalCsg.Subtract(
+            Primitives.Prism(Radius, 60f, 48), Primitives.Box(60f, 12f, 12f));
+
+        var barrel = new CylinderSurface(Vector3.Zero, Radius);
+        var room = TileRoom.Of(barrel, tower);
+
+        Assert.NotNull(room);
+        Assert.True(room!.Scans, "a wrapped room has no outline, so it is walked rather than clipped");
+
+        Assert.False(room.Supports(new Vector2(0f, 0f)), "the middle of the window reads as wall");
+        Assert.True(room.Supports(new Vector2(0f, 22f)), "the wall above the window reads as fresh air");
+
+        var courses = SurfaceTexture.CoursesOf(
+            new TextureOptions(TextureKind.RoofTiles, 8f, 0.4f, 45f), 0.3f)!.Value;
+
+        float round = 2f * MathF.PI * Radius;
+        var pieces = TileSolid.Pieces(courses, round, 52f, room);
+
+        log.WriteLine($"{pieces.Count} tiles round a {round:0.#} mm tower with a window in it");
+        Assert.NotEmpty(pieces);
+
+        Assert.All(pieces, p => Assert.False(
+            p.Contains(0f, 0f), $"{p} stands over the window"));
+    }
+
+    /// <summary>
     /// Cut, the slabs are their own mirror about the face, so taking them away sinks the tiles in
     /// rather than doing nothing. Subtracting the raised solid removes the footings and no more,
     /// which is a flat recess a third of a millimetre deep with no pattern in it at all.

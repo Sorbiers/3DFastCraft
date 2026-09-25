@@ -2444,7 +2444,8 @@ public sealed class MainViewModel : INotifyPropertyChanged
 
                 // With the room, so the figure counts what will actually be laid: a course that
                 // runs across a window is broken at the reveal and comes to two pieces, not one.
-                int slabs = TileSolid.Pieces(courses, wide, tall, TileRoom.Of(EmbossSurface())).Count;
+                int slabs = TileSolid.Pieces(
+                    courses, wide, tall, TileRoom.Of(EmbossSurface(), embossMesh)).Count;
 
                 if (slabs == 0) return "The face is smaller than one course of this - try a finer pitch.";
 
@@ -3136,7 +3137,8 @@ public sealed class MainViewModel : INotifyPropertyChanged
         // Tiles and siding are built as the slabs they are. Only boarding is still a sampled
         // field, because only its grain is genuinely a height that changes everywhere.
         if (SurfaceTexture.CoursesOf(embossTexture, embossDepth) is { } courses)
-            return TileSolid.Build(surface, courses, wide, tall, sunk);
+            return TileSolid.Build(
+                surface, courses, wide, tall, sunk, TileRoom.Of(surface, embossMesh));
 
         return Profile(coarse) is { } relief
             ? ReliefField.Build(surface, relief, wide, tall, sunk)

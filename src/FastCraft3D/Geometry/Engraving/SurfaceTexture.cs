@@ -68,8 +68,8 @@ public enum TextureKind
 /// </param>
 /// <param name="SlopeDegrees">
 /// How far each piece of a laid texture is tilted - a roof tile, a strip of siding. Four degrees
-/// is what reads as a lapped roof; nought lays the pieces flat. It means nothing to the textures
-/// cut from flat outlines.
+/// is what reads as a lapped roof; nought lays the pieces flat, and negative lifts the other edge
+/// so the courses lap the other way. It means nothing to the textures cut from flat outlines.
 /// </param>
 /// <param name="Slope">Which way that tilt runs: up the course, or along the piece.</param>
 public readonly record struct TextureOptions(
@@ -151,7 +151,8 @@ public readonly record struct TextureOptions(
             PitchMm = Math.Max(PitchMm, line + LeastPadMm),
             LineMm = line,
             AngleDegrees = Math.Clamp(AngleDegrees, 15f, 75f),
-            SlopeDegrees = Math.Clamp(SlopeDegrees, 0f, TileSolid.MostSlopeDegrees)
+            SlopeDegrees = Math.Clamp(
+                SlopeDegrees, -TileSolid.MostSlopeDegrees, TileSolid.MostSlopeDegrees)
         };
     }
 }

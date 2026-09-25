@@ -12,7 +12,9 @@ namespace FastCraft3D.Geometry.Engraving;
 /// <param name="JointMm">The gap left between one slab and the next.</param>
 /// <param name="SlopeDegrees">
 /// How far each slab is tilted. Four degrees is what reads as a lapped roof at the sizes anyone
-/// models one; nought lays the tiles flat.
+/// models one; nought lays the tiles flat. Negative lifts the other edge - the head of a course
+/// rather than its tail, the near end of a piece rather than its far one - which is the same
+/// tiling seen from the other side of the roof.
 /// </param>
 /// <param name="Slope">Which way that tilt runs.</param>
 /// <param name="Stagger">Whether alternate courses are set over by half a tile.</param>
@@ -42,9 +44,39 @@ public sealed class TileRoom
     /// <summary>How far clear of an opening a tile stops, so it does not butt the reveal.</summary>
     public const float ClearanceMm = 0.2f;
 
-    private readonly FacePatch face;
-    private readonly FaceOutline outline;
+    /// <summary>
+    /// How far apart a wrapped piece is tested along its length. Finer than a joint, so a reveal
+    /// lands within a joint's width of where it really is.
+    /// </summary>
+    public const float ScanMm = 0.25f;
+
+    /// <summary>And a cap, so a course right round a big barrel is still tested in a blink.</summary>
+    public const int MostScanSteps = 2_000;
+
+    private readonly FacePatch? face;
+    private readonly FaceOutline? outline;
     private readonly Vector2 middle;
+
+    private readonly IPlacementSurface? wrapped;
+    private readonly SolidLookup? solid;
+
+    /// <summary>
+    /// Wrapped round a barrel there is no face patch to ask - the layout goes round the whole
+    /// object - so where the wall is has to be asked of the solid itself: a point a hair inside
+    /// the nominal surface has material under it if it is inside the mesh.
+    ///
+    /// That is a ray cast rather than a polygon test, so it is asked along a piece rather than of
+    /// the piece as a whole, and a course is broken wherever the support stops. The step is a
+    /// quarter of a millimetre, so a reveal can come out that much out of place. On a face the
+    /// outline answers exactly and none of this is used.
+    /// </summary>
+    private TileRoom(IPlacementSurface wrapped, Mesh solid)
+    {
+        this.wrapped = wrapped;
+        this.solid = new SolidLookup(solid);
+
+        Holes = [];
+    }
 
     private TileRoom(FacePatch face, Vector2 middle)
     {
@@ -78,8 +110,21 @@ public sealed class TileRoom
     /// round a barrel there is no patch to ask, so a barrel with a window in it still gets tiled
     /// over. Worth fixing the day anybody puts one there.
     /// </summary>
-    public static TileRoom? Of(IPlacementSurface? surface) =>
-        surface is PlanarSurface flat ? new TileRoom(flat.Face, flat.Middle) : null;
+    public static TileRoom? Of(IPlacementSurface? surface, Mesh? solid = null)
+    {
+        if (surface is PlanarSurface flat) return new TileRoom(flat.Face, flat.Middle);
+
+        return surface is not null && solid is not null && solid.TriangleCount > 0
+            ? new TileRoom(surface, solid)
+            : null;
+    }
+
+    /// <summary>
+    /// Whether a piece has to be tested along its length rather than judged whole. Wrapped, the
+    /// answer comes a point at a time, so a course that crosses an opening is broken at it rather
+    /// than thrown away.
+    /// </summary>
+    public bool Scans => outline is null;
 
     /// <summary>Whether the whole of this piece has wall under it.</summary>
     public bool Holds(Rect2 piece)
@@ -91,14 +136,28 @@ public sealed class TileRoom
         ];
 
         foreach (var corner in corners)
-        {
-            var on = corner + middle;
+            if (!Supports(corner))
+                return false;
 
-            if (!outline.Contains(on)) return false;
-            if (!face.Clears(on, 0f)) return false;
+        // And the middle, since wrapped the corners alone would step over an opening narrower
+        // than the piece is wide.
+        return Supports(new Vector2(
+            (piece.MinU + piece.MaxU) / 2f, (piece.MinV + piece.MaxV) / 2f));
+    }
+
+    /// <summary>Whether there is material under this point of the layout.</summary>
+    public bool Supports(Vector2 at)
+    {
+        if (outline is not null && face is not null)
+        {
+            var on = at + middle;
+            return outline.Contains(on) && face.Clears(on, 0f);
         }
 
-        return true;
+        // A hair inside the nominal surface, so a point on a wall reads as material and one over
+        // an opening does not.
+        return solid is not null && wrapped is not null &&
+               solid.Contains(wrapped.At(at, -SinkMm / 2f));
     }
 }
 
@@ -167,8 +226,11 @@ public static class TileSolid
     public static float RiseOn(in TileCourses courses, Rect2 piece)
     {
         float extent = courses.Slope == TileSlope.Pitch ? piece.Width : piece.Height;
-        float rise = extent * MathF.Tan(Math.Clamp(courses.SlopeDegrees, 0f, MostSlopeDegrees)
-                                        * MathF.PI / 180f);
+
+        // The sign says which edge rises, not how far: taken as read it would drive the low edge
+        // below the face and give the slab a negative thickness at one end.
+        float rise = extent * MathF.Tan(
+            Math.Min(MathF.Abs(courses.SlopeDegrees), MostSlopeDegrees) * MathF.PI / 180f);
 
         // A piece that rises further than a course is deep is a fin, not a tile - and it is also
         // what a strip of siding pitched a few degrees would otherwise become, since a strip runs
@@ -255,6 +317,12 @@ public static class TileSolid
         var cut = piece.ClippedTo(field);
         if (cut.IsEmpty) return;
 
+        if (room is { Scans: true })
+        {
+            Scan(made, cut, room);
+            return;
+        }
+
         List<Rect2> parts = room is null ? [cut] : Without(cut, room.Holes);
 
         foreach (var part in parts)
@@ -268,6 +336,41 @@ public static class TileSolid
             if (room is not null && !room.Holds(part)) continue;
 
             made.Add(part);
+        }
+    }
+
+    /// <summary>
+    /// Walks a piece along its length and keeps the stretches that have wall under them.
+    ///
+    /// For the wrapped case, where the answer comes a point at a time rather than from an outline.
+    /// A course crossing a window comes back as the stretch before it and the stretch after, to a
+    /// quarter of a millimetre.
+    /// </summary>
+    private static void Scan(List<Rect2> made, Rect2 piece, TileRoom room)
+    {
+        int steps = Math.Clamp(
+            (int)MathF.Ceiling(piece.Width / TileRoom.ScanMm), 1, TileRoom.MostScanSteps);
+
+        float step = piece.Width / steps;
+        int from = -1;
+
+        for (int i = 0; i <= steps; i++)
+        {
+            bool held = i < steps && room.Holds(new Rect2(
+                piece.MinU + i * step, piece.MinV, piece.MinU + (i + 1) * step, piece.MaxV));
+
+            if (held)
+            {
+                if (from < 0) from = i;
+                continue;
+            }
+
+            if (from < 0) continue;
+
+            var run = new Rect2(piece.MinU + from * step, piece.MinV, piece.MinU + i * step, piece.MaxV);
+            from = -1;
+
+            if (run.Width >= LeastMm - 1e-3f && run.Height >= LeastMm - 1e-3f) made.Add(run);
         }
     }
 
@@ -317,13 +420,17 @@ public static class TileSolid
     /// The solid, ready to be unioned onto the object - or subtracted from it, which
     /// <paramref name="sunk"/> mirrors it about the face for.
     /// </summary>
+    /// <param name="room">
+    /// Where there is wall to stand on. Left out, a face works it out for itself from its own
+    /// outline; wrapped there is no face to ask, so the caller has to hand over the object.
+    /// </param>
     public static Mesh Build(
         IPlacementSurface surface, in TileCourses courses, float acrossMm, float upMm,
-        bool sunk = false)
+        bool sunk = false, TileRoom? room = null)
     {
         var mesh = new Mesh();
 
-        foreach (var piece in Pieces(courses, acrossMm, upMm, TileRoom.Of(surface)))
+        foreach (var piece in Pieces(courses, acrossMm, upMm, room ?? TileRoom.Of(surface)))
             AddSlab(mesh, surface, courses, piece, sunk);
 
         return mesh.Welded();
@@ -341,6 +448,7 @@ public static class TileSolid
         float thick = MathF.Max(courses.ThickMm, 0.05f);
         float rise = RiseOn(courses, piece);
         bool pitched = courses.Slope == TileSlope.Pitch;
+        bool other = courses.SlopeDegrees < 0f;
 
         // Sunk, the slab is its own mirror about the face: the boolean then takes it away and
         // leaves the tile cut into the surface rather than standing off it.
@@ -356,7 +464,9 @@ public static class TileSolid
                 ? (piece.Width > 1e-6f ? (u - piece.MinU) / piece.Width : 0f)
                 : (piece.Height > 1e-6f ? (piece.MaxV - v) / piece.Height : 0f);
 
-            return turn * (thick + rise * Math.Clamp(along, 0f, 1f));
+            along = Math.Clamp(along, 0f, 1f);
+
+            return turn * (thick + rise * (other ? 1f - along : along));
         }
 
         Vector3 Top(float u, float v) => surface.At(new Vector2(u, v), Height(u, v));
