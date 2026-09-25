@@ -749,8 +749,9 @@ public partial class MainWindow : Window
 
     /// <summary>
     /// Keeps the placement handles on whatever is being placed, and hides them outside the tools
-    /// that use them. Lettering gets all three handles; an engraved pattern covers the whole face
-    /// and has no angle, so it gets the grip alone.
+    /// that use them. Lettering gets all three handles; an engraved pattern and a laid texture
+    /// cover the whole face and have no angle, so they get the grip alone - and a box round a
+    /// texture would be the face itself, which says nothing.
     /// </summary>
     private void RefreshPlacementGizmo()
     {
@@ -762,10 +763,13 @@ public partial class MainWindow : Window
 
         if (viewModel.IsEmbossMode)
         {
-            placeGizmo.Noun = "Lettering";
+            bool laid = viewModel.TextureTilts;
+
+            placeGizmo.Noun = laid ? "Texture" : "Lettering";
             placeGizmo.Show(
                 viewModel.HasEmbossFace, viewModel.EmbossSurface(),
-                viewModel.EmbossPlacement, viewModel.EmbossExtent);
+                viewModel.EmbossPlacement, viewModel.EmbossExtent,
+                laid ? PlacementHandles.Move : PlacementHandles.All);
         }
         else if (viewModel.IsEngraveMode)
         {

@@ -2375,7 +2375,27 @@ public sealed class MainViewModel : INotifyPropertyChanged
     private static float Rounded(float value) => float.IsFinite(value) ? MathF.Round(value, 3) : 0f;
 
     /// <summary>Half the size of the lettering, for the handles to be drawn round.</summary>
-    public Vector2 EmbossExtent => SurfacePlacement.Extent(Lettering());
+    /// <summary>
+    /// How much of the surface the thing being placed covers, as a half-size.
+    ///
+    /// Lettering is as big as its own outlines. A laid texture has none - it fills the face - so
+    /// it is the face's own room instead, and it matters because the handles take an extent of
+    /// nothing as nothing to place and hide themselves. That is why a texture could only be moved
+    /// by typing in the two fields.
+    ///
+    /// The flat textures are still the lettering's answer, and so still get no handles: their
+    /// layout takes no offset yet, and a grip that moved nothing would be worse than none.
+    /// </summary>
+    public Vector2 EmbossExtent
+    {
+        get
+        {
+            if (!embossTexture.IsLaid) return SurfacePlacement.Extent(Lettering());
+
+            var (across, up) = FaceRoom();
+            return new Vector2(across, up) * 0.5f;
+        }
+    }
 
     /// <summary>
     /// The shape the lettering is laid onto.
