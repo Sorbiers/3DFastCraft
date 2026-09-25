@@ -2425,6 +2425,18 @@ public sealed class MainViewModel : INotifyPropertyChanged
         {
             if (embossFace is null) return "Click the face to letter.";
 
+            if (SurfaceTexture.CoursesOf(embossTexture, embossDepth) is { } courses)
+            {
+                var (wide, tall) = FieldRoom();
+                int slabs = TileSolid.Pieces(courses, wide, tall).Count;
+
+                if (slabs == 0) return "The face is smaller than one course of this - try a finer pitch.";
+
+                return $"{embossTexture.Kind.ToString().ToLowerInvariant()}, {slabs:N0} pieces, "
+                     + $"{TileSolid.ReliefOf(courses):0.##} mm of relief"
+                     + $" - about {slabs * 12:N0} triangles";
+            }
+
             if (Profile(coarse: false) is { } relief)
             {
                 var (wide, tall) = FaceRoom();
@@ -2738,14 +2750,15 @@ public sealed class MainViewModel : INotifyPropertyChanged
 
             if (built is null || built.TriangleCount == 0)
             {
-                // Whatever Cost would have said, said here too, so the reason lands in the one
+                // Whatever the panel would have said, said here too, so the reason lands in the one
                 // place somebody looks after pressing a button that appeared to do nothing.
                 var (wide, tall) = FaceRoom();
-                var cost = Profile(coarse: false) is { } relief
+                var cost = !embossTexture.IsLaid && Profile(coarse: false) is { } relief
                     ? ReliefField.Cost(relief, MathF.Max(wide, 0.01f), MathF.Max(tall, 0.01f))
                     : default;
 
-                Status = cost.Refusal ?? "The texture produced no geometry - try a coarser pitch";
+                Status = cost.Refusal
+                    ?? "The face is smaller than one course of this - try a finer pitch";
                 return;
             }
 
@@ -3089,17 +3102,31 @@ public sealed class MainViewModel : INotifyPropertyChanged
     /// </param>
     private Mesh? ProfiledSolid(IPlacementSurface surface, bool coarse, bool sunk = false)
     {
-        if (Profile(coarse) is not { } relief) return null;
+        var (wide, tall) = FieldRoom();
+        if (wide <= 0.01f || tall <= 0.01f) return null;
 
+        // Tiles and siding are built as the slabs they are. Only boarding is still a sampled
+        // field, because only its grain is genuinely a height that changes everywhere.
+        if (SurfaceTexture.CoursesOf(embossTexture, embossDepth) is { } courses)
+            return TileSolid.Build(surface, courses, wide, tall, sunk);
+
+        return Profile(coarse) is { } relief
+            ? ReliefField.Build(surface, relief, wide, tall, sunk)
+            : null;
+    }
+
+    /// <summary>
+    /// The rectangle a shaped texture is laid over: the face, less the strip a flat texture keeps
+    /// clear so that nothing is cut right at the outline.
+    /// </summary>
+    private (float Wide, float Tall) FieldRoom()
+    {
         var (across, up) = FaceRoom();
-        if (across <= 0.01f || up <= 0.01f) return null;
+        if (across <= 0.01f || up <= 0.01f) return (0f, 0f);
 
-        // Clear of the edge by the same strip a flat texture keeps, so the face is not cut into
-        // right at its outline.
         float margin = Engraver.RaisedInset * 4f;
 
-        return ReliefField.Build(surface, relief,
-            MathF.Max(across - margin, 0.01f), MathF.Max(up - margin, 0.01f), sunk);
+        return (MathF.Max(across - margin, 0.01f), MathF.Max(up - margin, 0.01f));
     }
 
     /// <summary>Whether a texture is being laid rather than a stamp placed.</summary>

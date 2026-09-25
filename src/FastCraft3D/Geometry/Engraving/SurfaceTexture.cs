@@ -103,6 +103,15 @@ public readonly record struct TextureOptions(
         Kind is TextureKind.RoofTiles or TextureKind.Planks or TextureKind.Siding;
 
     /// <summary>
+    /// The ones built as slabs rather than sampled as a field.
+    ///
+    /// A tile and a strip of siding are rectangles with a plate on them, laid at an angle, and
+    /// nothing about either of them wants a grid. Boarding still does, because its grain genuinely
+    /// is a height that changes everywhere.
+    /// </summary>
+    public bool IsLaid => Kind is TextureKind.RoofTiles or TextureKind.Siding;
+
+    /// <summary>
     /// Whether running it the other way means anything. Vertical boarding is real; a roof laid in
     /// vertical columns is not a roof.
     /// </summary>
@@ -174,6 +183,38 @@ public static class SurfaceTexture
     /// How fine the result may be. The grain on a board is held to this, so a preview can ask for
     /// a coarse one and get a field a fraction of the size to draw while the numbers are moving.
     /// </param>
+    /// <summary>
+    /// How far each tile is rolled, tail standing further off the face than head.
+    ///
+    /// Not a setting, because nobody asked for one and every roof wants the same answer: enough
+    /// that a course throws a shadow on the one below, not so much that the tiles read as fins.
+    /// </summary>
+    public const float RollDegrees = 4f;
+
+    /// <summary>
+    /// The courses a slab-built texture comes to on a face, or null when this one is a sampled
+    /// field instead.
+    /// </summary>
+    /// <param name="thickMm">
+    /// How thick a tile is. It is what the panel's Depth asks for, and the whole relief is this
+    /// plus what the roll adds - <see cref="TileSolid.ReliefOf"/> has that figure.
+    /// </param>
+    public static TileCourses? CoursesOf(TextureOptions options, float thickMm)
+    {
+        var o = options.Sane();
+        if (!o.IsLaid) return null;
+
+        float course = MathF.Max(o.PitchMm / MathF.Max(o.Courses, 0.2f), TextureOptions.LeastPadMm);
+
+        // Siding is one strip the whole way across, so its course is the pitch itself rather than
+        // the pitch divided by how long a piece is - there are no pieces.
+        return o.Kind == TextureKind.Siding
+            ? new TileCourses(o.PitchMm, o.PitchMm, thickMm, o.LineMm, RollDegrees,
+                              Stagger: false, Ends: false)
+            : new TileCourses(o.PitchMm, course, thickMm, o.LineMm, RollDegrees,
+                              Stagger: true, Ends: true);
+    }
+
     public static IRelief? ProfileOf(TextureOptions options, float depthMm, float nozzleMm = 0.4f)
     {
         var o = options.Sane();
