@@ -146,6 +146,8 @@ public partial class MainWindow : Window
         };
 
         viewModel.EngraveFaceChanged += ShowFacePreview;
+        viewModel.GeneratorFaceChanged += () => renderer?.ShowFace(viewModel.GeneratorFace, tint: AlignFacePickedColour);
+        viewModel.WallMountChanged += () => renderer?.ShowFace(viewModel.WallMountFace, null, viewModel.WallMountPreview());
         viewModel.RestingFacesChanged += () => renderer?.ShowRestingFaces(viewModel.RestingFaceList, viewModel.RestingHover);
         viewModel.AlignFaceChanged += () => renderer?.ShowFace(
             viewModel.AlignFace, tint: viewModel.HasAlignFaceTarget ? AlignFacePickedColour : null);
@@ -197,6 +199,7 @@ public partial class MainWindow : Window
         placeGizmo.Changed += placement =>
         {
             if (viewModel.IsEmbossMode) viewModel.EmbossPlacement = placement;
+            else if (viewModel.IsWallMountMode) viewModel.WallMountPlacement = placement;
             else if (viewModel.IsEngraveMode) viewModel.EngravePlacement = placement;
         };
         PlacementGizmoLayer.PreviewMouseLeftButtonDown += OnTextGizmoDown;
@@ -771,6 +774,13 @@ public partial class MainWindow : Window
                 viewModel.EmbossPlacement, viewModel.EmbossExtent,
                 laid ? PlacementHandles.Move : PlacementHandles.All);
         }
+        else if (viewModel.IsWallMountMode)
+        {
+            placeGizmo.Noun = "Keyholes";
+            placeGizmo.Show(
+                viewModel.HasWallMountFace, viewModel.WallMountSurface(),
+                viewModel.WallMountPlacement, viewModel.WallMountExtent, PlacementHandles.All);
+        }
         else if (viewModel.IsEngraveMode)
         {
             placeGizmo.Noun = "Pattern";
@@ -854,7 +864,7 @@ public partial class MainWindow : Window
         if (viewModel.IsSplitMode || viewModel.IsExtrudeMode) splitGizmo?.Reposition();
         SettleSplitPreview();
         SettleConnectorMarks();
-        if (viewModel.IsEmbossMode || viewModel.IsEngraveMode) placeGizmo?.Reposition();
+        if (viewModel.IsEmbossMode || viewModel.IsEngraveMode || viewModel.IsWallMountMode) placeGizmo?.Reposition();
 
         // The tape is anchored to the model rather than to the screen, so it is reprojected with
         // the camera. Only while it is out: this runs on every frame.
@@ -1027,6 +1037,26 @@ public partial class MainWindow : Window
         {
             viewModel.TakePivot(target, SnappedPoint(target, ToVector3(hit!.PointHit)));
             RefreshPivotMark();
+            e.Handled = true;
+            return;
+        }
+
+        if (viewModel.IsWallMountMode)
+        {
+            if (!viewModel.Scene.Selection.Contains(target))
+            {
+                PressLikeFileExplorer(target);
+                viewModel.RefreshSelection();
+            }
+
+            viewModel.PickWallMountFace(target, ToVector3(hit!.PointHit), ToVector3(hit.NormalAtHit));
+            e.Handled = true;
+            return;
+        }
+
+        // A cutter's panel is open on a part: a click on one of its faces puts the cutter there.
+        if (viewModel.GeneratorFacePick is { } pickFace && pickFace(target, ToVector3(hit!.PointHit), ToVector3(hit.NormalAtHit)))
+        {
             e.Handled = true;
             return;
         }
@@ -1837,6 +1867,7 @@ public partial class MainWindow : Window
 
         if (e.PropertyName is nameof(MainViewModel.IsToolRunning)
             or nameof(MainViewModel.IsEmbossMode)
+            or nameof(MainViewModel.IsWallMountMode)
             or nameof(MainViewModel.IsEngraveMode)
             or nameof(MainViewModel.PanelHandles))
         {

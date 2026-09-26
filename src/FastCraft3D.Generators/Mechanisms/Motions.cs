@@ -24,7 +24,10 @@ public sealed class Geneva : Generator<Geneva.Settings>
         [Length("Pin", 2, 10, Hint = "The driving pin's diameter")] float Pin = 4f,
         [Length("Thickness", 3, 15)] float Thickness = 5f,
         [Length("Bore", 0, 10, Hint = "For both shafts. Nought for none.")] float Bore = 4f,
-        [Clearance("Clearance", 0.15, 1, Hint = "Round the pin in the slot, and round the locking disc. Under 0.15 a printed Geneva binds.")] float Clearance = 0.3f);
+        [Clearance("Clearance", 0.15, 1, Hint = "Round the pin in the slot, and round the locking disc. Under 0.15 a printed Geneva binds.")] float Clearance = 0.3f,
+        [Toggle("Base", Hint = "A plate with a pin standing in each bore, to turn it by hand")] bool Base = false);
+
+    protected override bool Shows(Settings s, string parameter) => parameter != nameof(Settings.Base) || s.Bore > 0;
 
     private sealed record Layout(float Crank, float Wheel, float Lock, float SlotBottom, float Beta);
 
@@ -73,11 +76,17 @@ public sealed class Geneva : Generator<Geneva.Settings>
         if (s.Bore > 0) driver = Shapes.Subtract(driver, Shapes.Cylinder(s.Bore / 2f, -1, plate + t + 1));
 
         // Put together: the driver turned to start with its pin on the far side, the wheel beside it.
-        var driverTogether = Matrix4x4.CreateRotationZ(MathF.PI);
-        var wheelTogether = Matrix4x4.CreateTranslation(s.Distance, 0, plate + gap);
+        bool based = s.Base && s.Bore > 0;
+        float lift = based ? Base.Lift : 0f;
+        var driverTogether = Matrix4x4.CreateRotationZ(MathF.PI) * Matrix4x4.CreateTranslation(0, 0, lift);
+        var wheelTogether = Matrix4x4.CreateTranslation(s.Distance, 0, lift + plate + gap);
+
+        var set = new List<(string, string, Mesh, Matrix4x4?)> { ("Geneva driver", "driver", driver, driverTogether), ("Geneva wheel", "wheel", wheel, wheelTogether) };
+        if (based)
+            set.Add(("Base", "base", Base.Plate([(Vector2.Zero, s.Bore, lift + plate + t), (new Vector2(s.Distance, 0), s.Bore, lift + plate + gap + t)], printer), Matrix4x4.Identity));
 
         var made = new Generated(
-            Shapes.InARow([("Geneva driver", "driver", driver, driverTogether), ("Geneva wheel", "wheel", wheel, wheelTogether)]),
+            Shapes.InARow(set),
             [$"Turned by the motion check: the wheel steps {360f / s.Slots:0.#} degrees for each turn of the driver, "
              + $"moving through {180f - 360f / s.Slots:0} degrees of it and held still for the rest."])
         {
@@ -86,7 +95,7 @@ public sealed class Geneva : Generator<Geneva.Settings>
             // other way too. Clockwise, which is the way the wheel's slots are laid to meet the pin.
             Motion = new Mechanism(
                 [new MovingPart(0, Joint.Revolute, Vector2.Zero), new MovingPart(1, Joint.Revolute, new Vector2(s.Distance, 0))],
-                Driver: 0, Layers: [plate + gap + t / 2f], Turns: -1, Step: 1, Reach: 0.3)
+                Driver: 0, Layers: [lift + plate + gap + t / 2f], Turns: -1, Step: 1, Reach: 0.3)
         };
 
         // The check is the same run the panel plays, so the two cannot disagree.

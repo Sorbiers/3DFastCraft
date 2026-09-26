@@ -67,6 +67,20 @@ public sealed record GeneratedPart(
 
     /// <summary>The colour it is shown in, where that says what it is - glass pale blue - or null for the app's own.</summary>
     public Vector3? Colour { get; init; }
+
+    /// <summary>
+    /// For a cutter, the face of the part it goes into, as that face's outward direction, when it
+    /// is not the top: a wall mount's keyholes go in the back of a part standing as it stands. The
+    /// cutter is turned so it goes in square to that face with its own +Y pointing up.
+    /// </summary>
+    public Vector3? CutFace { get; init; }
+
+    /// <summary>
+    /// A cutter that means nothing on its own - keyholes - so the panel offers only Cut, and asks
+    /// for the part to be selected first. Any other parts of the set are put on the plate beside
+    /// it once it is cut: a wall mount's studs.
+    /// </summary>
+    public bool CutOnly { get; init; }
 }
 
 /// <summary>Named settings shipped with a generator, for the sizes people make most: "AA battery", "M3".</summary>
@@ -120,6 +134,9 @@ public abstract class Generator
 
     /// <summary>Still being proved out. A generator is until somebody has printed what it makes.</summary>
     public virtual bool IsBeta => true;
+
+    /// <summary>Whether it is in the Library's catalogue, or only opened from a button of its own - the wall mount, beside Hole.</summary>
+    public virtual bool Listed => true;
 
     public abstract SettingsShape Shape { get; }
 

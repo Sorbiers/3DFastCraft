@@ -411,7 +411,10 @@ function Invoke-DialogButton($dialog, $name) {
 # Inserts a flight of steps through the new tool, which builds it as one solid.
 function Add-Stair($w, [string]$name, [double]$rise, [double]$run, [double]$width, [int]$steps,
                    [double]$cx, [double]$cy, [double]$cz, [double]$rz) {
-  Invoke-Tool $w "Insert" "Stair" | Out-Null
+  # Through the Library, where the Stair button went; its tile is named for the generator.
+  Invoke-Tool $w "Insert" "Library" | Out-Null
+  Start-Sleep -Milliseconds 400
+  Invoke-ByName $w "Stair" | Out-Null
   $d = Get-Dialog "Stair"
   Set-DialogField $d "building.stair.Rise" $rise
   Set-DialogField $d "building.stair.Run" $run

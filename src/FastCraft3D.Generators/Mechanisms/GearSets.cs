@@ -48,7 +48,10 @@ public sealed class GearTrain : Generator<GearTrain.Settings>
         [Count("Pinion", 8, 30, UnitText = "teeth", Hint = "The small gear of every stage")] int Pinion = 12,
         [Count("Largest", 20, 150, UnitText = "teeth", Hint = "The most teeth any gear may have")] int Largest = 60,
         [Length("Thickness", 3, 20)] float Thickness = 6f,
-        [Length("Bore", 0, 10, Hint = "For the shafts. Nought for none.")] float Bore = 3.2f);
+        [Length("Bore", 0, 10, Hint = "For the shafts. Nought for none.")] float Bore = 3.2f,
+        [Toggle("Base", Hint = "A plate with a pin standing in each shaft's bore, to turn the train by hand")] bool Base = false);
+
+    protected override bool Shows(Settings s, string parameter) => parameter != nameof(Settings.Base) || s.Bore > 0;
 
     protected override IEnumerable<(string Name, Settings Settings)> Shipped =>
     [
@@ -115,6 +118,8 @@ public sealed class GearTrain : Generator<GearTrain.Settings>
 
         var pinion = Spur.Gear(m, s.Pinion, t, s.Bore);
         var parts = new List<(string, string, Mesh, Matrix4x4?)>();
+        bool based = s.Base && s.Bore > 0;
+        float lift = based ? Mechanisms.Base.Lift : 0f;
 
         for (int j = 0; j <= s.Stages; j++)
         {
@@ -128,8 +133,13 @@ public sealed class GearTrain : Generator<GearTrain.Settings>
             if (j < s.Stages) gears.Add(Shapes.Moved(pinion, 0, 0, (j - lowest) * t));
 
             string name = j == 0 ? "Input pinion" : j == s.Stages ? "Output gear" : $"Shaft {j + 1} gears";
-            parts.Add((name, $"shaft {j + 1}", Shapes.Union(gears), Matrix4x4.CreateTranslation(shafts[j], 0, lowest * t)));
+            parts.Add((name, $"shaft {j + 1}", Shapes.Union(gears), Matrix4x4.CreateTranslation(shafts[j], 0, lift + lowest * t)));
         }
+
+        if (based)
+            parts.Add(("Base", "base", Mechanisms.Base.Plate(
+                shafts.Select((x, j) => (new Vector2(x, 0), s.Bore, lift + (j == 0 ? t : j == s.Stages ? s.Stages * t : (j + 1) * t))).ToList(),
+                printer), Matrix4x4.Identity));
 
         double ratio = driven.Aggregate(1.0, (r, b) => r * b / s.Pinion);
         var notes = new List<string>
@@ -141,7 +151,7 @@ public sealed class GearTrain : Generator<GearTrain.Settings>
         var laid = Shapes.InARow(parts);
 
         // Every shaft turns about its own axis, where the train goes together; the first drives.
-        var shaftsTurning = laid.Select((p, j) =>
+        var shaftsTurning = laid.Take(s.Stages + 1).Select((p, j) =>
         {
             var axis = Vector3.Transform(p.Pivot, p.Assembled ?? Matrix4x4.Identity);
             return new MovingPart(j, Geometry.Motion.Joint.Revolute, new Vector2(axis.X, axis.Y));
@@ -149,7 +159,7 @@ public sealed class GearTrain : Generator<GearTrain.Settings>
 
         return new Generated(laid, notes)
         {
-            Motion = new Mechanism(shaftsTurning, 0, Enumerable.Range(0, s.Stages).Select(k => k * t + t / 2f).ToList())
+            Motion = new Mechanism(shaftsTurning, 0, Enumerable.Range(0, s.Stages).Select(k => lift + k * t + t / 2f).ToList())
         };
     }
 }

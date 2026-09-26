@@ -76,16 +76,37 @@ public sealed class Roof : Generator<Roof.Settings>
     protected override IEnumerable<(string Name, Settings Settings)> Shipped =>
     [
         ("Gable, tiled", Default),
-        ("Hip, slated", Default with { Shape = RoofShape.Hip, Covering = RoofCovering.Slates, Course = 1.8f, TileWidth = 2.2f, Relief = 0.3f }),
+        ("Hip, slated", Default with { Shape = RoofShape.Hip, Covering = RoofCovering.Slates, Course = 1.6f, TileWidth = 2.2f, Relief = 0.25f }),
         ("Half hip, tiled", Default with { Shape = RoofShape.HalfHip, Pitch = 45 }),
-        ("Barn, gambrel shingles", Default with { Shape = RoofShape.Gambrel, Covering = RoofCovering.Shingles, Course = 1.6f, TileWidth = 2f, Relief = 0.3f }),
-        ("Mansard, slated", Default with { Shape = RoofShape.Mansard, Covering = RoofCovering.Slates, Course = 1.8f, TileWidth = 2.2f, Relief = 0.3f }),
+        ("Barn, gambrel shingles", Default with { Shape = RoofShape.Gambrel, Covering = RoofCovering.Shingles, Course = 1.3f, TileWidth = 1.8f, Relief = 0.3f }),
+        ("Mansard, slated", Default with { Shape = RoofShape.Mansard, Covering = RoofCovering.Slates, Course = 1.6f, TileWidth = 2.2f, Relief = 0.25f }),
         ("Lean-to, corrugated", Default with { Shape = RoofShape.LeanTo, Width = 30, Length = 50, Pitch = 15, Covering = RoofCovering.Corrugated, TileWidth = 1.5f, Ridge = false }),
         ("Shed, standing seam", Default with { Shape = RoofShape.Gable, Width = 40, Length = 50, Pitch = 30, Covering = RoofCovering.StandingSeam, TileWidth = 4f, Relief = 0.5f, Ridge = false }),
         ("Flat, with a parapet", Default with { Shape = RoofShape.Flat, Fascia = 3f, Hollow = false })
     ];
 
     private static bool Sloped(Settings s) => s.Shape != RoofShape.Flat;
+
+    /// <summary>
+    /// A covering's own proportions, brought in when it is chosen: a slate is not a tile of the
+    /// same size laid flatter. With one set of numbers for all three, tiles, slates and shingles
+    /// came out the same roof.
+    /// </summary>
+    internal static (float Course, float Width, float Relief) Proportions(RoofCovering covering) => covering switch
+    {
+        RoofCovering.Slates => (1.6f, 2.2f, 0.25f),
+        RoofCovering.Shingles => (1.3f, 1.8f, 0.3f),
+        RoofCovering.Corrugated => (2.2f, 1.5f, 0.4f),
+        RoofCovering.StandingSeam => (2.2f, 4f, 0.5f),
+        _ => (2.2f, 2.6f, 0.4f)
+    };
+
+    protected override Settings Adjust(Settings before, Settings after, string changed)
+    {
+        if (changed != nameof(Settings.Covering)) return after;
+        var (course, width, relief) = Proportions(after.Covering);
+        return after with { Course = course, TileWidth = width, Relief = relief };
+    }
 
     private static bool Tiled(Settings s) => s.Covering is RoofCovering.Tiles or RoofCovering.Slates or RoofCovering.Shingles;
 
@@ -429,14 +450,26 @@ public sealed class Roof : Generator<Roof.Settings>
         var normal = new Vector3(-slope.Up * MathF.Sin(slope.Pitch), MathF.Cos(slope.Pitch));
         if (Vector3.Dot(Vector3.Cross(corners[1] - corners[0], corners[2] - corners[0]), normal) < 0) patch.FlipWinding();
 
-        if (FacePatch.FromTriangle(patch, 0) is not { } face) return null;
+        // Welded, so the triangles share their corners: a face is grown across shared edges, and
+        // laid as separate triangles it was the first of them alone - the tiles filled half of
+        // every slope, up to the diagonal.
+        if (FacePatch.FromTriangle(patch.Welded(), 0) is not { } face) return null;
+
+        // Each laid as it is on a roof. A tile laps the course below and stands off it at its tail;
+        // a slate is thin and lies nearly flat; a shingle is split, and leans along its length,
+        // so a course of them reads as a row of pieces rather than as a lap.
+        var (tilt, lean, thick) = s.Covering switch
+        {
+            RoofCovering.Slates => (1.5f, TileSlope.Roll, s.Relief),
+            RoofCovering.Shingles => (5f, TileSlope.Pitch, s.Relief),
+            _ => (4f, TileSlope.Roll, s.Relief)
+        };
 
         // The face's own V runs whichever way it runs; a tile's tail has to be at the bottom of
         // its course, down the slope, so the tilt is turned to suit.
-        float tilt = s.Covering switch { RoofCovering.Slates => 2f, RoofCovering.Shingles => 6f, _ => 4f };
-        if (face.V.Z < 0) tilt = -tilt;
+        if (lean == TileSlope.Roll && face.V.Z < 0) tilt = -tilt;
 
-        var courses = new TileCourses(s.TileWidth, s.Course, s.Relief, MathF.Min(joint, s.TileWidth / 3f), tilt);
+        var courses = new TileCourses(s.TileWidth, s.Course, thick, MathF.Min(joint, s.TileWidth / 3f), tilt, lean);
         var surface = new PlanarSurface(face);
         var size = face.Size;
         return TileSolid.Build(surface, courses, size.X, size.Y, room: TileRoom.Of(surface));

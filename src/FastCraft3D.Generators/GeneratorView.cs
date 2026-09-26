@@ -788,6 +788,8 @@ public sealed class GeneratorView : UserControl
     private void Describe()
     {
         insert.IsEnabled = cut.IsEnabled = Insertable() is not null;
+        bool cutOnly = shown?.Made.Parts.Any(p => p.CutOnly) == true;
+        insert.Visibility = cutOnly ? Visibility.Collapsed : Visibility.Visible;
         cut.Visibility = context.Target is not null && shown is { } cutting && cutting.Made.Parts.Any(p => p.Cutter)
             ? Visibility.Visible
             : Visibility.Collapsed;
@@ -821,6 +823,13 @@ public sealed class GeneratorView : UserControl
         if (s.Made.IsRefused)
         {
             summary.Text = working + s.Made.Refusal;
+            Say(problem: true);
+            return;
+        }
+
+        if (cutOnly && context.Target is null)
+        {
+            summary.Text = "Select the part to cut this into first, then open this again.";
             Say(problem: true);
             return;
         }

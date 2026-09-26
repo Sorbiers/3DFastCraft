@@ -18,7 +18,7 @@
     <SelfContained>false</SelfContained>
     <ApplicationIcon>Assets/app.ico</ApplicationIcon>
     <!-- A beta: the generator library is new. The stable 3.3.0 stays the site's download. -->
-    <Version>4.0.0-beta</Version>
+    <Version>4.1.0</Version>
     <Product>3DFastCraft</Product>
   </PropertyGroup>
 

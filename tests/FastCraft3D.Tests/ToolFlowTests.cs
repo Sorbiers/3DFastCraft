@@ -215,7 +215,7 @@ public class ToolFlowTests
             preview.Position += new Vector3(-30, 10, 0);
             preview.Rotation = new Vector3(90, 0, 0);
         });
-        model.InsertThreadCommand.Execute(null);
+        model.InsertGeneratedCommand.Execute(FastCraft3D.Generators.GeneratorRegistry.Find("fastener.thread"));
         PumpUntil(() => model.Scene.Objects.Count == 1 && !model.HasOpenPanel);
 
         var thread = Assert.Single(model.Scene.Objects);
@@ -248,7 +248,7 @@ public class ToolFlowTests
             Assert.Equal(20f + HoleCutter.Overshoot, cutter.WorldBounds.Max.Z, 2);
             Assert.Equal(0f, cutter.WorldBounds.Center.X, 2);
         });
-        model.InsertThreadCommand.Execute(null);
+        model.InsertGeneratedCommand.Execute(FastCraft3D.Generators.GeneratorRegistry.Find("fastener.thread"));
         PumpUntil(() => !model.Scene.Objects.Contains(cube) && !model.IsBusy, 60000);
 
         var drilled = Assert.Single(model.Scene.Objects).ToWorldMesh();

@@ -512,24 +512,15 @@
                     <Button Style="{StaticResource ToolButton}" Content="Import" Tag="{StaticResource IconImport}"
                             Command="{Binding ImportCommand}" ToolTip="Bring in an STL, an OBJ, or another 3DFastCraft project - its objects join what is already on the plate (Ctrl+I)" />
                     <Separator Margin="8,0" Visibility="{Binding IsAdvancedMode, Converter={StaticResource BoolToVisibility}}" />
-                    <Button Style="{StaticResource ToolButton}" Content="Fit test" Visibility="{Binding IsExtendedMode, Converter={StaticResource BoolToVisibility}}" Tag="{StaticResource IconFitTest}"
-                            Command="{Binding InsertFitTestCommand}" MinWidth="64"
-                            ToolTip="Four small 2x2 brick plates at Fit -0.2, -0.1, 0 and +0.1 mm, marked with one to four notches, each with studs on top and the underside below. Print them in your filament and press each onto real bricks. Without real bricks, stack one plate on another: the pair grips like the sum of their two Fits. To test two printed halves exactly as Split with connectors makes them - the same Fit on both - print the set twice and try each plate on its twin. Type the Fit that holds firmly but still comes apart by hand." />
                     <Button Style="{StaticResource ToolButton}" Content="Hole" Visibility="{Binding IsAdvancedMode, Converter={StaticResource BoolToVisibility}}" Tag="{StaticResource IconHole}"
                             Command="{Binding InsertHoleCommand}" MinWidth="58"
                             ToolTip="A screw hole - plain, countersunk or counterbored, with a nut pocket if asked - or a heat-set insert pocket, M2 to M8. Cut into the top of the one part selected, or made as a cutter to place and Subtract." />
-                    <Button Style="{StaticResource ToolButton}" Content="Thread" Visibility="{Binding IsAdvancedMode, Converter={StaticResource BoolToVisibility}}" Tag="{StaticResource IconThread}"
-                            Command="{Binding InsertThreadCommand}" MinWidth="70"
-                            ToolTip="A threaded rod, a nut, or a cutter to Subtract for a threaded hole: ISO metric M3 to M20 or any diameter and pitch, with a clearance so a printed rod and nut screw together" />
-                    <Button Style="{StaticResource ToolButton}" Content="Stair" Visibility="{Binding IsAdvancedMode, Converter={StaticResource BoolToVisibility}}" Tag="{StaticResource IconStair}"
-                            Command="{Binding InsertStairCommand}" MinWidth="70"
-                            ToolTip="A straight flight, built as one solid, with the riser and going reported in real units" />
-                    <Button Style="{StaticResource ToolButton}" Content="Gear" Visibility="{Binding IsAdvancedMode, Converter={StaticResource BoolToVisibility}}" Tag="{StaticResource IconGear}"
-                            Command="{Binding InsertGearCommand}" MinWidth="64"
-                            ToolTip="An involute gear, ring gear or rack - straight, helical or herringbone - with a bore, a hub and a set-screw hole, and a partner made already in mesh with it" />
-                    <Button Style="{StaticResource ToolButton}" Content="Library" Visibility="{Binding IsExtendedMode, Converter={StaticResource BoolToVisibility}}" Tag="{StaticResource IconLibrary}"
+                    <Button Style="{StaticResource ToolButton}" Content="Keyhole" Visibility="{Binding IsAdvancedMode, Converter={StaticResource BoolToVisibility}}" Tag="{StaticResource IconWallMount}"
+                            Command="{Binding BeginWallMountCommand}" MinWidth="76"
+                            ToolTip="Keyhole slots to hang a part on a wall: select the part, press this, click the face that goes against the wall, drag the keyholes into place, and Apply. Printed wall studs and a drilling template if wanted." />
+                    <Button Style="{StaticResource ToolButton}" Content="Library" Visibility="{Binding IsAdvancedMode, Converter={StaticResource BoolToVisibility}}" Tag="{StaticResource IconLibrary}"
                             Command="{Binding OpenLibraryCommand}" MinWidth="64" AutomationProperties.AutomationId="Library"
-                            ToolTip="BETA - new, and still being proved out; check what it gives you before printing it. Parts made to your numbers: boxes, organisers, hinges, clips, fasteners, gears and mechanisms, windows, doors and roofs. Pick one, set its sizes with the preview on the plate, and insert it." />
+                            ToolTip="BETA - new, and still being proved out; check what it gives you before printing it. Parts made to your numbers: boxes, organisers, hinges, clips, threads and other fasteners, gears and mechanisms, stairs, windows, doors and roofs, and the brick fit test. Pick one, set its sizes with the preview on the plate, and insert it." />
                 </WrapPanel>
             </TabItem>
 
@@ -1167,7 +1158,7 @@
                             </StackPanel>
                             <TextBlock TextWrapping="Wrap" Foreground="#FF7A8088" Margin="0,0,0,6"
                                        Visibility="{Binding ConnectorsAreBricks, Converter={StaticResource BoolToVisibility}}"
-                                       Text="Use Fit test on the Insert tab to find your Fit: print the set twice and try each plate on its twin - that is how these two halves will meet." />
+                                       Text="Use the Brick fit test in the Library to find your Fit: print the set twice and try each plate on its twin - that is how these two halves will meet." />
                             <StackPanel Visibility="{Binding ConnectorsAreRound, Converter={StaticResource BoolToVisibility}}">
                             <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
                                 <RadioButton Content="Square to cut" GroupName="ConnectorDirection" Margin="0,0,8,0"
@@ -1484,7 +1475,7 @@
                         <StackPanel Orientation="Horizontal" Margin="0,0,0,6"
                                     Visibility="{Binding EngraveIsStuds, Converter={StaticResource BoolToVisibility}}">
                             <TextBlock Text="Fit" Style="{StaticResource FieldLabel}" Width="76"
-                                       ToolTip="How much fatter than standard to make the studs, or the tubes and walls that grip them - in mm across. Positive grips harder, negative looser. Studs change by the whole Fit; tubes, rods and walls by half of it on each surface, so the space for a stud shrinks by the whole Fit too. Printed studs come out a little fat, so -0.1 suits PLA on a tuned printer and about -0.15 PETG. Print the Fit test from the Insert tab to find yours." />
+                                       ToolTip="How much fatter than standard to make the studs, or the tubes and walls that grip them - in mm across. Positive grips harder, negative looser. Studs change by the whole Fit; tubes, rods and walls by half of it on each surface, so the space for a stud shrinks by the whole Fit too. Printed studs come out a little fat, so -0.1 suits PLA on a tuned printer and about -0.15 PETG. Print the Brick fit test from the Library to find yours." />
                             <TextBox AutomationProperties.AutomationId="EngraveStudFit" Width="64" Style="{StaticResource NumberBox}" Tag="number"
                                      Text="{Binding EngraveStudFit, StringFormat=N2, UpdateSourceTrigger=LostFocus}" />
                             <TextBlock Text="mm" Foreground="#FF9AA0A8" VerticalAlignment="Center" />
@@ -1535,6 +1526,76 @@
                                     Command="{Binding ApplyEngraveCommand}" />
                             <Button Content="Cancel" Style="{StaticResource PanelButton}"
                                     Command="{Binding CancelEngraveCommand}" />
+                        </StackPanel>
+                    </StackPanel>
+                </Border>
+
+                <!-- Keyhole panel, shown while keyholes are being placed on a face -->
+                <Border Grid.Row="5" Margin="0,10,0,0" Padding="8" Background="#FFEFF5FF"
+                        BorderBrush="#FFB8D2F0" BorderThickness="1" CornerRadius="3"
+                        Visibility="{Binding IsWallMountMode, Converter={StaticResource BoolToVisibility}}">
+                    <StackPanel>
+                        <TextBlock Text="Keyhole" FontWeight="SemiBold" Margin="0,0,0,6" />
+                        <TextBlock Text="{Binding WallMountSummary}" TextWrapping="Wrap" Foreground="#FF3A4550" Margin="0,0,0,8" />
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,4" ToolTip="How many, side by side">
+                            <TextBlock Text="Keyholes" Style="{StaticResource FieldLabel}" Width="92" />
+                            <TextBox Width="64" Style="{StaticResource NumberBox}" Tag="number"
+                                     Text="{Binding KeyholeCount, StringFormat=N0, UpdateSourceTrigger=LostFocus}" />
+                            <TextBlock Text="" Foreground="#FF9AA0A8" VerticalAlignment="Center" />
+                        </StackPanel>
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,4" ToolTip="Middle to middle">
+                            <TextBlock Text="Apart" Style="{StaticResource FieldLabel}" Width="92" />
+                            <TextBox Width="64" Style="{StaticResource NumberBox}" Tag="number"
+                                     Text="{Binding KeyholeApart, StringFormat=N1, UpdateSourceTrigger=LostFocus}" />
+                            <TextBlock Text="mm" Foreground="#FF9AA0A8" VerticalAlignment="Center" />
+                        </StackPanel>
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,4" ToolTip="How far the slot runs up from the round hole">
+                            <TextBlock Text="Slot" Style="{StaticResource FieldLabel}" Width="92" />
+                            <TextBox Width="64" Style="{StaticResource NumberBox}" Tag="number"
+                                     Text="{Binding KeyholeSlot, StringFormat=N1, UpdateSourceTrigger=LostFocus}" />
+                            <TextBlock Text="mm" Foreground="#FF9AA0A8" VerticalAlignment="Center" />
+                        </StackPanel>
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,4" ToolTip="How thick the part is over the head, holding it">
+                            <TextBlock Text="Lip" Style="{StaticResource FieldLabel}" Width="92" />
+                            <TextBox Width="64" Style="{StaticResource NumberBox}" Tag="number"
+                                     Text="{Binding KeyholeLip, StringFormat=N1, UpdateSourceTrigger=LostFocus}" />
+                            <TextBlock Text="mm" Foreground="#FF9AA0A8" VerticalAlignment="Center" />
+                        </StackPanel>
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,4" ToolTip="How deep the space behind the lip is, for the head">
+                            <TextBlock Text="Head room" Style="{StaticResource FieldLabel}" Width="92" />
+                            <TextBox Width="64" Style="{StaticResource NumberBox}" Tag="number"
+                                     Text="{Binding KeyholeHeadRoom, StringFormat=N1, UpdateSourceTrigger=LostFocus}" />
+                            <TextBlock Text="mm" Foreground="#FF9AA0A8" VerticalAlignment="Center" />
+                        </StackPanel>
+                        <CheckBox Content="Printed wall studs" IsChecked="{Binding KeyholeStuds, Mode=TwoWay}" Margin="0,4,0,4"
+                                  ToolTip="Studs to screw to the wall for the keyholes to hang on, rather than screw heads. The keyholes are sized to them, with the printer's clearance round each." />
+                        <StackPanel Visibility="{Binding KeyholeStuds, Converter={StaticResource BoolToVisibility}}">
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,4" ToolTip="The screw through each stud into the wall">
+                            <TextBlock Text="Wall screw" Style="{StaticResource FieldLabel}" Width="92" />
+                            <TextBox Width="64" Style="{StaticResource NumberBox}" Tag="number"
+                                     Text="{Binding KeyholeWallScrew, StringFormat=N1, UpdateSourceTrigger=LostFocus}" />
+                            <TextBlock Text="mm" Foreground="#FF9AA0A8" VerticalAlignment="Center" />
+                        </StackPanel>
+                        </StackPanel>
+                        <StackPanel Visibility="{Binding ScrewKeyholes, Converter={StaticResource BoolToVisibility}}">
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,4" ToolTip="Across the head of the screw it hangs on">
+                            <TextBlock Text="Screw head" Style="{StaticResource FieldLabel}" Width="92" />
+                            <TextBox Width="64" Style="{StaticResource NumberBox}" Tag="number"
+                                     Text="{Binding KeyholeHead, StringFormat=N1, UpdateSourceTrigger=LostFocus}" />
+                            <TextBlock Text="mm" Foreground="#FF9AA0A8" VerticalAlignment="Center" />
+                        </StackPanel>
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,4" ToolTip="Across the screw below its head">
+                            <TextBlock Text="Screw shank" Style="{StaticResource FieldLabel}" Width="92" />
+                            <TextBox Width="64" Style="{StaticResource NumberBox}" Tag="number"
+                                     Text="{Binding KeyholeShank, StringFormat=N1, UpdateSourceTrigger=LostFocus}" />
+                            <TextBlock Text="mm" Foreground="#FF9AA0A8" VerticalAlignment="Center" />
+                        </StackPanel>
+                        </StackPanel>
+                        <CheckBox Content="Drilling template" IsChecked="{Binding KeyholeTemplate, Mode=TwoWay}" Margin="0,4,0,8"
+                                  ToolTip="A thin strip with a hole where each screw goes, at the keyholes' spacing, to hold level on the wall and drill through." />
+                        <StackPanel Orientation="Horizontal">
+                            <Button Content="Apply" Style="{StaticResource PanelButton}" Command="{Binding ApplyWallMountCommand}" />
+                            <Button Content="Cancel" Style="{StaticResource PanelButton}" Command="{Binding CancelWallMountCommand}" />
                         </StackPanel>
                     </StackPanel>
                 </Border>
@@ -1844,7 +1905,7 @@
                             </StackPanel>
                             <TextBlock TextWrapping="Wrap" Foreground="#FF7A8088" Margin="0,0,0,6"
                                        Visibility="{Binding ConnectorsAreBricks, Converter={StaticResource BoolToVisibility}}"
-                                       Text="Use Fit test on the Insert tab to find your Fit: print the set twice and try each plate on its twin - that is how these two halves will meet." />
+                                       Text="Use the Brick fit test in the Library to find your Fit: print the set twice and try each plate on its twin - that is how these two halves will meet." />
                             <StackPanel Visibility="{Binding ConnectorsAreRound, Converter={StaticResource BoolToVisibility}}">
                             <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
                                 <RadioButton Content="Square to cut" GroupName="ConnectDirection" Margin="0,0,8,0"
@@ -2794,7 +2855,7 @@
               Focusable="False"
               ItemsSource="{Binding UiModes}" SelectedItem="{Binding UiMode, Mode=TwoWay}"
               AutomationProperties.AutomationId="UiMode"
-              ToolTip="Classic shows the tools 3D Builder had. Advanced adds the working set - sketches, holes, threads, gears, blueprints and more. Extended adds the specialised and the experimental on top of that: the lithophane, the pivot, the session recorder, Voronoi and the legacy Engrave. Keys work the same at all three, and no tool&apos;s own settings are ever hidden - only its button.">
+              ToolTip="Classic shows the tools 3D Builder had. Advanced adds the working set - sketches, holes, the Library of threads, gears, stairs and more, blueprints. Extended adds the specialised and the experimental on top of that: the lithophane, the pivot, the session recorder, Voronoi and the legacy Engrave. Keys work the same at all three, and no tool&apos;s own settings are ever hidden - only its button.">
         <ComboBox.ItemTemplate>
             <DataTemplate>
                 <StackPanel Orientation="Horizontal" ToolTip="{Binding Hint}">

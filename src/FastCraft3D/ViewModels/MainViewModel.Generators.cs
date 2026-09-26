@@ -31,6 +31,15 @@ public sealed partial class MainViewModel
     public System.Windows.Input.ICommand OpenLibraryCommand =>
         openLibrary ??= Track(RelayCommand.Simple(OpenLibrary));
 
+
+    /// <summary>What a click on a face means while a cutter's panel is open: where to put the cutter. Null otherwise.</summary>
+    public Func<SceneObject, Vector3, Vector3, bool>? GeneratorFacePick { get; private set; }
+
+    /// <summary>The face a cutter was put on, shown picked.</summary>
+    public FacePatch? GeneratorFace { get; private set; }
+
+    public event Action? GeneratorFaceChanged;
+
     /// <summary>Opens the generator given as the parameter.</summary>
     public System.Windows.Input.ICommand InsertGeneratedCommand =>
         insertGenerated ??= Track(new RelayCommand(p =>
@@ -46,7 +55,7 @@ public sealed partial class MainViewModel
 
     private void OpenLibrary()
     {
-        var view = new LibraryView(GeneratorRegistry.All, LibraryMemory.Shared, LibraryPictures.Shared);
+        var view = new LibraryView(GeneratorRegistry.All.Where(g => g.Listed).ToList(), LibraryMemory.Shared, LibraryPictures.Shared);
         var panel = new ToolPanel { Title = "Library", IsBeta = true, Content = view };
 
         Generator? chosen = null;
@@ -61,12 +70,6 @@ public sealed partial class MainViewModel
 
         // Through the command, so the repeat key opens this generator again rather than the catalogue.
         if (chosen is not null) InsertGeneratedCommand.Execute(chosen);
-    }
-
-    /// <summary>For a ribbon button that is a generator: Stair, Thread.</summary>
-    private void InsertGenerated(string id)
-    {
-        if (GeneratorRegistry.Find(id) is { } generator) InsertGenerated(generator);
     }
 
     /// <summary>
@@ -98,13 +101,37 @@ public sealed partial class MainViewModel
         // where it stays as it is rebuilt - it grows about its own origin - and where it is put down.
         SceneObject? held = null;
         bool heldCuts = false;
+        Vector3? heldFace = null;
+
+        // A face clicked on the part a cutter is going into: where it goes, and which way is up it.
+        (Vector3 Middle, Vector3 Normal)? picked = null;
         var heldPivot = Vector3.Zero;
         Vector3 OriginOf(SceneObject o) => Vector3.Transform(-heldPivot, o.Transform);
 
-        void Put(SceneObject o, bool cutter)
+        void Square(SceneObject o, Vector3 middle, Vector3 n)
+        {
+            // Square into the face, its own +Y up the face - or, on a face lying flat, along +Y:
+            // a wall mount's keyholes in the back of a part standing as it stands, slots running up.
+            var up = MathF.Abs(n.Z) > 0.9f ? Vector3.UnitY : Vector3.Normalize(Vector3.UnitZ - n * n.Z);
+            var across = Vector3.Cross(up, n);
+            o.Rotation = MeshTransform.EulerFrom(new Matrix4x4(
+                across.X, across.Y, across.Z, 0, up.X, up.Y, up.Z, 0, n.X, n.Y, n.Z, 0, 0, 0, 0, 1));
+            o.Position = middle + n * HoleCutter.Overshoot;
+        }
+
+        void Put(SceneObject o, bool cutter, Vector3? face = null)
         {
             o.Rotation = Vector3.Zero;
-            if (cutter && target is not null)
+            if (cutter && target is not null && picked is { } chosen)
+            {
+                Square(o, chosen.Middle, chosen.Normal);
+            }
+            else if (cutter && target is not null && face is { } n)
+            {
+                var part = target.WorldBounds;
+                Square(o, part.Center + n * (MathF.Abs(Vector3.Dot(part.Size, n)) / 2f), n);
+            }
+            else if (cutter && target is not null)
             {
                 // Upright in the middle of the part's top, its mouth a little proud of the surface
                 // so the hole opens cleanly rather than leaving a skin.
@@ -120,9 +147,28 @@ public sealed partial class MainViewModel
 
         lastGenerated.TryGetValue(generator.Id, out var start);
 
+        // While the panel is open, a click on a flat face of the part places the cutter on it.
+        if (target is not null)
+            GeneratorFacePick = (clicked, point, normal) =>
+            {
+                if (clicked != target || held is null || !heldCuts) return false;
+                if (EngraveState.FaceAt(target.ToWorldMesh(), point, normal) is not { } face)
+                {
+                    Status = "That is not a flat face - pick one of the flat sides";
+                    return true;
+                }
+
+                picked = (face.ToLocal((face.Min + face.Max) / 2f), face.Normal);
+                GeneratorFace = face;
+                GeneratorFaceChanged?.Invoke();
+                Put(held, true);
+                return true;
+            };
+
         var (inserted, view) = OpenGenerator(generator, start, "Insert", null, target?.Name, made =>
         {
-            if (made.Parts.Count != 1)
+            // A cutter with parts beside it - a wall mount's studs - is shown as its cutter alone.
+            if (made.Parts.Count != 1 && !made.Parts[0].Cutter)
             {
                 var objects = Objects(made, assembled: true, ColourOf);
                 BedPlacement.Fit(objects, 1f);
@@ -135,7 +181,7 @@ public sealed partial class MainViewModel
                 held = new SceneObject(part.Name, part.Mesh) { Colour = ColourOf(0), Anchors = part.Anchors?.ToList() ?? [] }
                     .CentredOn(part.Pivot);
                 heldPivot = part.Pivot;
-                Put(held, part.Cutter);
+                Put(held, part.Cutter, part.CutFace);
             }
             else
             {
@@ -148,14 +194,19 @@ public sealed partial class MainViewModel
                 Keep(held, -heldPivot, origin);
 
                 // A cutter goes into the part it is for, and anything else comes back out of it.
-                if (part.Cutter != heldCuts && target is not null) Put(held, part.Cutter);
+                if ((part.Cutter != heldCuts || part.CutFace != heldFace) && target is not null) Put(held, part.Cutter, part.CutFace);
             }
 
             heldCuts = part.Cutter;
+            heldFace = part.CutFace;
 
             // A cutter is shown with the part it is going into; anything else on its own.
             return ([held], false, part.Cutter ? target : null);
         });
+
+        GeneratorFacePick = null;
+        GeneratorFace = null;
+        GeneratorFaceChanged?.Invoke();
 
         if (!inserted || view.Result is not { } settings || view.Made is not { Parts.Count: > 0 } result)
         {
@@ -171,11 +222,22 @@ public sealed partial class MainViewModel
         var parts = Objects(result, assembled: false, ColourOf, part => Recipes.For(generator, settings, part.Role, set));
         foreach (var o in parts) o.Name = Scene.UniqueName(o.Name);
 
-        if (parts.Count == 1 && held is not null)
+        var beside = new List<SceneObject>();
+        if (held is not null && (parts.Count == 1 || result.Parts[0].Cutter))
         {
             parts[0].Rotation = held.Rotation;
             parts[0].Scale = held.Scale;
             Keep(parts[0], parts[0].Recipe!.Origin, OriginOf(held));
+
+            // The rest of the set - a wall mount's studs - onto the plate, clear of what is there.
+            beside = parts.Skip(1).ToList();
+            if (beside.Count > 0)
+            {
+                BedPlacement.Fit(beside, 1f);
+                var around = BedPlacement.Reach(beside);
+                var free = ClearOf(around);
+                foreach (var o in beside) o.Position += new Vector3(free.X - around.Center.X, free.Y - around.Center.Y, 0);
+            }
         }
         else
         {
@@ -187,9 +249,9 @@ public sealed partial class MainViewModel
             foreach (var o in parts) o.Position += new Vector3(clear.X - reach.Center.X, clear.Y - reach.Center.Y, 0);
         }
 
-        if (view.Cuts && target is not null && parts.Count == 1)
+        if (view.Cuts && target is not null && result.Parts[0].Cutter)
         {
-            _ = CutInto(target, parts[0]);
+            _ = CutInto(target, parts[0], beside);
             return;
         }
 
@@ -202,7 +264,7 @@ public sealed partial class MainViewModel
     /// Takes a cutter out of the part it was sunk into, as one undo step. Refused rather than kept
     /// if the part comes back with holes in its surface.
     /// </summary>
-    private async Task CutInto(SceneObject target, SceneObject cutter)
+    private async Task CutInto(SceneObject target, SceneObject cutter, IReadOnlyList<SceneObject>? beside = null)
     {
         Scene.SelectOnly(target);
         RefreshSelection();
@@ -221,7 +283,7 @@ public sealed partial class MainViewModel
             }
 
             var cut = new SceneObject(target.Name, result) { Colour = target.Colour }.Centred();
-            Undo.Execute(new ReplaceObjectsCommand($"Cut {cutter.Name}", [target], [cut]));
+            Undo.Execute(new ReplaceObjectsCommand($"Cut {cutter.Name}", [target], [cut, .. beside ?? []]));
             RefreshSelection();
             Status = $"Cut the {cutter.Name} into {target.Name}";
         }

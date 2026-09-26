@@ -5,6 +5,7 @@ using FastCraft3D.Generators.Clips;
 using FastCraft3D.Generators.Fasteners;
 using FastCraft3D.Generators.Mechanisms;
 using FastCraft3D.Geometry;
+using FastCraft3D.Geometry.Engraving;
 using FastCraft3D.Geometry.Motion;
 using Xunit;
 
@@ -164,7 +165,7 @@ public class LibraryGeneratorTests
     public void AWindowsGlassIsAPartOfItsOwnOnTheClearFilamentFillingEveryPane()
     {
         var window = new FastCraft3D.Generators.Buildings.Window();
-        var s = window.Default with { Columns = 3, Rows = 2, GlassThickness = 0.4f };
+        var s = window.Default with { Columns = 3, Rows = 2, GlassThickness = 0.4f, Flat = true };
         var made = window.Make(s, Printer.Default);
 
         var glass = Assert.Single(made.Parts, p => p.Role == "glass");
@@ -191,7 +192,7 @@ public class LibraryGeneratorTests
     public void ADoorIsGlazedOnlyInTheTopPanelsAsked()
     {
         var door = new FastCraft3D.Generators.Buildings.Door();
-        var s = door.Default with { Leaf = FastCraft3D.Generators.Buildings.DoorLeaf.Glazed, Panels = 3, Glazed = 1 };
+        var s = door.Default with { Leaf = FastCraft3D.Generators.Buildings.DoorLeaf.Glazed, Panels = 3, Glazed = 1, Flat = true };
         var made = door.Make(s, Printer.Default);
 
         var glass = Assert.Single(made.Parts, p => p.Role == "glass");
@@ -252,6 +253,40 @@ public class LibraryGeneratorTests
         Assert.True(Volume(smooth with { Covering = FastCraft3D.Generators.Buildings.RoofCovering.Tiles }) > shell);
     }
 
+    /// <summary>
+    /// The slabs stand on the whole of each slope, not half of it. Laid on a face made of two
+    /// triangles that did not share their corners, they stopped at the diagonal, and every test
+    /// that only asked whether the roof grew passed.
+    /// </summary>
+    [Theory]
+    [InlineData(FastCraft3D.Generators.Buildings.RoofCovering.Tiles)]
+    [InlineData(FastCraft3D.Generators.Buildings.RoofCovering.Slates)]
+    [InlineData(FastCraft3D.Generators.Buildings.RoofCovering.Shingles)]
+    public void TilesCoverTheWholeOfEverySlope(FastCraft3D.Generators.Buildings.RoofCovering covering)
+    {
+        var roof = new FastCraft3D.Generators.Buildings.Roof();
+        var (course, width, relief) = FastCraft3D.Generators.Buildings.Roof.Proportions(covering);
+        var smooth = roof.Default with { Hollow = false, Ridge = false, Covering = FastCraft3D.Generators.Buildings.RoofCovering.Smooth };
+        var tiled = smooth with { Covering = covering, Course = course, TileWidth = width, Relief = relief };
+        double Volume(FastCraft3D.Generators.Buildings.Roof.Settings s) => roof.Make(s, Printer.Default).Parts[0].Mesh.ComputeSignedVolume();
+
+        // Two slopes 84 mm long and 33 / cos 40 up, most of it under slabs a relief thick.
+        double slopes = 2 * 84 * 33 / Math.Cos(40 * Math.PI / 180);
+        double added = Volume(tiled) - Volume(smooth);
+        Assert.True(added > 0.6 * slopes * relief, $"the {covering} added {added:0} mm3, under {0.6 * slopes * relief:0} for two whole slopes");
+    }
+
+    [Fact]
+    public void ChoosingACoveringBringsItsOwnProportions()
+    {
+        var roof = new FastCraft3D.Generators.Buildings.Roof();
+        var start = roof.Default;
+        var slates = (FastCraft3D.Generators.Buildings.Roof.Settings)roof.Adjusted(start,
+            start with { Covering = FastCraft3D.Generators.Buildings.RoofCovering.Slates }, "Covering");
+
+        Assert.NotEqual((start.Course, start.TileWidth, start.Relief), (slates.Course, slates.TileWidth, slates.Relief));
+    }
+
     [Fact]
     public void ARoofSaysHowHighItsRidgeIsAtTheModelsScale()
     {
@@ -269,6 +304,42 @@ public class LibraryGeneratorTests
 
         Assert.Equal(12.0, (double)minute / cannon * hour / pinion, 9);
         Assert.Equal(cannon + minute, pinion + hour);
+    }
+
+    [Fact]
+    public void EachFitTestPlateHasItsFitCutIntoItsTop()
+    {
+        var test = new FastCraft3D.Generators.Calibration.FitTest();
+        var made = test.Make(test.Default, Printer.Default);
+
+        Assert.Equal(4, made.Parts.Count);
+        var plain = BrickStuds.FitCoupon(-0.2f, 1)!;
+        double cut = plain.ComputeSignedVolume() - made.Parts[0].Mesh.ComputeSignedVolume();
+        Assert.True(cut > 1, $"only {cut:0.##} mm3 was cut for the label");
+        Assert.Equal(BrickStuds.PlateHeight + BrickStuds.StudHeight, made.Parts[0].Mesh.ComputeBounds().Size.Z, 2);
+    }
+
+    [Fact]
+    public void ARetractionTestSaysWhatToRetractAtEachHeight()
+    {
+        var test = new FastCraft3D.Generators.Calibration.RetractionTest();
+        var made = test.Make(test.Default with { From = 0.4f, Step = 0.4f, Bands = 3, BandHeight = 5, Base = 1 }, Printer.Default);
+
+        Assert.Contains("Z 1–6 mm: 0.4 mm", made.Notes);
+        Assert.Contains("Z 11–16 mm: 1.2 mm", made.Notes);
+        Assert.Equal(16f, made.Parts[0].Mesh.ComputeBounds().Max.Z, 3);
+    }
+
+    [Fact]
+    public void ATemperatureTowerHasABandForEachTemperatureAndATowerForEachSpeed()
+    {
+        var tower = new FastCraft3D.Generators.Calibration.TemperatureTower();
+        var made = tower.Make(tower.Default with { From = 230, Step = -5, Bands = 6, Speeds = 3 }, Printer.Default);
+
+        Assert.Equal(3, made.Parts.Count);
+        Assert.Contains("Z 1.2–9.2 mm: 230 °C", made.Notes);
+        Assert.Contains("Z 41.2–49.2 mm: 205 °C", made.Notes);
+        Assert.Contains(made.Parts, p => p.Name == "Tower 100 mm/s");
     }
 
     [Fact]

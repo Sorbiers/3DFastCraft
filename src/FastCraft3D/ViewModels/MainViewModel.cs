@@ -188,9 +188,6 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
         Scene.Objects.CollectionChanged += (_, _) => RaiseHiddenAndLocked();
 
         InsertCommand = Track(new RelayCommand(p => Insert(p)));
-        InsertStairCommand = Track(RelayCommand.Simple(() => InsertGenerated("building.stair")));
-        InsertThreadCommand = Track(RelayCommand.Simple(() => InsertGenerated("fastener.thread")));
-        InsertFitTestCommand = Track(RelayCommand.Simple(InsertFitTest));
         InsertCustomCommand = Track(RelayCommand.Simple(InsertCustom));
         InsertTextCommand = Track(RelayCommand.Simple(InsertText));
         InsertHoleCommand = Track(AsyncRelayCommand.Simple(InsertHole));
@@ -204,7 +201,6 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
         SketchExtrudeCommand = RelayCommand.Simple(ExtrudeSketch, () => sketch.Loops.Count > 0);
         SketchRevolveCommand = RelayCommand.Simple(RevolveSketch, () => sketch.Loops.Count > 0);
         DoneSketchCommand = RelayCommand.Simple(() => IsSketchMode = false);
-        InsertGearCommand = Track(RelayCommand.Simple(() => InsertGenerated("mechanism.gear")));
         DeleteCommand = RelayCommand.Simple(Delete, () => Scene.Selection.Count > 0);
         DuplicateCommand = new RelayCommand(p => Duplicate(offset: !Equals(p, "InPlace")),
             _ => Scene.Selection.Count > 0);
@@ -327,9 +323,6 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
     public UndoStack Undo { get; }
 
     public System.Windows.Input.ICommand InsertCommand { get; }
-    public System.Windows.Input.ICommand InsertStairCommand { get; }
-    public System.Windows.Input.ICommand InsertThreadCommand { get; }
-    public System.Windows.Input.ICommand InsertFitTestCommand { get; }
     public System.Windows.Input.ICommand InsertCustomCommand { get; }
     public System.Windows.Input.ICommand InsertTextCommand { get; }
     public System.Windows.Input.ICommand InsertHoleCommand { get; }
@@ -343,7 +336,6 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
     public System.Windows.Input.ICommand SketchExtrudeCommand { get; }
     public System.Windows.Input.ICommand SketchRevolveCommand { get; }
     public System.Windows.Input.ICommand DoneSketchCommand { get; }
-    public System.Windows.Input.ICommand InsertGearCommand { get; }
     public System.Windows.Input.ICommand DeleteCommand { get; }
     public System.Windows.Input.ICommand DuplicateCommand { get; }
     public System.Windows.Input.ICommand MirrorCommand { get; }
@@ -1718,7 +1710,7 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
     /// strip that goes with them, stand down while one of them is running rather than sitting
     /// underneath and leaving it to the pointer to decide which was meant.
     /// </summary>
-    public bool IsToolRunning => isSplitMode || isEngraveMode || isEmbossMode || isLayMode || isExtrudeMode || isConnectMode || isSketchMode || isPivotMode
+    public bool IsToolRunning => isSplitMode || isEngraveMode || isEmbossMode || isWallMountMode || isLayMode || isExtrudeMode || isConnectMode || isSketchMode || isPivotMode
                                  || isAlignFaceMode || isCentreFaceMode || openPanel is not null;
 
     /// <summary>
@@ -5898,37 +5890,6 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
         {
             EndWork();
         }
-    }
-
-    /// <summary>
-    /// Four small brick plates in a row, studs on top and the underside below, each at one of the
-    /// test fits and marked with that many notches. Printed once per filament, tried on real bricks
-    /// and on each other, they say which Fit to type - which no table of tolerances can.
-    /// </summary>
-    private void InsertFitTest()
-    {
-        var colour = NextAutomaticColour();
-        var plates = new List<SceneObject>();
-        var fits = BrickStuds.CouponFits;
-
-        for (int i = 0; i < fits.Length; i++)
-        {
-            if (BrickStuds.FitCoupon(fits[i], i + 1) is not { } mesh) continue;
-
-            plates.Add(new SceneObject(Scene.UniqueName($"Fit test {fits[i]:+0.00;-0.00;0.00}"), mesh)
-            {
-                Colour = colour,
-                Position = new Vector3((i - (fits.Length - 1) / 2f) * 22f, 0f, 0f)
-            }.Centred());
-        }
-
-        if (plates.Count == 0) return;
-
-        Undo.Execute(new AddObjectsCommand("Insert fit test", plates));
-        RefreshSelection();
-
-        Status = "Fit test: " + string.Join(", ", fits.Select((f, i) => $"{i + 1} notch{(i == 0 ? "" : "es")} = {f:+0.00;-0.00;0.00}"))
-                 + " mm. Print them, press each onto real bricks and onto each other, and use the one that grips.";
     }
 
     /// <summary>The last custom shape added, so the next one starts from it rather than from scratch.</summary>

@@ -3,6 +3,12 @@ using FastCraft3D.Geometry;
 
 namespace FastCraft3D.Generators.Boxes;
 
+public enum EnclosureLid
+{
+    [ShownAs("Lift-off")] LiftOff,
+    [ShownAs("Screwed down")] Screwed
+}
+
 public enum Board
 {
     [ShownAs("Raspberry Pi 4 or 5")] RaspberryPi,
@@ -48,7 +54,14 @@ public sealed class Enclosure : Generator<Enclosure.Settings>
         [Length("Floor", 1, 5, Group = "Box")] float Floor = 2f,
         [Length("Standoffs", 2, 20, Group = "Box", Hint = "How high the board stands off the floor")] float Standoff = 5f,
         [Length("Corner radius", 0, 15, Group = "Box")] float Radius = 3f,
-        [Clearance("Lid fit", 0.05, 1, Group = "Box")] float Fit = 0.2f);
+        [Clearance("Lid fit", 0.05, 1, Group = "Box")] float Fit = 0.2f,
+        [Choice("Lid", Group = "Lid")] EnclosureLid Lid = EnclosureLid.LiftOff,
+        [Length("Lid screws", 2, 5, Group = "Lid", Hint = "M3 for 3: through the lid into a post in each corner"), ShowWhen(nameof(Lid), EnclosureLid.Screwed)] float LidScrew = 3f);
+
+    protected override bool Shows(Settings s, string parameter) => parameter != nameof(Settings.Fit) || s.Lid == EnclosureLid.LiftOff;
+
+    /// <summary>A corner post's radius: round the screw's pilot, with a wall a screw can bite into.</summary>
+    private static float PostRadius(Settings s) => s.LidScrew / 2f + 1.6f;
 
     protected override IEnumerable<string> Check(Settings s, Printer printer)
     {
@@ -65,8 +78,10 @@ public sealed class Enclosure : Generator<Enclosure.Settings>
     protected override Generated Build(Settings s, Printer printer, CancellationToken token)
     {
         var board = Spec(s.Board, s);
-        float width = board.Width + 2 * (s.Gap + s.Wall);
-        float depth = board.Depth + 2 * (s.Gap + s.Wall);
+        // Screwed down, the box is a post wider each way, so the corner posts stand clear of the board.
+        float posts = s.Lid == EnclosureLid.Screwed ? 2 * PostRadius(s) : 0f;
+        float width = board.Width + 2 * (s.Gap + s.Wall) + posts;
+        float depth = board.Depth + 2 * (s.Gap + s.Wall) + posts;
         float height = s.Floor + s.InsideHeight;
 
         var pieces = new List<Mesh> { OpenBox.Tray(width, depth, height, s.Wall, s.Floor, s.Radius) };
@@ -78,8 +93,31 @@ public sealed class Enclosure : Generator<Enclosure.Settings>
         foreach (var hole in board.Holes)
             pieces.Add(Shapes.Tube(post / 2f, pilot / 2f, s.Floor - 0.5f, s.Floor + s.Standoff, corner + hole));
 
+        var corners = new List<Vector2>();
+        if (s.Lid == EnclosureLid.Screwed)
+        {
+            // In each inside corner, running into both walls, up to the rim the lid sits on.
+            float r = PostRadius(s), cx = width / 2f - s.Wall - r + 0.5f, cy = depth / 2f - s.Wall - r + 0.5f;
+            corners.AddRange([new(-cx, -cy), new(cx, -cy), new(-cx, cy), new(cx, cy)]);
+            foreach (var c in corners)
+                pieces.Add(Shapes.Tube(r, s.LidScrew * 0.85f / 2f, s.Floor - 0.5f, height, c));
+        }
+
         token.ThrowIfCancellationRequested();
         var box = Shapes.Union(pieces);
+
+        if (s.Lid == EnclosureLid.Screwed)
+        {
+            // A flat lid the box's own outline, a clearance hole over each post.
+            var plate = Shapes.Prism(Shapes.RoundedRect(width, depth, s.Radius), 0, s.Floor);
+            var flat = Shapes.Subtract(plate, corners.Select(c => Shapes.Cylinder(s.LidScrew / 2f + 0.2f, -1, s.Floor + 1, c)).ToList());
+            var screwed = Shapes.InARow([("Enclosure", "box", box, Matrix4x4.Identity), ("Lid", "lid", flat, Matrix4x4.CreateTranslation(0, 0, height))]);
+            return new Generated(screwed,
+            [
+                $"M{board.Screw:0.#} screws into {pilot:0.#} mm pilot holes for the board; M{s.LidScrew:0.#} screws through the lid into the corner posts.",
+                "Cut the sockets' openings with Subtract for now."
+            ]);
+        }
 
         const float lip = 4f;
         var lid = LiddedBox.LiftOffLid(width, depth, s.Radius, s.Wall, s.Fit, s.Floor, lip);

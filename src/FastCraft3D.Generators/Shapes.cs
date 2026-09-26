@@ -245,7 +245,7 @@ public static class Shapes
         if (parts.Count == 0) throw new Refusal("There is nothing to make.");
         if (parts.Count == 1) return parts[0];
 
-        return ManifoldCsg.UnionAll(parts) is { TriangleCount: > 0 } joined ? joined : throw Failed();
+        return ManifoldCsg.UnionAll(parts) is { TriangleCount: > 0 } joined ? Tidied(joined) : throw Failed();
     }
 
     /// <summary>Takes the tools out of the solid. Refuses if they will not cut cleanly.</summary>
@@ -256,11 +256,68 @@ public static class Shapes
         var cutting = tools.Where(t => t.TriangleCount > 0).ToList();
         if (cutting.Count == 0) return solid;
 
-        return ManifoldCsg.SubtractAll(solid, cutting) is { TriangleCount: > 0 } cut ? cut : throw Failed();
+        return ManifoldCsg.SubtractAll(solid, cutting) is { TriangleCount: > 0 } cut ? Tidied(cut) : throw Failed();
     }
 
     public static Mesh Intersect(Mesh solid, Mesh tool) =>
-        ManifoldCsg.Intersect(solid, tool) is { TriangleCount: > 0 } common ? common : throw Failed();
+        ManifoldCsg.Intersect(solid, tool) is { TriangleCount: > 0 } common ? Tidied(common) : throw Failed();
+
+    /// <summary>
+    /// The result less any triangle that lies on its own reverse. Manifold now and then hands one
+    /// back - three points in a line, once each way round - where cuts meet along a line, as the
+    /// rows of a number cut into a thin base did. The solid is right and the pair adds nothing to
+    /// it, but welded for the health check the line has four faces on it. Only exact pairs go, and
+    /// only when that is what closes the result; otherwise it is returned as it came.
+    /// </summary>
+    private static Mesh Tidied(Mesh mesh)
+    {
+        var welded = mesh.Welded();
+        var idx = welded.Indices;
+        var seen = new Dictionary<(int, int, int), int>();
+        var drop = new HashSet<int>();
+
+        for (int t = 0; t + 2 < idx.Count; t += 3)
+        {
+            int a = idx[t], b = idx[t + 1], c = idx[t + 2];
+            var key = Sorted(a, b, c);
+            if (seen.TryGetValue(key, out int other) && !drop.Contains(other) && Reverses(idx, t, other))
+            {
+                drop.Add(t);
+                drop.Add(other);
+                seen.Remove(key);
+            }
+            else
+            {
+                seen[key] = t;
+            }
+        }
+
+        if (drop.Count == 0) return mesh;
+
+        var kept = new List<int>(idx.Count - 3 * drop.Count);
+        for (int t = 0; t + 2 < idx.Count; t += 3)
+            if (!drop.Contains(t)) kept.AddRange([idx[t], idx[t + 1], idx[t + 2]]);
+
+        var tidied = new Mesh(welded.Positions, kept);
+        return tidied.CheckHealth().IsWatertight && !mesh.CheckHealth().IsWatertight ? tidied : mesh;
+
+        static (int, int, int) Sorted(int a, int b, int c)
+        {
+            if (a > b) (a, b) = (b, a);
+            if (b > c) (b, c) = (c, b);
+            if (a > b) (a, b) = (b, a);
+            return (a, b, c);
+        }
+
+        // The same three corners, wound the other way.
+        static bool Reverses(List<int> idx, int t, int u)
+        {
+            for (int i = 0; i < 3; i++)
+                if (idx[u + i] == idx[t])
+                    return idx[u + (i + 2) % 3] == idx[t + 1];
+            return false;
+        }
+    }
 
     private static Refusal Failed() => new(ManifoldCsg.Unavailable
         ? "This needs the Manifold boolean engine, which did not load on this PC."
@@ -282,8 +339,11 @@ public static class Shapes
             Vector2 a = points[triangles[i]], b = points[triangles[i + 1]], c = points[triangles[i + 2]];
 
             // The triangulation says it winds anticlockwise; asked rather than trusted, since one
-            // face the wrong way round is a solid that is not closed.
-            bool anticlockwise = (b.X - a.X) * (c.Y - a.Y) - (c.X - a.X) * (b.Y - a.Y) > 0;
+            // face the wrong way round is a solid that is not closed. But a triangle with no area -
+            // three corners in a line, as a stair's inner corners are - has no winding to ask, and
+            // flipped at random it turned six faces of every stair; it keeps the one it was given.
+            float turn = (b.X - a.X) * (c.Y - a.Y) - (c.X - a.X) * (b.Y - a.Y);
+            bool anticlockwise = turn > 0 || MathF.Abs(turn) < 1e-9f;
             if (anticlockwise != up) (b, c) = (c, b);
 
             mesh.AddTriangle(new(a, z), new(b, z), new(c, z));
