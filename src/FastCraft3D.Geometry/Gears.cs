@@ -269,6 +269,9 @@ public static partial class Gears
     /// <summary>The least material left between a bore and the roots, or a hub.</summary>
     public const float LeastWall = 0.8f;
 
+    /// <summary>The least a worm's root may be from its axis.</summary>
+    private const double LeastCore = 0.2;
+
     /// <summary>The most a helical tooth's tip moves between one layer and the next.</summary>
     private const float LayerShift = 0.4f;
 
@@ -289,6 +292,13 @@ public static partial class Gears
         if (m < 0.8f)
             notes.Add("Module under 0.8 mm is finer than a 0.4 mm nozzle prints well.");
 
+        // A herringbone pair has to turn back at the same height, or above it the two lean
+        // opposite ways. Each turned back at its own half height, and a rack 4 mm thick ran 7 mm3
+        // into a gear 4.8 mm thick. Half the thinner of the two, so that one is a true herringbone.
+        float? apex = o.Form == ToothForm.Herringbone && o.PartnerTeeth > 0
+            ? Math.Min(o.Thickness, o.ForMate().Thickness) / 2f
+            : null;
+
         switch (o.Kind)
         {
             case GearKind.Gear:
@@ -302,7 +312,7 @@ public static partial class Gears
                 float lockHeight = lockDisc is null ? 0f : o.LockHeight;
 
                 var gear = External(o, o.Teeth, 1, (float)(plan?.Shown ?? 0.0), notes, out string? refusal, token,
-                                    partial: true, lockDisc: lockDisc, lockHeight: lockHeight);
+                                    partial: true, lockDisc: lockDisc, lockHeight: lockHeight, apex: framed ? null : apex);
                 if (gear is null) return new([], notes, refusal);
                 parts.Add(new($"Gear {o.Teeth}T", gear, Anchors: Bore(o, gear)));
 
@@ -325,7 +335,7 @@ public static partial class Gears
                     // Their tooth lines have to lie together where they touch, and the two turn opposite
                     // ways - so the partner leans the other way.
                     float apart = m * (o.Teeth + o.PartnerTeeth) / 2f;
-                    var partner = Partner(o.ForMate(), o.PartnerTeeth, -1, MathF.PI - MathF.PI / o.PartnerTeeth, notes, token);
+                    var partner = Partner(o.ForMate(), o.PartnerTeeth, -1, MathF.PI - MathF.PI / o.PartnerTeeth, notes, token, apex);
                     if (partner is not null)
                     {
                         var placed = Moved(partner, new Vector3(apart, 0, 0));
@@ -338,7 +348,7 @@ public static partial class Gears
 
             case GearKind.Ring:
             {
-                var ring = Ring(o, 1, notes, out string? refusal);
+                var ring = Ring(o, 1, notes, out string? refusal, apex);
                 if (ring is null) return new([], notes, refusal);
                 parts.Add(new($"Ring gear {o.Teeth}T", ring, Anchors: Bore(o, ring)));
 
@@ -348,14 +358,19 @@ public static partial class Gears
                     {
                         notes.Add("No pinion: it needs fewer teeth than the ring.");
                     }
+                    else if (o.Teeth - o.PartnerTeeth < 12 && !RunsClear(o))
+                    {
+                        // Nothing about the teeth can be changed to fix this short of cutting the
+                        // ring with a smaller pinion than it runs with, which is not how it is drawn.
+                        notes.Add($"No pinion: {o.PartnerTeeth} teeth inside {o.Teeth} catch tip on tip as they turn."
+                                + " A ring wants about 12 more than its pinion.");
+                    }
                     else
                     {
-                        if (o.Teeth - o.PartnerTeeth < 12)
-                            notes.Add("A ring wants 12 teeth more than its pinion, or the tips catch.");
 
                         // Inside a ring both turn the same way, so the pinion leans the same way.
                         float apart = m * (o.Teeth - o.PartnerTeeth) / 2f;
-                        var pinion = Partner(o.ForMate(), o.PartnerTeeth, 1, 0f, notes, token);
+                        var pinion = Partner(o.ForMate(), o.PartnerTeeth, 1, 0f, notes, token, apex);
                         if (pinion is not null)
                         {
                             var placed = Moved(pinion, new Vector3(apart, 0, 0));
@@ -420,30 +435,30 @@ public static partial class Gears
                     // Left to itself the wheel is as wide as the worm asks for, which has nothing
                     // to do with how long the worm is: two modules for every root of the diameter
                     // quotient and one. A long worm only lets the shafts slide along one another.
-                    var mate = o.ForMate((float)(2.0 * m * Math.Sqrt(d / m + 1.0)))
-                                with { Form = ToothForm.Helical, HelixAngle = (float)leadAngle };
+                    var mate = o.ForMate((float)(2.0 * m * Math.Sqrt(d / m + 1.0)));
                     float width = mate.Thickness;
+                    double centres = d / 2.0 + m * o.PartnerTeeth / 2.0;
 
-                    var wheel = External(mate, o.PartnerTeeth, 1, 0f, notes, out string? refusal, token);
+                    if (CollarReach(o, centres) is { } collar)
+                        return new([], notes, $"The worm's hub would run into the wheel - make it under {2.0 * collar:0.#} mm across, or the worm longer.");
+
+                    var wheel = WormWheel(mate, o.PartnerTeeth, d, notes, out string? refusal, token);
                     if (wheel is null) return new([], notes, refusal);
 
                     // The worm stands on its end to print, which is how a thread wants to be
                     // printed; the wheel lies flat beside it. In mesh neither is where it prints:
                     // the worm lies down across the wheel, a quarter turn from it.
-                    double centres = d / 2.0 + m * o.PartnerTeeth / 2.0;
                     float apart = (float)(d / 2.0 + m + m * (o.PartnerTeeth + 2) / 2f + 2f);
 
                     var seated = Moved(wheel, new Vector3(apart, 0, 0));
 
-                    parts.Add(new("Worm", screw,
-                                  AcrossTheWheel(o, screw, width, centres, Radians((float)leadAngle)),
-                                  Bore(o, screw)));
+                    parts.Add(new("Worm", screw, AcrossTheWheel(o, width, centres), Bore(o, screw)));
                     parts.Add(new($"Worm wheel {o.PartnerTeeth}T", seated,
                                   Matrix4x4.CreateTranslation(-apart, 0f, 0f),
                                   Bore(o.ForMate(), seated, new Vector2(apart, 0f))));
 
                     notes.Add("Made side by side to print, shown in mesh. Both right-handed.");
-                    notes.Add("The wheel is helical, not throated: it touches at a point.");
+                    notes.Add("The wheel is cut to the worm across its whole width but not throated round it, so they bear along a short line.");
                 }
 
                 notes.Add($"Single start, {d:0.##} mm across the pitch, thread leaning {leadAngle:0.#} degrees"
@@ -461,14 +476,17 @@ public static partial class Gears
 
                 if (o.WithPawl)
                 {
-                    var (pawl, reach) = Pawl(o, tipRadius);
-
-                    // Clear of the wheel to print, back into a tooth to be looked at.
-                    float apart = (float)tipRadius + 2f - pawl.ComputeBounds().Min.X;
-                    var (against, pivot) = AgainstTheRatchet(o, Moved(pawl, new Vector3(apart, 0f, 0f)), apart, reach);
-
-                    parts.Add(new("Pawl", Moved(pawl, new Vector3(apart, 0f, 0f)), against));
-                    notes.Add($"The pawl's pivot goes {pivot.Length():0.#} mm from the centre, as shown.");
+                    if (Pawl(o) is { } pawl)
+                    {
+                        // Drawn where it catches; moved clear of the wheel to print.
+                        float apart = (float)tipRadius + 2f - pawl.Mesh.ComputeBounds().Min.X;
+                        parts.Add(new("Pawl", Moved(pawl.Mesh, new Vector3(apart, 0f, 0f)), Matrix4x4.CreateTranslation(-apart, 0f, 0f)));
+                        notes.Add($"The pawl's pivot goes {pawl.Pivot.Length():0.#} mm from the centre, as shown.");
+                    }
+                    else
+                    {
+                        notes.Add("No pawl: there is no room for one clear of the teeth.");
+                    }
                 }
 
                 break;
@@ -476,12 +494,12 @@ public static partial class Gears
 
             default:
             {
-                parts.Add(new($"Rack {o.Teeth}T", Rack(o, 1)));
+                parts.Add(new($"Rack {o.Teeth}T", Rack(o, 1, apex)));
 
                 if (o.PartnerTeeth > 0)
                 {
                     float pitchLine = o.Rim + 1.25f * m;
-                    var gear = Partner(o.ForMate(), o.PartnerTeeth, 1, -MathF.PI / 2f, notes, token);
+                    var gear = Partner(o.ForMate(), o.PartnerTeeth, 1, -MathF.PI / 2f, notes, token, apex);
                     if (gear is not null)
                     {
                         float up = pitchLine + m * o.PartnerTeeth / 2f;
@@ -566,7 +584,7 @@ public static partial class Gears
     /// when r d lies within a rack tooth's half width of r u - rho sin u, for the turn u that brings
     /// it to height rho cos u - so the space reaches as far as the largest that ever gets.
     /// </summary>
-    public static double SpaceHalfAngle(double module, int teeth, double pressureRadians, double backlash, double radius)
+    public static double SpaceHalfAngle(double module, double teeth, double pressureRadians, double backlash, double radius)
     {
         double r = module * teeth / 2.0;
         double tipLine = r - 1.25 * module;
@@ -608,28 +626,44 @@ public static partial class Gears
     }
 
     /// <summary>Half the angle an external gear's tooth spans at a radius.</summary>
-    public static double ToothHalfAngle(double module, int teeth, double pressureRadians, double backlash, double radius) =>
+    public static double ToothHalfAngle(double module, double teeth, double pressureRadians, double backlash, double radius) =>
         Math.PI / teeth - SpaceHalfAngle(module, teeth, pressureRadians, backlash, radius);
 
     /// <param name="Radii">From the root out to the tip for a gear; from the root in to the tip for a ring.</param>
     /// <param name="Half">Half the angle the tooth spans at each of those radii.</param>
     /// <param name="TipArc">Points along the tip between the two flanks.</param>
     /// <param name="RootArc">Points along the root between one tooth and the next.</param>
-    private sealed record Profile(double[] Radii, double[] Half, int TipArc, int RootArc)
+    /// <param name="Middle">
+    /// Where the tooth's middle is at each radius, as an angle off the tooth's own; null for a
+    /// tooth as straight as the rack that cut it. Only a worm's wheel has one.
+    /// </param>
+    private sealed record Profile(double[] Radii, double[] Half, int TipArc, int RootArc, double[]? Middle = null)
     {
         public int Top => Radii.Length - 1;
 
         /// <summary>How near the middle the band inside the teeth comes: the chord across a tooth's root.</summary>
         public double BandReach => Radii[0] * Math.Cos(Half[0]);
+
+        public double Off(int j) => Middle?[j] ?? 0.0;
     }
 
-    private static Profile ExternalProfile(GearOptions o, int teeth, double shrink, Profile? like)
+    /// <param name="teeth">Not always a whole number: a bevel's teeth are cut as those of a larger gear.</param>
+    /// <param name="reach">The furthest out the tip may be, whatever the module makes of it.</param>
+    private static Profile ExternalProfile(GearOptions o, double teeth, double shrink, Profile? like,
+                                           double reach = double.PositiveInfinity)
     {
         double m = o.Module, r = m * teeth / 2.0, pressure = Radians(o.PressureAngle);
+
+        // A chamfer and a cut-away gear's relief together can take more off a fine tooth than it
+        // is wide, and then nowhere between root and tip is wide enough for the bisections below
+        // to find: the flanks crossed and the gear came out torn. They leave it at least twice its
+        // narrowest at the pitch circle.
+        shrink = Math.Min(shrink, Math.Max(0.0, ToothHalfAngle(m, teeth, pressure, o.Backlash, r) * r - Flat * m));
+
         double Half(double rho) => ToothHalfAngle(m, teeth, pressure, o.Backlash, rho) - shrink / rho;
         double Least(double rho) => Flat * m / 2.0 / rho;
 
-        double root = r - 1.25 * m, tip = r + m - shrink;
+        double root = r - 1.25 * m, tip = Math.Min(r + m - shrink, reach);
         if (Half(tip) < Least(tip)) tip = Bisect(r, tip, rho => Half(rho) - Least(rho));
         if (Half(root) < Least(root)) root = Bisect(root, r, rho => Half(rho) - Least(rho));
 
@@ -717,19 +751,48 @@ public static partial class Gears
 
             for (int j = 0; j <= n; j++)
             {
-                points[b + j] = Polar(p.Radii[j], middle - p.Half[j]);
-                points[b + n + 1 + p.TipArc + (n - j)] = Polar(p.Radii[j], middle + p.Half[j]);
+                points[b + j] = Polar(p.Radii[j], middle + p.Off(j) - p.Half[j]);
+                points[b + n + 1 + p.TipArc + (n - j)] = Polar(p.Radii[j], middle + p.Off(j) + p.Half[j]);
             }
 
             for (int t = 1; t <= p.TipArc; t++)
-                points[b + n + t] = Polar(p.Radii[n], middle - p.Half[n] + 2.0 * p.Half[n] * t / (p.TipArc + 1));
+                points[b + n + t] = Polar(p.Radii[n], middle + p.Off(n) - p.Half[n] + 2.0 * p.Half[n] * t / (p.TipArc + 1));
 
-            double from = middle + p.Half[0], to = middle + 2.0 * Math.PI / teeth - p.Half[0];
+            double from = middle + p.Off(0) + p.Half[0], to = middle + p.Off(0) + 2.0 * Math.PI / teeth - p.Half[0];
             for (int t = 1; t <= p.RootArc; t++)
                 points[b + 2 * (n + 1) + p.TipArc + t - 1] = Polar(p.Radii[0], from + (to - from) * t / (p.RootArc + 1));
         }
 
         return points;
+    }
+
+    /// <summary>
+    /// A bevel's teeth, as they are drawn on its flat back.
+    ///
+    /// They were drawn there first as a spur gear's, the depth measured out along the back. But
+    /// what has to match between two bevels is the depth measured square to the pitch cone, which
+    /// that makes a module times the cosine of each gear's own cone angle: the same for a pair of
+    /// equal gears, and for a 15:30 pair a pinion whose tips reached a millimetre past the roots of
+    /// its mate. So the teeth are Tredgold's: those of a spur gear as big as the back cone - the
+    /// cone square to the pitch cone at the heel - laid on that cone, where a module means the
+    /// same to both gears, and carried along the lines to the apex until they reach the back.
+    ///
+    /// Where the tip reaches the back it is further out than a spur's would be. It is taken no
+    /// further than a spur's there, and the tip cone is kept short of lying flat on a steep cone
+    /// with few teeth, which only an odd single bevel has.
+    /// </summary>
+    private static Profile BackConeProfile(GearOptions o, int teeth, double gamma)
+    {
+        double r = o.Module * teeth / 2.0, cos = Math.Cos(gamma), sin = Math.Sin(gamma);
+        double apex = r / Math.Tan(gamma);
+
+        // How far up from the back a point on the back cone is, and so where the line from the
+        // apex through it meets the back.
+        double Up(double rho) => rho * sin - r * sin / cos;
+        double Back(double rho) => rho * cos * apex / (apex - Up(rho));
+
+        var cone = ExternalProfile(o, teeth / cos, 0.0, null, reach: (apex / 2.0 + r * sin / cos) / sin);
+        return new(cone.Radii.Select(Back).ToArray(), cone.Half.Select(h => h / cos).ToArray(), cone.TipArc, cone.RootArc);
     }
 
     /// <summary>A ring gear's toothed inside, anticlockwise: the teeth's middles half a pitch off the turn, so a space faces it.</summary>
@@ -812,25 +875,38 @@ public static partial class Gears
         var points = new Vector2[teeth * per];
         double root = whole.Radii[0];
 
+        Profile Of(int k) => what(k) == Tooth.Relieved ? relieved : whole;
+
         for (int k = 0; k < teeth; k++)
         {
             var tooth = what(k);
-            var p = tooth == Tooth.Relieved ? relieved : whole;
+            var p = Of(k);
             double middle = turn + 2.0 * Math.PI * k / teeth;
             int b = k * per;
 
-            double Radius(int j) => tooth == Tooth.Gone ? root : p.Radii[j];
-
-            for (int j = 0; j <= n; j++)
+            if (tooth == Tooth.Gone)
             {
-                points[b + j] = Polar(Radius(j), middle - p.Half[j]);
-                points[b + n + 1 + p.TipArc + (n - j)] = Polar(Radius(j), middle + p.Half[j]);
+                // Evenly along the root between where the tooth's corners were. Put at the angles
+                // its flanks had, they doubled back wherever the flank did - which a small gear's
+                // undercut one does - and the rim folded over itself.
+                int own = 2 * (n + 1) + p.TipArc;
+                for (int t = 0; t < own; t++)
+                    points[b + t] = Polar(root, middle - p.Half[0] + 2.0 * p.Half[0] * t / (own - 1));
+            }
+            else
+            {
+                for (int j = 0; j <= n; j++)
+                {
+                    points[b + j] = Polar(p.Radii[j], middle - p.Half[j]);
+                    points[b + n + 1 + p.TipArc + (n - j)] = Polar(p.Radii[j], middle + p.Half[j]);
+                }
+
+                for (int t = 1; t <= p.TipArc; t++)
+                    points[b + n + t] = Polar(p.Radii[n], middle - p.Half[n] + 2.0 * p.Half[n] * t / (p.TipArc + 1));
             }
 
-            for (int t = 1; t <= p.TipArc; t++)
-                points[b + n + t] = Polar(Radius(n), middle - p.Half[n] + 2.0 * p.Half[n] * t / (p.TipArc + 1));
-
-            double from = middle + p.Half[0], to = middle + 2.0 * Math.PI / teeth - p.Half[0];
+            // To where the next tooth starts, which is its own width and not this one's.
+            double from = middle + p.Half[0], to = middle + 2.0 * Math.PI / teeth - Of((k + 1) % teeth).Half[0];
             for (int t = 1; t <= p.RootArc; t++)
                 points[b + 2 * (n + 1) + p.TipArc + t - 1] = Polar(root, from + (to - from) * t / (p.RootArc + 1));
         }
@@ -893,7 +969,7 @@ public static partial class Gears
         if (face < o.Thickness - 1e-3)
             notes.Add($"Face cut to {face:0.#} mm from {o.Thickness:0.#}: a third of the cone, as a cut bevel's is.");
 
-        var profile = ExternalProfile(o, teeth, 0.0, null);
+        var profile = BackConeProfile(o, teeth, gamma);
         double shrink = 1.0 - face / distance;
 
         var middle = Fitting(o with { HubDiameter = 0f }, profile.BandReach * shrink,
@@ -903,8 +979,13 @@ public static partial class Gears
         if (o.HubDiameter > 0 && o.HubHeight > 0)
             notes.Add("No hub on a bevel: its back is the face that seats.");
 
-        var heel = ExternalLoop(profile, teeth, 0.0);
-        var toe = heel.Select(p => p * (float)shrink).ToArray();
+        // The toe is the back drawn in towards the apex, so every edge between them runs straight
+        // at it. The back's tips are then held to a spur's outside, which only takes material away:
+        // the tooth is wider nearer the middle, so a point drawn in along its radius is still in it.
+        var drawn = ExternalLoop(profile, teeth, 0.0);
+        var toe = drawn.Select(p => p * (float)shrink).ToArray();
+        float outside = (float)(pitchRadius + m);
+        var heel = drawn.Select(p => p.Length() > outside ? p * (outside / p.Length()) : p).ToArray();
         float top = (float)(face * Math.Cos(gamma));
 
         var mesh = new Mesh();
@@ -922,44 +1003,23 @@ public static partial class Gears
 
     /// <summary>
     /// Where the worm goes when the drive is shown as it goes together: laid across the wheel a
-    /// quarter turn from it, its axis at the wheel's half height and the centre distance away.
+    /// quarter turn from it, its axis at the wheel's half height and the centre distance away,
+    /// and turned about its own axis so the middle of its thread crosses the wheel's middle layer
+    /// on the line between the shafts - which is where <see cref="WormWheel"/> cut a space for it.
     ///
-    /// It is also turned about its own axis so the two interleave where they are closest, rather
-    /// than being drawn driven into one another. Which way round that is depends on whether the
-    /// wheel has a tooth or a space facing the worm, and the wheel's teeth lean - so the tooth at
-    /// the bottom face is not the tooth at half height. Both are worked out here: the wheel's from
-    /// its twist, the worm's by looking at where the thread's own corners fall round the middle of
-    /// its length. It is near enough for something being looked at; the two are not being run.
+    /// The turn is worked out from the thread's formula. It was found by looking for the lowest
+    /// and highest vertices round the worm's middle, but the root and the crest are each a flat
+    /// fifth of a pitch, and whichever vertex along them came first set the turn: up to half a
+    /// millimetre of thread at module 1.5, against the 0.15 of play there was to take it.
     /// </summary>
-    private static Matrix4x4 AcrossTheWheel(GearOptions o, Mesh worm, float width, double centres, double leadAngle)
+    private static Matrix4x4 AcrossTheWheel(GearOptions o, float width, double centres)
     {
-        double radius = o.Module * o.PartnerTeeth / 2.0;
-        double pitchAngle = 2.0 * Math.PI / o.PartnerTeeth;
+        var (corners, _) = WormProfile(Radians(o.PressureAngle));
+        double pitch = Math.PI * o.Module;
 
-        // How far the wheel's teeth have wound round by the height the worm touches them.
-        double twist = Math.Tan(leadAngle) / radius * (width / 2.0);
-        double nearest = twist - Math.Round(twist / pitchAngle) * pitchAngle;
-        bool toothFacing = Math.Abs(nearest) < pitchAngle / 4.0;
-
-        float middle = o.Thickness / 2f;   // the worm's own middle, along its length
-        double slab = Math.PI * o.Module / 40.0;
-        double deepest = double.MaxValue, highest = 0.0, atRoot = 0.0, atCrest = 0.0;
-        bool found = false;
-
-        foreach (var p in worm.Positions)
-        {
-            if (Math.Abs(p.Z - middle) > slab) continue;
-
-            double from = Math.Sqrt(p.X * p.X + p.Y * p.Y);
-            double round = Math.Atan2(p.Y, p.X);
-            found = true;
-
-            if (from < deepest) { deepest = from; atRoot = round; }
-            if (from > highest) { highest = from; atCrest = round; }
-        }
-
-        // The wheel lies on -X of the worm once the worm is moved out to the centre distance.
-        double facing = found ? Math.PI - (toothFacing ? atRoot : atCrest) : 0.0;
+        // The thread's middle is half its crest along a pitch, at phase z / pitch - angle / turn;
+        // the wheel lies on -X of the worm, at the angle half a turn round.
+        double facing = Math.IEEERemainder(Math.PI - Math.Tau * (o.Thickness / (2.0 * pitch) - corners[1] / 2.0), Math.Tau);
 
         return Matrix4x4.CreateTranslation(0f, 0f, -o.Thickness / 2f)
              * Matrix4x4.CreateRotationZ((float)facing)
@@ -1000,7 +1060,16 @@ public static partial class Gears
     {
         refusal = null;
         double m = o.Module, pitch = Math.PI * m, length = o.Thickness;
-        double tip = diameter / 2.0 + m, root = Math.Max(diameter / 2.0 - 1.25 * m, 0.2);
+        double tip = diameter / 2.0 + m, root = diameter / 2.0 - 1.25 * m;
+
+        // The root was once held to 0.2 mm and the worm made anyway, but a wheel's tips reach a
+        // quarter module short of the true root, and so into the core of a worm that thin.
+        if (root < LeastCore)
+        {
+            refusal = $"A worm {diameter:0.##} mm across the pitch has nothing under a thread of module {m:0.##}"
+                    + $" - make it at least {2.0 * (LeastCore + 1.25 * m):0.#} mm across.";
+            return null;
+        }
 
         var bore = BoreLoop(o);
         double boreReach = bore?.Max(p => p.Length()) ?? 0.0;
@@ -1109,6 +1178,224 @@ public static partial class Gears
     }
 
     /// <summary>
+    /// How wide the worm's collar may be before it reaches the wheel, or null when it does not.
+    /// The collar stands past the end of the worm, so a worm shorter than the wheel is across puts
+    /// it over the wheel's rim.
+    /// </summary>
+    private static double? CollarReach(GearOptions o, double centres)
+    {
+        if (o.HubDiameter <= 0 || o.HubHeight <= 0) return null;
+
+        double rim = o.Module * (o.PartnerTeeth + 2) / 2.0;
+        double end = Math.Max(o.Thickness / 2.0 - 0.2, 0.0);   // the collar is sunk 0.2 into the worm
+        if (end >= rim) return null;
+
+        double room = centres - Math.Sqrt(rim * rim - end * end) - 0.05;
+        return o.HubDiameter / 2.0 > room ? room : null;
+    }
+
+    /// <summary>
+    /// A worm's wheel, its teeth cut as the worm itself would cut them.
+    ///
+    /// It was a helical gear leaning at the thread's lead angle, which is right only in the layer
+    /// through the worm's axis. Off it, a plane along the worm cuts the thread further round,
+    /// where it has wound on and its flanks lean differently, and the wheel ran into the worm by
+    /// up to 200 mm3. But the thread's section in any such plane only slides along as the worm
+    /// turns, just as a rack does - so each layer of the wheel is cut by rolling that section round
+    /// it, as a spur gear is cut by its rack; see <see cref="WormCut"/>. It is not throated: its
+    /// tips stay on a cylinder, and it bears along a short line rather than across its face.
+    /// </summary>
+    private static Mesh? WormWheel(GearOptions o, int teeth, double diameter, List<string> notes,
+                                   out string? refusal, CancellationToken token)
+    {
+        var cut = new WormCut(o, teeth, diameter);
+        float h = o.Thickness, chamfer = o.Chamfer;
+
+        // Layers close together where the worm is, and none needed where it is not. This close
+        // keeps a flank between two layers within a few thousandths of the one the worm cuts.
+        double step = Math.Max(0.05, Math.Sqrt(0.1 * (diameter / 2.0 - o.Module)));
+        double low = Math.Max(0.0, h / 2.0 - cut.Reach), high = Math.Min(h, h / 2.0 + cut.Reach);
+        int steps = Math.Clamp((int)Math.Ceiling((high - low) / step), 1, 120);
+
+        var wanted = new List<float> { 0f, h, chamfer };
+        for (int i = 0; i <= steps; i++) wanted.Add((float)(low + (high - low) * i / steps));
+
+        var layers = new List<float>();
+        foreach (float z in wanted.Where(z => z == 0f || (z >= chamfer && z <= h)).Order())
+        {
+            if (layers.Count == 0 || z - layers[^1] > 1e-3f) layers.Add(z);
+            else if (z == h) layers[^1] = h;
+        }
+
+        var like = cut.Profile(0.0, 0.0, null);
+        var profiles = layers.Select(z => cut.Profile(z - h / 2.0, z == 0f && chamfer > 0f ? chamfer : 0.0, like)).ToList();
+
+        var middle = Fitting(o, profiles.Min(p => p.BandReach), $"the roots of a {teeth}-tooth wheel", out refusal);
+        if (middle is null) return null;
+
+        var loops = profiles.Select(p => ExternalLoop(p, teeth, 0.0)).ToList();
+        var bore = middle.Bore;
+        var hubCircle = middle.HubCircle;
+
+        var mesh = new Mesh();
+        for (int i = 0; i + 1 < layers.Count; i++)
+            Wall(mesh, loops[i], layers[i], loops[i + 1], layers[i + 1], outward: true);
+
+        if (bore is not null) Wall(mesh, bore, 0f, bore, middle.Top, outward: false);
+        if (hubCircle is not null) Wall(mesh, hubCircle, middle.HubBase, hubCircle, middle.Top, outward: true);
+
+        Zip(mesh, Band(loops[0], profiles[0], teeth), bore, 0f, up: false);
+        ExternalTeeth(mesh, loops[0], profiles[0], teeth, 0f, up: false);
+
+        Zip(mesh, Band(loops[^1], profiles[^1], teeth), hubCircle ?? bore, h, up: true);
+        ExternalTeeth(mesh, loops[^1], profiles[^1], teeth, h, up: true);
+
+        if (hubCircle is not null) Zip(mesh, hubCircle, bore, middle.Top, up: true);
+
+        return SetScrewed(mesh.Welded(), o, middle, notes, token);
+    }
+
+    /// <summary>
+    /// A worm's thread as the cutter of its wheel, with the worm lying across the wheel on +X at
+    /// the centre distance, its axis along Y at the wheel's middle layer, and its thread's middle
+    /// crossing that layer at Y = 0 - where <see cref="AcrossTheWheel"/> turns it to.
+    ///
+    /// In the layer e from the worm's axis, a point s in from the worm's axis along X is
+    /// sqrt(s² + e²) from it, where the thread is as wide as its axial section is at that
+    /// radius; and it is atan(e / s) round from the line between the shafts, where the thread has
+    /// wound a pitch times that over a turn further along. That is a rack - one whose flanks are
+    /// not straight and whose middle wanders with depth - and it is rolled round the wheel's
+    /// pitch circle the way <see cref="SpaceHalfAngle"/> rolls a straight one.
+    /// </summary>
+    private sealed class WormCut
+    {
+        private readonly GearOptions o;
+        private readonly int teeth;
+        private readonly double m, r, pitch, centres, tip, root, crest, flank;
+
+        public WormCut(GearOptions o, int teeth, double diameter)
+        {
+            this.o = o;
+            this.teeth = teeth;
+            m = o.Module;
+            r = m * teeth / 2.0;
+            pitch = Math.PI * m;
+            centres = diameter / 2.0 + r;
+            tip = diameter / 2.0 + m;
+            root = diameter / 2.0 - 1.25 * m;
+
+            var (corners, _) = WormProfile(Radians(o.PressureAngle));
+            crest = corners[1];
+            flank = corners[2] - corners[1];
+        }
+
+        /// <summary>How far either side of the worm's axis the thread reaches.</summary>
+        public double Reach => tip;
+
+        /// <summary>
+        /// The thread's middle and half its width along the worm, s in from its axis in the layer
+        /// e off it; null where the thread does not reach. Widened by half the play, as the rack
+        /// that cuts a spur gear is.
+        /// </summary>
+        private (double Middle, double Half)? Thread(double s, double e)
+        {
+            double at = Math.Sqrt(s * s + e * e);
+            if (at >= tip) return null;
+
+            double depth = Math.Min(1.0, (tip - at) / (tip - root));
+            return (pitch / Math.Tau * Math.Atan2(e, s), pitch * (crest / 2.0 + depth * flank) + o.Backlash / 4.0);
+        }
+
+        /// <summary>
+        /// The angles either side of the space the thread cuts at a radius in the layer e, or
+        /// null where it cuts nothing there. A point of the wheel turned to beta round from the
+        /// line between the shafts has rolled the thread r beta - rho sin beta along from it.
+        /// </summary>
+        private (double From, double To)? Space(double rho, double e)
+        {
+            double inside = tip * tip - e * e;
+            if (inside <= 0) return null;
+
+            double near = (centres - Math.Sqrt(inside)) / rho;
+            if (near >= 1.0) return null;
+
+            double reach = Math.Acos(near);
+            double Along(double beta) => r * beta - rho * Math.Sin(beta);
+
+            double from = -Largest(beta => Thread(centres - rho * Math.Cos(beta), e) is { } t
+                ? -(Along(beta) + t.Middle - t.Half) : double.NegativeInfinity, -reach, reach);
+            double to = Largest(beta => Thread(centres - rho * Math.Cos(beta), e) is { } t
+                ? Along(beta) + t.Middle + t.Half : double.NegativeInfinity, -reach, reach);
+
+            return double.IsFinite(from) && double.IsFinite(to) ? (from / r, to / r) : null;
+        }
+
+        /// <summary>
+        /// The wheel's tooth in the layer e from the worm's axis. The space is the worm's where it
+        /// reaches and a plain spur's centred on the same line where it does not, whichever is
+        /// the wider: towards the wheel's edges the thread passes over the roots without reaching
+        /// them, and a tooth left as wide as a whole pitch there has no root to stand on.
+        /// </summary>
+        public Profile Profile(double e, double shrink, Profile? like)
+        {
+            double pressure = Radians(o.PressureAngle);
+            double centred = pitch / Math.Tau * Math.Atan2(e, centres - r) / r;
+
+            (double Half, double Middle) Tooth(double rho)
+            {
+                double spur = SpaceHalfAngle(m, teeth, pressure, o.Backlash, rho);
+                double from = centred - spur, to = centred + spur;
+                if (Space(rho, e) is { } worm) (from, to) = (Math.Min(from, worm.From), Math.Max(to, worm.To));
+
+                return (Math.PI / teeth - (to - from) / 2.0 - shrink / rho, (from + to) / 2.0 + Math.PI / teeth);
+            }
+
+            double Least(double rho) => Flat * m / 2.0 / rho;
+
+            double rootRadius = r - 1.25 * m, tipRadius = r + m - shrink;
+            if (Tooth(tipRadius).Half < Least(tipRadius)) tipRadius = Bisect(r, tipRadius, rho => Tooth(rho).Half - Least(rho));
+            if (Tooth(rootRadius).Half < Least(rootRadius)) rootRadius = Bisect(rootRadius, r, rho => Tooth(rho).Half - Least(rho));
+
+            var radii = new double[Levels + 1];
+            var half = new double[Levels + 1];
+            var middle = new double[Levels + 1];
+            for (int j = 0; j <= Levels; j++)
+            {
+                radii[j] = rootRadius + (tipRadius - rootRadius) * j / Levels;
+                (half[j], middle[j]) = Tooth(radii[j]);
+            }
+
+            return new(radii, half,
+                like?.TipArc ?? Math.Max(0, (int)Math.Ceiling(2.0 * half[Levels] * tipRadius / (0.25 * m)) - 1),
+                like?.RootArc ?? Math.Max(0, (int)Math.Ceiling((2.0 * Math.PI / teeth - 2.0 * half[0]) * rootRadius / (0.25 * m)) - 1),
+                middle);
+        }
+
+        /// <summary>The largest a function gets over a range: sampled, then closed in on by golden section.</summary>
+        private static double Largest(Func<double, double> f, double low, double high)
+        {
+            const int samples = 240;
+            double step = (high - low) / samples;
+            double best = double.NegativeInfinity, at = low;
+            for (int i = 0; i <= samples; i++)
+            {
+                double x = low + i * step, value = f(x);
+                if (value > best) (best, at) = (value, x);
+            }
+
+            double a = Math.Max(low, at - step), b = Math.Min(high, at + step);
+            const double golden = 0.6180339887498949;
+            for (int i = 0; i < 40; i++)
+            {
+                double p = b - golden * (b - a), q = a + golden * (b - a);
+                if (f(p) > f(q)) b = q; else a = p;
+            }
+
+            return Math.Max(best, f((a + b) / 2.0));
+        }
+    }
+
+    /// <summary>
     /// A ratchet wheel: a long ramp up to each tip and a steep face back down to the next root, so
     /// it turns freely one way and is caught the other.
     ///
@@ -1126,13 +1413,7 @@ public static partial class Gears
         var middle = Fitting(o, root, $"the roots of a {o.Teeth}-tooth ratchet", out refusal);
         if (middle is null) return null;
 
-        var loop = new List<Vector2>(2 * o.Teeth);
-        for (int k = 0; k < o.Teeth; k++)
-        {
-            double at = pitch * k;
-            loop.Add(Polar(root, at + lean));   // the foot of the catching face
-            loop.Add(Polar(tip, at + pitch));   // the tip, at the top of the ramp
-        }
+        var loop = RatchetLoop(o);
 
         float h = o.Thickness, top = middle.Top;
         var mesh = new Mesh();
@@ -1153,102 +1434,192 @@ public static partial class Gears
         return SetScrewed(mesh.Welded(), o, middle, notes, token);
     }
 
-    /// <summary>
-    /// The pawl that catches a ratchet: an arm with its pivot at one end and a point at the other,
-    /// lying flat as the wheel does. Where the pivot goes is said in a note rather than built in,
-    /// since it is a hole in whatever the pair is mounted on.
-    /// </summary>
-    /// <summary>
-    /// Where the pawl goes when the two are shown together: its point in the notch nearest the top
-    /// of the wheel, and its arm laid along the way the wheel pushes it when it is caught, so the
-    /// push runs down the arm into the pivot instead of trying to lift the point out. Hands back
-    /// where the pivot lands as well, since that is a hole in whatever the pair is mounted on.
-    /// </summary>
-    private static (Matrix4x4 Where, Vector2 Pivot) AgainstTheRatchet(GearOptions o, Mesh pawl, float apart, float reach)
+    /// <summary>A ratchet wheel's outline: the foot of each catching face, then the tip at the top of the ramp after it.</summary>
+    private static List<Vector2> RatchetLoop(GearOptions o)
     {
         double m = o.Module, tip = m * o.Teeth / 2.0, root = tip - m;
         double pitch = 2.0 * Math.PI / o.Teeth;
         double lean = Math.Min(Radians(o.Undercut), pitch / 3.0);
 
-        // The foot of a catching face, which is where a pawl sits, nearest to straight up.
-        double at = Math.Round((Math.PI / 2.0 - lean) / pitch) * pitch + lean;
-        var contact = Polar(root + 0.2, at);
-
-        // Round the wheel the way it is caught: the face is a hair behind this point, so the arm
-        // running on from here is the arm the face pushes along.
-        var along = new Vector2((float)-Math.Sin(at), (float)Math.Cos(at));
-        var pivot = contact + along * reach;
-
-        Matrix4x4 At(Vector2 where) =>
-            Matrix4x4.CreateTranslation(-apart, 0f, 0f)
-            * Matrix4x4.CreateRotationZ((float)(at - Math.PI / 2.0))
-            * Matrix4x4.CreateTranslation(where.X, where.Y, 0f);
-
-        // Then pushed out until the deepest part of it - the back of the hook, not its point -
-        // sits just clear of the roots. Seated by the point alone it buried its own hook in the
-        // wheel, which is the one thing a pawl must not do.
-        var outward = new Vector2((float)Math.Cos(at), (float)Math.Sin(at));
-
-        for (int settle = 0; settle < 3; settle++)
+        var loop = new List<Vector2>(2 * o.Teeth);
+        for (int k = 0; k < o.Teeth; k++)
         {
-            var placed = At(pivot);
-            float deepest = float.MaxValue;
-
-            foreach (var p in pawl.Positions)
-            {
-                var q = Vector3.Transform(p, placed);
-                deepest = MathF.Min(deepest, new Vector2(q.X, q.Y).Length());
-            }
-
-            float clear = (float)(root + 0.1) - deepest;
-            if (clear <= 0.001f) break;
-
-            pivot += outward * clear;
+            double at = pitch * k;
+            loop.Add(Polar(root, at + lean));
+            loop.Add(Polar(tip, at + pitch));
         }
 
-        return (At(pivot), pivot);
+        return loop;
     }
 
-    private static (Mesh Mesh, float Reach) Pawl(GearOptions o, double tip)
+    /// <summary>
+    /// The pawl that catches a ratchet, drawn where it sits: its point in the notch nearest the
+    /// top of the wheel, its arm laid along the way the wheel pushes it when it is caught, so the
+    /// push runs down the arm into the pivot instead of trying to lift the point out. Hands back
+    /// where the pivot is as well, since that is a hole in whatever the pair is mounted on; null
+    /// when no pawl could be drawn clear of the teeth.
+    ///
+    /// It was a straight wedge laid along the tangent at the notch, its hook hanging below the
+    /// arm and pushed out until its deepest point cleared the roots. But the next tooth's ramp
+    /// rises under that tangent, and the hook sat in it: 22 mm3 at the panel's own settings,
+    /// hundreds with coarse teeth. So the underside is drawn from the wheel: a clearance off the
+    /// ramp the point rests on, then round clear of the tips until a straight line to the boss
+    /// runs away from the wheel. What comes out is checked against the wheel's own outline.
+    /// </summary>
+    private static (Mesh Mesh, Vector2 Pivot)? Pawl(GearOptions o)
     {
-        double boss = Math.Max(o.BoreSize / 2.0 + 1.6, 3.0);
+        double m = o.Module, tip = m * o.Teeth / 2.0, root = tip - m;
+        double pitch = 2.0 * Math.PI / o.Teeth;
+        double lean = Math.Min(Radians(o.Undercut), pitch / 3.0);
+        double clear = Math.Clamp(0.1 * m, 0.05, 0.2);
+        double hole = o.BoreSize / 2.0, boss = Math.Max(hole + 1.6, 3.0);
 
-        // The hook has to lie inside a tooth, and a tooth is only a module deep - so this is held
-        // to half of one however big the boss round the pivot has to be.
-        double nose = Math.Min(Math.Max(boss * 0.45, 1.2), 0.5 * o.Module);
-        double arm = Math.Max(1.2 * tip, 4.0 * boss);
-        double point = arm + nose * 1.6;
+        // The notch nearest straight up: the foot of its catching face, the tip that face falls
+        // from, and the tip at the top of the ramp that climbs away from it.
+        double at = Math.Round((Math.PI / 2.0 - lean) / pitch) * pitch + lean;
+        var foot = Polar(root, at);
+        var faceTip = Polar(tip, at - lean);
+        var rampTip = Polar(tip, at - lean + pitch);
+        var face = Vector2.Normalize(faceTip - foot);
+        var ramp = Vector2.Normalize(rampTip - foot);
+        var off = new Vector2(ramp.Y, -ramp.X);   // square off the ramp, away from the wheel
 
-        var outline = new List<Vector2>();
-        int steps = Math.Max(12, (int)Math.Ceiling(Math.PI * boss / 0.4));
-        for (int i = 0; i <= steps; i++)
-            outline.Add(Polar(boss, Math.PI / 2.0 + Math.PI * i / steps));
+        // The point is a clearance off both the face and the ramp, and the hook rises from it
+        // along the face; the heel is the same clearance over the ramp's top.
+        double opening = Math.Acos(Math.Clamp(Vector2.Dot(face, ramp), -1f, 1f));
+        var point = foot + Vector2.Normalize(face + ramp) * (float)(clear / Math.Sin(opening / 2.0));
+        double depth = 0.6 * Vector2.Distance(faceTip, foot);
+        var hook = point + face * (float)depth;
+        var heel = rampTip + off * (float)clear;
 
-        outline.Add(new Vector2((float)arm, (float)-nose));
-        outline.Add(new Vector2((float)point, (float)(-nose * 0.15)));
+        // The arm runs square to the radius through the middle of the hook.
+        var contact = point + face * (float)(depth / 2.0);
+        var across = Vector2.Normalize(new Vector2(-contact.Y, contact.X));
 
-        var loop = Densified(outline);
-        var bore = Circle(o.BoreSize / 2.0);
-        float h = o.Thickness;
+        var wheel = RatchetLoop(o);
+        double over = tip + clear;
 
-        var mesh = new Mesh();
-        Wall(mesh, loop, 0f, loop, h, outward: true);
-        Wall(mesh, bore, 0f, bore, h, outward: false);
-        Zip(mesh, loop, bore, 0f, up: false);
-        Zip(mesh, loop, bore, h, up: true);
+        for (double reach = Math.Max(1.2 * tip, 4.0 * boss), tries = 0; tries < 8; reach *= 1.25, tries++)
+        {
+            var pivot = contact + across * (float)reach;
+            if (PawlOutline(point, hook, heel, pivot, boss, over) is not { } outline) continue;
+            if (!PawlClear(outline, wheel, pivot, hole, clear)) continue;
 
-        return (mesh.Welded(), (float)point);
+            var bore = Circle(hole).Select(p => p + pivot).ToList();
+            var mesh = Engraving.TextSolid.Extrude([new Engraving.TextShape(outline, [bore])], 0f, o.Thickness);
+            return mesh.CheckHealth().IsWatertight ? (mesh, pivot) : null;
+        }
+
+        return null;
     }
 
-    private static Mesh? Partner(GearOptions o, int teeth, int hand, float phase, List<string> notes, CancellationToken token)
+    /// <summary>
+    /// A pawl's outline, anticlockwise: the point, up the hook, across the top to the boss, round
+    /// it, and back along the underside - which stays <paramref name="over"/> from the wheel's
+    /// middle until a straight line from it to the boss only gets further away. Null when the
+    /// pieces do not fit together.
+    /// </summary>
+    private static List<Vector2>? PawlOutline(Vector2 point, Vector2 hook, Vector2 heel, Vector2 pivot, double boss, double over)
     {
-        var gear = External(o, teeth, hand, phase, notes, out _, token);
+        // Where a line from a point outside the boss touches it, on the side away from the wheel
+        // or on the side towards it; as an angle about the pivot.
+        double? Touch(Vector2 from, bool upper)
+        {
+            double d = Vector2.Distance(from, pivot);
+            if (d <= boss + 0.1) return null;
+
+            double toward = Math.Atan2(from.Y - pivot.Y, from.X - pivot.X), spread = Math.Acos(boss / d);
+            return upper ? toward + spread : toward - spread;
+        }
+
+        var under = new List<Vector2> { heel };
+        double start = Math.Atan2(heel.Y, heel.X), step = 0.4 / over;
+        for (int i = 0; ; i++)
+        {
+            var last = under[^1];
+            if (Touch(last, upper: false) is not { } low) return null;
+
+            var reached = pivot + new Vector2((float)(boss * Math.Cos(low)), (float)(boss * Math.Sin(low)));
+            if (Vector2.Dot(last, reached - last) >= 0f) break;
+            if (i > 4000) return null;
+
+            under.Add(Polar(over, start + i * step));
+        }
+
+        if (Touch(hook, upper: true) is not { } from || Touch(under[^1], upper: false) is not { } to) return null;
+        while (to <= from) to += Math.Tau;
+        if (to - from >= Math.Tau) return null;
+
+        var outline = new List<Vector2> { point, hook };
+        int pieces = Math.Max(8, (int)Math.Ceiling((to - from) * boss / 0.4));
+        for (int k = 0; k <= pieces; k++)
+        {
+            double a = from + (to - from) * k / pieces;
+            outline.Add(pivot + new Vector2((float)(boss * Math.Cos(a)), (float)(boss * Math.Sin(a))));
+        }
+
+        for (int k = under.Count - 1; k >= 0; k--) outline.Add(under[k]);
+        return outline;
+    }
+
+    /// <summary>
+    /// Whether a pawl's outline is a proper loop, holds its pivot hole with a wall round it, and
+    /// keeps a clearance from the wheel - checked edge against edge, since both are straight.
+    /// </summary>
+    private static bool PawlClear(List<Vector2> pawl, List<Vector2> wheel, Vector2 pivot, double hole, double clear)
+    {
+        if (Polygon2.SignedArea(pawl) <= 0f) return false;
+
+        int n = pawl.Count;
+        for (int i = 0; i < n; i++)
+            for (int j = i + 2; j < n; j++)
+            {
+                if (i == 0 && j == n - 1) continue;
+                if (SegmentGap(pawl[i], pawl[(i + 1) % n], pawl[j], pawl[(j + 1) % n]) < 1e-4) return false;
+            }
+
+        for (int i = 0; i < n; i++)
+            if (PointGap(pivot, pawl[i], pawl[(i + 1) % n]) < hole + 0.9 * LeastWall) return false;
+
+        if (Polygon2.Contains(wheel, pawl[0]) || Polygon2.Contains(pawl, wheel[0])) return false;
+
+        for (int i = 0; i < n; i++)
+            for (int j = 0; j < wheel.Count; j++)
+                if (SegmentGap(pawl[i], pawl[(i + 1) % n], wheel[j], wheel[(j + 1) % wheel.Count]) < 0.5 * clear)
+                    return false;
+
+        return true;
+    }
+
+    private static double PointGap(Vector2 p, Vector2 a, Vector2 b)
+    {
+        var ab = b - a;
+        float t = ab.LengthSquared() > 0f ? Math.Clamp(Vector2.Dot(p - a, ab) / ab.LengthSquared(), 0f, 1f) : 0f;
+        return Vector2.Distance(p, a + ab * t);
+    }
+
+    /// <summary>How near two segments come: nought if they cross.</summary>
+    private static double SegmentGap(Vector2 a, Vector2 b, Vector2 c, Vector2 d)
+    {
+        static float Cross(Vector2 u, Vector2 v) => u.X * v.Y - u.Y * v.X;
+
+        float d1 = Cross(b - a, c - a), d2 = Cross(b - a, d - a), d3 = Cross(d - c, a - c), d4 = Cross(d - c, b - c);
+        if (((d1 > 0 && d2 < 0) || (d1 < 0 && d2 > 0)) && ((d3 > 0 && d4 < 0) || (d3 < 0 && d4 > 0))) return 0.0;
+
+        return Math.Min(Math.Min(PointGap(a, c, d), PointGap(b, c, d)), Math.Min(PointGap(c, a, b), PointGap(d, a, b)));
+    }
+
+    /// <param name="apex">Where a herringbone's teeth turn back, when not at half its own thickness.</param>
+    private static Mesh? Partner(GearOptions o, int teeth, int hand, float phase, List<string> notes, CancellationToken token,
+                                 float? apex = null)
+    {
+        var gear = External(o, teeth, hand, phase, notes, out _, token, apex: apex);
         if (gear is not null) return gear;
 
         // A pinion is often too small for the bore the bigger gear was given; it is still worth
         // having, plain, rather than not at all.
         var plain = o with { Bore = BoreShape.None, HubHeight = 0f, SetScrew = 0f };
-        gear = External(plain, teeth, hand, phase, notes, out string? refusal, token);
+        gear = External(plain, teeth, hand, phase, notes, out string? refusal, token, apex: apex);
         if (gear is not null)
             notes.Add($"The {teeth}-tooth gear is too small for that bore, so it was made plain.");
         else if (refusal is not null)
@@ -1260,7 +1631,7 @@ public static partial class Gears
     /// <param name="lockDisc">A framed gear's lock, standing <paramref name="lockHeight"/> on top of the teeth; see <see cref="PlanFrame"/>.</param>
     private static Mesh? External(GearOptions o, int teeth, int hand, float phase, List<string> notes,
                                   out string? refusal, CancellationToken token, bool partial = false,
-                                  IReadOnlyList<Vector2>? lockDisc = null, float lockHeight = 0f)
+                                  IReadOnlyList<Vector2>? lockDisc = null, float lockHeight = 0f, float? apex = null)
     {
         refusal = null;
         double m = o.Module, r = m * teeth / 2.0;
@@ -1298,7 +1669,7 @@ public static partial class Gears
         float h = o.Thickness;
         float top = middle.Top;
 
-        var layers = Layers(o, (float)(hand * Math.Tan(Radians(o.HelixAngle)) / r), (float)profile.Radii[^1]);
+        var layers = Layers(o, (float)(hand * Math.Tan(Radians(o.HelixAngle)) / r), (float)profile.Radii[^1], apex);
         var loops = layers.Select(l => mutilated
             ? PartialLoop(l.Chamfered ? chamfered! : profile, l.Chamfered ? relievedChamfer! : relieved!,
                           teeth, phase + l.Twist, What)
@@ -1414,7 +1785,7 @@ public static partial class Gears
         return mesh;
     }
 
-    private static Mesh? Ring(GearOptions o, int hand, List<string> notes, out string? refusal)
+    private static Mesh? Ring(GearOptions o, int hand, List<string> notes, out string? refusal, float? apex = null)
     {
         refusal = null;
         int teeth = o.Teeth;
@@ -1425,7 +1796,7 @@ public static partial class Gears
         var rim = Circle(r + 1.25 * m + o.Rim);
 
         float h = o.Thickness;
-        var layers = Layers(o, (float)(hand * Math.Tan(Radians(o.HelixAngle)) / r), (float)profile.Radii[0]);
+        var layers = Layers(o, (float)(hand * Math.Tan(Radians(o.HelixAngle)) / r), (float)profile.Radii[0], apex);
         var loops = layers.Select(l => RingLoop(l.Chamfered ? chamfered! : profile, teeth, l.Twist)).ToList();
 
         var mesh = new Mesh();
@@ -1441,6 +1812,50 @@ public static partial class Gears
         RingTeeth(mesh, loops[^1], profile, teeth, h, up: true);
 
         return mesh.Welded();
+    }
+
+    /// <summary>
+    /// Whether a ring's pinion turns through a whole tooth inside it without the two running into
+    /// each other. Close in size, the tips of each sweep through the other's as they come out of
+    /// mesh, which neither tooth's own shape knows anything about: 12 teeth inside 15 overlapped
+    /// by 10 mm3 as they were drawn, before turning at all. A helical pair's layers are this same
+    /// pair turned on a little, so the flat section answers for them all.
+    /// </summary>
+    private static bool RunsClear(GearOptions o)
+    {
+        int small = o.PartnerTeeth, big = o.Teeth;
+        var ringProfile = RingProfile(o, 0.0, null);
+        var pinionProfile = ExternalProfile(o, small, 0.0, null);
+        var ring = RingLoop(ringProfile, big, 0.0);
+        var pinion = ExternalLoop(pinionProfile, small, 0.0);
+
+        var centre = new Vector2((float)(o.Module * (big - small) / 2.0), 0f);
+        double inner = ringProfile.Radii[^1], outer = pinionProfile.Radii[^1];
+
+        // Two gears in mesh touch along their flanks; what is being looked for is one inside the other.
+        const double sink = 0.005;
+
+        for (int step = 0; step < 32; step++)
+        {
+            double turn = 2.0 * Math.PI / small * step / 32;
+            var p = pinion.Select(v => Rotated(v, (float)turn) + centre).ToList();
+            var q = ring.Select(v => Rotated(v, (float)(turn * small / big))).ToList();
+
+            foreach (var v in p)
+                if (v.Length() > inner - sink && !Polygon2.Contains(q, v) && Gap(v, q) > sink) return false;
+
+            foreach (var w in q)
+                if (Vector2.Distance(w, centre) < outer + sink && Polygon2.Contains(p, w) && Gap(w, p) > sink) return false;
+        }
+
+        return true;
+
+        static double Gap(Vector2 v, List<Vector2> loop)
+        {
+            double least = double.MaxValue;
+            for (int i = 0; i < loop.Count; i++) least = Math.Min(least, PointGap(v, loop[i], loop[(i + 1) % loop.Count]));
+            return least;
+        }
     }
 
     private static List<Vector2> RingBand(Vector2[] loop, Profile p, int teeth)
@@ -1464,10 +1879,10 @@ public static partial class Gears
     /// root's depth up from the bottom edge. A space sits on X = 0, so a gear with a tooth pointing
     /// down meshes there.
     /// </summary>
-    private static Mesh Rack(GearOptions o, int hand)
+    private static Mesh Rack(GearOptions o, int hand, float? apex = null)
     {
         float m = o.Module, h = o.Thickness;
-        var layers = Layers(o, (float)(hand * Math.Tan(Radians(o.HelixAngle))), 1f);
+        var layers = Layers(o, (float)(hand * Math.Tan(Radians(o.HelixAngle))), 1f, apex);
         var loops = layers.Select(l => RackLoop(o, l.Chamfered ? o.Chamfer : 0f, l.Twist)).ToList();
 
         var mesh = new Mesh();
@@ -1532,10 +1947,12 @@ public static partial class Gears
     /// bottom. A straight gear needs only its two faces; a helical one enough between them that a
     /// tip moves under <see cref="LayerShift"/> from one to the next.
     /// </summary>
-    private static List<(float Z, float Twist, bool Chamfered)> Layers(GearOptions o, float perHeight, float reach)
+    /// <param name="apex">Where a herringbone's teeth turn back; half its thickness when null.</param>
+    private static List<(float Z, float Twist, bool Chamfered)> Layers(GearOptions o, float perHeight, float reach, float? apex = null)
     {
         float h = o.Thickness, chamfer = o.Chamfer;
         bool winds = o.Form != ToothForm.Straight && o.HelixAngle > 0f;
+        float turn = o.Form == ToothForm.Herringbone ? MathF.Min(apex ?? h / 2f, h) : h;
         var heights = new List<float> { 0f };
 
         if (!winds)
@@ -1544,11 +1961,16 @@ public static partial class Gears
         }
         else
         {
-            float span = o.Form == ToothForm.Herringbone ? h / 2f : h;
-            int steps = Math.Clamp((int)MathF.Ceiling(MathF.Abs(perHeight) * span * reach / LayerShift), 1, 200);
-            for (int i = 1; i <= steps; i++) heights.Add(span * i / steps);
-            if (o.Form == ToothForm.Herringbone)
-                for (int i = 1; i <= steps; i++) heights.Add(span + span * i / steps);
+            int Steps(float span) => Math.Clamp((int)MathF.Ceiling(MathF.Abs(perHeight) * span * reach / LayerShift), 1, 200);
+
+            int up = Steps(turn);
+            for (int i = 1; i <= up; i++) heights.Add(turn * i / up);
+
+            if (turn < h)
+            {
+                int down = Steps(h - turn);
+                for (int i = 1; i <= down; i++) heights.Add(turn + (h - turn) * i / down);
+            }
         }
 
         if (chamfer > 0f)
@@ -1561,7 +1983,7 @@ public static partial class Gears
         return heights.Select(z => (z, Twist(z), chamfer > 0f && z == 0f)).ToList();
 
         float Twist(float z) => !winds ? 0f
-            : o.Form == ToothForm.Herringbone ? perHeight * MathF.Min(z, h - z)
+            : o.Form == ToothForm.Herringbone ? perHeight * (z <= turn ? z : 2f * turn - z)
             : perHeight * z;
     }
 

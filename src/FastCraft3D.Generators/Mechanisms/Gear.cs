@@ -64,7 +64,21 @@ public sealed class Gear : Generator<Gear.Settings>
         [Length("Flat", 0.1, 100, Group = "Shaft", Hint = "For a D-shaft, from the flat to the far side - the dimension a supplier quotes")] float BoreFlat = 4.5f,
         [Length("Hub", 0, 300, Group = "Shaft", Hint = "The hub's diameter. Nought for none.")] float HubDiameter = 0f,
         [Length("Hub height", 0, 100, Group = "Shaft")] float HubHeight = 0f,
-        [Length("Set screw", 0, 20, Group = "Shaft", Hint = "The set screw's hole through the hub. Nought for none.")] float SetScrew = 0f);
+        [Length("Set screw", 0, 20, Group = "Shaft", Hint = "The set screw's hole through the hub. Nought for none.")] float SetScrew = 0f,
+        [Toggle("Base", Group = "Shaft", Hint = "A plate to turn it on by hand: a pin in each round bore, and for a ring or a rack, guides to keep it in mesh")] bool Base = false);
+
+    /// <summary>
+    /// Which sets a base is made for: a plain gear or pair on pins; a ring with its gear, the ring
+    /// kept round by posts; a rack with its pinion, the rack kept in mesh by a rail. A bevel and a
+    /// worm have a shaft lying down and want a bracket, not a plate, and a ratchet's pawl and a
+    /// framed gear have their own ways of being held.
+    /// </summary>
+    private static bool Standable(Settings s) => s.Kind switch
+    {
+        GearKind.Gear => !s.Partial && s.Bore == BoreShape.Round,
+        GearKind.Ring or GearKind.Rack => s.HasPartner,
+        _ => false
+    };
 
     protected override IEnumerable<(string Name, Settings Settings)> Shipped =>
     [
@@ -113,6 +127,7 @@ public sealed class Gear : Generator<Gear.Settings>
             nameof(Settings.BoreFlat) => shaft && s.Bore == BoreShape.DShaft,
             nameof(Settings.HubDiameter) or nameof(Settings.HubHeight) => hubbed,
             nameof(Settings.SetScrew) => hubbed && s.HubDiameter > 0 && s.HubHeight > 0,
+            nameof(Settings.Base) => Standable(s),
             _ => true
         };
     }
@@ -170,12 +185,70 @@ public sealed class Gear : Generator<Gear.Settings>
         if (gear.Kind == GearKind.Gear && gear.KeptTeeth > 0 && gear.Frame && Turned(gear) is { } jam)
             return Generated.Refused(jam);
 
+        // On a base, everything lifted onto it and a pin in each round bore.
+        bool based = s.Base && Standable(s);
+        float lift = based ? Mechanisms.Base.Lift : 0f;
+
         var parts = result.Parts.Select((part, i) => new GeneratedPart(
-            part.Name, part.Mesh, part.InMesh, part.Anchors,
+            part.Name, part.Mesh, based ? (part.InMesh ?? Matrix4x4.Identity) * Matrix4x4.CreateTranslation(0, 0, lift) : part.InMesh, part.Anchors,
             Role: i switch { 0 => "gear", 1 => "mate", _ => $"part {i + 1}" },
             Pivot: PivotOf(part))).ToList();
 
-        return new Generated(parts, notes) { Motion = MotionOf(gear, parts) };
+        var motion = MotionOf(gear, parts, lift);
+        if (based) parts.Add(new GeneratedPart("Base", Stand(s, parts, printer), Role: "base"));
+
+        return new Generated(parts, notes) { Motion = motion };
+    }
+
+    /// <summary>The base for a set, the parts already lifted onto it as they go together.</summary>
+    private static Mesh Stand(Settings s, IReadOnlyList<GeneratedPart> parts, Printer printer)
+    {
+        var placed = parts.Select(p => p.Assembled is { } a ? MeshTransform.Transformed(p.Mesh, a) : p.Mesh).ToList();
+        Vector2 Axis(int i)
+        {
+            var at = Vector3.Transform(parts[i].Pivot, parts[i].Assembled ?? Matrix4x4.Identity);
+            return new Vector2(at.X, at.Y);
+        }
+
+        float Bore(int i) => (i == 0 ? s.Bore : s.MateBore) == BoreShape.Round ? (i == 0 ? s.BoreSize : s.MateBoreSize) : 0f;
+        float Top(int i) => placed[i].ComputeBounds().Max.Z;
+
+        if (s.Kind == GearKind.Gear)
+            return Mechanisms.Base.Plate(parts.Select((_, i) => (Axis(i), Bore(i), Top(i))).ToList(), printer);
+
+        float c = printer.XyClearance, plate = Mechanisms.Base.Thickness;
+        float pin = Bore(1) / 2f - c;
+        var pieces = new List<Mesh>();
+        if (pin >= 0.4f) pieces.Add(Shapes.Cylinder(pin, plate - 0.01f, Top(1) - 0.5f, Axis(1)));
+
+        var held = placed[0].ComputeBounds();
+        if (s.Kind == GearKind.Ring)
+        {
+            // Posts round the outside, the printer's clearance off it, to keep the ring round its middle.
+            float r = held.Size.X / 2f, post = 1.2f;
+            var middle = new Vector2(held.Center.X, held.Center.Y);
+            pieces.Add(Shapes.Cylinder(r + c + 2 * post + 2f, 0, plate, middle));
+            for (int k = 0; k < 6; k++)
+            {
+                float a = MathF.PI * k / 3f;
+                pieces.Add(Shapes.Cylinder(post, plate - 0.01f, Top(0) - 0.3f, middle + (r + c + post) * new Vector2(MathF.Cos(a), MathF.Sin(a))));
+            }
+
+            return Shapes.Union(pieces);
+        }
+
+        // A rack: a rail along its back, the far side from the pinion, as long as a whole turn of
+        // the pinion carries it either way.
+        float travel = MathF.PI * s.Module * s.PartnerTeeth, rail = 2f;
+        bool below = Axis(1).Y > held.Center.Y;
+        float y0 = below ? held.Min.Y - c - rail : held.Max.Y + c, y1 = y0 + rail;
+        float x0 = held.Min.X - travel, x1 = held.Max.X + travel;
+        pieces.Add(Shapes.Box(x0, y0, plate - 0.01f, x1, y1, Top(0) - 0.3f));
+
+        var pinion = placed[1].ComputeBounds();
+        float lowY = MathF.Min(y0, pinion.Min.Y) - 3f, highY = MathF.Max(y1, pinion.Max.Y) + 3f;
+        pieces.Add(Shapes.Prism(Shapes.RoundedRect(x1 - x0 + 6f, highY - lowY, 3f, new Vector2((x0 + x1) / 2f, (lowY + highY) / 2f)), 0, plate));
+        return Shapes.Union(pieces);
     }
 
     /// <summary>
@@ -183,11 +256,11 @@ public sealed class Gear : Generator<Gear.Settings>
     /// rack, a cut-away gear in its frame. A bevel and a worm turn out of the plane, and a
     /// ratchet's pawl is held by nothing but friction here, so those have none.
     /// </summary>
-    private static Mechanism? MotionOf(GearOptions gear, IReadOnlyList<GeneratedPart> parts)
+    private static Mechanism? MotionOf(GearOptions gear, IReadOnlyList<GeneratedPart> parts, float lift = 0)
     {
         if (parts.Count != 2) return null;
 
-        float layer = MathF.Min(gear.Thickness, gear.MateThickness ?? gear.Thickness) / 2f;
+        float layer = lift + MathF.Min(gear.Thickness, gear.MateThickness ?? gear.Thickness) / 2f;
         MovingPart Turning(int i, double reach = 0.3) => new(i, Joint.Revolute, new Vector2(parts[i].Pivot.X, parts[i].Pivot.Y), Reach: reach);
         MovingPart Sliding(int i) => new(i, Joint.Prismatic, default, Vector2.UnitX, Reach: 3);
 

@@ -43,6 +43,64 @@ public class MotionFilmTests
         Assert.InRange(Degrees(film, 1), -181, -179);
     }
 
+    [Theory]
+    [InlineData(ToothForm.Helical)]
+    [InlineData(ToothForm.Herringbone)]
+    public void HelicalAndHerringbonePairsTurnByTheRatioOfTheirTeeth(ToothForm form)
+    {
+        var (film, _) = Turned(Toothed, Toothed.Default with { Form = form, HasPartner = true, PartnerTeeth = 40 });
+
+        Assert.Equal(360, Degrees(film, 0), 0);
+        Assert.InRange(Degrees(film, 1), -182, -178);
+    }
+
+    [Fact]
+    public void AGearInsideARingTurnsItTheSameWayByTheRatioOfTheirTeeth()
+    {
+        var (film, _) = Turned(Toothed, Toothed.Default with { Kind = GearKind.Ring, Teeth = 48, HasPartner = true, PartnerTeeth = 16 });
+
+        // The gear inside drives: a whole turn of it takes the ring a third of the way, the same way round.
+        Assert.InRange(Degrees(film, 0), 118, 122);
+    }
+
+    [Fact]
+    public void APairOnItsBaseStillTurnsByItsRatioRoundThePins()
+    {
+        var (film, made) = Turned(Toothed, Toothed.Default with { HasPartner = true, PartnerTeeth = 40, Base = true });
+
+        Assert.Contains(made.Parts, p => p.Role == "base");
+        Assert.InRange(Degrees(film, 1), -181, -179);
+    }
+
+    [Fact]
+    public void ARingOnItsBaseTurnsInsideItsPosts()
+    {
+        var (film, made) = Turned(Toothed, Toothed.Default with { Kind = GearKind.Ring, Teeth = 48, HasPartner = true, PartnerTeeth = 16, Base = true });
+
+        Assert.Contains(made.Parts, p => p.Role == "base");
+        Assert.InRange(Degrees(film, 0), 118, 122);
+    }
+
+    [Fact]
+    public void ARackOnItsBaseSlidesAlongItsRail()
+    {
+        var (film, made) = Turned(Toothed, Toothed.Default with { Kind = GearKind.Rack, Teeth = 30, HasPartner = true, PartnerTeeth = 16, Base = true });
+
+        Assert.Contains(made.Parts, p => p.Role == "base");
+        double travel = film.Frames.Max(f => f[0]) - film.Frames.Min(f => f[0]);
+        Assert.InRange(travel, MathF.PI * 1.5f * 16 - 1, MathF.PI * 1.5f * 16 + 1);
+    }
+
+    [Fact]
+    public void ACamOnItsBaseLiftsItsFollowerBetweenItsRails()
+    {
+        var cam = new Cam();
+        var (film, made) = Turned(cam, cam.Default with { Rise = 10, WithBase = true });
+
+        Assert.Contains(made.Parts, p => p.Role == "base");
+        Assert.InRange(film.Frames.Max(f => f[1]), 9.5, 10.3);
+    }
+
     [Fact]
     public void APinionCarriesItsRackItsOwnPitchCircleAlong()
     {

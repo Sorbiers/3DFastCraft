@@ -512,12 +512,6 @@
                     <Button Style="{StaticResource ToolButton}" Content="Import" Tag="{StaticResource IconImport}"
                             Command="{Binding ImportCommand}" ToolTip="Bring in an STL, an OBJ, or another 3DFastCraft project - its objects join what is already on the plate (Ctrl+I)" />
                     <Separator Margin="8,0" Visibility="{Binding IsAdvancedMode, Converter={StaticResource BoolToVisibility}}" />
-                    <Button Style="{StaticResource ToolButton}" Content="Hole" Visibility="{Binding IsAdvancedMode, Converter={StaticResource BoolToVisibility}}" Tag="{StaticResource IconHole}"
-                            Command="{Binding InsertHoleCommand}" MinWidth="58"
-                            ToolTip="A screw hole - plain, countersunk or counterbored, with a nut pocket if asked - or a heat-set insert pocket, M2 to M8. Cut into the top of the one part selected, or made as a cutter to place and Subtract." />
-                    <Button Style="{StaticResource ToolButton}" Content="Keyhole" Visibility="{Binding IsAdvancedMode, Converter={StaticResource BoolToVisibility}}" Tag="{StaticResource IconWallMount}"
-                            Command="{Binding BeginWallMountCommand}" MinWidth="76"
-                            ToolTip="Keyhole slots to hang a part on a wall: select the part, press this, click the face that goes against the wall, drag the keyholes into place, and Apply. Printed wall studs and a drilling template if wanted." />
                     <Button Style="{StaticResource ToolButton}" Content="Library" Visibility="{Binding IsAdvancedMode, Converter={StaticResource BoolToVisibility}}" Tag="{StaticResource IconLibrary}"
                             Command="{Binding OpenLibraryCommand}" MinWidth="64" AutomationProperties.AutomationId="Library"
                             ToolTip="BETA - new, and still being proved out; check what it gives you before printing it. Parts made to your numbers: boxes, organisers, hinges, clips, threads and other fasteners, gears and mechanisms, stairs, windows, doors and roofs, and the brick fit test. Pick one, set its sizes with the preview on the plate, and insert it." />
@@ -726,6 +720,12 @@
                     <Button Style="{StaticResource ToolButton}" Content="Connect objects" Visibility="{Binding IsAdvancedMode, Converter={StaticResource BoolToVisibility}}" Tag="{StaticResource IconConnect}"
                             Command="{Binding BeginConnectCommand}" MinWidth="100"
                             ToolTip="Pins or pegs through the face two parts rest against each other on - a floor on its basement, two blocks side by side - so they go together one way only. Select the two parts. Needs exactly two objects selected." />
+                    <Button Style="{StaticResource ToolButton}" Content="Hole" Visibility="{Binding IsAdvancedMode, Converter={StaticResource BoolToVisibility}}" Tag="{StaticResource IconHole}"
+                            Command="{Binding InsertHoleCommand}" MinWidth="58"
+                            ToolTip="A screw hole - plain, countersunk or counterbored, with a nut pocket if asked - or a heat-set insert pocket, M2 to M8. Cut into the top of the one part selected, or made as a cutter to place and Subtract." />
+                    <Button Style="{StaticResource ToolButton}" Content="Keyhole" Visibility="{Binding IsAdvancedMode, Converter={StaticResource BoolToVisibility}}" Tag="{StaticResource IconWallMount}"
+                            Command="{Binding BeginWallMountCommand}" MinWidth="76"
+                            ToolTip="Keyhole slots to hang a part on a wall: select the part, press this, click the face that goes against the wall, drag the keyholes into place, and Apply. Printed wall studs and a drilling template if wanted." />
                     <Separator Margin="8,0" />
                     <Button Style="{StaticResource ToolButton}" Content="Emboss" Tag="{StaticResource IconText}"
                             Command="{Binding BeginEmbossCommand}" MinWidth="78"

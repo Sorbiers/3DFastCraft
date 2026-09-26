@@ -55,36 +55,12 @@ public class GeneratorSweepTests
         Assert.Empty(g.Problems(g.Defaults(), Printer.Default));
     }
 
-    /// <summary>
-    /// A bevel pair of unequal counts, and a worm and its wheel, run into each other where their
-    /// teeth meet: 2.5 mm3 in a 15:30 bevel pair at module 3, 15 mm3 in the worm preset. Found by
-    /// this sweep when the gear moved into the library, and a fault in the tooth geometry itself,
-    /// not in anything the move did. Kept visible rather than hidden: every other rule still holds
-    /// the gear, and <see cref="TheKnownGearInterferenceIsStillThere"/> fails the day it is fixed,
-    /// so this exception cannot outlive the fault.
-    /// </summary>
-    internal static bool Known(string fault) =>
-        fault.StartsWith("mechanism.gear ", StringComparison.Ordinal)
-        && (fault.Contains(": Bevel ", StringComparison.Ordinal) || fault.Contains(": Worm and ", StringComparison.Ordinal))
-        && fault.Contains(" overlap by ", StringComparison.Ordinal);
-
-    [Fact]
-    public void TheKnownGearInterferenceIsStillThere()
-    {
-        var gear = new FastCraft3D.Generators.Mechanisms.Gear();
-        var bevel = gear.Default with { Kind = GearKind.Bevel, Module = 3f, Teeth = 15, HasPartner = true, PartnerTeeth = 30 };
-
-        var fault = Sweep.Fault(gear, bevel);
-        Assert.True(fault is not null && Known(fault),
-            "The 15:30 bevel pair no longer runs into itself. Take the bevel and the worm out of Known, and this test with them.");
-    }
-
     [Theory]
     [MemberData(nameof(Ids))]
     public void EverySettingAtItsEndsRefusesOrMakesSoundParts(string id)
     {
         var g = GeneratorRegistry.Find(id)!;
-        var faults = Sweep.Quick(g).AsParallel().AsOrdered().Select(s => Sweep.Fault(g, s)).OfType<string>().Where(f => !Known(f)).ToList();
+        var faults = Sweep.Quick(g).AsParallel().AsOrdered().Select(s => Sweep.Fault(g, s)).OfType<string>().ToList();
 
         Assert.True(faults.Count == 0, string.Join(Environment.NewLine, faults));
     }
@@ -99,7 +75,7 @@ public class GeneratorSweepTests
 
         // In parallel, which the contract allows - a build is pure - and so also holds it to that.
         var faults = Sweep.Full(g, random: full ? 1000 : 20, seed: 7, pairs: full ? 3000 : 150).AsParallel().AsOrdered()
-            .Select(s => Sweep.Fault(g, s)).OfType<string>().Where(f => !Known(f)).Take(20).ToList();
+            .Select(s => Sweep.Fault(g, s)).OfType<string>().Take(20).ToList();
 
         Assert.True(faults.Count == 0, string.Join(Environment.NewLine, faults));
     }
@@ -129,7 +105,6 @@ public class GeneratorSweepTests
                 ? $"{g.Id} on {t.Printer}: its own starting point is refused - {refusal}"
                 : Sweep.Fault(g, t.Settings, t.Printer))
             .OfType<string>()
-            .Where(f => !Known(f))
             .ToList();
 
         Assert.True(faults.Count == 0, string.Join(Environment.NewLine, faults));
@@ -186,7 +161,6 @@ public class GeneratorSweepTests
                 ? $"{g.Id} preset {p.Name}: refused - {refusal}"
                 : Sweep.Fault(g, p.Settings))
             .OfType<string>()
-            .Where(f => !Known(f))
             .ToList();
 
         Assert.True(faults.Count == 0, string.Join(Environment.NewLine, faults));

@@ -342,6 +342,13 @@ public static class Sections
 {
     public static List<Vector2[]> At(Mesh mesh, float z)
     {
+        // Cut a hair off any vertex. An edge ending exactly on the plane neither crosses it nor
+        // misses it, so a triangle with a corner there gave one crossing and was dropped: a helical
+        // gear's mate, which has a ring of corners at half its height, came back as its bore alone,
+        // and its partner turned a whole turn without ever touching it.
+        for (int tries = 0; tries < 4 && mesh.Positions.Any(v => MathF.Abs(v.Z - z) < 1e-5f); tries++)
+            z += 1.7e-3f;
+
         var segments = new List<(Vector2 A, Vector2 B)>();
         for (int i = 0; i + 2 < mesh.Indices.Count; i += 3)
         {

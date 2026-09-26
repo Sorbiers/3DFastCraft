@@ -194,7 +194,10 @@ public sealed class Cam : Generator<Cam.Settings>
         [Choice("Follower", Group = "Follower")] FollowerKind Follower = FollowerKind.Roller,
         [Length("Roller radius", 2, 15, Group = "Follower"), ShowWhen(nameof(Follower), FollowerKind.Roller)] float Roller = 5f,
         [Length("Thickness", 3, 20)] float Thickness = 6f,
-        [Length("Bore", 0, 12)] float Bore = 5f);
+        [Length("Bore", 0, 12)] float Bore = 5f,
+        [Toggle("Base", Hint = "A plate with a pin for the cam and rails the follower slides between, to turn it by hand")] bool WithBase = false);
+
+    protected override bool Shows(Settings s, string parameter) => parameter != nameof(Settings.WithBase) || s.Bore > 0;
 
     protected override IEnumerable<string> Check(Settings s, Printer printer)
     {
@@ -276,8 +279,11 @@ public sealed class Cam : Generator<Cam.Settings>
         token.ThrowIfCancellationRequested();
         var cam = Shapes.Prism(profile, s.Bore > 0 ? [Shapes.Circle(s.Bore / 2f)] : [], 0, s.Thickness);
 
-        // The follower: a rounded tip the size of the roller, or a flat foot, on a stem.
-        const float stem = 30f;
+        // The follower: a rounded tip the size of the roller, or a flat foot, on a stem - long
+        // enough, on a base, to stay between its rails the whole way up and down.
+        bool based = s.WithBase && s.Bore > 0;
+        float tip = s.Follower == FollowerKind.Roller ? s.Roller : 3f;
+        float stem = based ? MathF.Max(30f, s.Rise + tip + 20f) : 30f;
         float width = s.Follower == FollowerKind.Roller ? 2 * s.Roller : 2 * (float)MaxRate(s) + 6f;
         var follower = s.Follower == FollowerKind.Roller
             ? Shapes.Union(Shapes.Cylinder(s.Roller, 0, s.Thickness), Shapes.Box(-s.Roller / 2f, 0, 0, s.Roller / 2f, stem, s.Thickness))
@@ -285,11 +291,32 @@ public sealed class Cam : Generator<Cam.Settings>
 
         // Resting on the cam at the start of the rise, with a hair between.
         float rest = s.Follower == FollowerKind.Roller ? s.Base + s.Roller + 0.1f : s.Base + 0.1f;
-        var parts = Shapes.InARow(
-        [
-            ("Cam", "cam", cam, Matrix4x4.CreateRotationZ(MathF.PI / 2f)),
-            ("Follower", "follower", follower, Matrix4x4.CreateTranslation(0, rest, 0))
-        ]);
+        float raised = based ? Mechanisms.Base.Lift : 0f;
+        var set = new List<(string, string, Mesh, Matrix4x4?)>
+        {
+            ("Cam", "cam", cam, Matrix4x4.CreateRotationZ(MathF.PI / 2f) * Matrix4x4.CreateTranslation(0, 0, raised)),
+            ("Follower", "follower", follower, Matrix4x4.CreateTranslation(0, rest, raised))
+        };
+
+        if (based)
+        {
+            // A pin in the cam's bore, and two rails either side of the stem, above where the
+            // roller or the foot reaches at the top of the rise, so only the stem passes between.
+            float c = printer.XyClearance, half = s.Follower == FollowerKind.Roller ? s.Roller / 2f : 2.5f, rail = 2f;
+            float from = rest + s.Rise + tip + 1f, to = rest + stem - 1f, reach = s.Base + s.Rise + 3f;
+            float plate = Mechanisms.Base.Thickness, top = raised + s.Thickness;
+
+            var pieces = new List<Mesh>
+            {
+                Shapes.Prism(Shapes.RoundedRect(2 * reach, to + reach + 3f, 3f, new Vector2(0, (to - reach + 3f) / 2f)), 0, plate),
+                Shapes.Box(-half - c - rail, from, plate - 0.01f, -half - c, to, top),
+                Shapes.Box(half + c, from, plate - 0.01f, half + c + rail, to, top)
+            };
+            if (s.Bore / 2f - c >= 0.4f) pieces.Add(Shapes.Cylinder(s.Bore / 2f - c, plate - 0.01f, top - 0.5f));
+            set.Add(("Base", "base", Shapes.Union(pieces), Matrix4x4.Identity));
+        }
+
+        var parts = Shapes.InARow(set);
 
         var notes = new List<string> { $"{s.Rise:0.#} mm of lift. The follower slides in a guide of your own, straight up the cam's middle." };
         if (s.Follower == FollowerKind.Roller)
@@ -304,7 +331,7 @@ public sealed class Cam : Generator<Cam.Settings>
         {
             Motion = new Mechanism(
                 [new MovingPart(0, Joint.Revolute, Vector2.Zero), new MovingPart(1, Joint.Prismatic, default, Vector2.UnitY, Reach: 3, Returns: true)],
-                Driver: 0, Layers: [s.Thickness / 2f], Turns: -1, Step: 1)
+                Driver: 0, Layers: [raised + s.Thickness / 2f], Turns: -1, Step: 1)
         };
     }
 
