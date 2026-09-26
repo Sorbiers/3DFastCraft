@@ -38,6 +38,8 @@ public class DrawingTests
         return whole;
     }
 
+    internal static Dictionary<DrawingView, ViewLines> Views() => AllViews(DrilledBlock());
+
     private static Dictionary<DrawingView, ViewLines> AllViews(Mesh mesh) =>
         Enum.GetValues<DrawingView>().ToDictionary(v => v, v => ViewDrawing.Build([mesh], v));
 
@@ -95,12 +97,28 @@ public class DrawingTests
     {
         var a4 = new Vector2(297, 210);
 
-        var small = DrawingSheet.Layout(AllViews(DrilledBlock()), a4, new DrawingOptions());
+        var standard = new DrawingOptions { FillPage = false };
+        var small = DrawingSheet.Layout(AllViews(DrilledBlock()), a4, standard);
         Assert.Equal("1:1", small.ScaleText);
 
         var big = MeshTransform.Transformed(DrilledBlock(), Matrix4x4.CreateScale(5f));
-        var scaled = DrawingSheet.Layout(AllViews(big), a4, new DrawingOptions());
+        var scaled = DrawingSheet.Layout(AllViews(big), a4, standard);
         Assert.Equal("1:5", scaled.ScaleText);
+    }
+
+    [Fact]
+    public void FillingThePageDrawsLargerThanTheStandardScaleAndStillFits()
+    {
+        var a4 = new Vector2(297, 210);
+        var standard = DrawingSheet.Layout(AllViews(DrilledBlock()), a4, new DrawingOptions { FillPage = false });
+        var filled = DrawingSheet.Layout(AllViews(DrilledBlock()), a4, new DrawingOptions { FillPage = true });
+
+        Assert.True(filled.Scale > standard.Scale, $"{filled.ScaleText} is no larger than {standard.ScaleText}");
+        foreach (var placed in filled.Views)
+        {
+            var far = placed.Corner + placed.Lines.Size * placed.Scale;
+            Assert.True(far.X <= 297 - DrawingSheet.Margin && far.Y <= 210 - DrawingSheet.Margin);
+        }
     }
 
     [Theory]
@@ -133,7 +151,8 @@ public class DrawingTests
         // Everything on the paper, clear of the title block.
         foreach (var placed in sheet.Views)
         {
-            var far = placed.Corner + placed.Lines.Size * sheet.Scale;
+            // Each at its own scale: the isometric is drawn smaller than the rest when its corner is.
+            var far = placed.Corner + placed.Lines.Size * placed.Scale;
             Assert.True(placed.Corner.X >= DrawingSheet.Margin && far.X <= 297 - DrawingSheet.Margin);
             Assert.True(placed.Corner.Y >= DrawingSheet.Margin + DrawingSheet.TitleHeight && far.Y <= 210 - DrawingSheet.Margin);
         }

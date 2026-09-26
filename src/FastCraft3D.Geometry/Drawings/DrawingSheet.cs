@@ -29,6 +29,16 @@ public enum ScaleFormat
     RealOnly
 }
 
+/// <summary>What a figure too small to fit between its arrows does.</summary>
+public enum SmallFigures
+{
+    /// <summary>Written outside, beyond the end of its dimension line, with the line run out to it.</summary>
+    Callout,
+
+    /// <summary>Left off, dimension and all.</summary>
+    Hide
+}
+
 /// <param name="Title">The part's name, in the title block.</param>
 /// <param name="AllDimensions">Every straight, axis-aligned edge dimensioned on each view, not just the overall size.</param>
 /// <param name="UnitLabel">What the dimensions are written in.</param>
@@ -46,6 +56,14 @@ public sealed record DrawingOptions
     public float UnitMillimetres { get; init; } = 1f;
     public float ModelScale { get; init; } = 1f;
     public ScaleFormat ScaleFormat { get; init; } = ScaleFormat.ModelWithReal;
+
+    /// <summary>The largest scale the views fit at, rather than the largest standard one: less paper left empty.</summary>
+    public bool FillPage { get; init; } = true;
+
+    public SmallFigures SmallFigures { get; init; } = SmallFigures.Callout;
+
+    /// <summary>Leave off a dimension whose figure would land on one already drawn.</summary>
+    public bool HideOverlaps { get; init; }
 
     /// <summary>
     /// What the title block's UNITS cell says: <see cref="UnitLabel"/> for a dimension written in
@@ -177,7 +195,15 @@ public static class DrawingSheet
         float room = MathF.Min(
             (width - 3f * gap) / MathF.Max(columns[0] + columns[1], 1e-3f),
             (height - 3f * gap) / MathF.Max(rows[0] + rows[1], 1e-3f));
-        float scale = Scales.FirstOrDefault(s => s <= room + 1e-6f, Scales[^1]);
+        float scale = options.FillPage ? Filling(room) : Scales.FirstOrDefault(s => s <= room + 1e-6f, Scales[^1]);
+
+        // Steps in a chain too short to see at this scale - a faceted edge a few hundredths off
+        // another - are one position, not a dimension of their own: "0.02" figures crowding the
+        // corner of a view said nothing anybody could use.
+        float least = MinimumStep / scale;
+        frontX = Merged(frontX, least); frontZ = Merged(frontZ, least);
+        topX = Merged(topX, least); topY = Merged(topY, least);
+        rightY = Merged(rightY, least); rightZ = Merged(rightZ, least);
 
         float columnWidth0 = columns[0] * scale, columnWidth1 = columns[1] * scale;
         float rowHeight0 = rows[0] * scale, rowHeight1 = rows[1] * scale;
@@ -315,6 +341,36 @@ public static class DrawingSheet
             into.Add(new Dimension(At(positions[0]), At(positions[^1]), outward * (2f * DimensionOffset), measure(positions[^1] - positions[0])));
     }
 
+    /// <summary>Paper millimetres a chain's step has to span to be drawn at all.</summary>
+    public const float MinimumStep = 0.6f;
+
+    /// <summary>Positions closer than <paramref name="least"/> to the last one kept are dropped; the two ends always stay.</summary>
+    private static List<float> Merged(List<float> positions, float least)
+    {
+        if (positions.Count < 3) return positions;
+        var kept = new List<float> { positions[0] };
+        for (int i = 1; i < positions.Count - 1; i++)
+            if (positions[i] - kept[^1] >= least && positions[^1] - positions[i] >= least) kept.Add(positions[i]);
+        kept.Add(positions[^1]);
+        return kept;
+    }
+
+    /// <summary>
+    /// The largest scale no bigger than <paramref name="room"/>, rounded down to two figures so it
+    /// still reads as a scale: 1.8:1, 1:2.3.
+    /// </summary>
+    private static float Filling(float room)
+    {
+        if (room >= 1f)
+        {
+            float magnitude = MathF.Pow(10, MathF.Floor(MathF.Log10(room)) - 1);
+            return MathF.Max(1f, MathF.Floor(room / magnitude) * magnitude);
+        }
+
+        float reduction = 1f / room, step = MathF.Pow(10, MathF.Floor(MathF.Log10(reduction)) - 1);
+        return 1f / (MathF.Ceiling(reduction / step - 1e-4f) * step);
+    }
+
     /// <summary>How many rows deep a chain along these positions stacks: none, one, or a chain plus its overall.</summary>
     private static int Rows(IReadOnlyList<float> positions) => positions.Count switch { < 2 => 0, 2 => 1, _ => 2 };
 
@@ -353,6 +409,6 @@ public static class DrawingSheet
     /// <summary>"1:2", "1:1", "5:1".</summary>
     public static string ScaleText(float scale) =>
         scale >= 1f
-            ? $"{MathF.Round(scale).ToString(CultureInfo.InvariantCulture)}:1"
-            : $"1:{MathF.Round(1f / scale).ToString(CultureInfo.InvariantCulture)}";
+            ? $"{MathF.Round(scale, 2).ToString("0.##", CultureInfo.InvariantCulture)}:1"
+            : $"1:{MathF.Round(1f / scale, 2).ToString("0.##", CultureInfo.InvariantCulture)}";
 }

@@ -9073,7 +9073,8 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
             : subjects.Count == 1 ? subjects[0].Name
             : "Untitled";
 
-        var window = new DrawingWindow(subjects.Select(o => o.ToWorldMesh()).ToList(), title, unit.Label, unit.Millimetres, modelScale)
+        var window = new DrawingWindow(subjects.Select(o => o.ToWorldMesh()).ToList(), title, unit.Label, unit.Millimetres, modelScale,
+                                       subjects.Select(o => o.Name).ToList())
         {
             Owner = Application.Current?.MainWindow
         };

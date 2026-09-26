@@ -23,6 +23,14 @@
 
     <DockPanel>
         <StackPanel DockPanel.Dock="Left" Width="240" Margin="18,10,12,14">
+            <TextBlock Text="Sheet" Style="{StaticResource GroupHeader}" />
+            <StackPanel Orientation="Horizontal">
+                <RadioButton x:Name="DrawingModeBox" GroupName="Mode" Content="Drawing" Margin="2,3,12,3" IsChecked="True" Checked="OnChanged"
+                             ToolTip="Three views and an isometric, dimensioned" />
+                <RadioButton x:Name="PartsModeBox" GroupName="Mode" Content="Parts list" Checked="OnChanged"
+                             ToolTip="Every object: a picture, its name, its size and its volume, as many to a page as fit" />
+            </StackPanel>
+
             <TextBlock Text="Title" Style="{StaticResource GroupHeader}" />
             <TextBox x:Name="TitleBox" Padding="3,2" TextChanged="OnChanged"
                      AutomationProperties.AutomationId="DrawingTitle" />
@@ -47,7 +55,15 @@
             <CheckBox x:Name="AllDimensionsBox" Content="Every dimension" Margin="18,3,2,3" Click="OnChanged"
                       IsEnabled="{Binding IsChecked, ElementName=DimensionsBox}"
                       ToolTip="Every straight, axis-aligned edge on each view, not just its overall size - so any one view carries everything it shows. A curved or slanted edge, such as a hole, is left alone." />
+            <CheckBox x:Name="HideSmallBox" Content="Hide figures too small to fit" Margin="18,3,2,3" Click="OnChanged"
+                      IsEnabled="{Binding IsChecked, ElementName=DimensionsBox}"
+                      ToolTip="Off, a figure too long for the space between its arrows is written outside, past one end. On, it is left off." />
+            <CheckBox x:Name="HideOverlapsBox" Content="Hide overlapping figures" Margin="18,3,2,3" Click="OnChanged"
+                      IsEnabled="{Binding IsChecked, ElementName=DimensionsBox}"
+                      ToolTip="Leave off a dimension whose figure would land on one already drawn" />
             <CheckBox x:Name="IsometricBox" Content="Isometric view" Click="OnChanged" />
+            <CheckBox x:Name="FillBox" Content="Fill the page" Click="OnChanged"
+                      ToolTip="The largest scale the views fit at, such as 1.8:1. Off, the largest standard one: 1:1, 2:1, 1:2 and so on." />
 
             <StackPanel x:Name="ScaleFormatPanel" IsEnabled="{Binding IsChecked, ElementName=DimensionsBox}">
                 <TextBlock Text="Scale" Style="{StaticResource GroupHeader}" />
@@ -66,10 +82,18 @@
                 <TextBlock x:Name="SummaryText" TextWrapping="Wrap" Foreground="#FF3A3F45" />
             </Border>
 
+            <StackPanel x:Name="PagePanel" Orientation="Horizontal" Margin="0,10,0,0" Visibility="Collapsed">
+                <Button Content="&lt;" Width="28" Height="24" Click="OnPreviousPage" />
+                <TextBlock x:Name="PageText" VerticalAlignment="Center" Margin="10,0" Foreground="#FF3A3F45" />
+                <Button Content="&gt;" Width="28" Height="24" Click="OnNextPage" />
+            </StackPanel>
+
             <StackPanel Orientation="Horizontal" Margin="0,16,0,0">
-                <Button x:Name="PrintButton" Content="Print" Width="90" Height="28" Margin="0,0,8,0" Click="OnPrint"
+                <Button x:Name="PrintButton" Content="Print" Width="70" Height="28" Margin="0,0,6,0" Click="OnPrint"
                         IsDefault="True" IsEnabled="False" AutomationProperties.AutomationId="DrawingPrint" />
-                <Button Content="Close" Width="90" Height="28" IsCancel="True" />
+                <Button x:Name="PngButton" Content="Save PNG" Width="80" Height="28" Margin="0,0,6,0" Click="OnSavePng" IsEnabled="False"
+                        ToolTip="The page as a picture, at 300 dots to the inch; a parts list of several pages, one picture each" />
+                <Button Content="Close" Width="70" Height="28" IsCancel="True" />
             </StackPanel>
             <TextBlock Text="For a PDF, print to Microsoft Print to PDF." TextWrapping="Wrap"
                        Foreground="#FF7A8088" Margin="0,8,0,0" />
