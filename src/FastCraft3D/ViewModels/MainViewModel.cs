@@ -81,6 +81,12 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
     private SurfaceProfile? embossProfile;
     private string embossText = "TEXT";
     private string svgFile = "";
+
+    // A picture stamped in place of a drawing: its ink, read once, and where to split ink from none.
+    private Greyscale? embossInk;
+    private string embossInkFile = "";
+    private float embossThreshold = 0.5f;
+    private bool embossInvert;
     private string embossFont = "Arial";
     private List<string>? installedFonts;
     private float embossHeight = 10f;
@@ -3088,6 +3094,9 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
         {
             try
             {
+                if (PictureReader.Reads(svgFile))
+                    return letteringCache = PictureTrace.Outlines(EmbossInk(), embossThreshold, embossHeight);
+
                 return letteringCache = SvgOutlines.Read(svgFile, embossHeight);
             }
             catch (Exception ex)
@@ -3117,12 +3126,30 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
     {
         var dialog = new OpenFileDialog
         {
-            Filter = "Drawing (*.svg)|*.svg|All files (*.*)|*.*",
-            Title = "Stamp a drawing"
+            Filter = "Drawings and pictures (*.svg;*.png;*.jpg;*.jpeg;*.bmp;*.gif;*.tif;*.tiff)|*.svg;*.png;*.jpg;*.jpeg;*.bmp;*.gif;*.tif;*.tiff"
+                     + "|Drawing (*.svg)|*.svg|" + PictureReader.Filter,
+            Title = "Stamp a drawing, or the dark parts of a picture"
         };
         if (dialog.ShowDialog() != true) return;
 
         svgFile = dialog.FileName;
+
+        // A picture is split into ink and none where it best divides, and can be moved from there.
+        if (PictureReader.Reads(svgFile))
+        {
+            embossInvert = false;
+            try
+            {
+                embossThreshold = PictureTrace.Threshold(EmbossInk());
+            }
+            catch (Exception ex)
+            {
+                Status = $"Could not read {SvgName}: {ex.Message}";
+                svgFile = "";
+            }
+            Raise(nameof(EmbossThreshold));
+            Raise(nameof(EmbossInvert));
+        }
 
         // A drawing and a texture are two answers to the same question, and the texture is asked
         // first, so leaving it on would swallow the file that was just chosen.
@@ -3140,6 +3167,7 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
         // drawing whatever the cache still held - the typed TEXT, not the drawing just loaded.
         letteringCache = null;
         Raise(nameof(HasDrawing));
+        Raise(nameof(IsPictureDrawing));
         Raise(nameof(UsesText));
         Raise(nameof(SvgName));
         Raise(nameof(DrawingShapes));
@@ -3419,6 +3447,48 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
 
     /// <summary>Whether the lettering is coming from a drawing rather than from the text box.</summary>
     public bool HasDrawing => svgFile.Length > 0;
+
+    /// <summary>Whether what is stamped is a picture, traced, rather than a drawing's own shapes.</summary>
+    public bool IsPictureDrawing => svgFile.Length > 0 && PictureReader.Reads(svgFile);
+
+    /// <summary>The picture's ink, read once per file, the other way round when asked.</summary>
+    private Greyscale EmbossInk()
+    {
+        if (embossInk is null || embossInkFile != svgFile)
+        {
+            embossInk = PictureReader.ReadInk(svgFile);
+            embossInkFile = svgFile;
+        }
+
+        return embossInvert
+            ? embossInk with { Samples = embossInk.Samples.Select(v => 1f - v).ToArray() }
+            : embossInk;
+    }
+
+    /// <summary>How much ink counts as ink, from nothing to one. Lower takes in the paler parts.</summary>
+    public float EmbossThreshold
+    {
+        get => embossThreshold;
+        set
+        {
+            if (!float.IsFinite(value)) return;
+            embossThreshold = Math.Clamp(value, 0.02f, 0.98f);
+            Raise(nameof(EmbossThreshold));
+            RefreshDrawing();
+        }
+    }
+
+    /// <summary>Stamp what is not ink instead: a white logo on a dark ground.</summary>
+    public bool EmbossInvert
+    {
+        get => embossInvert;
+        set
+        {
+            embossInvert = value;
+            Raise(nameof(EmbossInvert));
+            RefreshDrawing();
+        }
+    }
 
     /// <summary>
     /// The lettering or the loaded drawing's outlines, for the panel to show. The very ones that

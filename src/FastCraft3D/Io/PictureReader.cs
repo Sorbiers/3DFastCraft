@@ -44,6 +44,70 @@ public static class PictureReader
         return Reduce(pixels, width, height, Math.Max(1, Math.Min(width, atMostWide)));
     }
 
+    /// <summary>
+    /// Where the picture has ink, from nothing to one, for stamping it: what is see-through is
+    /// empty when the picture has see-through parts at all - a logo on nothing - and otherwise
+    /// what is dark is ink, a drawing on white.
+    /// </summary>
+    public static Greyscale ReadInk(string file, int atMostWide = 500)
+    {
+        using var stream = File.OpenRead(file);
+        var frame = BitmapDecoder.Create(stream, BitmapCreateOptions.None, BitmapCacheOption.OnLoad).Frames[0];
+        var colours = new FormatConvertedBitmap(frame, PixelFormats.Bgra32, null, 0);
+
+        int width = colours.PixelWidth, height = colours.PixelHeight;
+        var pixels = new byte[width * height * 4];
+        colours.CopyPixels(pixels, width * 4, 0);
+        return Ink(pixels, width, height, atMostWide);
+    }
+
+    /// <summary>The same from pixels already in hand, which is what the tests use.</summary>
+    public static Greyscale Ink(byte[] bgra, int width, int height, int atMostWide)
+    {
+        int clear = 0;
+        for (int p = 3; p < bgra.Length; p += 4)
+            if (bgra[p] < 128) clear++;
+
+        // A few stray see-through pixels on a scan's edge do not make it a cut-out.
+        bool cutOut = clear > width * height / 100;
+
+        int wanted = Math.Max(1, Math.Min(width, atMostWide));
+        int tall = Math.Max(1, (int)MathF.Round(height * (float)wanted / width));
+        var samples = new float[wanted * tall];
+
+        for (int y = 0; y < tall; y++)
+        {
+            int from = y * height / tall, to = Math.Max(from + 1, (y + 1) * height / tall);
+            for (int x = 0; x < wanted; x++)
+            {
+                int left = x * width / wanted, right = Math.Max(left + 1, (x + 1) * width / wanted);
+                double total = 0;
+                int counted = 0;
+
+                for (int sy = from; sy < to && sy < height; sy++)
+                    for (int sx = left; sx < right && sx < width; sx++)
+                    {
+                        int p = (sy * width + sx) * 4;
+                        float alpha = bgra[p + 3] / 255f;
+                        if (cutOut)
+                        {
+                            total += alpha;
+                        }
+                        else
+                        {
+                            double grey = (0.299 * bgra[p + 2] + 0.587 * bgra[p + 1] + 0.114 * bgra[p]) / 255.0;
+                            total += 1.0 - (grey * alpha + (1f - alpha));
+                        }
+                        counted++;
+                    }
+
+                samples[y * wanted + x] = counted == 0 ? 0f : (float)(total / counted);
+            }
+        }
+
+        return new Greyscale(wanted, tall, samples);
+    }
+
     /// <summary>The same from pixels already in hand, which is what the tests use.</summary>
     public static Greyscale Reduce(byte[] bgra, int width, int height, int atMostWide)
     {
