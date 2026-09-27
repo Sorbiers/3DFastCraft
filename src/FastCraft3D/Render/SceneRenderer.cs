@@ -170,10 +170,19 @@ public sealed class SceneRenderer : IDisposable
 
         foreach (int t in face.Triangles)
         {
-            skin.AddTriangle(
-                face.Mesh.Positions[face.Mesh.Indices[t]] + lift,
-                face.Mesh.Positions[face.Mesh.Indices[t + 1]] + lift,
-                face.Mesh.Positions[face.Mesh.Indices[t + 2]] + lift);
+            var a = face.Mesh.Positions[face.Mesh.Indices[t]];
+            var b = face.Mesh.Positions[face.Mesh.Indices[t + 1]];
+            var c = face.Mesh.Positions[face.Mesh.Indices[t + 2]];
+
+            // A round surface has no one normal: each triangle is lifted off along its own.
+            var up = lift;
+            if (face.Normal == System.Numerics.Vector3.Zero)
+            {
+                var n = System.Numerics.Vector3.Cross(b - a, c - a);
+                if (n.LengthSquared() > 1e-20f) up = System.Numerics.Vector3.Normalize(n) * 0.05f;
+            }
+
+            skin.AddTriangle(a + up, b + up, c + up);
         }
 
         var accent = tint ?? Color.FromRgb(0x2E, 0x9B, 0xFF);

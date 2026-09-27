@@ -1307,11 +1307,20 @@
                     <StackPanel>
                         <TextBlock Text="Centre face to face" FontWeight="SemiBold" Margin="0,0,0,6" />
                         <TextBlock TextWrapping="Wrap" Foreground="#FF5A5F66" Margin="0,0,0,6"
-                                   Text="Click a face on the selected object(s), then a face on a different, unselected one." />
+                                   Text="Click a face on the selected object(s), then a face on a different, unselected one. A round face - a pin's side, a hole's wall - is taken whole, by its axis." />
                         <TextBlock Text="{Binding CentreFaceStatusLabel}" FontStyle="Italic" Foreground="#FF5A5F66"
                                    TextWrapping="Wrap" Margin="0,0,0,8" />
 
-                        <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+                        <!-- A round face picked: the axes are put on one line, so X, Y and Z give way
+                             to what matters for a pin in a hole. -->
+                        <StackPanel Margin="0,0,0,8" Visibility="{Binding CentreIsRound, Converter={StaticResource BoolToVisibility}}">
+                            <CheckBox Content="Turn to parallel" Margin="0,0,0,4" IsChecked="{Binding CentreTurnParallel, Mode=TwoWay}"
+                                      ToolTip="First turn the selection so its axis runs the same way as the other - for a pin standing at a slant" />
+                            <CheckBox Content="Middles meet along the axis" IsChecked="{Binding CentreAlongAxis, Mode=TwoWay}"
+                                      ToolTip="Also slide it along the axis until the two middles meet. Off: it keeps its height, and only comes onto the axis." />
+                        </StackPanel>
+
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,8" Visibility="{Binding CentreIsFlat, Converter={StaticResource BoolToVisibility}}">
                             <TextBlock Text="Match" Style="{StaticResource FieldLabel}" />
                             <CheckBox Content="X" Margin="0,0,10,0" IsChecked="{Binding CentreAxisX, Mode=TwoWay}" />
                             <CheckBox Content="Y" Margin="0,0,10,0" IsChecked="{Binding CentreAxisY, Mode=TwoWay}" />

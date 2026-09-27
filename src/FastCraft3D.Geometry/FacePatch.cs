@@ -152,7 +152,7 @@ public sealed class FacePatch
             : Grow(mesh, normals, triangleOffset, toleranceMm, angleDegrees);
     }
 
-    private static Vector3[] TriangleNormals(Mesh mesh)
+    internal static Vector3[] TriangleNormals(Mesh mesh)
     {
         var normals = new Vector3[mesh.TriangleCount];
         for (int t = 0, i = 0; t + 2 < mesh.Indices.Count; t += 3, i++)
@@ -174,7 +174,7 @@ public sealed class FacePatch
     /// hit test said the surface faces. The normal matters because a thin wall has a triangle
     /// on each side, both within tolerance of the same point.
     /// </summary>
-    private static int FindSeed(
+    internal static int FindSeed(
         Mesh mesh, Vector3[] normals, Vector3 point, Vector3 hintNormal, float tolerance)
     {
         bool haveHint = hintNormal.LengthSquared() > 1e-12f;
@@ -346,6 +346,20 @@ public sealed class FacePatch
     }
 
     /// <summary>Edges used by exactly one of the face's triangles, kept in winding order.</summary>
+    /// <summary>
+    /// A marker for a surface that is not flat - a pin's side, a hole's wall - so the viewport can
+    /// light it as it lights a flat face. It has no plane: the normal is zero, and the marker is
+    /// lifted off each triangle along that triangle's own normal instead.
+    /// </summary>
+    internal static FacePatch Curved(Mesh mesh, List<int> triangles, float area)
+    {
+        var sum = Vector3.Zero;
+        foreach (int t in triangles) sum += mesh.Positions[mesh.Indices[t]];
+        var origin = triangles.Count > 0 ? sum / triangles.Count : Vector3.Zero;
+        return new FacePatch(mesh, triangles, Vector3.Zero, origin, Vector3.Zero, Vector3.Zero,
+            Vector2.Zero, Vector2.Zero, area, BoundaryEdges(mesh, triangles), []);
+    }
+
     private static List<(int A, int B)> BoundaryEdges(Mesh mesh, List<int> triangles)
     {
         var used = new Dictionary<(int, int), int>();

@@ -106,6 +106,11 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
     private bool centreFaceAPicked, centreFaceBPicked;
     private string? centreFaceALabel, centreFaceBLabel;
     private bool centreAxisX = true, centreAxisY = true, centreAxisZ = true;
+    private RoundSurface? centreRoundA, centreRoundB;
+    private bool centreTurnParallel, centreAlongAxis;
+
+    /// <summary>Each object's mesh in the world while Centre face to face is out, since hovering asks on every move.</summary>
+    private readonly Dictionary<SceneObject, Mesh> centreMeshes = [];
     private float embossBevel;
     private TextProjection embossProjection = TextProjection.Planar;
     private SurfacePlacement embossPlacement = SurfacePlacement.Middle;
@@ -261,7 +266,7 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
         CancelAlignFaceCommand = RelayCommand.Simple(() => IsAlignFaceMode = false);
         BeginCentreFaceCommand = Track(RelayCommand.Simple(BeginCentreFace, () => Scene.Selection.Count > 0));
         ApplyCentreFaceCommand = AsyncRelayCommand.Simple(
-            ApplyCentreFace, () => centreFaceAPicked && centreFaceBPicked && (centreAxisX || centreAxisY || centreAxisZ));
+            ApplyCentreFace, () => centreFaceAPicked && centreFaceBPicked && (CentreIsRound || centreAxisX || centreAxisY || centreAxisZ));
         CancelCentreFaceCommand = RelayCommand.Simple(() => IsCentreFaceMode = false);
         LoadDrawingCommand = RelayCommand.Simple(LoadDrawing);
         ClearDrawingCommand = RelayCommand.Simple(
@@ -1966,8 +1971,10 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
             if (!value)
             {
                 centreFaceA = centreFaceB = null;
+                centreRoundA = centreRoundB = null;
                 centreFaceAPicked = centreFaceBPicked = false;
                 centreFaceALabel = centreFaceBLabel = null;
+                centreMeshes.Clear();
                 RaiseCentreFace();
             }
             Raise(nameof(IsToolRunning));
@@ -1986,11 +1993,38 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
 
     public string CentreFaceStatusLabel => (centreFaceAPicked, centreFaceBPicked) switch
     {
-        (false, false) => "Click a face on the selected object(s)",
-        (true, false) => $"Picked a face on {centreFaceALabel} - now click a face on a different, unselected object",
-        (false, true) => $"Picked a face on {centreFaceBLabel} - now click a face on the selected object(s)",
-        (true, true) => $"Picked {centreFaceALabel} against {centreFaceBLabel} - choose the axes, then Apply"
+        (false, false) => "Click a face on the selected object(s) - a flat face, or a round one such as a pin's side",
+        (true, false) => $"Picked {Picked(centreRoundA, centreFaceALabel)} - now click a face on a different, unselected object: a hole's wall to put it in",
+        (false, true) => $"Picked {Picked(centreRoundB, centreFaceBLabel)} - now click a face on the selected object(s)",
+        (true, true) => $"Picked {Picked(centreRoundA, centreFaceALabel)} against {Picked(centreRoundB, centreFaceBLabel)}"
+                        + (CentreIsRound ? " - Apply puts them on one axis" : " - choose the axes, then Apply")
+                        + Misfit()
     };
+
+    private static string Picked(RoundSurface? round, string? on) => round is null
+        ? $"a face on {on}"
+        : round.IsHole ? $"a Ø{round.Diameter:0.##} hole in {on}" : $"a Ø{round.Diameter:0.##} round face on {on}";
+
+    /// <summary>A pin that will not go in, or will rattle, said before it is moved rather than found in print.</summary>
+    private string Misfit()
+    {
+        if (centreRoundA is not { } a || centreRoundB is not { } b || a.IsHole == b.IsHole) return "";
+        var (pin, hole) = a.IsHole ? (b, a) : (a, b);
+        float gap = hole.Diameter - pin.Diameter;
+        return gap < 0 ? $". The pin is {-gap:0.##} mm too big for the hole."
+            : $". {gap:0.##} mm between them across.";
+    }
+
+    /// <summary>Whether either face picked is round, when the axes are lined up rather than X, Y and Z matched.</summary>
+    public bool CentreIsRound => centreRoundA is not null || centreRoundB is not null;
+
+    public bool CentreIsFlat => !CentreIsRound;
+
+    /// <summary>First turn the selection so the two axes run the same way - for a tilted pin.</summary>
+    public bool CentreTurnParallel { get => centreTurnParallel; set => Set(ref centreTurnParallel, value); }
+
+    /// <summary>Also slide it along the axis until the two middles meet, rather than leaving its height.</summary>
+    public bool CentreAlongAxis { get => centreAlongAxis; set => Set(ref centreAlongAxis, value); }
 
     /// <summary>Whether this axis' offset should be applied at all - the other two keep their position.</summary>
     public bool CentreAxisX { get => centreAxisX; set => Set(ref centreAxisX, value); }
@@ -2002,7 +2036,23 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
         Raise(nameof(HasCentreFaceA));
         Raise(nameof(HasCentreFaceB));
         Raise(nameof(CentreFaceStatusLabel));
+        Raise(nameof(CentreIsRound));
+        Raise(nameof(CentreIsFlat));
+        System.Windows.Input.CommandManager.InvalidateRequerySuggested();
         CentreFaceChanged?.Invoke();
+    }
+
+    /// <summary>
+    /// The face under a point: the whole of a round surface when it is on one - a flat facet of a
+    /// pin would put its middle off the axis by the radius - otherwise the flat face.
+    /// </summary>
+    private (FacePatch? Face, RoundSurface? Round) CentreSurfaceAt(SceneObject target, Vector3 worldPoint, Vector3 worldNormal)
+    {
+        if (!centreMeshes.TryGetValue(target, out var world))
+            centreMeshes[target] = world = target.ToWorldMesh();
+
+        if (RoundSurface.Find(world, worldPoint, worldNormal) is { } round) return (round.Patch, round);
+        return (FacePatch.Find(world, worldPoint, worldNormal), null);
     }
 
     private void BeginCentreFace()
@@ -2019,9 +2069,11 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
         IsAlignFaceMode = false;
 
         centreFaceA = centreFaceB = null;
+        centreRoundA = centreRoundB = null;
         centreFaceAPicked = centreFaceBPicked = false;
         centreFaceALabel = centreFaceBLabel = null;
         centreAxisX = centreAxisY = centreAxisZ = true;
+        centreMeshes.Clear();
 
         IsCentreFaceMode = true;
         RaiseCentreFace();
@@ -2042,12 +2094,12 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
 
         if (!centreFaceAPicked && (target is null || onSelection))
         {
-            centreFaceA = target is null ? null : FacePatch.Find(target.ToWorldMesh(), worldPoint, worldNormal);
+            centreFaceA = target is null ? null : CentreSurfaceAt(target, worldPoint, worldNormal).Face;
             CentreFaceChanged?.Invoke();
         }
         else if (!centreFaceBPicked && (target is null || !onSelection))
         {
-            centreFaceB = target is null ? null : FacePatch.Find(target.ToWorldMesh(), worldPoint, worldNormal);
+            centreFaceB = target is null ? null : CentreSurfaceAt(target, worldPoint, worldNormal).Face;
             CentreFaceChanged?.Invoke();
         }
     }
@@ -2060,18 +2112,20 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
     {
         if (!isCentreFaceMode) return false;
 
-        var face = FacePatch.Find(target.ToWorldMesh(), worldPoint, worldNormal);
+        var (face, round) = CentreSurfaceAt(target, worldPoint, worldNormal);
         if (face is null) return false;
 
         if (target.IsSelected)
         {
             centreFaceA = face;
+            centreRoundA = round;
             centreFaceAPicked = true;
             centreFaceALabel = target.Name;
         }
         else
         {
             centreFaceB = face;
+            centreRoundB = round;
             centreFaceBPicked = true;
             centreFaceBLabel = target.Name;
         }
@@ -2092,22 +2146,58 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
 
         if (!centreFaceAPicked || centreFaceA is not { } faceA) return;
         if (!centreFaceBPicked || centreFaceB is not { } faceB) return;
-        if (!centreAxisX && !centreAxisY && !centreAxisZ) return;
+        if (!CentreIsRound && !centreAxisX && !centreAxisY && !centreAxisZ) return;
 
         var selection = Scene.Selection.ToList();
         if (selection.Count == 0) return;
 
-        var centreA = faceA.ToLocal((faceA.Min + faceA.Max) * 0.5f);
-        var centreB = faceB.ToLocal((faceB.Min + faceB.Max) * 0.5f);
-        var offset = AlignTools.OffsetBetweenPoints(centreA, centreB, centreAxisX, centreAxisY, centreAxisZ);
-
+        var centreA = centreRoundA?.Centre ?? faceA.ToLocal((faceA.Min + faceA.Max) * 0.5f);
+        var centreB = centreRoundB?.Centre ?? faceB.ToLocal((faceB.Min + faceB.Max) * 0.5f);
         var before = selection.Select(TransformState.Capture).ToList();
+
+        Vector3 offset;
+        string warn = "";
+        if (CentreIsRound)
+        {
+            // Which way each runs: a round face's axis, a flat face's normal.
+            var runA = centreRoundA?.Axis ?? faceA.Normal;
+            var runB = centreRoundB?.Axis ?? faceB.Normal;
+            if (Vector3.Dot(runA, runB) < 0) runB = -runB;
+
+            if (centreTurnParallel && runA != Vector3.Zero && runB != Vector3.Zero)
+            {
+                // Turned about the first face's middle, so that stays where it was.
+                var turn = MeshTransform.TurnFromTo(runA, runB);
+                foreach (var o in selection)
+                {
+                    o.Rotation = MeshTransform.EulerFrom(MeshTransform.Rotation(o.Rotation) * turn);
+                    o.Position = centreA + Vector3.Transform(o.Position - centreA, turn);
+                }
+                runA = runB;
+            }
+
+            // Across the axis always; along it only when asked, so a pin keeps its height.
+            var axis = centreRoundB?.Axis ?? centreRoundA?.Axis ?? runB;
+            var d = centreB - centreA;
+            var along = axis * Vector3.Dot(d, axis);
+            offset = d - along + (centreAlongAxis ? along : Vector3.Zero);
+
+            if (!centreTurnParallel && MathF.Abs(Vector3.Dot(runA, runB)) < 0.9998f)
+                warn = " - the two axes are not parallel: tick Turn to parallel to stand it true";
+        }
+        else
+        {
+            offset = AlignTools.OffsetBetweenPoints(centreA, centreB, centreAxisX, centreAxisY, centreAxisZ);
+        }
+
         foreach (var o in selection) o.Position += offset;
 
         if (TransformCommand.CreateIfChanged("Centre face to face", selection, before) is { } command)
         {
             Undo.Execute(command);
-            Status = $"Aligned {selection.Count} object(s) so the two faces' centres match";
+            Status = CentreIsRound
+                ? $"Put {selection.Count} object(s) on the other's axis{warn}"
+                : $"Aligned {selection.Count} object(s) so the two faces' centres match";
         }
         else
         {
