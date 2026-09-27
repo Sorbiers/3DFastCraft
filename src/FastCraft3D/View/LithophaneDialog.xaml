@@ -30,7 +30,7 @@
         <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
             <Button x:Name="ChooseButton" Content="Picture" Style="{DynamicResource PanelButton}" Click="OnChoose"
                     AutomationProperties.AutomationId="LithophanePicture"
-                    ToolTip="PNG, JPEG, BMP, GIF or TIFF. Anything see-through is read as white." />
+                    ToolTip="PNG, JPEG, BMP, GIF or TIFF. Anything see-through is read as white. Choose several at once for a lamp with a picture on each side." />
             <TextBlock x:Name="PictureText" VerticalAlignment="Center" Margin="6,0,0,0" MaxWidth="150"
                        TextTrimming="CharacterEllipsis" Foreground="#FF5A5F66" />
         </StackPanel>
@@ -192,24 +192,37 @@
             <RadioButton x:Name="CurvedBox" GroupName="LithophaneShape" Content="Curved" Margin="0,0,10,0" VerticalAlignment="Center"
                          Checked="OnChanged" AutomationProperties.AutomationId="LithophaneCurved"
                          ToolTip="Bent round a cylinder, the picture on the outside - for a shade with the lamp inside it" />
-            <RadioButton x:Name="CubeBox" GroupName="LithophaneShape" Content="Cube lamp" VerticalAlignment="Center"
+            <RadioButton x:Name="CubeBox" GroupName="LithophaneShape" Content="Lamp" VerticalAlignment="Center"
                          Checked="OnChanged" AutomationProperties.AutomationId="LithophaneCube"
-                         ToolTip="Four panels round a square lamp, a picture on each, on a base with a hole for the light" />
+                         ToolTip="Panels round a lamp, three to twelve sides, a picture on each, on a base for the light" />
         </StackPanel>
 
-        <!-- The other three sides of a cube lamp; a side left empty carries the first picture. -->
+        <!-- A lamp: how many sides, and what it stands on. Several pictures chosen at once go
+             round it in turn. -->
         <StackPanel x:Name="SidesPanel" Margin="68,6,0,0" Visibility="Collapsed">
             <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
-                <Button Content="Side 2" Tag="1" Style="{DynamicResource PanelButton}" Click="OnChooseSide" />
-                <TextBlock x:Name="Side2Text" Text="the first picture" VerticalAlignment="Center" Margin="6,0,0,0" MaxWidth="110" TextTrimming="CharacterEllipsis" Foreground="#FF5A5F66" />
+                <TextBlock Text="Sides" Style="{DynamicResource FieldLabel}" Width="80" />
+                <TextBox x:Name="SidesBox" Width="48" Style="{DynamicResource NumberBox}" Tag="number" TextChanged="OnChanged"
+                         AutomationProperties.AutomationId="LithophaneSides" ToolTip="Three to twelve panels round the lamp" />
             </StackPanel>
-            <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
-                <Button Content="Side 3" Tag="2" Style="{DynamicResource PanelButton}" Click="OnChooseSide" />
-                <TextBlock x:Name="Side3Text" Text="the first picture" VerticalAlignment="Center" Margin="6,0,0,0" MaxWidth="110" TextTrimming="CharacterEllipsis" Foreground="#FF5A5F66" />
-            </StackPanel>
-            <StackPanel Orientation="Horizontal">
-                <Button Content="Side 4" Tag="3" Style="{DynamicResource PanelButton}" Click="OnChooseSide" />
-                <TextBlock x:Name="Side4Text" Text="the first picture" VerticalAlignment="Center" Margin="6,0,0,0" MaxWidth="110" TextTrimming="CharacterEllipsis" Foreground="#FF5A5F66" />
+            <TextBlock x:Name="PicturesText" TextWrapping="Wrap" Foreground="#FF5A5F66" Margin="0,0,0,6"
+                       Text="Choose several pictures at once for a picture on each side." />
+            <CheckBox x:Name="SocketBox" Content="Base for a bulb socket (E26 / E27)" Checked="OnChanged" Unchecked="OnChanged"
+                      AutomationProperties.AutomationId="LithophaneSocket" Margin="0,0,0,4"
+                      ToolTip="A hollow base with a floor on top holding the socket, and a notch in its foot for the cable. Off: a frame round a hole, for a light standing under the lamp." />
+            <StackPanel x:Name="SocketPanel" Visibility="Collapsed">
+                <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
+                    <TextBlock Text="Socket hole" Style="{DynamicResource FieldLabel}" Width="80" />
+                    <TextBox x:Name="SocketHoleBox" Width="48" Style="{DynamicResource NumberBox}" Tag="number" TextChanged="OnChanged"
+                             ToolTip="40 mm for a socket held by its shade ring; 10.5 mm for one on a threaded nipple (1/8 IP). Measure yours." />
+                    <TextBlock Text="mm" Foreground="#FF9AA0A8" VerticalAlignment="Center" Margin="4,0,0,0" />
+                </StackPanel>
+                <StackPanel Orientation="Horizontal">
+                    <TextBlock Text="Base height" Style="{DynamicResource FieldLabel}" Width="80" />
+                    <TextBox x:Name="SocketBaseBox" Width="48" Style="{DynamicResource NumberBox}" Tag="number" TextChanged="OnChanged"
+                             ToolTip="Room under the floor for the socket's body below its ring, and the cable" />
+                    <TextBlock Text="mm" Foreground="#FF9AA0A8" VerticalAlignment="Center" Margin="4,0,0,0" />
+                </StackPanel>
             </StackPanel>
         </StackPanel>
 

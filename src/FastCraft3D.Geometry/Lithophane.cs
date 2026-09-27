@@ -14,8 +14,8 @@ public enum LithophaneShape
     /// <summary>A flat plate, standing on its bottom edge.</summary>
     Flat,
 
-    /// <summary>Four flat panels round a square lamp, a picture on each, on a base with a hole for the light.</summary>
-    Cube,
+    /// <summary>Flat panels round a lamp - three to twelve sides - a picture on each, on a base with a hole for the light.</summary>
+    Lamp,
 
     /// <summary>Bent round part of a cylinder, the picture on the outside of the curve.</summary>
     Curved
@@ -47,6 +47,18 @@ public sealed record LithophaneOptions
     public float Frame { get; init; } = 3f;
     public float LayerHeight { get; init; } = 0.1f;
 
+    /// <summary>How many panels round a lamp.</summary>
+    public int LampSides { get; init; } = 4;
+
+    /// <summary>A lamp stands on a hollow base with a hole in its top for a bulb socket, rather than on a frame round a hole.</summary>
+    public bool Socket { get; init; }
+
+    /// <summary>Across the socket's hole: 40 mm takes an E26 or E27 socket held by its shade ring, 10.5 mm one on a threaded nipple.</summary>
+    public float SocketHole { get; init; } = 40f;
+
+    /// <summary>How tall the hollow base under a socket is - room below the floor for the socket's body and the cable.</summary>
+    public float SocketBase { get; init; } = 45f;
+
     /// <summary>The same settings with every number brought inside what can be built from it.</summary>
     public LithophaneOptions Sane()
     {
@@ -54,6 +66,9 @@ public sealed record LithophaneOptions
 
         return this with
         {
+            LampSides = Math.Clamp(LampSides, 3, 12),
+            SocketHole = Math.Clamp(Finite(SocketHole, 40f), 5f, 120f),
+            SocketBase = Math.Clamp(Finite(SocketBase, 45f), 5f, 200f),
             Width = Math.Clamp(Finite(Width, 100f), 5f, 1000f),
             MinThickness = min,
 
@@ -307,64 +322,131 @@ public static class Lithophane
     }
 
     /// <summary>
-    /// A square lamp: four flat panels, one picture each, facing out; a post at each corner that
-    /// the panels' ends run into; a base with a hole in it for the light; and a rim round the top.
-    /// Every panel is made to the first picture's proportions - the others are stretched to it -
-    /// so the four are the same size and the box is square. The pieces overlap rather than meet,
-    /// and are joined as one.
+    /// A lamp: flat panels round a regular polygon, a picture on each, joined at the corners by
+    /// posts, with a rim round the top and a base under it. Pictures fewer than the sides go round
+    /// again; each is stretched to the first one's proportions so every panel is the same size.
+    ///
+    /// Each panel's flat back is the outside and its relief the inside, as a lithophane lamp is
+    /// made. The panels' inner corners meet, so no picture runs into the next one's; the wedge
+    /// left outside at each corner is the post.
+    ///
+    /// The base is a frame round a hole for a light standing under it, or - for a bulb - a hollow
+    /// pedestal with a floor on top holding the socket and a notch in its foot for the cable.
     /// </summary>
-    public static Mesh BuildCube(IReadOnlyList<Greyscale> sides, LithophaneOptions options)
+    public static Mesh BuildLamp(IReadOnlyList<Greyscale> pictures, LithophaneOptions options)
     {
         var o = options.Sane() with { Shape = LithophaneShape.Flat };
-        var first = sides[0];
-        var panels = Enumerable.Range(0, 4).Select(k =>
+        int n = o.LampSides;
+        var first = pictures[0];
+
+        var panels = Enumerable.Range(0, n).Select(k =>
         {
-            var picture = k < sides.Count ? sides[k] : first;
+            var picture = pictures[k % pictures.Count];
             return Build(picture.Width == first.Width && picture.Height == first.Height ? picture : Stretched(picture, first.Width, first.Height), o);
         }).ToList();
 
         var size = panels[0].ComputeBounds();
         float width = size.Size.X, height = size.Size.Z, thick = o.MaxThickness;
-        float half = width / 2f + thick;     // the box's outside, half across
-        const float baseThick = 2f, rim = 2f, over = 0.5f;
+        float half = MathF.PI / n;
+        // To the outside of a panel. A little past where the panels' inner corners would just
+        // meet, so they stand apart and the post alone joins them. Touching along a line, two
+        // panels came out of the union as a seam shared by four faces; overlapping, a panel's
+        // edge lay along the next one's relief as often as not.
+        float apothem = width / (2f * MathF.Tan(half)) + thick + 0.3f;
+        float inside = apothem - thick;
+        const float floor = 2f, rim = 2f, over = 0.5f, wall = 3f;
+        float lift = o.Socket ? o.SocketBase : 0f;
+        // Every piece overlaps the next by a real amount, never flush: a panel's top lying exactly
+        // on the rim's underside left the union with edges shared by four faces.
+        float bottom = lift + floor, sunk = bottom - 0.3f, top = sunk + height;
+
+        Vector2 Out(int k) => new(MathF.Cos(-MathF.PI / 2f + k * 2f * half), MathF.Sin(-MathF.PI / 2f + k * 2f * half));
+        Vector2 Along(int k) { var r = Out(k); return new(-r.Y, r.X); }
 
         var pieces = new List<Mesh>();
-        for (int k = 0; k < 4; k++)
+        for (int k = 0; k < n; k++)
         {
-            // A plate is read from its flat back, the relief behind it, so each panel's back is the
-            // outside of the box and its relief the inside - as a lithophane lamp is made.
-            var turn = Matrix4x4.CreateRotationZ(k * MathF.PI / 2f);
-            var at = Vector3.Transform(new Vector3(0, -half, 0), turn);
-            pieces.Add(MeshTransform.Transformed(panels[k], turn * Matrix4x4.CreateTranslation(at.X, at.Y, baseThick - 0.01f)));
+            var turn = Matrix4x4.CreateRotationZ(k * 2f * half);
+            var at = Vector3.Transform(new Vector3(0, -apothem, 0), turn);
+            pieces.Add(MeshTransform.Transformed(panels[k], turn * Matrix4x4.CreateTranslation(at.X, at.Y, sunk)));
+
+            // The post between this panel and the next: from each panel's inner corner, a little
+            // along it so the two overlap, out past the outer face to the polygon's corner. None
+            // of its corners lies in a side of the rim or the base: where one did - the inner edge
+            // in the side of the rim's opening, the outer face in the rim's own - the union came
+            // out with edges shared by four faces.
+            int j = (k + 1) % n;
+            float end = width / 2f - 0.7f, deep = inside - 0.8f, out_ = apothem + 0.3f;
+            var corner = new[]
+            {
+                Out(k) * deep + Along(k) * end,
+                Out(k) * out_ + Along(k) * end,
+                Corner(k, out_),
+                Out(j) * out_ - Along(j) * end,
+                Out(j) * deep - Along(j) * end
+            };
+            pieces.Add(Prism(corner, bottom - 0.6f, top + 0.3f));
         }
 
-        // Corner posts a hair wider than the walls, so their faces never lie in a panel's.
-        float inside = half - thick - over, outside = half + over;
-        foreach (var (sx, sy) in new[] { (1, 1), (-1, 1), (-1, -1), (1, -1) })
-        {
-            var a = new Vector3(sx * inside, sy * inside, 0);
-            var b = new Vector3(sx * outside, sy * outside, baseThick + height);
-            pieces.Add(Box(Vector3.Min(a, b), Vector3.Max(a, b)));
-        }
+        // The rim round the top, open to the lamp.
+        pieces.Add(Hollowed(Prism(Polygon(apothem + over), top - 0.5f, top + rim), Prism(Polygon(inside - over), top - 1f, top + rim + 1f)));
 
-        // The base, a round hole in it for the light, and the rim round the top.
-        pieces.Add(Frame(outside, inside - 3f, 0, baseThick, round: true));
-        pieces.Add(Frame(outside, inside, baseThick + height - 0.01f, baseThick + height + rim, round: false));
+        if (!o.Socket)
+        {
+            // A frame round a round hole, for a light standing under it.
+            pieces.Add(Hollowed(Prism(Polygon(apothem + over), 0, floor), Round(inside - over - 3f, -1f, floor + 1f)));
+        }
+        else
+        {
+            // A floor with the socket's hole, on a hollow pedestal with a notch in its foot for the cable.
+            float hole = MathF.Min(o.SocketHole / 2f, inside - over - 2f);
+            pieces.Add(Hollowed(Prism(Polygon(apothem + over), lift - 0.01f, bottom), Round(hole, lift - 1f, bottom + 1f)));
+
+            var pedestal = Hollowed(Prism(Polygon(apothem + over), 0, lift), Prism(Polygon(apothem + over - wall), -1f, lift - 0.02f));
+            float notchTop = MathF.Min(12f, lift * 0.6f);
+            var notch = MeshTransform.Transformed(Primitives.Box(10f, 4f * wall, notchTop + 3f), Matrix4x4.CreateTranslation(0, -(apothem + over), (notchTop - 3f) / 2f));
+            pieces.Add(Hollowed(pedestal, notch));
+        }
 
         return Csg.ManifoldCsg.UnionAll(pieces) ?? Mesh.Combine(pieces);
 
-        static Mesh Box(Vector3 lo, Vector3 hi) => MeshTransform.Transformed(Primitives.Box(hi.X - lo.X, hi.Y - lo.Y, hi.Z - lo.Z),
-            Matrix4x4.CreateTranslation((lo + hi) / 2f));
-
-        // A square plate with a hole through it, round or square.
-        static Mesh Frame(float outer, float hole, float z0, float z1, bool round)
+        Vector2 Corner(int k, float at)
         {
-            var plate = Box(new Vector3(-outer, -outer, z0), new Vector3(outer, outer, z1));
-            var cut = round
-                ? MeshTransform.Transformed(Primitives.Prism(hole, z1 - z0 + 2f, 64), Matrix4x4.CreateTranslation(0, 0, (z0 + z1) / 2f))
-                : Box(new Vector3(-hole, -hole, z0 - 1f), new Vector3(hole, hole, z1 + 1f));
-            return Csg.ManifoldCsg.Subtract(plate, cut) ?? plate;
+            var c = (Out(k) + Out((k + 1) % n)) / 2f;
+            return Vector2.Normalize(c) * (at / MathF.Cos(half));
         }
+
+        // The outline round the lamp, at a distance from its middle to each side's middle.
+        List<Vector2> Polygon(float at) => Enumerable.Range(0, n).Select(k => Corner(k, at)).ToList();
+
+        static Mesh Round(float radius, float z0, float z1) =>
+            MeshTransform.Transformed(Primitives.Prism(radius, z1 - z0, 64), Matrix4x4.CreateTranslation(0, 0, (z0 + z1) / 2f));
+
+        static Mesh Hollowed(Mesh solid, Mesh cut) => Csg.ManifoldCsg.Subtract(solid, cut) ?? solid;
+    }
+
+    /// <summary>A convex outline, anticlockwise, stood up from one height to another.</summary>
+    private static Mesh Prism(IReadOnlyList<Vector2> loop, float z0, float z1)
+    {
+        var mesh = new Mesh();
+        int count = loop.Count;
+        Vector3 Low(int i) => new(loop[i].X, loop[i].Y, z0);
+        Vector3 High(int i) => new(loop[i].X, loop[i].Y, z1);
+
+        for (int i = 1; i + 1 < count; i++)
+        {
+            mesh.AddTriangle(High(0), High(i), High(i + 1));
+            mesh.AddTriangle(Low(0), Low(i + 1), Low(i));
+        }
+
+        for (int i = 0; i < count; i++)
+        {
+            int j = (i + 1) % count;
+            mesh.AddTriangle(Low(i), Low(j), High(j));
+            mesh.AddTriangle(Low(i), High(j), High(i));
+        }
+
+        return mesh.Welded();
     }
 
     /// <summary>A picture sampled to another size, so four pictures make four panels the same size.</summary>

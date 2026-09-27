@@ -45,7 +45,7 @@ public partial class LithophaneDialog : ToolPanel
     private bool syncing;
 
     /// <param name="preview">Shows a plate on the build plate, or takes it away when given null.</param>
-    public LithophaneDialog(string file, LithophaneOptions start, Action<Mesh?> preview)
+    public LithophaneDialog(IReadOnlyList<string> files, LithophaneOptions start, Action<Mesh?> preview)
     {
         this.preview = preview;
         InitializeComponent();
@@ -81,11 +81,15 @@ public partial class LithophaneDialog : ToolPanel
         NegativeBox.IsChecked = start.Negative;
         FlatBox.IsChecked = start.Shape == LithophaneShape.Flat;
         CurvedBox.IsChecked = start.Shape == LithophaneShape.Curved;
-        CubeBox.IsChecked = start.Shape == LithophaneShape.Cube;
+        CubeBox.IsChecked = start.Shape == LithophaneShape.Lamp;
+        SidesBox.Text = start.LampSides.ToString(CultureInfo.CurrentCulture);
+        SocketBox.IsChecked = start.Socket;
+        SocketHoleBox.Text = Format(start.SocketHole);
+        SocketBaseBox.Text = Format(start.SocketBase);
         loading = false;
 
         SyncSliders();
-        Load(file);
+        Load(files);
     }
 
     /// <summary>Null until the plate is added.</summary>
@@ -94,30 +98,59 @@ public partial class LithophaneDialog : ToolPanel
     /// <summary>The picture itself, for the caller to build the real plate from.</summary>
     public Greyscale? Picture { get; private set; }
 
-    /// <summary>A cube lamp's other three sides; null for a side that carries the first picture.</summary>
-    private readonly Greyscale?[] others = new Greyscale?[3];
-
-    /// <summary>A cube lamp's four pictures, the first picture standing in for any side not chosen.</summary>
-    public IReadOnlyList<Greyscale> Sides => Picture is { } first ? [first, .. others.Select(o => o ?? first)] : [];
+    /// <summary>Every picture chosen, the first being <see cref="Picture"/>. A lamp puts them round its sides in turn.</summary>
+    public IReadOnlyList<Greyscale> Pictures { get; private set; } = [];
 
     /// <summary>What it is called, for the object's name.</summary>
     public string PictureName { get; private set; } = "Lithophane";
 
     private static string Format(float value) => value.ToString("0.###", CultureInfo.CurrentCulture);
 
-    private void Load(string file)
+    /// <summary>
+    /// The pictures chosen. More than one makes a lamp with a side for each - three at the least,
+    /// the pictures going round again - since that is the only thing several pictures can be.
+    /// </summary>
+    private void Load(IReadOnlyList<string> files)
     {
-        try
+        var read = new List<Greyscale>();
+        var names = new List<string>();
+        var failed = new List<string>();
+        foreach (var file in files)
         {
-            Picture = PictureReader.Read(file);
-            PictureName = Path.GetFileNameWithoutExtension(file);
-            PictureText.Text = Path.GetFileName(file);
-            PictureText.ToolTip = file;
+            try
+            {
+                read.Add(PictureReader.Read(file));
+                names.Add(Path.GetFileName(file));
+            }
+            catch (Exception ex)
+            {
+                failed.Add($"{Path.GetFileName(file)}: {ex.Message}");
+            }
         }
-        catch (Exception ex)
+
+        Pictures = read;
+        Picture = read.Count > 0 ? read[0] : null;
+
+        if (read.Count == 0)
         {
-            Picture = null;
-            PictureText.Text = $"could not be read: {ex.Message}";
+            PictureText.Text = failed.Count > 0 ? $"could not be read: {failed[0]}" : "";
+        }
+        else
+        {
+            PictureName = read.Count == 1 ? Path.GetFileNameWithoutExtension(names[0]) : "Lithophane lamp";
+            PictureText.Text = read.Count == 1 ? names[0] : $"{read.Count} pictures";
+            PictureText.ToolTip = string.Join(Environment.NewLine, names.Concat(failed.Select(f => "not read - " + f)));
+            PicturesText.Text = read.Count == 1
+                ? "Choose several pictures at once for a picture on each side."
+                : $"{read.Count} pictures round the sides: {string.Join(", ", names)}.";
+
+            if (read.Count > 1)
+            {
+                loading = true;
+                CubeBox.IsChecked = true;
+                SidesBox.Text = Math.Clamp(read.Count, 3, 12).ToString(CultureInfo.CurrentCulture);
+                loading = false;
+            }
         }
 
         // At once rather than on the timer: a picture has just been chosen, and the panel
@@ -143,7 +176,11 @@ public partial class LithophaneDialog : ToolPanel
             Gamma = Number(GammaBox, fallback.Gamma),
             Angle = Number(AngleBox, fallback.Angle),
             Negative = NegativeBox.IsChecked == true,
-            Shape = CubeBox.IsChecked == true ? LithophaneShape.Cube : CurvedBox.IsChecked == true ? LithophaneShape.Curved : LithophaneShape.Flat
+            Shape = CubeBox.IsChecked == true ? LithophaneShape.Lamp : CurvedBox.IsChecked == true ? LithophaneShape.Curved : LithophaneShape.Flat,
+            LampSides = (int)MathF.Round(Number(SidesBox, fallback.LampSides)),
+            Socket = SocketBox.IsChecked == true,
+            SocketHole = Number(SocketHoleBox, fallback.SocketHole),
+            SocketBase = Number(SocketBaseBox, fallback.SocketBase)
         }.Sane();
 
         static float Number(TextBox box, float otherwise) =>
@@ -169,7 +206,8 @@ public partial class LithophaneDialog : ToolPanel
         bool curved = o.Shape == LithophaneShape.Curved;
         AngleBox.IsEnabled = curved;
         AngleSlider.IsEnabled = curved;
-        SidesPanel.Visibility = o.Shape == LithophaneShape.Cube ? Visibility.Visible : Visibility.Collapsed;
+        SidesPanel.Visibility = o.Shape == LithophaneShape.Lamp ? Visibility.Visible : Visibility.Collapsed;
+        SocketPanel.Visibility = o.Socket ? Visibility.Visible : Visibility.Collapsed;
         AddButton.IsEnabled = Picture is not null;
 
         if (Picture is not { } picture)
@@ -187,8 +225,8 @@ public partial class LithophaneDialog : ToolPanel
         // Coarser than what will be built, so typing into a box does not stop to lay out a
         // quarter of a million triangles between one keystroke and the next.
         float coarse = MathF.Max(o.Pitch, o.Width / PreviewSamples);
-        preview(o.Shape == LithophaneShape.Cube
-            ? Lithophane.BuildCube(Sides, o with { Pitch = MathF.Max(coarse, o.Width / (PreviewSamples / 2f)) })
+        preview(o.Shape == LithophaneShape.Lamp
+            ? Lithophane.BuildLamp(Pictures, o with { Pitch = MathF.Max(coarse, o.Width / (PreviewSamples / 2f)) })
             : Lithophane.Build(picture, o with { Pitch = coarse }));
 
         int greys = Lithophane.GreyLevels(o);
@@ -205,6 +243,17 @@ public partial class LithophaneDialog : ToolPanel
             notes.Add("A heavy mesh. Coarser detail costs the print nothing the nozzle could have drawn anyway.");
         if (o.MinThickness < 0.6f)
             notes.Add("Under 0.6 mm is thinner than two walls on most printers, and may come out with holes in it.");
+
+        if (o.Shape == LithophaneShape.Lamp)
+        {
+            // Inside, from the middle to a panel: what a bulb has to fit in without touching.
+            float inside = grid.Width / (2f * MathF.Tan(MathF.PI / o.LampSides));
+            notes.Add($"A lamp of {o.LampSides} sides, {2 * (inside + o.MaxThickness):0} mm across the flats, {2 * inside:0} mm inside.");
+            if (o.Socket && (2 * inside < 70 || grid.Height < 110))
+                notes.Add("Tight for a household bulb, which is about 60 mm across and 110 mm tall: use a small bulb, and an LED - a filament bulb will soften the plastic.");
+            else if (o.Socket)
+                notes.Add("Use an LED bulb: a filament bulb runs hot enough to soften the plastic.");
+        }
 
         notes.Add("It stands upright, which is how it has to print: laid flat, every grey becomes a layer step.");
         SummaryText.Text = string.Join("\n", notes);
@@ -271,34 +320,10 @@ public partial class LithophaneDialog : ToolPanel
         Refresh();
     }
 
-    /// <summary>One of a cube lamp's other sides.</summary>
-    private void OnChooseSide(object sender, RoutedEventArgs e)
-    {
-        if (sender is not Button { Tag: string tag } || !int.TryParse(tag, out int side)) return;
-
-        var dialog = new OpenFileDialog { Filter = PictureReader.Filter, Title = $"A picture for side {side + 1}" };
-        if (dialog.ShowDialog() != true) return;
-
-        var label = side switch { 1 => Side2Text, 2 => Side3Text, _ => Side4Text };
-        try
-        {
-            others[side - 1] = PictureReader.Read(dialog.FileName);
-            label.Text = Path.GetFileName(dialog.FileName);
-            label.ToolTip = dialog.FileName;
-        }
-        catch (Exception ex)
-        {
-            others[side - 1] = null;
-            label.Text = $"could not be read: {ex.Message}";
-        }
-
-        Rebuild();
-    }
-
     private void OnChoose(object sender, RoutedEventArgs e)
     {
-        var dialog = new OpenFileDialog { Filter = PictureReader.Filter, Title = "Choose a picture" };
-        if (dialog.ShowDialog() == true) Load(dialog.FileName);
+        var dialog = new OpenFileDialog { Filter = PictureReader.Filter, Title = "Choose a picture, or several for a lamp", Multiselect = true };
+        if (dialog.ShowDialog() == true) Load(dialog.FileNames);
     }
 
     protected override void OnClosed(EventArgs e)

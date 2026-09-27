@@ -5993,13 +5993,13 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
     {
         if (IsBusy) return;
 
-        var chosen = new OpenFileDialog { Filter = PictureReader.Filter, Title = "A picture for the lithophane" };
+        var chosen = new OpenFileDialog { Filter = PictureReader.Filter, Title = "A picture for the lithophane, or several for a lamp", Multiselect = true };
         if (chosen.ShowDialog() != true) return;
 
         var colour = NextAutomaticColour();
         SceneObject? shown = null;
 
-        var dialog = new LithophaneDialog(chosen.FileName, lastLithophane, mesh =>
+        var dialog = new LithophaneDialog(chosen.FileNames, lastLithophane, mesh =>
         {
             if (mesh is null)
             {
@@ -6051,8 +6051,8 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
         var token = StartWork($"Building {dialog.PictureName}");
         try
         {
-            var sides = dialog.Sides;
-            var built = await Task.Run(() => options.Shape == LithophaneShape.Cube ? Lithophane.BuildCube(sides, options) : Lithophane.Build(picture, options), token);
+            var pictures = dialog.Pictures;
+            var built = await Task.Run(() => options.Shape == LithophaneShape.Lamp ? Lithophane.BuildLamp(pictures, options) : Lithophane.Build(picture, options), token);
 
             var o = new SceneObject(Scene.UniqueName(dialog.PictureName), built) { Colour = colour }.Centred();
             o.Position = o.Position with { Z = o.Position.Z - o.WorldBounds.Min.Z };

@@ -66,7 +66,7 @@ public class XamlLoadsTests
             try
             {
                 Mesh? shown = null;
-                var panel = new LithophaneDialog(file, new LithophaneOptions(), mesh => shown = mesh);
+                var panel = new LithophaneDialog([file], new LithophaneOptions(), mesh => shown = mesh);
 
                 // The plate is on the build plate as the panel opens, not a moment afterwards.
                 Assert.NotNull(shown);
