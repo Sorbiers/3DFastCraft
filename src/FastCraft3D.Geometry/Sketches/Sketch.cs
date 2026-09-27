@@ -205,11 +205,16 @@ public sealed class Sketch
     /// <summary>
     /// Finishes what is being drawn where it stands: closed into an outline if it has the points
     /// for one, dropped if it has not. What the right button does.
+    ///
+    /// An arc waiting to be bent is set first, through <paramref name="bend"/> - where the pointer
+    /// is, so the arc on screen is the arc kept. Without that the right button threw the arc away,
+    /// and with nothing before it the whole outline, which left no way to finish on an arc.
     /// </summary>
-    public string EndLine()
+    public string EndLine(Vector2? bend = null)
     {
         if (kind == ChainKind.Stroke) return EndStroke();
         if (Chain.Count == 0) return "";
+        if (ArcEnd is not null && bend is { } through) return SetArcAndClose(through);
         if (Chain.Count >= 3) return Close();
 
         DropChain();
@@ -312,7 +317,9 @@ public sealed class Sketch
 
             ArcEnd = onFirst ? Chain[0] : point;
             arcCloses = onFirst;
-            return "Move to bend the arc, and click to set it.";
+            return onFirst
+                ? "Move to bend the arc, and click to set it and close the outline."
+                : "Move to bend the arc, and click to set it. Right-click or Enter sets it where it is shown and closes the outline.";
         }
 
         var arc = Arc(Chain[^1], point, end, out float radius);
@@ -320,14 +327,49 @@ public sealed class Sketch
         ArcEnd = null;
         arcCloses = false;
 
-        steps.Add(Chain.Count);
+        int mark = Chain.Count;
+        steps.Add(mark);
         if (closes) arc.RemoveAt(arc.Count - 1);
         Chain.AddRange(arc);
 
-        if (closes) return Close();
+        if (closes)
+        {
+            string said = Close();
+            if (!IsDrawing) return said;
+
+            // It would not close - it crosses the outline. The arc comes off again and is left
+            // waiting to be bent, or it stayed on the end and every later try failed the same way.
+            Chain.RemoveRange(mark, Chain.Count - mark);
+            steps.RemoveAt(steps.Count - 1);
+            ArcEnd = end;
+            arcCloses = true;
+            return said + " Bend the arc another way, or press Backspace to take back where it ends.";
+        }
         return float.IsFinite(radius)
             ? $"An arc of radius {F(radius)} mm. Click where the next arc ends, or change to Line to go on straight."
             : "Straight, since the point was in line with the ends. Click where the next arc ends.";
+    }
+
+    /// <summary>
+    /// Closes the outline being drawn, if it can be one. An arc waiting to be bent is set through
+    /// <paramref name="bend"/> first, as <see cref="EndLine"/> does.
+    /// </summary>
+    public string Close(Vector2? bend)
+    {
+        if (ArcEnd is not null && bend is { } through && kind == ChainKind.Lines) return SetArcAndClose(through);
+        return Close();
+    }
+
+    /// <summary>The waiting arc set through a point, then the outline closed - unless the arc already did.</summary>
+    private string SetArcAndClose(Vector2 through)
+    {
+        bool closes = arcCloses;
+        string said = PlaceArc(through, false);
+
+        // A closing arc has closed the outline, or failed and is waiting again; either way it has
+        // said so. One that did not close leaves the outline to be closed straight back.
+        if (closes || !IsDrawing || ArcEnd is not null) return said;
+        return Chain.Count >= 3 ? Close() : said;
     }
 
     /// <summary>Closes the outline being drawn, if it can be one.</summary>

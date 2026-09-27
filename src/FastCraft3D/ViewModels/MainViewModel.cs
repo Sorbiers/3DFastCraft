@@ -200,7 +200,7 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
         InsertLithophaneCommand = Track(AsyncRelayCommand.Simple(InsertLithophane));
         HullCommand = Track(RelayCommand.Simple(HullSelection, () => Scene.Selection.Count > 0));
         BeginSketchCommand = new RelayCommand(p => BeginSketch(Enum.TryParse<SketchTool>(p as string, out var tool) ? tool : SketchTool.Line));
-        SketchCloseCommand = RelayCommand.Simple(() => SayOfSketch(sketch.Close()), () => sketch.Chain.Count >= 3);
+        SketchCloseCommand = RelayCommand.Simple(() => SayOfSketch(sketch.Close(sketchCursor)), () => sketch.Chain.Count >= 3 || sketch.ArcEnd is not null);
         SketchUndoCommand = RelayCommand.Simple(() => SayOfSketch(sketch.Undo()), () => !sketch.IsEmpty);
         SketchClearCommand = RelayCommand.Simple(() => { sketch.Clear(); SayOfSketch("Cleared. Start a new outline."); }, () => !sketch.IsEmpty);
         SketchLoadDrawingCommand = RelayCommand.Simple(PickSketchDrawing);
@@ -5529,6 +5529,14 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
     {
         // In a sketch the first Escape drops the outline half drawn, as it would in any drawing
         // program; the next leaves the sketch.
+        // An arc waiting to be bent: Escape takes back only where it ends, not the outline behind it.
+        if (openPanel is null && isSketchMode && sketch.ArcEnd is not null)
+        {
+            SketchMessage = sketch.Undo() + " Escape again drops the outline being drawn.";
+            RaiseSketch();
+            return true;
+        }
+
         if (openPanel is null && isSketchMode && sketch.IsDrawing)
         {
             sketch.DropChain();
@@ -6288,7 +6296,7 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
         SketchChanged?.Invoke();
     }
 
-    public void CloseSketch() => SayOfSketch(sketch.Close());
+    public void CloseSketch() => SayOfSketch(sketch.Close(sketchCursor));
 
     private void PickSketchDrawing()
     {
@@ -6387,7 +6395,7 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
     {
         if (!sketch.IsDrawing) return;
 
-        SayOfSketch(sketch.EndLine());
+        SayOfSketch(sketch.EndLine(sketchCursor));
     }
 
     private void SayOfSketch(string message)
