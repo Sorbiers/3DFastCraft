@@ -152,6 +152,30 @@ public static class SceneSerializer
         Write(path, dto);
     }
 
+    /// <summary>
+    /// Objects as bytes, in the project file's own form, for the Windows clipboard - so a copy in
+    /// one window of the app pastes in another, as it did in 3D Builder.
+    /// </summary>
+    public static byte[] ToBytes(IEnumerable<SceneObject> objects)
+    {
+        var dto = new SceneDto { Version = CurrentVersion, Objects = objects.Select(ToDto).ToList() };
+        using var memory = new MemoryStream();
+        using (var gzip = new GZipStream(memory, CompressionLevel.Fastest, leaveOpen: true))
+            JsonSerializer.Serialize(gzip, dto, Options);
+        return memory.ToArray();
+    }
+
+    public static List<SceneObject> FromBytes(byte[] data)
+    {
+        using var memory = new MemoryStream(data);
+        using var gzip = new GZipStream(memory, CompressionMode.Decompress);
+        var dto = JsonSerializer.Deserialize<SceneDto>(gzip, Options)
+                  ?? throw new InvalidDataException("There is nothing readable on the clipboard.");
+        if (dto.Version > CurrentVersion)
+            throw new InvalidDataException("These were copied from a newer version of 3DFastCraft.");
+        return dto.Objects?.Select(FromDto).ToList() ?? [];
+    }
+
     // --- Plumbing ---------------------------------------------------------------------
 
     private static SceneDto Read(string path)

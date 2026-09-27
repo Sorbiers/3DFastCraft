@@ -313,7 +313,7 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
             () => lastRepeatable?.CanExecute(lastRepeatableParameter) ?? false);
         CopyCommand = RelayCommand.Simple(Copy, () => Scene.Selection.Count > 0);
         CutCommand = RelayCommand.Simple(Cut, () => Scene.Selection.Count > 0);
-        PasteCommand = RelayCommand.Simple(Paste, () => clipboard.Count > 0);
+        PasteCommand = RelayCommand.Simple(Paste, () => clipboard.Count > 0 || SharedClipboardHasObjects());
         ImportCommand = RelayCommand.Simple(Import);
         ExportCommand = RelayCommand.Simple(Export, () => Scene.Objects.Count > 0);
         ExportSessionCommand = AsyncRelayCommand.Simple(ExportSession, () => Undo.History.Count > 0);
@@ -4647,7 +4647,11 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
         }
     }
 
-    public bool ScaleInLengths => !scaleInPercent;
+    public bool ScaleInLengths
+    {
+        get => !scaleInPercent;
+        set => ScaleInPercent = !value;
+    }
 
     public float ObjectPercentX { get => PercentOf(Axis.X); set => ResizeToPercent(Axis.X, value); }
     public float ObjectPercentY { get => PercentOf(Axis.Y); set => ResizeToPercent(Axis.Y, value); }
@@ -7249,6 +7253,7 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
 
         clipboard.Clear();
         foreach (var o in selection) clipboard.Add(o.Clone());
+        ShareClipboard();
 
         Status = selection.Count == 1 ? "Copied 1 object" : $"Copied {selection.Count} objects";
     }
@@ -7261,6 +7266,7 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
 
         clipboard.Clear();
         foreach (var o in selection) clipboard.Add(o.Clone());
+        ShareClipboard();
 
         int taken = selection.Count;
         Undo.Execute(new DeleteObjectsCommand(selection));
@@ -7283,6 +7289,7 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
     /// </summary>
     private void Paste()
     {
+        TakeSharedClipboard();
         if (clipboard.Count == 0) return;
 
         var name = Namer();
@@ -7301,6 +7308,69 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
         Status = pasted.Count == 1
             ? "Pasted 1 object where it came from"
             : $"Pasted {pasted.Count} objects where they came from";
+    }
+
+    // --- The clipboard shared with other windows of the app ---------------------------
+
+    /// <summary>What the objects are put on the Windows clipboard as. Only this app reads it.</summary>
+    private const string ClipboardFormat = "3DFastCraft.Objects";
+
+    /// <summary>
+    /// The mark put with this window's last copy. A paste that finds it on the clipboard uses the
+    /// copies already held here rather than reading them back.
+    /// </summary>
+    private Guid sharedCopy;
+
+    /// <summary>
+    /// Puts the copied objects on the Windows clipboard as well, so another window of the app can
+    /// paste them. Best effort: the clipboard can be held by another program for a moment, and a
+    /// copy within this window still works without it.
+    /// </summary>
+    private void ShareClipboard()
+    {
+        try
+        {
+            sharedCopy = Guid.NewGuid();
+            var bytes = SceneSerializer.ToBytes(clipboard);
+            var data = new System.Windows.DataObject();
+            data.SetData(ClipboardFormat, new MemoryStream([.. sharedCopy.ToByteArray(), .. bytes]));
+            System.Windows.Clipboard.SetDataObject(data, copy: true);
+        }
+        catch (Exception)
+        {
+            // Left to this window alone.
+        }
+    }
+
+    private static bool SharedClipboardHasObjects()
+    {
+        try { return System.Windows.Clipboard.ContainsData(ClipboardFormat); }
+        catch (Exception) { return false; }
+    }
+
+    /// <summary>Objects copied in another window of the app, taken in place of this window's own.</summary>
+    private void TakeSharedClipboard()
+    {
+        try
+        {
+            if (System.Windows.Clipboard.GetData(ClipboardFormat) is not MemoryStream stream) return;
+
+            var all = stream.ToArray();
+            if (all.Length <= 16) return;
+            var mark = new Guid(all.AsSpan(0, 16));
+            if (mark == sharedCopy && clipboard.Count > 0) return;
+
+            var objects = SceneSerializer.FromBytes(all[16..]);
+            if (objects.Count == 0) return;
+
+            clipboard.Clear();
+            clipboard.AddRange(objects);
+            sharedCopy = mark;
+        }
+        catch (Exception ex)
+        {
+            Status = $"Could not read what was copied in the other window: {ex.Message}";
+        }
     }
 
     private void InvertSelection()

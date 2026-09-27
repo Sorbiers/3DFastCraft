@@ -2842,7 +2842,6 @@
                                      ToolTip="Type a value to set it, or +=5 / -=5 to change by that much. With the As one button off, every selected object gets it."
                                      Text="{Binding GroupSizeZ, Converter={StaticResource Mixed}, ConverterParameter=0.####, UpdateSourceTrigger=LostFocus}" />
                         </StackPanel>
-                        <TextBlock Text="{Binding UnitLabel}" Style="{StaticResource GizmoUnit}" />
                         </StackPanel>
 
                         <!-- The same in per cent: of the size it came in at for one object, of the
@@ -2879,15 +2878,18 @@
                                          ToolTip="As one: per cent of the selection as it stands, 150 makes it half as big again. Each on its own: per cent of the size each came in at."
                                          Text="{Binding GroupPercentZ, Converter={StaticResource Mixed}, ConverterParameter=0.##, UpdateSourceTrigger=LostFocus}" />
                             </StackPanel>
-                            <TextBlock Text="%" Style="{StaticResource GizmoUnit}" />
                         </StackPanel>
 
-                        <ToggleButton Style="{StaticResource ModeButton}" Margin="4,0,0,0"
-                                      ToolTip="Resize in per cent rather than in lengths. Either way, *=1.5 or /=2 typed in a box multiplies or divides what is there."
-                                      AutomationProperties.Name="Resize in per cent"
-                                      IsChecked="{Binding ScaleInPercent, Mode=TwoWay}">
-                            <TextBlock Text="%" FontWeight="SemiBold" FontSize="13" Foreground="#FF33383F" />
-                        </ToggleButton>
+                        <!-- The unit is the switch: lengths or per cent, as Snap picks its step. -->
+                        <StackPanel Orientation="Horizontal" Margin="8,0,0,0"
+                                    ToolTip="Resize in lengths or in per cent. Either way, *=1.5 or /=2 typed in a box multiplies or divides what is there.">
+                            <RadioButton Content="{Binding UnitLabel}" GroupName="ResizeUnit" VerticalAlignment="Center" Margin="0,0,7,0"
+                                         AutomationProperties.Name="Resize in lengths"
+                                         IsChecked="{Binding ScaleInLengths, Mode=TwoWay}" />
+                            <RadioButton Content="%" GroupName="ResizeUnit" VerticalAlignment="Center" Margin="0,0,3,0"
+                                         AutomationProperties.Name="Resize in per cent"
+                                         IsChecked="{Binding ScaleInPercent, Mode=TwoWay}" />
+                        </StackPanel>
 
                         <!-- The same numbers at the scene's scale, and editable: type metres
                              here or millimetres there and each follows the other. Only the
