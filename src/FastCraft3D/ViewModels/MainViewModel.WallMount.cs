@@ -86,6 +86,9 @@ public partial class MainViewModel
         mountFace = face;
         mountPlacement = SurfacePlacement.Middle;
         Raise(nameof(HasWallMountFace));
+        Raise(nameof(KeyholeAcross));
+        Raise(nameof(KeyholeUp));
+        Raise(nameof(KeyholeTurn));
         KeyholesChanged();
         return true;
     }
@@ -99,8 +102,31 @@ public partial class MainViewModel
         {
             if (mountPlacement == value) return;
             mountPlacement = value;
+            Raise(nameof(KeyholeAcross));
+            Raise(nameof(KeyholeUp));
+            Raise(nameof(KeyholeTurn));
             WallMountChanged?.Invoke();
+            PlacementChanged?.Invoke();
         }
+    }
+
+    /// <summary>How far the keyholes sit from the middle of the face, along it - the handles' numbers, as in Emboss.</summary>
+    public float KeyholeAcross
+    {
+        get => mountPlacement.OffsetMm.X;
+        set => WallMountPlacement = mountPlacement with { OffsetMm = new Vector2(Rounded(value), mountPlacement.OffsetMm.Y) };
+    }
+
+    public float KeyholeUp
+    {
+        get => mountPlacement.OffsetMm.Y;
+        set => WallMountPlacement = mountPlacement with { OffsetMm = new Vector2(mountPlacement.OffsetMm.X, Rounded(value)) };
+    }
+
+    public float KeyholeTurn
+    {
+        get => mountPlacement.AngleDegrees;
+        set => WallMountPlacement = mountPlacement with { AngleDegrees = Rounded(value) };
     }
 
     /// <summary>
@@ -131,7 +157,7 @@ public partial class MainViewModel
         Keyholes.Problem(keyholes)
         ?? (mountFace is null
             ? "Click the face of the part that goes against the wall."
-            : $"{keyholes.Count} keyhole{(keyholes.Count == 1 ? "" : "s")} for {(keyholes.Studs ? "printed wall studs" : $"{keyholes.Head:0.#} mm screw heads")}, "
+            : $"{keyholes.Count} keyhole{(keyholes.Count == 1 ? "" : "s")}{(keyholes.Count > 1 ? keyholes.Vertical ? " one above another" : " side by side" : "")} for {(keyholes.Studs ? "printed wall studs" : $"{keyholes.Head:0.#} mm screw heads")}, "
               + $"cut {keyholes.Depth:0.#} mm deep: the part has to be thicker than that. Drag the handles to place them; the slots run up from the round holes.");
 
     private void KeyholesChanged()
@@ -139,6 +165,8 @@ public partial class MainViewModel
         Raise(nameof(WallMountSummary));
         Raise(nameof(KeyholeStuds));
         Raise(nameof(ScrewKeyholes));
+        Raise(nameof(KeyholeVertical));
+        Raise(nameof(KeyholeHorizontal));
         WallMountChanged?.Invoke();
         PlacementChanged?.Invoke();
     }
@@ -154,6 +182,11 @@ public partial class MainViewModel
     public float KeyholeWallScrew { get => keyholes.WallScrew; set { keyholes = keyholes with { WallScrew = Math.Clamp(value, 2f, 6f) }; KeyholesChanged(); } }
     /// <summary>Hung on screw heads rather than studs, for the screw rows to show.</summary>
     public bool ScrewKeyholes => !keyholes.Studs;
+
+    /// <summary>The keyholes one above another up the face, for a tall narrow part, rather than side by side.</summary>
+    public bool KeyholeVertical { get => keyholes.Vertical; set { keyholes = keyholes with { Vertical = value }; KeyholesChanged(); } }
+
+    public bool KeyholeHorizontal { get => !keyholes.Vertical; set { if (value) KeyholeVertical = false; } }
 
     public bool KeyholeTemplate { get => keyholes.Template; set { keyholes = keyholes with { Template = value }; KeyholesChanged(); } }
 

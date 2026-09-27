@@ -147,6 +147,7 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
     private readonly List<SceneObject> clipboard = new();
     private GizmoMode gizmoMode = GizmoMode.Move;
     private bool uniformScale = true;
+    private bool scaleInPercent;
     private MeasureUnit unit = MeasureUnit.Default;
     private bool snapRotation = true;
     private double snapStep;
@@ -932,11 +933,13 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
     /// share or nothing at all, and nothing plus five is not a number - so adding to the box would
     /// do nothing exactly when the parts differ, which is when anyone would type it.
     /// </summary>
-    public bool ChangeEachBy(string property, float delta)
+    public bool ChangeEachBy(string property, float delta, bool times = false)
     {
         if (aroundSelectionCentre || Scene.Selection.Count < 2 || !float.IsFinite(delta)) return false;
 
-        float d = unit.To(delta);
+        // Times a factor has no unit; plus an amount is in the boxes' unit.
+        float d = times ? delta : unit.To(delta);
+        float By(float value, float amount) => times ? value * delta : value + amount;
         var selection = Scene.Selection;
         bool known = true;
         bool moving = property is nameof(GroupX) or nameof(GroupY) or nameof(GroupZ);
@@ -946,15 +949,18 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
         {
             switch (property)
             {
-                case nameof(GroupX): foreach (var o in selection) o.PositionX += d; break;
-                case nameof(GroupY): foreach (var o in selection) o.PositionY += d; break;
-                case nameof(GroupZ): foreach (var o in selection) o.PositionZ += d; break;
-                case nameof(GroupSizeX): foreach (var o in selection) ResizeObject(o, Axis.X, MathF.Max(0.01f, o.SizeX + d)); break;
-                case nameof(GroupSizeY): foreach (var o in selection) ResizeObject(o, Axis.Y, MathF.Max(0.01f, o.SizeY + d)); break;
-                case nameof(GroupSizeZ): foreach (var o in selection) ResizeObject(o, Axis.Z, MathF.Max(0.01f, o.SizeZ + d)); break;
-                case nameof(GroupRoll): foreach (var o in selection) o.RotationX = GizmoMath.NormaliseDegrees(o.RotationX + delta); break;
-                case nameof(GroupPitch): foreach (var o in selection) o.RotationY = GizmoMath.NormaliseDegrees(o.RotationY + delta); break;
-                case nameof(GroupYaw): foreach (var o in selection) o.RotationZ = GizmoMath.NormaliseDegrees(o.RotationZ + delta); break;
+                case nameof(GroupX): foreach (var o in selection) o.PositionX = By(o.PositionX, d); break;
+                case nameof(GroupY): foreach (var o in selection) o.PositionY = By(o.PositionY, d); break;
+                case nameof(GroupZ): foreach (var o in selection) o.PositionZ = By(o.PositionZ, d); break;
+                case nameof(GroupSizeX): foreach (var o in selection) ResizeObject(o, Axis.X, MathF.Max(0.01f, By(o.SizeX, d))); break;
+                case nameof(GroupSizeY): foreach (var o in selection) ResizeObject(o, Axis.Y, MathF.Max(0.01f, By(o.SizeY, d))); break;
+                case nameof(GroupSizeZ): foreach (var o in selection) ResizeObject(o, Axis.Z, MathF.Max(0.01f, By(o.SizeZ, d))); break;
+                case nameof(GroupPercentX): foreach (var o in selection) ResizeObject(o, Axis.X, AtPercent(o, Axis.X, MathF.Max(0.01f, By(ScaleOn(o, Axis.X) * 100f, delta)))); break;
+                case nameof(GroupPercentY): foreach (var o in selection) ResizeObject(o, Axis.Y, AtPercent(o, Axis.Y, MathF.Max(0.01f, By(ScaleOn(o, Axis.Y) * 100f, delta)))); break;
+                case nameof(GroupPercentZ): foreach (var o in selection) ResizeObject(o, Axis.Z, AtPercent(o, Axis.Z, MathF.Max(0.01f, By(ScaleOn(o, Axis.Z) * 100f, delta)))); break;
+                case nameof(GroupRoll): foreach (var o in selection) o.RotationX = GizmoMath.NormaliseDegrees(By(o.RotationX, delta)); break;
+                case nameof(GroupPitch): foreach (var o in selection) o.RotationY = GizmoMath.NormaliseDegrees(By(o.RotationY, delta)); break;
+                case nameof(GroupYaw): foreach (var o in selection) o.RotationZ = GizmoMath.NormaliseDegrees(By(o.RotationZ, delta)); break;
                 default: known = false; break;
             }
         }
@@ -1711,7 +1717,7 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
     /// underneath and leaving it to the pointer to decide which was meant.
     /// </summary>
     public bool IsToolRunning => isSplitMode || isEngraveMode || isEmbossMode || isWallMountMode || isLayMode || isExtrudeMode || isConnectMode || isSketchMode || isPivotMode
-                                 || isAlignFaceMode || isCentreFaceMode || openPanel is not null;
+                                 || isAlignFaceMode || isCentreFaceMode || isSurfaceInfoMode || openPanel is not null;
 
     /// <summary>
     /// Whether a tool has the object in hand, counting the two that do not take the handles
@@ -1798,7 +1804,6 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
             {
                 alignFace = null;
                 alignFaceTargetLabel = null;
-                alignFaceModeX = alignFaceModeY = alignFaceModeZ = null;
                 RaiseAlignFace();
             }
             Raise(nameof(IsToolRunning));
@@ -1843,8 +1848,9 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
         alignFace = null;
         alignFacePicked = false;
         alignFaceTargetLabel = null;
-        alignFaceModeX = alignFaceModeY = alignFaceModeZ = null;
 
+        // The axes are not cleared: the buttons in the panel stay as they were last left, and
+        // clearing these behind them showed a choice that was not there and kept Apply greyed out.
         IsAlignFaceMode = true;
         RaiseAlignFace();
         Status = "Click a face on any object to align the selection against";
@@ -1879,6 +1885,7 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
         alignFacePicked = true;
         alignFaceTargetLabel = target.Name;
         RaiseAlignFace();
+        System.Windows.Input.CommandManager.InvalidateRequerySuggested();
 
         Status = $"Picked a face on {target.Name} - choose how X, Y and Z should line up, then Apply";
         return true;
@@ -1893,6 +1900,8 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
             case Axis.Y: alignFaceModeY = mode; break;
             default: alignFaceModeZ = mode; break;
         }
+
+        System.Windows.Input.CommandManager.InvalidateRequerySuggested();
     }
 
     /// <summary>
@@ -2723,8 +2732,13 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
         }
 
         var before = TransformState.Capture(target);
+
+        // The pointer leaving the row comes after the click that closed the panel - the row goes
+        // from under it - and putting the part back then undid the turn just made.
+        bool settled = false;
         var panel = new BestFaceDialog(target.Name, choices, choice =>
         {
+            if (settled) return;
             if (choice is null) before.ApplyTo(target);
             else TurnOnto(target, before, choice.Normal);
 
@@ -2732,6 +2746,7 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
         });
 
         bool accepted = panel.ShowDialog() == true && panel.Result is not null;
+        settled = true;
 
         // Whatever the hovering left on the plate, the undo step has to start from where the user
         // did - the same rule the smoothing preview follows.
@@ -4528,6 +4543,66 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
     }
 
     /// <summary>
+    /// The resize boxes in per cent rather than in lengths. One object's per cent is of the size
+    /// it came in at - its scale - so 100 takes it back to that. Several as one have no size they
+    /// came in at, so theirs is of the size of the lot as it stands: 100 until something is typed.
+    /// </summary>
+    public bool ScaleInPercent
+    {
+        get => scaleInPercent;
+        set
+        {
+            Set(ref scaleInPercent, value);
+            Raise(nameof(ScaleInLengths));
+        }
+    }
+
+    public bool ScaleInLengths => !scaleInPercent;
+
+    public float ObjectPercentX { get => PercentOf(Axis.X); set => ResizeToPercent(Axis.X, value); }
+    public float ObjectPercentY { get => PercentOf(Axis.Y); set => ResizeToPercent(Axis.Y, value); }
+    public float ObjectPercentZ { get => PercentOf(Axis.Z); set => ResizeToPercent(Axis.Z, value); }
+
+    public float GroupPercentX { get => GroupPercent(Axis.X); set => GroupToPercent(Axis.X, value); }
+    public float GroupPercentY { get => GroupPercent(Axis.Y); set => GroupToPercent(Axis.Y, value); }
+    public float GroupPercentZ { get => GroupPercent(Axis.Z); set => GroupToPercent(Axis.Z, value); }
+
+    private static float ScaleOn(SceneObject o, Axis axis) =>
+        MathF.Abs(axis switch { Axis.X => o.Scale.X, Axis.Y => o.Scale.Y, _ => o.Scale.Z });
+
+    private static float SizeOn(SceneObject o, Axis axis) =>
+        axis switch { Axis.X => o.SizeX, Axis.Y => o.SizeY, _ => o.SizeZ };
+
+    /// <summary>The length on an axis that is the given per cent of the size the object came in at.</summary>
+    private static float AtPercent(SceneObject o, Axis axis, float percent)
+    {
+        float scale = ScaleOn(o, axis);
+        return scale < 1e-6f ? SizeOn(o, axis) : SizeOn(o, axis) / scale * percent / 100f;
+    }
+
+    private float PercentOf(Axis axis) => Selected is { } o ? ScaleOn(o, axis) * 100f : 100f;
+
+    private void ResizeToPercent(Axis axis, float percent)
+    {
+        if (Selected is not { } o || !float.IsFinite(percent) || percent <= 0f) return;
+        ResizeSelected(axis, AtPercent(o, axis, percent));
+    }
+
+    private float GroupPercent(Axis axis) => aroundSelectionCentre ? 100f : Shared(o => ScaleOn(o, axis) * 100f);
+
+    private void GroupToPercent(Axis axis, float percent)
+    {
+        if (!float.IsFinite(percent) || percent <= 0f || Scene.Selection.Count == 0) return;
+
+        OnBed(moving: false, together: aroundSelectionCentre, () =>
+        {
+            if (aroundSelectionCentre) ResizeGroup(axis, GroupSpan(axis) * percent / 100f);
+            else foreach (var o in Scene.Selection) ResizeObject(o, axis, AtPercent(o, axis, percent));
+        });
+        RaiseGroup();
+    }
+
+    /// <summary>
     /// Sets one of the selected object's own dimensions, taking the other two with it when the
     /// proportions are locked.
     /// </summary>
@@ -4641,6 +4716,12 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
         Raise(nameof(ObjectSizeX));
         Raise(nameof(ObjectSizeY));
         Raise(nameof(ObjectSizeZ));
+        Raise(nameof(ObjectPercentX));
+        Raise(nameof(ObjectPercentY));
+        Raise(nameof(ObjectPercentZ));
+        Raise(nameof(GroupPercentX));
+        Raise(nameof(GroupPercentY));
+        Raise(nameof(GroupPercentZ));
     }
 
     /// <summary>
@@ -5378,6 +5459,8 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
         else if (IsPivotMode) IsPivotMode = false;
         else if (IsAlignFaceMode) IsAlignFaceMode = false;
         else if (IsCentreFaceMode) IsCentreFaceMode = false;
+        else if (IsWallMountMode) IsWallMountMode = false;
+        else if (IsSurfaceInfoMode) IsSurfaceInfoMode = false;
         else if (IsSubtractMode) IsSubtractMode = false;
         else return false;
 
@@ -5866,7 +5949,8 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
         var token = StartWork($"Building {dialog.PictureName}");
         try
         {
-            var built = await Task.Run(() => Lithophane.Build(picture, options), token);
+            var sides = dialog.Sides;
+            var built = await Task.Run(() => options.Shape == LithophaneShape.Cube ? Lithophane.BuildCube(sides, options) : Lithophane.Build(picture, options), token);
 
             var o = new SceneObject(Scene.UniqueName(dialog.PictureName), built) { Colour = colour }.Centred();
             o.Position = o.Position with { Z = o.Position.Z - o.WorldBounds.Min.Z };

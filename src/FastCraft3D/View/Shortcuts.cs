@@ -26,6 +26,7 @@ public enum KeyAction
     ShowAll,
     LockSelection,
     UnlockAll,
+    Xray,
     ShowShortcuts
 }
 
@@ -89,6 +90,8 @@ public static class Shortcuts
         new("Edit", "Lock the selection, so nothing can select or change it", Key.L, Action: KeyAction.LockSelection),
         new("Edit", "Unlock everything", Key.L, ModifierKeys.Alt, Action: KeyAction.UnlockAll),
         new("Edit", "Repeat the last tool, with what it was last given", Key.Space, Ctrl, "RepeatLastCommand"),
+        new("Edit", "Subtract: the last picked from the rest", Key.OemMinus, Ctrl, "BeginSubtractCommand", Text: "Ctrl+-"),
+        new("Edit", "Merge the selection into one solid", Key.OemPlus, Ctrl, "BooleanCommand", "Union", Text: "Ctrl+="),
 
         new("Move, rotate, resize", "Move handles", Key.M, Action: KeyAction.Move),
         new("Move, rotate, resize", "Rotate handles", Key.R, Action: KeyAction.Rotate),
@@ -113,6 +116,7 @@ public static class Shortcuts
         new("Dragging a resize handle", "Snap the size to whole millimetres", Text: "Shift"),
 
         new("View", "Zoom to fit", Key.F, Action: KeyAction.ZoomToFit),
+        new("View", "X-ray: fade all but the selection", Key.X, Action: KeyAction.Xray),
         new("View", "Look from the top", Key.D1, Action: KeyAction.ViewTop),
         new("View", "Look from the front", Key.D2, Action: KeyAction.ViewFront),
         new("View", "Look from the right", Key.D3, Action: KeyAction.ViewRight),
@@ -124,7 +128,8 @@ public static class Shortcuts
 
         new("Number boxes", "Apply what is typed", Text: "Enter"),
         new("Number boxes", "Step by one unit; Shift for ten, Ctrl for a tenth", Text: "Up / Down"),
-        new("Number boxes", "Change by an amount instead of to it", Text: "+=5   -=5")
+        new("Number boxes", "Change by an amount instead of to it", Text: "+=5   -=5"),
+        new("Number boxes", "Multiply or divide what is there", Text: "*=1.5   /=2")
     ];
 
     /// <summary>The table under its headings, in the order it is written.</summary>

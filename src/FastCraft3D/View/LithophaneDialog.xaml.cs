@@ -81,6 +81,7 @@ public partial class LithophaneDialog : ToolPanel
         NegativeBox.IsChecked = start.Negative;
         FlatBox.IsChecked = start.Shape == LithophaneShape.Flat;
         CurvedBox.IsChecked = start.Shape == LithophaneShape.Curved;
+        CubeBox.IsChecked = start.Shape == LithophaneShape.Cube;
         loading = false;
 
         SyncSliders();
@@ -92,6 +93,12 @@ public partial class LithophaneDialog : ToolPanel
 
     /// <summary>The picture itself, for the caller to build the real plate from.</summary>
     public Greyscale? Picture { get; private set; }
+
+    /// <summary>A cube lamp's other three sides; null for a side that carries the first picture.</summary>
+    private readonly Greyscale?[] others = new Greyscale?[3];
+
+    /// <summary>A cube lamp's four pictures, the first picture standing in for any side not chosen.</summary>
+    public IReadOnlyList<Greyscale> Sides => Picture is { } first ? [first, .. others.Select(o => o ?? first)] : [];
 
     /// <summary>What it is called, for the object's name.</summary>
     public string PictureName { get; private set; } = "Lithophane";
@@ -136,7 +143,7 @@ public partial class LithophaneDialog : ToolPanel
             Gamma = Number(GammaBox, fallback.Gamma),
             Angle = Number(AngleBox, fallback.Angle),
             Negative = NegativeBox.IsChecked == true,
-            Shape = CurvedBox.IsChecked == true ? LithophaneShape.Curved : LithophaneShape.Flat
+            Shape = CubeBox.IsChecked == true ? LithophaneShape.Cube : CurvedBox.IsChecked == true ? LithophaneShape.Curved : LithophaneShape.Flat
         }.Sane();
 
         static float Number(TextBox box, float otherwise) =>
@@ -162,6 +169,7 @@ public partial class LithophaneDialog : ToolPanel
         bool curved = o.Shape == LithophaneShape.Curved;
         AngleBox.IsEnabled = curved;
         AngleSlider.IsEnabled = curved;
+        SidesPanel.Visibility = o.Shape == LithophaneShape.Cube ? Visibility.Visible : Visibility.Collapsed;
         AddButton.IsEnabled = Picture is not null;
 
         if (Picture is not { } picture)
@@ -179,7 +187,9 @@ public partial class LithophaneDialog : ToolPanel
         // Coarser than what will be built, so typing into a box does not stop to lay out a
         // quarter of a million triangles between one keystroke and the next.
         float coarse = MathF.Max(o.Pitch, o.Width / PreviewSamples);
-        preview(Lithophane.Build(picture, o with { Pitch = coarse }));
+        preview(o.Shape == LithophaneShape.Cube
+            ? Lithophane.BuildCube(Sides, o with { Pitch = MathF.Max(coarse, o.Width / (PreviewSamples / 2f)) })
+            : Lithophane.Build(picture, o with { Pitch = coarse }));
 
         int greys = Lithophane.GreyLevels(o);
         var notes = new List<string>
@@ -259,6 +269,30 @@ public partial class LithophaneDialog : ToolPanel
     {
         if (!syncing) SyncSliders();
         Refresh();
+    }
+
+    /// <summary>One of a cube lamp's other sides.</summary>
+    private void OnChooseSide(object sender, RoutedEventArgs e)
+    {
+        if (sender is not Button { Tag: string tag } || !int.TryParse(tag, out int side)) return;
+
+        var dialog = new OpenFileDialog { Filter = PictureReader.Filter, Title = $"A picture for side {side + 1}" };
+        if (dialog.ShowDialog() != true) return;
+
+        var label = side switch { 1 => Side2Text, 2 => Side3Text, _ => Side4Text };
+        try
+        {
+            others[side - 1] = PictureReader.Read(dialog.FileName);
+            label.Text = Path.GetFileName(dialog.FileName);
+            label.ToolTip = dialog.FileName;
+        }
+        catch (Exception ex)
+        {
+            others[side - 1] = null;
+            label.Text = $"could not be read: {ex.Message}";
+        }
+
+        Rebuild();
     }
 
     private void OnChoose(object sender, RoutedEventArgs e)

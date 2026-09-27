@@ -189,9 +189,28 @@
             <TextBlock Text="Shape" Style="{DynamicResource FieldLabel}" Width="68" />
             <RadioButton x:Name="FlatBox" GroupName="LithophaneShape" Content="Flat" Margin="0,0,10,0" VerticalAlignment="Center"
                          Checked="OnChanged" AutomationProperties.AutomationId="LithophaneFlat" />
-            <RadioButton x:Name="CurvedBox" GroupName="LithophaneShape" Content="Curved" VerticalAlignment="Center"
+            <RadioButton x:Name="CurvedBox" GroupName="LithophaneShape" Content="Curved" Margin="0,0,10,0" VerticalAlignment="Center"
                          Checked="OnChanged" AutomationProperties.AutomationId="LithophaneCurved"
                          ToolTip="Bent round a cylinder, the picture on the outside - for a shade with the lamp inside it" />
+            <RadioButton x:Name="CubeBox" GroupName="LithophaneShape" Content="Cube lamp" VerticalAlignment="Center"
+                         Checked="OnChanged" AutomationProperties.AutomationId="LithophaneCube"
+                         ToolTip="Four panels round a square lamp, a picture on each, on a base with a hole for the light" />
+        </StackPanel>
+
+        <!-- The other three sides of a cube lamp; a side left empty carries the first picture. -->
+        <StackPanel x:Name="SidesPanel" Margin="68,6,0,0" Visibility="Collapsed">
+            <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
+                <Button Content="Side 2" Tag="1" Style="{DynamicResource PanelButton}" Click="OnChooseSide" />
+                <TextBlock x:Name="Side2Text" Text="the first picture" VerticalAlignment="Center" Margin="6,0,0,0" MaxWidth="110" TextTrimming="CharacterEllipsis" Foreground="#FF5A5F66" />
+            </StackPanel>
+            <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
+                <Button Content="Side 3" Tag="2" Style="{DynamicResource PanelButton}" Click="OnChooseSide" />
+                <TextBlock x:Name="Side3Text" Text="the first picture" VerticalAlignment="Center" Margin="6,0,0,0" MaxWidth="110" TextTrimming="CharacterEllipsis" Foreground="#FF5A5F66" />
+            </StackPanel>
+            <StackPanel Orientation="Horizontal">
+                <Button Content="Side 4" Tag="3" Style="{DynamicResource PanelButton}" Click="OnChooseSide" />
+                <TextBlock x:Name="Side4Text" Text="the first picture" VerticalAlignment="Center" Margin="6,0,0,0" MaxWidth="110" TextTrimming="CharacterEllipsis" Foreground="#FF5A5F66" />
+            </StackPanel>
         </StackPanel>
 
         <Grid Style="{StaticResource LithoRow}">

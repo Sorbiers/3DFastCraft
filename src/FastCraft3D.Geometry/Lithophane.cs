@@ -14,6 +14,9 @@ public enum LithophaneShape
     /// <summary>A flat plate, standing on its bottom edge.</summary>
     Flat,
 
+    /// <summary>Four flat panels round a square lamp, a picture on each, on a base with a hole for the light.</summary>
+    Cube,
+
     /// <summary>Bent round part of a cylinder, the picture on the outside of the curve.</summary>
     Curved
 }
@@ -301,6 +304,77 @@ public static class Lithophane
         }
 
         return new Mesh(positions, indices);
+    }
+
+    /// <summary>
+    /// A square lamp: four flat panels, one picture each, facing out; a post at each corner that
+    /// the panels' ends run into; a base with a hole in it for the light; and a rim round the top.
+    /// Every panel is made to the first picture's proportions - the others are stretched to it -
+    /// so the four are the same size and the box is square. The pieces overlap rather than meet,
+    /// and are joined as one.
+    /// </summary>
+    public static Mesh BuildCube(IReadOnlyList<Greyscale> sides, LithophaneOptions options)
+    {
+        var o = options.Sane() with { Shape = LithophaneShape.Flat };
+        var first = sides[0];
+        var panels = Enumerable.Range(0, 4).Select(k =>
+        {
+            var picture = k < sides.Count ? sides[k] : first;
+            return Build(picture.Width == first.Width && picture.Height == first.Height ? picture : Stretched(picture, first.Width, first.Height), o);
+        }).ToList();
+
+        var size = panels[0].ComputeBounds();
+        float width = size.Size.X, height = size.Size.Z, thick = o.MaxThickness;
+        float half = width / 2f + thick;     // the box's outside, half across
+        const float baseThick = 2f, rim = 2f, over = 0.5f;
+
+        var pieces = new List<Mesh>();
+        for (int k = 0; k < 4; k++)
+        {
+            // A plate is read from its flat back, the relief behind it, so each panel's back is the
+            // outside of the box and its relief the inside - as a lithophane lamp is made.
+            var turn = Matrix4x4.CreateRotationZ(k * MathF.PI / 2f);
+            var at = Vector3.Transform(new Vector3(0, -half, 0), turn);
+            pieces.Add(MeshTransform.Transformed(panels[k], turn * Matrix4x4.CreateTranslation(at.X, at.Y, baseThick - 0.01f)));
+        }
+
+        // Corner posts a hair wider than the walls, so their faces never lie in a panel's.
+        float inside = half - thick - over, outside = half + over;
+        foreach (var (sx, sy) in new[] { (1, 1), (-1, 1), (-1, -1), (1, -1) })
+        {
+            var a = new Vector3(sx * inside, sy * inside, 0);
+            var b = new Vector3(sx * outside, sy * outside, baseThick + height);
+            pieces.Add(Box(Vector3.Min(a, b), Vector3.Max(a, b)));
+        }
+
+        // The base, a round hole in it for the light, and the rim round the top.
+        pieces.Add(Frame(outside, inside - 3f, 0, baseThick, round: true));
+        pieces.Add(Frame(outside, inside, baseThick + height - 0.01f, baseThick + height + rim, round: false));
+
+        return Csg.ManifoldCsg.UnionAll(pieces) ?? Mesh.Combine(pieces);
+
+        static Mesh Box(Vector3 lo, Vector3 hi) => MeshTransform.Transformed(Primitives.Box(hi.X - lo.X, hi.Y - lo.Y, hi.Z - lo.Z),
+            Matrix4x4.CreateTranslation((lo + hi) / 2f));
+
+        // A square plate with a hole through it, round or square.
+        static Mesh Frame(float outer, float hole, float z0, float z1, bool round)
+        {
+            var plate = Box(new Vector3(-outer, -outer, z0), new Vector3(outer, outer, z1));
+            var cut = round
+                ? MeshTransform.Transformed(Primitives.Prism(hole, z1 - z0 + 2f, 64), Matrix4x4.CreateTranslation(0, 0, (z0 + z1) / 2f))
+                : Box(new Vector3(-hole, -hole, z0 - 1f), new Vector3(hole, hole, z1 + 1f));
+            return Csg.ManifoldCsg.Subtract(plate, cut) ?? plate;
+        }
+    }
+
+    /// <summary>A picture sampled to another size, so four pictures make four panels the same size.</summary>
+    private static Greyscale Stretched(Greyscale picture, int width, int height)
+    {
+        var samples = new float[width * height];
+        for (int y = 0; y < height; y++)
+            for (int x = 0; x < width; x++)
+                samples[y * width + x] = Sample(picture, x / (float)Math.Max(1, width - 1), 1f - y / (float)Math.Max(1, height - 1));
+        return new Greyscale(width, height, samples);
     }
 
     /// <summary>The picture read between its samples, with u across and v up from its bottom edge.</summary>

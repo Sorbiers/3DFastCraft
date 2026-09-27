@@ -17,7 +17,7 @@ namespace FastCraft3D.Generators.Fasteners;
 /// <param name="Template">A strip to hold on the wall and drill through.</param>
 public sealed record KeyholeOptions(
     int Count = 2, float Apart = 40f, float Head = 8f, float Shank = 4f, float Slot = 10f, float Lip = 1.6f,
-    float HeadRoom = 3f, bool Studs = false, float WallScrew = 3.5f, bool Template = false)
+    float HeadRoom = 3f, bool Studs = false, float WallScrew = 3.5f, bool Template = false, bool Vertical = false)
 {
     /// <summary>A stud's neck: the wall screw through it with a wall round it a screw will not split.</summary>
     public float Neck => WallScrew + 2.4f;
@@ -44,11 +44,16 @@ public static class Keyholes
     public static string? Problem(KeyholeOptions o)
     {
         if (o.ShankSize >= o.HeadSize - 1) return "The shank is as wide as the head: the head would pull through the slot.";
-        if (o.Count > 1 && o.Apart < o.HeadSize + 4) return "The keyholes run into each other.";
+        if (o.Count > 1 && o.Apart < o.HeadSize + 4 + (o.Vertical ? o.Slot : 0)) return "The keyholes run into each other.";
         return null;
     }
 
-    private static float Across(KeyholeOptions o, int i) => (i - (o.Count - 1) / 2f) * o.Apart;
+    /// <summary>Where each round hole is: side by side in a row, or one above another up the face.</summary>
+    private static Vector2 At(KeyholeOptions o, int i)
+    {
+        float along = (i - (o.Count - 1) / 2f) * o.Apart;
+        return o.Vertical ? new Vector2(0, along) : new Vector2(along, 0);
+    }
 
     /// <summary>What shows on the face: each round hole and the narrow slot up from it, as one outline.</summary>
     public static List<TextShape> Mouth(KeyholeOptions o, float clearance)
@@ -59,7 +64,7 @@ public static class Keyholes
         var shapes = new List<TextShape>();
         for (int i = 0; i < o.Count; i++)
         {
-            var at = new Vector2(Across(o, i), 0);
+            var at = At(o, i);
             var loop = new List<Vector2>();
 
             // Round the bottom of the hole from where the slot's right side meets it to where
@@ -90,7 +95,7 @@ public static class Keyholes
     {
         float r = o.HeadSize / 2f + clearance;
         return Enumerable.Range(0, o.Count)
-            .Select(i => new TextShape(Shapes.RoundedRect(2 * r, o.Slot + 2 * r, r, new Vector2(Across(o, i), o.Slot / 2f)), []))
+            .Select(i => new TextShape(Shapes.RoundedRect(2 * r, o.Slot + 2 * r, r, At(o, i) + new Vector2(0, o.Slot / 2f)), []))
             .ToList();
     }
 
@@ -115,10 +120,11 @@ public static class Keyholes
     /// </summary>
     public static Mesh Template(KeyholeOptions o)
     {
-        float wide = (o.Count - 1) * o.Apart + 20f, tall = 20f, hole = MathF.Max(1f, (o.Studs ? o.WallScrew : o.Shank) / 2f - 0.5f);
+        float span = (o.Count - 1) * o.Apart + 20f;
+        float wide = o.Vertical ? 20f : span, tall = o.Vertical ? span : 20f, hole = MathF.Max(1f, (o.Studs ? o.WallScrew : o.Shank) / 2f - 0.5f);
         var strip = Shapes.Prism(Shapes.RoundedRect(wide, tall, 2f), 0, 1.2f);
         var cuts = Enumerable.Range(0, o.Count)
-            .Select(i => Shapes.Cylinder(hole, -1, 3, new Vector2(Across(o, i), 0)))
+            .Select(i => Shapes.Cylinder(hole, -1, 3, At(o, i)))
             .Append(Shapes.Prism([new(-2, tall / 2f + 1), new(2, tall / 2f + 1), new(0, tall / 2f - 3)], -1, 3))
             .ToList();
         return Shapes.Subtract(strip, cuts);

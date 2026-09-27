@@ -555,13 +555,13 @@
                     <Separator Margin="8,0" />
                     <Button Style="{StaticResource ToolButton}" Content="Subtract" Tag="{StaticResource IconSubtract}"
                             Command="{Binding BeginSubtractCommand}" MinWidth="80"
-                            ToolTip="Take the last object picked away from everything picked before it. Each of those is cut on its own and stays a separate object. Opens the options on the right: a tolerance, and whether to keep the cutter. Needs two or more objects selected, the cutter picked last." />
+                            ToolTip="Take the last object picked away from everything picked before it. Each of those is cut on its own and stays a separate object. Opens the options on the right: a tolerance, and whether to keep the cutter. Needs two or more objects selected, the cutter picked last. (Ctrl+-)" />
                     <Button Style="{StaticResource ToolButton}" Content="Intersect" Tag="{StaticResource IconIntersect}"
                             Command="{Binding BooleanCommand}" CommandParameter="Intersect"
                             ToolTip="Keep only the overlapping volume. Needs two or more objects selected." />
                     <Button Style="{StaticResource ToolButton}" Content="Merge" Tag="{StaticResource IconMerge}"
                             Command="{Binding BooleanCommand}" CommandParameter="Union"
-                            ToolTip="Fuse the selection into one solid. Needs two or more objects selected." />
+                            ToolTip="Fuse the selection into one solid. Needs two or more objects selected. (Ctrl+=)" />
 
                     <Button Style="{StaticResource ToolButton}" Content="Split" Tag="{StaticResource IconSplit}"
                             Command="{Binding BeginSplitCommand}"
@@ -744,6 +744,10 @@
                     <Button Style="{StaticResource ToolButton}" Content="Fit check" Visibility="{Binding IsAdvancedMode, Converter={StaticResource BoolToVisibility}}" Tag="{StaticResource IconMeasure}"
                             Command="{Binding FitCheckCommand}" MinWidth="72"
                             ToolTip="Measures two parts against each other without changing either: how far they overlap, or how big the gap is. A pin with no hole and a frame too big for its opening both look right on screen. Needs exactly two objects selected." />
+                    <Button Style="{StaticResource ToolButton}" Content="Surface info" Tag="{StaticResource IconSurfaceInfo}"
+                            Command="{Binding BeginSurfaceInfoCommand}" MinWidth="84"
+                            AutomationProperties.AutomationId="SurfaceInfo"
+                            ToolTip="Where a face is and how big: point at a face on any object to light it, click to read its middle, which way it faces, its size and its area. Stays out until Cancel." />
                 </WrapPanel>
             </TabItem>
 
@@ -821,7 +825,7 @@
                                   ToolTip="Draw every triangle edge - useful for seeing how dense an import is" />
                     <ToggleButton Style="{StaticResource ToolToggle}" Content="X-ray" Tag="{StaticResource IconXray}"
                                   IsChecked="{Binding ShowXray}"
-                                  ToolTip="Fade everything that is not selected, to see a part buried inside another. While a tool has the plate to itself - a split, a preview - it also brings the rest back, drawn through rather than taken away" />
+                                  ToolTip="Fade everything that is not selected, to see a part buried inside another. While a tool has the plate to itself - a split, a preview - it also brings the rest back, drawn through rather than taken away (X)" />
                     <ToggleButton Style="{StaticResource ToolToggle}" Content="Outline" Visibility="{Binding IsExtendedMode, Converter={StaticResource BoolToVisibility}}" Tag="{StaticResource IconOutline}"
                                   IsChecked="{Binding ShowOutlines}" MinWidth="76"
                                   AutomationProperties.Name="Outline"
@@ -889,7 +893,7 @@
         </Border>
 
         <!-- Right panel -->
-        <Border DockPanel.Dock="Right" Width="300" Background="#FFFAFAFB"
+        <Border x:Name="SidePanel" DockPanel.Dock="Right" Width="300" Background="#FFFAFAFB"
                 BorderBrush="#FFD8DBE0" BorderThickness="1,0,0,0">
             <Grid Margin="10">
                 <Grid.RowDefinitions>
@@ -1225,6 +1229,36 @@
                     </StackPanel>
                 </Border>
 
+                <!-- Surface info, shown while the tool is out. In the align-to-face row: no two
+                     tools run together. -->
+                <Border Grid.Row="2" Margin="0,10,0,0" Padding="8" Background="#FFEFF5FF"
+                        BorderBrush="#FFB8D2F0" BorderThickness="1" CornerRadius="3"
+                        Visibility="{Binding IsSurfaceInfoMode, Converter={StaticResource BoolToVisibility}}">
+                    <StackPanel>
+                        <TextBlock Text="Surface info" FontWeight="SemiBold" Margin="0,0,0,6" />
+                        <TextBlock TextWrapping="Wrap" Foreground="#FF5A5F66" Margin="0,0,0,8"
+                                   Text="Point at a face on any object to light it; click to read it. Click another to read that one." />
+                        <ItemsControl ItemsSource="{Binding SurfaceFacts}" Margin="0,0,0,8" AutomationProperties.AutomationId="SurfaceFacts"
+                                      Visibility="{Binding HasSurfaceInfo, Converter={StaticResource BoolToVisibility}}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Grid Margin="0,1">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="72" />
+                                            <ColumnDefinition Width="*" />
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Text="{Binding Label}" Foreground="#FF5A5F66" />
+                                        <TextBox Grid.Column="1" Text="{Binding Value, Mode=OneWay}" IsReadOnly="True" TextWrapping="Wrap"
+                                                 BorderThickness="0" Background="Transparent" Padding="0" Foreground="#FF23303C" />
+                                    </Grid>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                        <Button Content="Cancel" Style="{StaticResource PanelButton}" HorizontalAlignment="Left"
+                                Command="{Binding CancelSurfaceInfoCommand}" />
+                    </StackPanel>
+                </Border>
+
                 <!-- Align-to-face panel, shown only while that tool is running. Shares Split's row:
                      the two never run together. -->
                 <Border Grid.Row="2" Margin="0,10,0,0" Padding="8" Background="#FFEFF5FF"
@@ -1543,6 +1577,13 @@
                                      Text="{Binding KeyholeCount, StringFormat=N0, UpdateSourceTrigger=LostFocus}" />
                             <TextBlock Text="" Foreground="#FF9AA0A8" VerticalAlignment="Center" />
                         </StackPanel>
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
+                            <TextBlock Text="Arranged" Style="{StaticResource FieldLabel}" Width="92" />
+                            <RadioButton Content="Horizontal" GroupName="KeyholeLayout" Margin="0,0,10,0" VerticalAlignment="Center"
+                                         IsChecked="{Binding KeyholeHorizontal, Mode=TwoWay}" ToolTip="Side by side, across the face" />
+                            <RadioButton Content="Vertical" GroupName="KeyholeLayout" VerticalAlignment="Center"
+                                         IsChecked="{Binding KeyholeVertical, Mode=TwoWay}" ToolTip="One above another, up the face - for a tall narrow part" />
+                        </StackPanel>
                         <StackPanel Orientation="Horizontal" Margin="0,0,0,4" ToolTip="Middle to middle">
                             <TextBlock Text="Apart" Style="{StaticResource FieldLabel}" Width="92" />
                             <TextBox Width="64" Style="{StaticResource NumberBox}" Tag="number"
@@ -1566,6 +1607,25 @@
                             <TextBox Width="64" Style="{StaticResource NumberBox}" Tag="number"
                                      Text="{Binding KeyholeHeadRoom, StringFormat=N1, UpdateSourceTrigger=LostFocus}" />
                             <TextBlock Text="mm" Foreground="#FF9AA0A8" VerticalAlignment="Center" />
+                        </StackPanel>
+                        <!-- Where they sit. The handles drive the same numbers, as in Emboss. -->
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,4" ToolTip="How far from the middle of the face, along it">
+                            <TextBlock Text="Across" Style="{StaticResource FieldLabel}" Width="92" />
+                            <TextBox Width="64" Style="{StaticResource NumberBox}" Tag="number" AutomationProperties.AutomationId="KeyholeAcross"
+                                     Text="{Binding KeyholeAcross, StringFormat=N2, UpdateSourceTrigger=LostFocus}" />
+                            <TextBlock Text="mm" Foreground="#FF9AA0A8" VerticalAlignment="Center" />
+                        </StackPanel>
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,4" ToolTip="How far from the middle of the face, up it">
+                            <TextBlock Text="Up" Style="{StaticResource FieldLabel}" Width="92" />
+                            <TextBox Width="64" Style="{StaticResource NumberBox}" Tag="number" AutomationProperties.AutomationId="KeyholeUp"
+                                     Text="{Binding KeyholeUp, StringFormat=N2, UpdateSourceTrigger=LostFocus}" />
+                            <TextBlock Text="mm" Foreground="#FF9AA0A8" VerticalAlignment="Center" />
+                        </StackPanel>
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,4" ToolTip="Turned on the face from straight up">
+                            <TextBlock Text="Turn" Style="{StaticResource FieldLabel}" Width="92" />
+                            <TextBox Width="64" Style="{StaticResource NumberBox}" Tag="number" AutomationProperties.AutomationId="KeyholeTurn"
+                                     Text="{Binding KeyholeTurn, StringFormat=N1, UpdateSourceTrigger=LostFocus}" />
+                            <TextBlock Text="deg" Foreground="#FF9AA0A8" VerticalAlignment="Center" />
                         </StackPanel>
                         <CheckBox Content="Printed wall studs" IsChecked="{Binding KeyholeStuds, Mode=TwoWay}" Margin="0,4,0,4"
                                   ToolTip="Studs to screw to the wall for the keyholes to hang on, rather than screw heads. The keyholes are sized to them, with the printer's clearance round each." />
@@ -2368,6 +2428,16 @@
             </Grid>
         </Border>
 
+        <!-- The side panel's edge, to drag it wider or narrower. -->
+        <Thumb DockPanel.Dock="Right" Width="5" Cursor="SizeWE" DragDelta="OnSidePanelResize"
+               ToolTip="Drag to make the panel wider or narrower" AutomationProperties.AutomationId="SidePanelEdge">
+            <Thumb.Template>
+                <ControlTemplate TargetType="Thumb">
+                    <Border Background="Transparent" />
+                </ControlTemplate>
+            </Thumb.Template>
+        </Thumb>
+
         <!-- Viewport -->
         <Grid>
             <hx:Viewport3DX x:Name="View"
@@ -2728,6 +2798,8 @@
 
                     <StackPanel Orientation="Horizontal"
                                 Visibility="{Binding IsScaleMode, Converter={StaticResource BoolToVisibility}}">
+                        <StackPanel Orientation="Horizontal"
+                                    Visibility="{Binding ScaleInLengths, Converter={StaticResource BoolToVisibility}}">
                         <StackPanel Orientation="Horizontal" DataContext="{Binding Selected}"
                                     Visibility="{Binding DataContext.HasOneSelected,
                                                  RelativeSource={RelativeSource AncestorType=Window},
@@ -2762,6 +2834,51 @@
                                      Text="{Binding GroupSizeZ, Converter={StaticResource Mixed}, ConverterParameter=0.####, UpdateSourceTrigger=LostFocus}" />
                         </StackPanel>
                         <TextBlock Text="{Binding UnitLabel}" Style="{StaticResource GizmoUnit}" />
+                        </StackPanel>
+
+                        <!-- The same in per cent: of the size it came in at for one object, of the
+                             lot as it stands for several as one. -->
+                        <StackPanel Orientation="Horizontal"
+                                    Visibility="{Binding ScaleInPercent, Converter={StaticResource BoolToVisibility}}">
+                            <StackPanel Orientation="Horizontal"
+                                        Visibility="{Binding HasOneSelected, Converter={StaticResource BoolToVisibility}}">
+                                <TextBlock Text="W" Style="{StaticResource GizmoLabelX}" ToolTip="Width - along X" />
+                                <TextBox Style="{StaticResource GizmoBox}" Tag="transform" AutomationProperties.AutomationId="PercentW"
+                                         ToolTip="Per cent of the size it came in at: 100 takes it back. *=2 doubles it."
+                                         Text="{Binding ObjectPercentX, StringFormat=0.##, UpdateSourceTrigger=LostFocus}" />
+                                <TextBlock Text="D" Style="{StaticResource GizmoLabelY}" ToolTip="Depth - along Y" />
+                                <TextBox Style="{StaticResource GizmoBox}" Tag="transform" AutomationProperties.AutomationId="PercentD"
+                                         ToolTip="Per cent of the size it came in at: 100 takes it back. *=2 doubles it."
+                                         Text="{Binding ObjectPercentY, StringFormat=0.##, UpdateSourceTrigger=LostFocus}" />
+                                <TextBlock Text="H" Style="{StaticResource GizmoLabelZ}" ToolTip="Height - along Z" />
+                                <TextBox Style="{StaticResource GizmoBox}" Tag="transform" AutomationProperties.AutomationId="PercentH"
+                                         ToolTip="Per cent of the size it came in at: 100 takes it back. *=2 doubles it."
+                                         Text="{Binding ObjectPercentZ, StringFormat=0.##, UpdateSourceTrigger=LostFocus}" />
+                            </StackPanel>
+                            <StackPanel Orientation="Horizontal"
+                                        Visibility="{Binding HasManySelected, Converter={StaticResource BoolToVisibility}}">
+                                <TextBlock Text="W" Style="{StaticResource GizmoLabelX}" ToolTip="Width of the selection - along X" />
+                                <TextBox Style="{StaticResource GizmoMixedBox}" Tag="transform"
+                                         ToolTip="As one: per cent of the selection as it stands, 150 makes it half as big again. Each on its own: per cent of the size each came in at."
+                                         Text="{Binding GroupPercentX, Converter={StaticResource Mixed}, ConverterParameter=0.##, UpdateSourceTrigger=LostFocus}" />
+                                <TextBlock Text="D" Style="{StaticResource GizmoLabelY}" ToolTip="Depth of the selection - along Y" />
+                                <TextBox Style="{StaticResource GizmoMixedBox}" Tag="transform"
+                                         ToolTip="As one: per cent of the selection as it stands, 150 makes it half as big again. Each on its own: per cent of the size each came in at."
+                                         Text="{Binding GroupPercentY, Converter={StaticResource Mixed}, ConverterParameter=0.##, UpdateSourceTrigger=LostFocus}" />
+                                <TextBlock Text="H" Style="{StaticResource GizmoLabelZ}" ToolTip="Height of the selection - along Z" />
+                                <TextBox Style="{StaticResource GizmoMixedBox}" Tag="transform"
+                                         ToolTip="As one: per cent of the selection as it stands, 150 makes it half as big again. Each on its own: per cent of the size each came in at."
+                                         Text="{Binding GroupPercentZ, Converter={StaticResource Mixed}, ConverterParameter=0.##, UpdateSourceTrigger=LostFocus}" />
+                            </StackPanel>
+                            <TextBlock Text="%" Style="{StaticResource GizmoUnit}" />
+                        </StackPanel>
+
+                        <ToggleButton Style="{StaticResource ModeButton}" Margin="4,0,0,0"
+                                      ToolTip="Resize in per cent rather than in lengths. Either way, *=1.5 or /=2 typed in a box multiplies or divides what is there."
+                                      AutomationProperties.Name="Resize in per cent"
+                                      IsChecked="{Binding ScaleInPercent, Mode=TwoWay}">
+                            <TextBlock Text="%" FontWeight="SemiBold" FontSize="13" Foreground="#FF33383F" />
+                        </ToggleButton>
 
                         <!-- The same numbers at the scene's scale, and editable: type metres
                              here or millimetres there and each follows the other. Only the

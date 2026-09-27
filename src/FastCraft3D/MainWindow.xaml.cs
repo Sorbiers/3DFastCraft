@@ -151,6 +151,8 @@ public partial class MainWindow : Window
         viewModel.RestingFacesChanged += () => renderer?.ShowRestingFaces(viewModel.RestingFaceList, viewModel.RestingHover);
         viewModel.AlignFaceChanged += () => renderer?.ShowFace(
             viewModel.AlignFace, tint: viewModel.HasAlignFaceTarget ? AlignFacePickedColour : null);
+        viewModel.SurfaceInfoChanged += () => renderer?.ShowFace(
+            viewModel.SurfaceInfoFace, tint: viewModel.SurfaceInfoShowsPicked ? AlignFacePickedColour : null);
         viewModel.CentreFaceChanged += () =>
         {
             renderer?.ShowFace(viewModel.CentreFaceA, tint: viewModel.HasCentreFaceA ? AlignFacePickedColour : null);
@@ -451,10 +453,12 @@ public partial class MainWindow : Window
             return;
         }
 
-        if (Keyboard.Modifiers is ModifierKeys.Control)
+        // Any chord with Ctrl in it, Ctrl+Shift+A - select nothing - among them. Catching Ctrl alone
+        // let that one through, and the selection went from under the tool.
+        if (Keyboard.Modifiers.HasFlag(ModifierKeys.Control))
         {
             // Cut, copy, paste and select-all belong to the box being typed in.
-            if (typing && e.Key is Key.C or Key.V or Key.X or Key.A) return;
+            if (typing && Keyboard.Modifiers is ModifierKeys.Control && e.Key is Key.C or Key.V or Key.X or Key.A) return;
 
             e.Handled = true;
             return;
@@ -513,6 +517,15 @@ public partial class MainWindow : Window
         }
 
         if (Keyboard.FocusedElement is TextBox) return;
+
+        // X-ray changes only how the plate is drawn, and is most use while a tool has it.
+        if (action == KeyAction.Xray)
+        {
+            viewModel.ShowXray = !viewModel.ShowXray;
+            e.Handled = true;
+            return;
+        }
+
         if (viewModel.IsToolInHand) return; // the mode buttons are greyed out with the rest
         if (Shortcuts.IsNudge(action) && FocusWantsArrows()) return;
 
@@ -732,6 +745,9 @@ public partial class MainWindow : Window
         if (renderer is null) return;
 
         if (viewModel.IsEmbossMode) ShowEmbossPreview();
+        // Keyholes too: letting go of a handle drew the engraving's preview, which there is none
+        // of, and the keyholes went with it.
+        else if (viewModel.IsWallMountMode) renderer.ShowFace(viewModel.WallMountFace, null, viewModel.WallMountPreview());
         else renderer.ShowFace(viewModel.EngraveFace, viewModel.EngravePreview);
     }
 
@@ -1011,7 +1027,8 @@ public partial class MainWindow : Window
             // With sticky selection on, empty space never changes anything. With it off, a
             // click out here clears the selection - but only a click: the same press is also
             // how a camera orbit begins, so the decision waits for the release.
-            if (!viewModel.StickySelection && !IsShiftDown && !IsControlDown) pendingClear = true;
+            // Never while a tool is out: the tool is working on the selection.
+            if (!viewModel.IsToolInHand && !viewModel.StickySelection && !IsShiftDown && !IsControlDown) pendingClear = true;
             return; // unhandled, so the camera gesture takes over
         }
 
@@ -1077,6 +1094,14 @@ public partial class MainWindow : Window
         // Splitting on a picked face: the click sets the plane rather than the selection. The
         // gizmo handles its own drags before this, so only a click on the model itself lands here.
         if (viewModel.IsSplitMode && viewModel.PickSplitPlane(
+                target, ToVector3(hit!.PointHit), ToVector3(hit.NormalAtHit)))
+        {
+            e.Handled = true;
+            return;
+        }
+
+        // Surface info reads any face, selected or not, and leaves the selection alone.
+        if (viewModel.IsSurfaceInfoMode && viewModel.PickSurfaceInfo(
                 target, ToVector3(hit!.PointHit), ToVector3(hit.NormalAtHit)))
         {
             e.Handled = true;
@@ -1285,6 +1310,15 @@ public partial class MainWindow : Window
                 viewModel.HoverAlignFace(hovered, ToVector3(faceHit.PointHit), ToVector3(faceHit.NormalAtHit));
             else
                 viewModel.HoverAlignFace(null, Vector3.Zero, Vector3.Zero);
+        }
+
+        if (viewModel.IsSurfaceInfoMode)
+        {
+            var faceHit = FirstHit(e.GetPosition(View), selectable: true);
+            if (faceHit is not null && renderer?.Resolve(faceHit.ModelHit) is { } hovered)
+                viewModel.HoverSurfaceInfo(hovered, ToVector3(faceHit.PointHit), ToVector3(faceHit.NormalAtHit));
+            else
+                viewModel.HoverSurfaceInfo(null, Vector3.Zero, Vector3.Zero);
         }
 
         if (viewModel.IsCentreFaceMode)
@@ -1657,13 +1691,17 @@ public partial class MainWindow : Window
     private bool ChangeFieldBy(TextBox box)
     {
         if (box.Tag is not "transform") return false;
-        if (!FieldInput.TryParseRelative(box.Text, out float delta)) return false;
+
+        bool times = false;
+        if (FieldInput.TryParseRelative(box.Text, out float delta)) { }
+        else if (FieldInput.TryParseFactor(box.Text, out delta)) times = true;
+        else return false;
 
         var binding = box.GetBindingExpression(TextBox.TextProperty);
         if (binding?.ResolvedSource is not { } source || binding.ResolvedSourcePropertyName is not { } name)
             return false;
 
-        if (!(ReferenceEquals(source, viewModel) && viewModel.ChangeEachBy(name, delta)))
+        if (!(ReferenceEquals(source, viewModel) && viewModel.ChangeEachBy(name, delta, times)))
         {
             var property = source.GetType().GetProperty(name);
             if (property is null || property.PropertyType != typeof(float) || !property.CanWrite) return false;
@@ -1671,7 +1709,7 @@ public partial class MainWindow : Window
             float now = (float)property.GetValue(source)!;
             if (!float.IsFinite(now)) return false;
 
-            property.SetValue(source, now + delta);
+            property.SetValue(source, times ? now * delta : now + delta);
         }
 
         // Shows the new value, which also means the binding has nothing left to write on the way out.
@@ -2011,6 +2049,13 @@ public partial class MainWindow : Window
     }
 
     /// <summary>Reads "Axis:Mode" off the radio button's Tag, e.g. "X:Centre" or "Y:None" for "leave it".</summary>
+    /// <summary>The edge of the side panel dragged: wider for long names and big tool panels, narrower for more plate.</summary>
+    private void OnSidePanelResize(object sender, DragDeltaEventArgs e)
+    {
+        double most = Math.Max(300, ActualWidth - 420);
+        SidePanel.Width = Math.Clamp(SidePanel.Width - e.HorizontalChange, 260, most);
+    }
+
     private void OnAlignFaceModeChanged(object sender, RoutedEventArgs e)
     {
         if (sender is not RadioButton { Tag: string tag }) return;

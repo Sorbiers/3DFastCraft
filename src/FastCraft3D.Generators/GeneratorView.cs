@@ -70,11 +70,13 @@ public sealed class GeneratorView : UserControl
     private (string Text, bool Problem)? motion;
     private readonly Expander printerSection = new() { Margin = new Thickness(0, 8, 0, 0) };
 
-    private readonly ComboBox presetList = new() { MinWidth = 150, Margin = new Thickness(0, 2, 4, 2) };
+    private readonly ComboBox presetList = new() { MinWidth = 100, Margin = new Thickness(0, 2, 4, 2) };
     private readonly Button forgetPreset = new() { Content = "Forget", Visibility = Visibility.Collapsed };
     private readonly Button savePreset = new() { Content = "Save as preset" };
-    private readonly StackPanel naming = new() { Orientation = Orientation.Horizontal, Visibility = Visibility.Collapsed, Margin = new Thickness(96, 2, 0, 0) };
-    private readonly TextBox presetName = new() { Width = 140, Margin = new Thickness(0, 2, 4, 2) };
+    // Docked rather than stacked, so the name box takes what room the panel has: at a fixed width
+    // beside the label's column and the Keep button it ran off the side of the panel.
+    private readonly DockPanel naming = new() { Visibility = Visibility.Collapsed, Margin = new Thickness(96, 2, 0, 0) };
+    private readonly TextBox presetName = new() { MinWidth = 60, Margin = new Thickness(0, 2, 4, 2) };
     private List<(string Label, string? Mine, Func<object?> Settings)> presets = [];
     private bool fillingPresets;
     private bool reading = true;
@@ -339,7 +341,8 @@ public sealed class GeneratorView : UserControl
     {
         var outer = new StackPanel { Margin = new Thickness(0, 0, 0, 8) };
 
-        var row = new StackPanel { Orientation = Orientation.Horizontal };
+        // Docked for the same reason as the naming row: a long preset name widened the list past the panel.
+        var row = new DockPanel();
         var label = new TextBlock { Text = "Preset", Width = 96, ToolTip = "Sizes worth starting from. Choosing one fills in every setting." };
         label.SetResourceReference(StyleProperty, "FieldLabel");
         row.Children.Add(label);
@@ -394,8 +397,9 @@ public sealed class GeneratorView : UserControl
                 KeepPreset(presetName.Text);
             };
 
-            naming.Children.Add(presetName);
+            DockPanel.SetDock(keep, Dock.Right);
             naming.Children.Add(keep);
+            naming.Children.Add(presetName);
             outer.Children.Add(naming);
         }
 
