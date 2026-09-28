@@ -106,9 +106,13 @@ else; Advanced, the default, adds the working set - sketches, holes, the Library
 Extended adds the specialized and experimental tools too. Only buttons are hidden, never a setting
 inside a panel, every key works at every level, and **F1** lists the keys for whatever is showing.
 The choice is remembered, and so is the width of the side panel, which is dragged by its edge.
+Dragged wide, a tool's panel lays its settings out in columns rather than one long list, and every
+length in it - in the side panel and in the tools that open there - reads in the unit the app is
+set to.
 
 **Keys worth knowing:** **Ctrl+L** opens the Library, **X** toggles X-ray, **Ctrl+-** is Subtract
-and **Ctrl+=** Merge. **Enter** applies the tool in hand and **Esc** puts it down. Any number box
+and **Ctrl+=** Merge. **End** drops the selection onto whatever is under it, and **Ctrl+End** drops
+it a little way in, ready to Merge. **Enter** applies the tool in hand and **Esc** puts it down. Any number box
 takes `+=5`, `-=5`, `*=1.5` or `/=2` to change what is there, and copy and paste work between two
 windows of the app.
 
@@ -598,6 +602,18 @@ until you notice that only one of them moves anything:
 Watertight says a part will print. It says nothing about whether two parts go together, and a pin
 with no hole under it and a lid resting on its own hinge both look perfectly right on screen.
 
+### Drop down
+
+**Drop down** on the Align tab, beside Drop to plate, moves the selection straight down until it
+rests on whatever is under it - another part, or the plate when there is nothing. It goes by the
+shapes themselves, not their boxes: a corner coming down on a face, or an edge crossing an edge,
+so two ridges crossed at right angles stop where they meet. Pressed again, a part already resting
+stays where it is.
+
+Held with **Ctrl** or **Shift**, or pressed as **Ctrl+End**, it goes 0.2 mm into the part below, so
+the two share material rather than a face and **Merge** joins them cleanly. Nothing is merged
+until you ask.
+
 ### Laying a part on its face
 
 **Lay on face** on the Align tab answers the printing question of which way up to put a part.
@@ -660,6 +676,10 @@ a sample of the text in it, bold, italic and letter spacing.
 gets the recess and the letters come back as the plug that fills it flush - the very solid that
 cut it, so the two fit by construction. Raised, they stand on it as a part of their own. Either
 way the letters go onto the next filament up, and the pair export to a 3MF that says so.
+
+On the face, the grip moves the lettering, the knob turns it, and the squares at the corners of
+its dashed outline resize it in proportion - dragged along the surface, the opposite corner staying
+put. The new height is taken when the corner is let go.
 
 For lettering that is an object of its own - a sign, a name tag - use **Text** on the Insert tab
 instead; see [Text](#text) below.
@@ -972,8 +992,10 @@ the far side along each hole's own axis, not the part's diagonal. **Clearance** 
 diameter, since printed holes come out small - but not on an insert's pocket, which should be
 tight.
 
-With one part selected the cutter starts sunk into its top, and **Cut** takes the holes out where
-the cutter stands. **Add** puts the cutter on the plate instead, to Subtract later from this part
+With parts selected the cutter starts sunk into the top of them, and **Cut** takes the holes out
+where the cutter stands. Several selected - a lid on its box, plates to be bolted together - are
+drilled at once: **All the way through** then goes through the lot, and the holes line up because
+they are the same holes. If any part would not come out closed, none is changed. **Add** puts the cutter on the plate instead, to Subtract later from this part
 or another. A cut that would not leave the part closed is refused.
 
 By hand, a hole is a cylinder and **Subtract**: the last object picked is the cutter, so select the
@@ -1269,8 +1291,19 @@ the part pressed onto it a hair over its size; a crank or a handwheel turns it; 
 frame or a follower runs in guides that print without supports and go together from above. The
 fits follow the printer's clearance set in the panel. **Turn it** in the panel plays the set turning
 and checks that nothing runs into anything, the base included. **Lay out for printing**, on by
-default, puts the parts side by side to print; off, the set goes down assembled, as the preview
-shows it.
+default, puts the parts side by side to print, each an object of its own in its own color; off,
+the set goes down assembled, as the preview shows it, grouped as one object so it moves as one -
+**Ungroup** takes it apart.
+
+A window's or a door's glass comes grouped with its frame. Printed lying down, the glass is the
+first few layers, so one filament change after them makes it clear; **Ungroup** gives it a part and a
+filament of its own instead.
+
+**Roof** can carry dormers: how many to a slope, on one slope or both, their width, height and how
+far up from the wall they stand. They are spaced evenly along the long slopes, between the verges
+or the hips, merged into the roof and covered as it is - tiles, slates or sheet - with a capping on
+their ridges. On a mansard or a gambrel they stand on the steep lower slope. Too many for the room,
+or too tall for the slope, and the panel says so rather than making them.
 
 ### Keyhole and Surface info
 
