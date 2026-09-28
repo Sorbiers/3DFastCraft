@@ -234,10 +234,10 @@ public sealed class SettingsShape
                 $"{type.Name} is a struct. Settings must be a record class: new() on a record struct skips the defaults.");
 
         // The primary constructor: the one whose every parameter is also a property. A record's
-        // copy constructor takes the record itself and is not it.
+        // copy constructor takes the record itself and is not it. One with none is allowed, for an
+        // entry with nothing to set - the Library's way into a tool of the app's own.
         var constructor = type.GetConstructors()
-            .Where(c => c.GetParameters().Length > 0
-                        && c.GetParameters().All(p => type.GetProperty(p.Name!)?.PropertyType == p.ParameterType))
+            .Where(c => c.GetParameters().All(p => type.GetProperty(p.Name!)?.PropertyType == p.ParameterType))
             .OrderByDescending(c => c.GetParameters().Length)
             .FirstOrDefault()
             ?? throw new InvalidOperationException($"{type.Name} has no primary constructor whose parameters are its properties.");

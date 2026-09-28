@@ -45,7 +45,7 @@ public partial class MouldDialog : ToolPanel
         bounds = model.ComputeBounds();
         Chosen = study;
 
-        SubjectText.Text = $"A mould for {name}, to pour silicone into.";
+        SubjectText.Text = $"A mold for {name}, to pour silicone into.";
         AdviceText.Text = study.Summary;
 
         AxisText.Text = string.Join("    ", study.Pulls.Select(p =>

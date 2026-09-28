@@ -48,7 +48,7 @@ public sealed class Enclosure : Generator<Enclosure.Settings>
         [Length("Board width", 10, 180), ShowWhen(nameof(Board), Board.Custom)] float BoardWidth = 60f,
         [Length("Board depth", 10, 180), ShowWhen(nameof(Board), Board.Custom)] float BoardDepth = 40f,
         [Length("Hole inset", 2, 20, Hint = "From each edge to the middle of the corner holes"), ShowWhen(nameof(Board), Board.Custom)] float HoleInset = 3.5f,
-        [Length("Room round it", 1, 30, Group = "Box")] float Gap = 3f,
+        [Length("Clearance around it", 1, 30, Group = "Box")] float Gap = 3f,
         [Length("Inside height", 10, 100, Group = "Box", Hint = "From the floor to the underside of the lid")] float InsideHeight = 30f,
         [Wall("Wall", 1.2, 5, Group = "Box")] float Wall = 2f,
         [Length("Floor", 1, 5, Group = "Box")] float Floor = 2f,

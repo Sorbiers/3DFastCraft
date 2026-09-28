@@ -184,7 +184,7 @@ public sealed class CalibrationCube : Generator<CalibrationCube.Settings>
         return new Generated([new GeneratedPart("Calibration cube", cube, Role: "cube")],
         [
             $"Measure it with calipers across each lettered face: X across the X, Y across the Y, Z from the plate to the top. Each should read {a:0.##} mm.",
-            $"If one reads, say, {a + 0.2f:0.##} instead, that axis prints {(a + 0.2f) / a * 100 - 100:0.#}% large: scale it by {a / (a + 0.2f) * 100:0.#}% in the slicer, or put the printer's steps per millimetre right.",
+            $"If one reads, say, {a + 0.2f:0.##} instead, that axis prints {(a + 0.2f) / a * 100 - 100:0.#}% large: scale it by {a / (a + 0.2f) * 100:0.#}% in the slicer, or put the printer's steps per millimeter right.",
             "Measure at the middle of each face, away from the edges, where the first layer and the corners spread."
         ]);
     }

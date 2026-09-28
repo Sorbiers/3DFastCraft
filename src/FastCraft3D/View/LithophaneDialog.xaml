@@ -96,7 +96,7 @@
                 <ColumnDefinition Width="*" />
             </Grid.ColumnDefinitions>
             <TextBlock Text="Detail" Style="{DynamicResource FieldLabel}"
-                       ToolTip="Millimetres between samples. About the nozzle's own width is as fine as there is any point going: finer only adds triangles." />
+                       ToolTip="Millimeters between samples. About the nozzle's own width is as fine as there is any point going: finer only adds triangles." />
             <TextBox Grid.Column="1" x:Name="PitchBox" Style="{DynamicResource NumberBox}" Tag="number" TextChanged="OnChanged"
                      AutomationProperties.AutomationId="LithophanePitch" />
             <TextBlock Text="mm" Style="{StaticResource LithoUnit}" />
@@ -112,7 +112,7 @@
                 <ColumnDefinition Width="*" />
             </Grid.ColumnDefinitions>
             <TextBlock Text="Layers" Style="{DynamicResource FieldLabel}"
-                       ToolTip="The layer height it will be printed at. It decides how many greys survive, and is only used to say so." />
+                       ToolTip="The layer height it will be printed at. It decides how many grays survive, and is only used to say so." />
             <TextBox Grid.Column="1" x:Name="LayerBox" Style="{DynamicResource NumberBox}" Tag="number" TextChanged="OnChanged"
                      AutomationProperties.AutomationId="LithophaneLayer" />
             <TextBlock Text="mm" Style="{StaticResource LithoUnit}" />
@@ -159,7 +159,7 @@
                 <ColumnDefinition Width="*" />
             </Grid.ColumnDefinitions>
             <TextBlock Text="Contrast" Style="{DynamicResource FieldLabel}"
-                       ToolTip="Spread about mid grey. One leaves it alone; over one pushes the lights and darks apart, under one draws them together." />
+                       ToolTip="Spread about mid gray. One leaves it alone; over one pushes the lights and darks apart, under one draws them together." />
             <TextBox Grid.Column="1" x:Name="ContrastBox" Style="{DynamicResource NumberBox}" Tag="number" TextChanged="OnChanged"
                      AutomationProperties.AutomationId="LithophaneContrast" />
             <Slider x:Name="ContrastSlider" Style="{StaticResource LithoSlider}" Minimum="0.2" Maximum="3"

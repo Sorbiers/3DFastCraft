@@ -109,7 +109,7 @@ public sealed class LibraryView : UserControl
         var sections = new List<(string, List<Generator>)>();
 
         var starred = memory.Favourites.Select(Find).OfType<Generator>().ToList();
-        if (starred.Count > 0) sections.Add(("Favourites", starred));
+        if (starred.Count > 0) sections.Add(("Favorites", starred));
 
         var recent = memory.Recent.Select(Find).OfType<Generator>().ToList();
         if (recent.Count > 0) sections.Add(("Recently used", recent));

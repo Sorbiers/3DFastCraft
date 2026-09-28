@@ -28,7 +28,7 @@ public partial class DistributeDialog : ToolPanel
         this.bed = bed;
         this.arrange = arrange;
 
-        SubjectText.Text = $"Setting {count} objects out in rows across the bed, centred on it.";
+        SubjectText.Text = $"Setting {count} objects out in rows across the plate, centered on it.";
         GapBox.Text = gap.ToString("0.##", CultureInfo.CurrentCulture);
 
         Loaded += (_, _) =>
@@ -63,8 +63,8 @@ public partial class DistributeDialog : ToolPanel
 
         SummaryText.Text = $"{count} objects covering {covers.X:0.#} × {covers.Y:0.#} mm"
                            + (fits
-                               ? $" of the {bed.X:0.#} × {bed.Y:0.#} mm bed."
-                               : $" - more than the {bed.X:0.#} × {bed.Y:0.#} mm bed. A smaller gap, or Fit, may help.");
+                               ? $" of the {bed.X:0.#} × {bed.Y:0.#} mm plate."
+                               : $" - more than the {bed.X:0.#} × {bed.Y:0.#} mm plate. A smaller gap, or Fit, may help.");
     }
 
     private void OnAccept(object sender, RoutedEventArgs e)

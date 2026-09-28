@@ -38,7 +38,7 @@ public static class MouldGrid
 
         int resolution = Math.Clamp(options.Resolution, 48, 768);
         float voxel = MathF.Max(span.X, MathF.Max(span.Y, span.Z)) / resolution;
-        if (voxel <= 0f) return new MouldResult([], "Nothing to make a mould of.");
+        if (voxel <= 0f) return new MouldResult([], "Nothing to make a mold of.");
 
         var origin = blockMin - new Vector3(voxel * Margin);
 
@@ -103,7 +103,7 @@ public static class MouldGrid
             mesh = Smooth(mesh);
 
             parts.Add(new MouldPart(
-                $"Mould {(char)('A' + parts.Count)}", mesh, mesh.CheckHealth().IsWatertight));
+                $"Mold {(char)('A' + parts.Count)}", mesh, mesh.CheckHealth().IsWatertight));
         }
 
         return new MouldResult(parts, Describe(parts, study, options, voxel));

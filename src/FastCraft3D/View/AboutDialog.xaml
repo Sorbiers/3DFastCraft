@@ -16,15 +16,15 @@
         </StackPanel>
 
         <TextBlock TextWrapping="Wrap" Foreground="#FF33383F" Margin="0,14,0,0"
-                   Text="A small, offline replacement for the retired Microsoft 3D Builder: drop in shapes, size them exactly, cut and combine them, and export a printable STL. Millimetres, Z-up, everything on one plate." />
+                   Text="A small, offline replacement for the retired Microsoft 3D Builder: drop in shapes, size them exactly, cut and combine them, and export a printable STL. Millimeters, Z-up, everything on one plate." />
 
         <Border Background="#FFEDEEF0" CornerRadius="4" Padding="12,9" Margin="0,14,0,0">
             <StackPanel>
                 <TextBlock x:Name="CopyrightLine" Foreground="#FF33383F" TextWrapping="Wrap" />
                 <TextBlock TextWrapping="Wrap" Foreground="#FF5A5F66" FontSize="12" Margin="0,6,0,0"
-                           Text="BSD 3-Clause with the Commons Clause - free to use, change and pass on, including in a business; selling the software itself needs a commercial licence. Models you make are your own. See LICENSE in the repository." />
+                           Text="BSD 3-Clause with the Commons Clause - free to use, change and pass on, including in a business; selling the software itself needs a commercial license. Models you make are your own. See LICENSE in the repository." />
                 <TextBlock TextWrapping="Wrap" Foreground="#FF5A5F66" FontSize="12" Margin="0,6,0,0"
-                           Text="Built on HelixToolkit and SharpDX, each under its own MIT licence - listed in THIRD-PARTY-NOTICES.md." />
+                           Text="Built on HelixToolkit and SharpDX, each under its own MIT license - listed in THIRD-PARTY-NOTICES.md." />
             </StackPanel>
         </Border>
 

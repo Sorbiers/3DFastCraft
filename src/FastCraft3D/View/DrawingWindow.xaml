@@ -69,9 +69,9 @@
                 <TextBlock Text="Scale" Style="{StaticResource GroupHeader}" />
                 <RadioButton x:Name="ModelOnlyBox" GroupName="ScaleFormat" Content="Model size" Checked="OnChanged"
                              ToolTip="Just what the model itself measures, e.g. &quot;50 mm&quot; - what the scale is set to makes no difference." />
-                <RadioButton x:Name="ModelWithRealBox" GroupName="ScaleFormat" Content="Model, real in brackets" Checked="OnChanged"
+                <RadioButton x:Name="ModelWithRealBox" GroupName="ScaleFormat" Content="Model, real in parentheses" Checked="OnChanged"
                              ToolTip="What the model measures, with what it stands for beside it: &quot;50 mm (4.35 m)&quot;." />
-                <RadioButton x:Name="RealWithModelBox" GroupName="ScaleFormat" Content="Real, model in brackets" Checked="OnChanged"
+                <RadioButton x:Name="RealWithModelBox" GroupName="ScaleFormat" Content="Real, model in parentheses" Checked="OnChanged"
                              ToolTip="What it stands for, with the model's own size beside it: &quot;4.35 m (50 mm)&quot;." />
                 <RadioButton x:Name="RealOnlyBox" GroupName="ScaleFormat" Content="Real size" Checked="OnChanged"
                              ToolTip="Only what it stands for, e.g. &quot;4.35 m&quot; - what the model itself measures is left off entirely." />

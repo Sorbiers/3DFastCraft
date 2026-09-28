@@ -42,9 +42,14 @@ path from a shape on the plate to a printable part. These are the tools it adds 
 | 19 | **Blueprint** | Front, top, right and isometric views with every straight edge dimensioned and a title block, printed or saved as a PDF. |
 | 20 | **Set pivot** | Measure and turn an object about a point you pick - a shaft hole, a hinge line - rather than the middle of its box. |
 | 21 | **Align to a face** | Line a selection up on the middle of any face, or centre a face of it on a face of something else. |
-| 22 | **Lithophane** | A photograph as a thin plate that shows when a light is behind it, flat or curved round for a shade. |
+| 22 | **Lithophane** | A photograph as a thin plate that shows when a light is behind it: flat, curved round for a shade, or a lamp of three to twelve sides with a base for a bulb socket. |
 | 23 | **Voronoi** | A part cut into a web of struts: an openwork lamp, or a foam through the inside to take weight out. |
 | 24 | **Export session and Record** | Every undo step written out as a file of its own, or a screenshot taken after every action. |
+| 25 | **Library** | Parts made to your numbers - boxes, organizers, hinges, clips, fasteners, gears and mechanisms, stairs, windows, doors and roofs, lithophanes and lamps, calibration prints - each with its preview on the plate. |
+| 26 | **Working models** | Every mechanism made into a model to print and turn by hand: a base, D-shafts, cranks and handwheels, guides that print without supports. |
+| 27 | **Keyhole** | Keyhole slots cut into the back of a part to hang it on a wall, with printed wall studs and a drilling template. |
+| 28 | **Emboss a picture** | The dark parts of a PNG or JPEG traced into outlines and stamped or cut, like an SVG. |
+| 29 | **Surface info** | Point at a face to read its middle, direction, size and area. |
 
 **Almost all of it is vibecoded.** The geometry, the renderer, the interface and the tests were
 written by [Claude Code](https://claude.com/claude-code) from prompts, with only tiny manual
@@ -84,10 +89,10 @@ dotnet test
 
 | Tab | What it does |
 |---|---|
-| **Insert** | Cube, cylinder, cone, sphere, pyramid, wedge, torus, hexagon, tetrahedron; a custom shape; text; a lithophane; a sketch; import an STL, OBJ or 3MF, or another project; a fit test; a hole; a thread; a stair; a gear |
+| **Insert** | Cube, cylinder, cone, sphere, pyramid, wedge, torus, hexagon, tetrahedron; a custom shape; text; a sketch; the **Library** (Ctrl+L) - gears, threads, stairs, boxes, lithophanes and the rest; import an STL, OBJ or 3MF, or another project |
 | **Edit** | Everything that changes the selection: undo, redo; copy, cut, paste; duplicate beside or in place, delete; Subtract / Intersect / Merge, split with a plane; set a pivot; round, twist, taper, bend; simplify, smooth, hollow; colour |
 | **Align** | Where it sits: drop to plate, lay on face, align to another object, align to a face, centre face to face, fit to the bed, distribute, mirror, and lining the selection up on X, Y or Z - to either edge, centred, or spread evenly |
-| **Tools** | The work around a model: mould, hull; repair, rebuild; Voronoi, extrude down, split with connectors, connect objects; emboss, engrave; repeat; measure, fit check |
+| **Tools** | The work around a model: mold, hull; repair, rebuild; Voronoi, extrude down, split with connectors, connect objects, hole, keyhole; emboss, engrave; repeat; measure, fit check, surface info |
 | **File** | New, open, recent, save, save as, save a version, versions, export STL/OBJ/3MF, blueprint, export session, record, about, shortcuts |
 | **View** | Zoom to fit, the six axis views and isometric, wireframe, x-ray, outline, plate, overhangs, grid; units and model scale |
 
@@ -95,11 +100,21 @@ dotnet test
 made of or what its surface is - is there. **Align** changes only where a thing sits, and
 **Tools** measures a model, mends it, or makes something new from it.
 
-**Classic or Advanced**, at the right of the tabs, decides how much of that is shown. Classic
-shows only the tools 3D Builder had, for anyone who wants the old app back and nothing else;
-Advanced, the default, shows everything. Only buttons are hidden, never a setting inside a panel,
-every key works in both, and **F1** lists the keys for whatever is showing. The choice is
-remembered.
+**Classic, Advanced or Extended**, at the right of the tabs, decides how much of that is shown.
+Classic shows only the tools 3D Builder had, for anyone who wants the old app back and nothing
+else; Advanced, the default, adds the working set - sketches, holes, the Library, blueprints; and
+Extended adds the specialized and experimental tools too. Only buttons are hidden, never a setting
+inside a panel, every key works at every level, and **F1** lists the keys for whatever is showing.
+The choice is remembered, and so is the width of the side panel, which is dragged by its edge.
+
+**Keys worth knowing:** **Ctrl+L** opens the Library, **X** toggles X-ray, **Ctrl+-** is Subtract
+and **Ctrl+=** Merge. **Enter** applies the tool in hand and **Esc** puts it down. Any number box
+takes `+=5`, `-=5`, `*=1.5` or `/=2` to change what is there, and copy and paste work between two
+windows of the app.
+
+**Resizing:** the resize strip reads in lengths or in per cent - a switch beside the boxes - and the
+corners of the box round the selection, dragged, resize it in proportion. **Keep proportions** is
+off to start with.
 
 **Camera:** left-drag orbits, right-drag pans, the wheel zooms. Dragging horizontally turns the
 scene around the vertical **Z** axis, like a turntable - the plate never rolls onto its side.
@@ -471,7 +486,7 @@ rosette.
 
 ### A stair
 
-**Stair** on the Insert tab takes a rise, a run, a width and a number of risers, shows the
+**Stair**, in the Library, takes a rise, a run, a width and a number of risers, shows the
 flight on the plate as the numbers change, and builds it as **one closed profile swept sideways**
 rather than a stack of boxes. That matters
 for what comes next: a stack of boxes has a coplanar seam at every tread, and coplanar seams are
@@ -896,7 +911,7 @@ evenly round it, one stays in the middle. Registration is better the further apa
 While the panel is open every connector is marked on the cut face and the half above it is
 faded, so what the settings do can be seen before anything is cut.
 
-**Fit test** on the Insert tab is for choosing the fit before trusting a big print to it: four
+**Brick fit test**, in the Library, is for choosing the fit before trusting a big print to it: four
 small 2x2 brick plates at -0.2, -0.1, 0 and +0.1 mm, marked with one to four notches. Print them
 in your filament and press each onto real bricks - or onto its twin, for two halves as Split
 with connectors makes them - and type the fit that holds firmly but still comes apart by hand.
@@ -946,7 +961,7 @@ everything else can still be imported, and several files land in one undo step.
 
 ### Holes
 
-**Hole** on the Insert tab makes a screw hole - **plain**, **countersunk** for a flat head, or
+**Hole** on the Tools tab makes a screw hole - **plain**, **countersunk** for a flat head, or
 **counterbored** for a socket cap to sit below the surface, with a **nut pocket** at the far end if
 asked - or a pocket for a **heat-set insert**, the brass thread pressed in with a soldering iron
 that survives being undone many times. M2 to M8.
@@ -967,7 +982,7 @@ print"*.
 
 ### Threads
 
-**Thread** on the Insert tab makes a **threaded rod**, a **bolt** with a hexagon or round head, a
+**Thread**, in the Library, makes a **threaded rod**, a **bolt** with a hexagon or round head, a
 **nut**, or a **hole cutter** to take a threaded hole out of a part - ISO metric coarse M3 to M20,
 which fills in the pitch and the ISO 4032 nut's size, or **Custom** for any diameter and pitch.
 
@@ -985,7 +1000,7 @@ wide for the threads to engage.
 
 ### Gears
 
-**Gear** on the Insert tab makes a **gear**, a **ring gear**, a **rack**, a **bevel**, a **worm** and
+**Gear**, in the Library, makes a **gear**, a **ring gear**, a **rack**, a **bevel**, a **worm** and
 its wheel, or a **ratchet** and its pawl, with the result on the plate as the numbers change. Spur
 gears, rings and racks can have **straight**, **helical** or **herringbone** teeth.
 
@@ -1104,9 +1119,15 @@ cylinders make a slot, a row of spheres a rounded bar. It replaces what was sele
 
 ### Lithophane
 
-**Lithophane** on the Insert tab is a photograph carried as thickness in a thin plate: thin where the
-picture is white and thick where it is dark, so it shows only when it is lit from behind. It is
-still marked **beta** - check what it gives you before printing it.
+**Picture lithophane**, in the Library, is a photograph carried as thickness in a thin plate: thin
+where the picture is white and thick where it is dark, so it shows only when it is lit from behind.
+
+Choose several pictures at once and it makes a **lamp** with a picture on each side - three to
+twelve sides - standing on a frame round a hole for a light, or on a hollow base holding an E26 or
+E27 bulb socket, with a notch for the cable. The **Moon lamp**, beside it in the Library, is a
+hollow moon carrying craters and seas in its wall - made up from a seed, or from NASA's map of the
+real moon - with the same socket stand if wanted. Use an LED bulb: a filament bulb runs hot enough
+to soften the plastic.
 
 Because a lithophane unlit is a grey slab, the panel shows a second preview lit from behind, from a
 tone chain that inverts the way light fades through plastic, so what it shows is what a lamp will
@@ -1139,12 +1160,16 @@ middle of the box. **Pivot to centre** puts it back. The pivot is kept with the 
 ### Aligning to a face
 
 **Align to face** on the Align tab lines a selection up on a face: pick a face on any object, then
-choose for X, Y and Z whether the selection's near edge, middle or far edge should land on the
-middle of that face. **Centre face to face** picks a face on the selection and then one on something
-else, and moves the selection so the two faces' middles meet on the axes you tick - how a lid is
-centred on an opening or a flange on its mate. The face under the pointer lights up as you pick,
-and both stay marked, green on the selection and amber on the other. In both, the selection moves
-together, keeping its own arrangement, and nothing is turned or resized.
+for X, Y and Z choose a place on the face - its near edge, middle or far edge - and the point of the
+selection that goes there. Near edge to near edge sits it flush; near edge to far edge stands it
+beside. A red sphere marks the place on the face and a blue one the point of the selection.
+
+**Center face to face** picks a face on the selection and then one on something else, and moves the
+selection so the two faces' middles meet on the axes you tick - how a lid is centered on an opening
+or a flange on its mate. Click the side of a pin or the wall of a hole and it takes the whole round
+surface and its axis: Apply puts a pin on its hole's axis, turning it parallel first if asked, and
+the panel says both diameters and the gap between them. In both, the selection moves together,
+keeping its own arrangement.
 
 The axis buttons further along the Align tab match everything to **the last object picked**, the
 same one Subtract and Align to treat as the anchor. With one object selected they align it to the
@@ -1226,6 +1251,35 @@ along every one of forty-eight facet edges at whatever angle the surface makes t
 meets a flat face tangentially all the way round its rim - both the contacts this boolean handles
 worst. Four flat faces meet a curved surface in four clean curves. Making them square took a
 two-part mould from both halves torn to neither.
+
+### The Library
+
+**Library** on the Insert tab (Ctrl+L) holds parts made to your numbers, each with its preview on
+the plate as the numbers change: boxes and organizers, hinges and clips, threads, holes and other
+fasteners, gears and mechanisms, stairs, windows, doors, dormers and roofs, lithophanes and lamps,
+and calibration prints. A search box narrows the list; favorites and the ones used last are at the
+top. Presets fill in every number, and your own can be kept under a name. A part made by the Library
+remembers how: **Edit settings** in the side panel opens it again, filled in, to make it anew where
+it stands.
+
+Every mechanism - gears, gear trains, planetary sets, the Geneva drive, the cam, the linkages, the
+bearing and a clock's motion works - can be made as a **Working model**, to print and turn by
+hand. Each gear is keyed on a D-shaft, round where it turns in the base and flatted where it drives,
+the part pressed onto it a hair over its size; a crank or a handwheel turns it; a ring, a rack, a
+frame or a follower runs in guides that print without supports and go together from above. The
+fits follow the printer's clearance set in the panel. **Turn it** in the panel plays the set turning
+and checks that nothing runs into anything, the base included. **Lay out for printing**, on by
+default, puts the parts side by side to print; off, the set goes down assembled, as the preview
+shows it.
+
+### Keyhole and Surface info
+
+**Keyhole** on the Tools tab cuts keyhole slots into the face of a part that goes against the wall:
+click the face, drag the keyholes into place - side by side or one above another - and Apply.
+Printed wall studs and a drilling template go on the plate beside it if wanted.
+
+**Surface info** lights the face under the pointer; a click reads its middle, which way it faces,
+its size and its area, in the unit the app is set to. It stays out until Cancel.
 
 ### Stopping a long operation
 

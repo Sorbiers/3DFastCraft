@@ -121,7 +121,7 @@ public class LibraryTests
         memory.Used("box.open");
 
         view.SearchText = "";
-        Assert.Equal(["Favourites", "Recently used"], view.Headings.Take(2));
+        Assert.Equal(["Favorites", "Recently used"], view.Headings.Take(2));
         Assert.True(memory.IsFavourite("box.open"));
     });
 

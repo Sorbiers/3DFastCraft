@@ -30,7 +30,7 @@
         <RadioButton x:Name="FormatObj" GroupName="Format"
                      Content="Wavefront OBJ - keeps objects named and separate" Checked="OnOptionChanged" />
         <RadioButton x:Name="FormatThreeMf" GroupName="Format"
-                     Content="3MF - parts, names and colours in millimetres; what slicers prefer" Checked="OnOptionChanged" />
+                     Content="3MF - parts, names and colors in millimeters; what slicers prefer" Checked="OnOptionChanged" />
 
         <CheckBox x:Name="DropToPlate" Margin="2,16,2,2" Foreground="#FF33383F"
                   Content="Drop to the build plate"

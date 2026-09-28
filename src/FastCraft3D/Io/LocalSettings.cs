@@ -30,11 +30,12 @@ namespace FastCraft3D.Io;
 /// default written here has to be the one that reads back as sticky - the 3D Builder behaviour -
 /// rather than sticky itself.
 /// </param>
+/// <param name="SidePanelWidth">How wide the side panel was dragged; nought, as a file from before it reads, for the default.</param>
 public readonly record struct RememberedSettings(
     float PlateWidth, float PlateDepth, float PlateHeight, string Unit,
     bool ShowAxes = true, bool ShowZAxis = false, bool ShowGridLabels = false, bool FoldProperties = false,
     bool ClassicMode = false, bool ShowShadows = false, bool ShowReflections = false,
-    bool SingleSelection = false, bool ExtendedMode = false);
+    bool SingleSelection = false, bool ExtendedMode = false, float SidePanelWidth = 0f);
 
 /// <summary>
 /// The printable area, the unit and how the grid is drawn, as last used, remembered between sessions.

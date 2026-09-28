@@ -60,8 +60,8 @@
             </StackPanel>
             <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
                 <RadioButton x:Name="GapsBox" GroupName="GridSpacing" Content="Gap between" IsChecked="True" Margin="0,0,14,0"
-                             Checked="OnChanged" ToolTip="The clear space between neighbours, whatever size they are: a plate of parts to print" />
-                <RadioButton x:Name="PitchBox" GroupName="GridSpacing" Content="Centre to centre"
+                             Checked="OnChanged" ToolTip="The clear space between neighbors, whatever size they are: a plate of parts to print" />
+                <RadioButton x:Name="PitchBox" GroupName="GridSpacing" Content="Center to center"
                              Checked="OnChanged" ToolTip="From the middle of one to the middle of the next: a pattern of holes or pegs" />
             </StackPanel>
         </StackPanel>
@@ -92,7 +92,7 @@
                        Foreground="#FF9AA0A8" TextWrapping="Wrap" Margin="0,0,0,6" />
 
             <StackPanel Orientation="Horizontal">
-                <TextBlock Text="Centre" Style="{DynamicResource FieldLabel}" Width="48"
+                <TextBlock Text="Center" Style="{DynamicResource FieldLabel}" Width="48"
                            ToolTip="The point on the plate the ring turns about." />
                 <TextBlock Text="X" VerticalAlignment="Center" Foreground="#FF5A5F66" Width="12" />
                 <TextBox x:Name="CentreXBox" Width="56" Style="{DynamicResource NumberBox}" Text="0"
@@ -130,9 +130,9 @@
                 <TextBlock Text="mm per copy" Foreground="#FF9AA0A8" VerticalAlignment="Center" />
             </StackPanel>
 
-            <CheckBox x:Name="FaceBox" Content="Turn each copy to face the centre" IsChecked="True"
+            <CheckBox x:Name="FaceBox" Content="Turn each copy to face the center" IsChecked="True"
                       AutomationProperties.AutomationId="RingFaceCentre" Margin="0,4,0,8" Click="OnChanged"
-                      ToolTip="Each copy is turned by the angle it travelled, so it keeps the same face towards the centre - gear teeth, crenellations, the treads of a spiral stair. Untick for a bolt circle: a round hole does not care which way it points." />
+                      ToolTip="Each copy is turned by the angle it traveled, so it keeps the same face toward the center - gear teeth, crenellations, the treads of a spiral stair. Untick for a bolt circle: a round hole does not care which way it points." />
         </StackPanel>
 
         <StackPanel x:Name="GrowPanel">

@@ -7,8 +7,8 @@ namespace FastCraft3D.Generators.Lithophanes;
 
 public enum MoonSurface
 {
-    [ShownAs("NASA photograph")] Photo,
-    [ShownAs("Made up")] MadeUp
+    [ShownAs("Craters")] MadeUp,
+    [ShownAs("NASA photograph")] Photo
 }
 
 /// <summary>
@@ -34,7 +34,7 @@ public sealed class Moon : Generator<Moon.Settings>
     public override string Summary => "A hollow moon with craters and seas in its wall, to light from inside.";
 
     public sealed record Settings(
-        [Choice("Surface", Hint = "The real moon, from NASA's photographs, or one made up of craters from a seed")] MoonSurface Surface = MoonSurface.Photo,
+        [Choice("Surface", Hint = "Craters made up from a seed, or the real moon from NASA's photographs")] MoonSurface Surface = MoonSurface.MadeUp,
         [Length("Diameter", 30, 200)] float Diameter = 100f,
         [Wall("Wall", 0.6, 3, Hint = "The thinnest the shell goes, where it is brightest")] float Wall = 0.8f,
         [Length("Relief", 0.4, 5, Hint = "How much thicker the darkest parts are than the brightest")] float Relief = 2f,
@@ -46,7 +46,7 @@ public sealed class Moon : Generator<Moon.Settings>
         [Toggle("Socket stand", Group = "Stand", Hint = "A stand for an E26 or E27 bulb socket: a hollow column with a notch for the cable, the socket through a plate at its top, and a ring the moon's opening sits over")] bool Stand = false,
         [Length("Socket hole", 10, 60, Group = "Stand", Hint = "40 mm takes a socket held by its shade ring, 10.5 mm one on a threaded nipple. Measure yours."), ShowWhen(nameof(Stand), true)] float SocketHole = 40f,
         [Length("Stand height", 15, 150, Group = "Stand", Hint = "Room under the plate for the socket's body and the cable"), ShowWhen(nameof(Stand), true)] float StandHeight = 50f,
-        [Toggle("Organize", Hint = "Laid out on the bed to print. Off: the moon put on its stand, as the preview shows it.")] bool Organise = true);
+        [Toggle("Lay out for printing", Hint = "On: the parts side by side, ready to print. Off: the moon put on its stand, as the preview shows it.")] bool Organise = true);
 
     protected override IEnumerable<(string Name, Settings Settings)> Shipped =>
     [
@@ -54,7 +54,7 @@ public sealed class Moon : Generator<Moon.Settings>
         ("Small moon, 60 mm", Default with { Diameter = 60, Opening = 32, Craters = 110, Relief = 1.6f, Detail = 0.6f }),
         ("Large moon, 150 mm", Default with { Diameter = 150, Opening = 50, Craters = 260, Detail = 1f }),
         ("Moon on an E26 stand, 150 mm", Default with { Diameter = 150, Opening = 70, Detail = 1f, Stand = true }),
-        ("Made-up moon, 100 mm", Default with { Surface = MoonSurface.MadeUp })
+        ("Real moon from NASA's map, 100 mm", Default with { Surface = MoonSurface.Photo })
     ];
 
     protected override IEnumerable<string> Check(Settings s, Printer printer)

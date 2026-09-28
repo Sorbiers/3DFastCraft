@@ -25,7 +25,7 @@ public sealed class Gear : Generator<Gear.Settings>
 
     public sealed record Settings(
         [Choice("Kind")] GearKind Kind = GearKind.Gear,
-        [Choice("Teeth form", Hint = "Helical teeth wind round as they rise: quieter and smoother. Herringbone goes one way to the middle and back, with no sideways push.")]
+        [Choice("Tooth form", Hint = "Helical teeth wind round as they rise: quieter and smoother. Herringbone goes one way to the middle and back, with no sideways push.")]
         ToothForm Form = ToothForm.Straight,
         [Length("Module", 0.2, 10, Hint = "The size of a tooth. Gears only mesh with gears of the same module. The pitch diameter is the module times the teeth; 1 to 2 prints well on a 0.4 mm nozzle.")]
         float Module = 1.5f,
@@ -38,7 +38,7 @@ public sealed class Gear : Generator<Gear.Settings>
         [Length("Chamfer", 0, 5, Hint = "Taken off the tips' edges top and bottom, so the first layer does not flare into the next tooth")] float Chamfer = 0f,
 
         [Toggle("Cut away", Group = "Cut away", Hint = "Teeth over only part of the rim: a sector that drives something back and forth")] bool Partial = false,
-        [Count("Kept teeth", 1, 400, UnitText = "teeth", Group = "Cut away")] int KeptTeeth = 5,
+        [Count("Teeth kept", 1, 400, UnitText = "teeth", Group = "Cut away")] int KeptTeeth = 5,
         [Toggle("Frame", Group = "Cut away", Hint = "A frame round the cut-away gear that it drives back and forth")] bool Frame = false,
         [Choice("Frame ends", Group = "Cut away")] FrameEnds FrameEnds = FrameEnds.Round,
         [Length("Frame clearance", 0.1, 1, Group = "Cut away", Hint = "The gap all round between the gear and the frame")] float FrameClearance = 0.25f,
@@ -65,8 +65,8 @@ public sealed class Gear : Generator<Gear.Settings>
         [Length("Hub", 0, 300, Group = "Shaft", Hint = "The hub's diameter. Nought for none.")] float HubDiameter = 0f,
         [Length("Hub height", 0, 100, Group = "Shaft")] float HubHeight = 0f,
         [Length("Set screw", 0, 20, Group = "Shaft", Hint = "The set screw's hole through the hub. Nought for none.")] float SetScrew = 0f,
-        [Toggle("Demo", Group = "Demo", Hint = "A model to print and turn by hand: each gear keyed on a D-shaft the bore's size through a base, a crank or a handwheel to turn it, and guides for a ring, a rack or a frame")] bool Demo = false,
-        [Toggle("Organize", Hint = "Laid out on the bed to print. Off: put on the plate as it goes together, as the preview shows it.")] bool Organise = true);
+        [Toggle("Working model", Group = "Working model", Hint = "A model to print and turn by hand: each gear keyed on a D-shaft the bore's size through a base, a crank or a handwheel to turn it, and guides for a ring, a rack or a frame")] bool Demo = false,
+        [Toggle("Lay out for printing", Hint = "On: the parts side by side, ready to print. Off: put down assembled, as the preview shows it.")] bool Organise = true);
 
     protected override IEnumerable<(string Name, Settings Settings)> Shipped =>
     [
@@ -295,7 +295,7 @@ public sealed class Gear : Generator<Gear.Settings>
 
                 var ring = Shapes.Subtract(Shapes.Tube(round + post + 3f, MathF.Max(outer - 2f, inner + 1f), keeper, keeper + 2.5f, middle), holes);
                 demo.Lying("Ring keeper", "keeper", ring);
-                notes.Add("Drop the ring onto its bed inside the posts, then press the keeper down onto the posts over it.");
+                notes.Add("Drop the ring into place inside the posts, then press the keeper down onto the posts over it.");
                 break;
             }
 

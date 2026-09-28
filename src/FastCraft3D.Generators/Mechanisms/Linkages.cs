@@ -66,8 +66,8 @@ public sealed class FourBar : Generator<FourBar.Settings>
         [Length("Link thickness", 2, 10, Group = "Links")] float Thickness = 4f,
         [Length("Pin", 2, 10, Group = "Links")] float Pin = 4f,
         [Clearance("Fit", 0.05, 1, Group = "Links", Hint = "Round each pin in its holes")] float Fit = 0.2f,
-        [Toggle("Demo", Group = "Demo", Hint = "A model to turn by hand: the crank and the rocker keyed on D-shafts through a base, the coupler over them on rivets, a knob on the crank's rivet to turn it by")] bool Demo = false,
-        [Toggle("Organize", Hint = "Laid out on the bed to print. Off: put on the plate as it goes together, as the preview shows it.")] bool Organise = true);
+        [Toggle("Working model", Group = "Working model", Hint = "A model to turn by hand: the crank and the rocker keyed on D-shafts through a base, the coupler over them on rivets, a knob on the crank's rivet to turn it by")] bool Demo = false,
+        [Toggle("Lay out for printing", Hint = "On: the parts side by side, ready to print. Off: put down assembled, as the preview shows it.")] bool Organise = true);
 
     protected override IEnumerable<string> Check(Settings s, Printer printer)
     {
@@ -328,8 +328,8 @@ public sealed class CrankSlider : Generator<CrankSlider.Settings>
         [Length("Link thickness", 2, 10)] float Thickness = 4f,
         [Length("Pin", 2, 10)] float Pin = 4f,
         [Clearance("Fit", 0.05, 1)] float Fit = 0.2f,
-        [Toggle("Demo", Group = "Demo", Hint = "A model to turn by hand: the crank keyed on a D-shaft through a base, the slider in a channel, the rod over them on rivets, a knob on the crank's rivet")] bool Demo = false,
-        [Toggle("Organize", Hint = "Laid out on the bed to print. Off: put on the plate as it goes together, as the preview shows it.")] bool Organise = true);
+        [Toggle("Working model", Group = "Working model", Hint = "A model to turn by hand: the crank keyed on a D-shaft through a base, the slider in a channel, the rod over them on rivets, a knob on the crank's rivet")] bool Demo = false,
+        [Toggle("Lay out for printing", Hint = "On: the parts side by side, ready to print. Off: put down assembled, as the preview shows it.")] bool Organise = true);
 
     protected override IEnumerable<string> Check(Settings s, Printer printer)
     {
@@ -507,8 +507,8 @@ public sealed class Bearing : Generator<Bearing.Settings>
         [Length("Outside", 15, 120)] float Outside = 30f,
         [Length("Width", 5, 30)] float Width = 9f,
         [Clearance("Clearance", 0.1, 1, Hint = "Round each ball. Print-in-place wants a little more than a sliding fit: raise it if the balls fuse.")] float Clearance = 0.35f,
-        [Toggle("Demo", Group = "Demo", Hint = "A stand the inner race presses onto, and a spinner that grips the outer race, with a knob to turn it by")] bool Demo = false,
-        [Toggle("Organize", Hint = "Laid out on the bed to print. Off: put on the plate as it goes together, as the preview shows it.")] bool Organise = true);
+        [Toggle("Working model", Group = "Working model", Hint = "A stand the inner race presses onto, and a spinner that grips the outer race, with a knob to turn it by")] bool Demo = false,
+        [Toggle("Lay out for printing", Hint = "On: the parts side by side, ready to print. Off: put down assembled, as the preview shows it.")] bool Organise = true);
 
     private static float Ball(Settings s) => MathF.Min(s.Width / 2f, ((s.Outside - s.Bore) / 2f - 2 * 1.6f) / 2f);
 

@@ -7,14 +7,14 @@
     <StackPanel>
         <TextBlock x:Name="SubjectText" TextWrapping="Wrap" Foreground="#FF3A4550" Margin="0,0,0,8" />
 
-        <TextBlock Text="Favour" Style="{DynamicResource FieldLabel}" HorizontalAlignment="Left" Margin="0,0,0,4" />
+        <TextBlock Text="Favor" Style="{DynamicResource FieldLabel}" HorizontalAlignment="Left" Margin="0,0,0,4" />
         <ComboBox x:Name="FavourBox" Margin="0,0,0,10" SelectedIndex="0"
                   SelectionChanged="OnFavourChanged"
                   AutomationProperties.AutomationId="BestFaceFavour"
                   ToolTip="What to weigh most. Support is usually the one that matters - it is the material, the time and the scar it leaves when it is broken off.">
             <ComboBoxItem Content="Less support" />
             <ComboBoxItem Content="Shorter print" />
-            <ComboBoxItem Content="Firmer footing" />
+            <ComboBoxItem Content="More stable" />
         </ComboBox>
 
         <ItemsControl x:Name="ChoiceList" AutomationProperties.AutomationId="BestFaceChoices">

@@ -28,7 +28,7 @@ public static class ObjWriter
 
         using (var writer = new StreamWriter(path, false, new UTF8Encoding(false)))
         {
-            writer.WriteLine("# Exported by 3DFastCraft - units are millimetres");
+            writer.WriteLine("# Exported by 3DFastCraft - units are millimeters");
             if (writeMaterials) writer.WriteLine($"mtllib {materialFile}");
 
             int positionOffset = 1;

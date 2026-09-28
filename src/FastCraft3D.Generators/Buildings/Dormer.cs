@@ -104,7 +104,7 @@ public sealed class Dormer : Generator<Dormer.Settings>
             notes.AddRange(Glazing.Notes(s.GlassThickness, printer));
         }
 
-        notes.Add($"Its underside slopes at {s.Pitch:0} degrees: stand it on a roof of that pitch, the front towards the eaves, and Merge.");
+        notes.Add($"Its underside slopes at {s.Pitch:0} degrees: stand it on a roof of that pitch, the front toward the eaves, and Merge.");
         return new Generated(parts, notes);
     }
 

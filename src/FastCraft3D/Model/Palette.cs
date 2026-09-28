@@ -44,7 +44,7 @@ public static class Palette
         new("Orchid", Cycle[3]), new("Pink", FromHex("#E87BA8")),
 
         new("White", FromHex("#F2F3F5")), new("Silver", FromHex("#C9CDD2")),
-        new("Grey", FromHex("#9AA0A8")), new("Slate", FromHex("#5F6A75")),
+        new("Gray", FromHex("#9AA0A8")), new("Slate", FromHex("#5F6A75")),
         new("Charcoal", FromHex("#3A3F45")), new("Black", FromHex("#23262A")),
         new("Sand", FromHex("#D9C39A")), new("Brown", FromHex("#8C6242"))
     ];
@@ -77,7 +77,7 @@ public static class Palette
     /// <summary>For the fixed swatches above, where a bad literal is a bug rather than input.</summary>
     public static Vector3 FromHex(string text) => TryFromHex(text, out var colour)
         ? colour
-        : throw new ArgumentException($"'{text}' is not a colour", nameof(text));
+        : throw new ArgumentException($"'{text}' is not a color", nameof(text));
 
     /// <summary>Accepts <c>#RRGGBB</c>, <c>RRGGBB</c> and the three-digit shorthand.</summary>
     public static bool TryFromHex(string? text, out Vector3 colour)

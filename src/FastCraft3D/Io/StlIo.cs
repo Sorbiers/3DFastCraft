@@ -37,7 +37,7 @@ public static class StlWriter
         using var writer = new BinaryWriter(stream, Encoding.ASCII, leaveOpen: true);
 
         var header = new byte[BinaryHeaderSize];
-        var tag = Encoding.ASCII.GetBytes("Binary STL exported by 3DFastCraft (millimetres)");
+        var tag = Encoding.ASCII.GetBytes("Binary STL exported by 3DFastCraft (millimeters)");
         Array.Copy(tag, header, Math.Min(tag.Length, BinaryHeaderSize));
         writer.Write(header);
 

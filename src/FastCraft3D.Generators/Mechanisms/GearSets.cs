@@ -48,9 +48,9 @@ public sealed class GearTrain : Generator<GearTrain.Settings>
         [Count("Pinion", 8, 30, UnitText = "teeth", Hint = "The small gear of every stage")] int Pinion = 12,
         [Count("Largest", 20, 150, UnitText = "teeth", Hint = "The most teeth any gear may have")] int Largest = 60,
         [Length("Thickness", 3, 20)] float Thickness = 6f,
-        [Length("Bore", 0, 10, Hint = "For the shafts. Nought for none. In a demo, the D-shafts' diameter.")] float Bore = 3.2f,
-        [Toggle("Demo", Group = "Demo", Hint = "A model to turn by hand: every shaft's gears keyed on a D-shaft through a base, a crank on the first")] bool Demo = false,
-        [Toggle("Organize", Hint = "Laid out on the bed to print. Off: put on the plate as it goes together, as the preview shows it.")] bool Organise = true);
+        [Length("Bore", 0, 10, Hint = "For the shafts. Nought for none. In a working model, the D-shafts' diameter.")] float Bore = 3.2f,
+        [Toggle("Working model", Group = "Working model", Hint = "A model to turn by hand: every shaft's gears keyed on a D-shaft through a base, a crank on the first")] bool Demo = false,
+        [Toggle("Lay out for printing", Hint = "On: the parts side by side, ready to print. Off: put down assembled, as the preview shows it.")] bool Organise = true);
 
     protected override IEnumerable<(string Name, Settings Settings)> Shipped =>
     [
@@ -183,15 +183,15 @@ public sealed class Planetary : Generator<Planetary.Settings>
     public sealed record Settings(
         [Length("Module", 0.5, 3)] float Module = 1.5f,
         [Count("Sun", 8, 60, UnitText = "teeth")] int Sun = 12,
-        [Count("Planets' teeth", 8, 60, UnitText = "teeth")] int Planet = 12,
+        [Count("Planet teeth", 8, 60, UnitText = "teeth")] int Planet = 12,
         [Count("Planets", 2, 8)] int Planets = 3,
         [Length("Thickness", 3, 20)] float Thickness = 8f,
         [Length("Ring rim", 2, 10)] float Rim = 3f,
         [Length("Sun bore", 0, 10)] float Bore = 5f,
         [Length("Planet pins", 1.5, 8, Hint = "The carrier's pins, and the planets' bores round them")] float Pin = 3f,
         [Clearance("Fit", 0.05, 1, Hint = "Round each planet's pin, and under the carrier")] float Fit = 0.25f,
-        [Toggle("Demo", Group = "Demo", Hint = "A model to turn by hand: the ring held in a cup on a base, the sun on a D-shaft with a crank, the carrier turning over the planets")] bool Demo = false,
-        [Toggle("Organize", Hint = "Laid out on the bed to print. Off: put on the plate as it goes together, as the preview shows it.")] bool Organise = true);
+        [Toggle("Working model", Group = "Working model", Hint = "A model to turn by hand: the ring held in a cup on a base, the sun on a D-shaft with a crank, the carrier turning over the planets")] bool Demo = false,
+        [Toggle("Lay out for printing", Hint = "On: the parts side by side, ready to print. Off: put down assembled, as the preview shows it.")] bool Organise = true);
 
     public static int Ring(Settings s) => s.Sun + 2 * s.Planet;
 
@@ -211,7 +211,7 @@ public sealed class Planetary : Generator<Planetary.Settings>
         if (s.Bore > s.Module * (s.Sun - 2.5f) - 2) yield return "The sun's bore is wider than its roots allow.";
         if (s.Demo && new Demo(printer, s.Bore).HoleRadius * 2 > s.Module * (s.Sun - 2.5f) - 2)
             yield return "The sun is too small for a D-shaft: more teeth on the sun, or a larger module.";
-        if (s.Demo && s.Rim < 2.5f) yield return "A demo keys the ring into its cup by notches in its rim: a rim of 2.5 mm at least.";
+        if (s.Demo && s.Rim < 2.5f) yield return "A working model keys the ring into its cup by notches in its rim: a rim of 2.5 mm at least.";
     }
 
     protected override Generated Build(Settings s, Printer printer, CancellationToken token)

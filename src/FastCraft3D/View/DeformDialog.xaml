@@ -7,7 +7,7 @@
         <TextBlock x:Name="SubjectText" TextWrapping="Wrap" Foreground="#FF3A4550" Margin="0,0,0,8" />
 
         <StackPanel x:Name="AxisRow" Orientation="Horizontal" Margin="0,0,0,6">
-            <TextBlock Text="Towards" Style="{DynamicResource FieldLabel}" Width="62" />
+            <TextBlock Text="Toward" Style="{DynamicResource FieldLabel}" Width="62" />
             <RadioButton x:Name="AxisX" Content="X" GroupName="DeformAxis" IsChecked="True" Margin="0,0,14,0"
                          VerticalAlignment="Center" Checked="OnAxisChanged" />
             <RadioButton x:Name="AxisY" Content="Y" GroupName="DeformAxis" VerticalAlignment="Center"

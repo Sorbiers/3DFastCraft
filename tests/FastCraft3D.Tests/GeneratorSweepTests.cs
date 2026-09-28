@@ -50,8 +50,9 @@ public class GeneratorSweepTests
         Assert.False(string.IsNullOrWhiteSpace(g.Title));
         Assert.False(string.IsNullOrWhiteSpace(g.Category));
 
-        // Reading the settings record throws with the reason if anything about it is wrong.
-        Assert.NotEmpty(g.Parameters);
+        // Reading the settings record throws with the reason if anything about it is wrong. An
+        // entry that opens a tool of the app's own has nothing to set.
+        if (g is not FastCraft3D.Generators.Lithophanes.IOpensTool) Assert.NotEmpty(g.Parameters);
         Assert.Empty(g.Problems(g.Defaults(), Printer.Default));
     }
 

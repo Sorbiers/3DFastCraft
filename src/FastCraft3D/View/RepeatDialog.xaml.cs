@@ -187,7 +187,7 @@ public partial class RepeatDialog : ToolPanel
         float now = RepeatArray.DistanceFromCentre(subjects, s.Centre);
         string moved = MathF.Abs(now - s.Radius) < 5e-3f
             ? ""
-            : $" Moves the selection from {now:0.##} to {s.Radius:0.##} mm from the centre.";
+            : $" Moves the selection from {now:0.##} to {s.Radius:0.##} mm from the center.";
 
         string climb = MathF.Abs(s.Rise) < 1e-4f
             ? ""

@@ -6,7 +6,7 @@ namespace FastCraft3D.Generators.Boxes;
 public enum LidKind
 {
     /// <summary>A plate with a lip that drops inside the rim.</summary>
-    [ShownAs("Lift off")] LiftOff,
+    [ShownAs("Lift-off")] LiftOff,
 
     /// <summary>A plate that slides in along grooves in the walls, in through the front.</summary>
     Sliding

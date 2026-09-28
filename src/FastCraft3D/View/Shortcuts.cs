@@ -72,6 +72,7 @@ public static class Shortcuts
         new("File", "Import", Key.I, Ctrl, "ImportCommand"),
         new("File", "Export", Key.E, Ctrl, "ExportCommand"),
         new("File", "Blueprint: three views with dimensions, to print", Key.P, Ctrl, "PrintDrawingCommand", Advanced: true),
+        new("File", "Library: boxes, gears, lamps and the rest, made to size", Key.L, Ctrl, "OpenLibraryCommand", Advanced: true),
 
         new("Edit", "Undo", Key.Z, Ctrl, "UndoCommand"),
         new("Edit", "Redo", Key.Y, Ctrl, "RedoCommand"),
@@ -106,6 +107,7 @@ public static class Shortcuts
         new("Move, rotate, resize", "Nudge down, along -Z", Key.PageDown, Action: KeyAction.NudgeDown),
         new("Move, rotate, resize", "A nudge is the snap step, or 1 mm with snap off; Shift makes it ten", Text: "Shift"),
         new("Move, rotate, resize", "Put down the tool in hand", Key.Escape, Action: KeyAction.None, Text: "Esc"),
+        new("Move, rotate, resize", "Apply the tool in hand; Ctrl+Enter from inside a number box", Text: "Enter"),
 
         new("Sketching", "Close the outline being drawn", Text: "Enter", Advanced: true),
         new("Sketching", "Take back the last point, or the last outline", Text: "Backspace", Advanced: true),
@@ -113,7 +115,7 @@ public static class Shortcuts
 
         new("Dragging a resize handle", "Keep proportions, the other way to the button", Text: "Ctrl"),
         new("Dragging a resize handle", "One way only, the other way to the button", Text: "Alt"),
-        new("Dragging a resize handle", "Snap the size to whole millimetres", Text: "Shift"),
+        new("Dragging a resize handle", "Snap the size to whole millimeters", Text: "Shift"),
 
         new("View", "Zoom to fit", Key.F, Action: KeyAction.ZoomToFit),
         new("View", "X-ray: fade all but the selection", Key.X, Action: KeyAction.Xray),

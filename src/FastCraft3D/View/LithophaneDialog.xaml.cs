@@ -234,7 +234,7 @@ public partial class LithophaneDialog : ToolPanel
         {
             $"{grid.Width:0.#} x {grid.Height:0.#} mm, {o.MinThickness:0.##} to {o.MaxThickness:0.##} mm thick.",
             $"{grid.Columns} x {grid.Rows} samples, {grid.Triangles:N0} triangles.",
-            $"{greys} greys at a {o.LayerHeight:0.##} mm layer - the picture cannot show more than that."
+            $"{greys} grays at a {o.LayerHeight:0.##} mm layer - the picture cannot show more than that."
         };
 
         if (greys < 12)
@@ -255,7 +255,7 @@ public partial class LithophaneDialog : ToolPanel
                 notes.Add("Use an LED bulb: a filament bulb runs hot enough to soften the plastic.");
         }
 
-        notes.Add("It stands upright, which is how it has to print: laid flat, every grey becomes a layer step.");
+        notes.Add("It stands upright, which is how it has to print: laid flat, every gray becomes a layer step.");
         SummaryText.Text = string.Join("\n", notes);
     }
 

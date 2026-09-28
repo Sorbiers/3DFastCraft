@@ -86,7 +86,7 @@ public static class MouldAnalysis
 
         var grid = VoxelRebuild.Sample(mesh, resolution, token);
         if (grid.Inside.Length == 0)
-            return new MouldStudy([], [], Vector3.Zero, [], "Nothing to make a mould of.");
+            return new MouldStudy([], [], Vector3.Zero, [], "Nothing to make a mold of.");
 
         var pulls = new List<PullReport>();
         foreach (var axis in new[] { Axis.X, Axis.Y, Axis.Z })

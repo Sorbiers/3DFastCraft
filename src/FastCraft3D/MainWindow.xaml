@@ -429,6 +429,7 @@
         <!-- A box that reads off several objects: blank with a quiet "mixed" when they differ.
              Not a 0, which is a value and invites typing over it as though it were true. -->
         <view:MixedNumberConverter x:Key="Mixed" />
+        <view:LengthConverter x:Key="Length" />
         <Style x:Key="GizmoMixedBox" TargetType="TextBox" BasedOn="{StaticResource GizmoBox}">
             <Style.Triggers>
                 <MultiTrigger>
@@ -502,19 +503,16 @@
                             ToolTip="A cube, cylinder, cone, sphere or torus with its size, segments and roundness chosen before it is made - more segments for a smoother shape" />
                     <Button Style="{StaticResource ToolButton}" Content="Text" Tag="{StaticResource IconText3D}"
                             Command="{Binding InsertTextCommand}" MinWidth="58"
-                            ToolTip="Lettering as an object of its own - a sign, a name tag, a keychain - in any installed font, lying on the plate or standing up. To put letters on a face that is already there, use Emboss or Engrave." />
-                    <Button Style="{StaticResource ToolButton}" Content="Lithophane" Visibility="{Binding IsExtendedMode, Converter={StaticResource BoolToVisibility}}" Tag="{StaticResource IconLithophane}"
-                            Command="{Binding InsertLithophaneCommand}" MinWidth="86"
-                            ToolTip="BETA - new, and still being proved out; check what it gives you before printing it. A photograph as a thin translucent plate: thin where the picture is white, thick where it is dark, so it shows only when it is lit from behind. Flat, or curved round for a lamp shade." />
+                            ToolTip="Lettering as an object of its own - a sign, a name tag, a keychain - in any installed font. To letter an existing face, use Emboss." />
                     <Button Style="{StaticResource ToolButton}" Content="Sketch" Visibility="{Binding IsAdvancedMode, Converter={StaticResource BoolToVisibility}}" Tag="{StaticResource IconSketchLine}"
                             Command="{Binding BeginSketchCommand}" MinWidth="64"
-                            ToolTip="Draw an outline on the plate - lines, arcs, smooth curves, freehand, rectangles, circles - and extrude or revolve it into a solid. Seen from above; Escape or Done when finished." />
+                            ToolTip="Draw an outline on the plate - lines, arcs, curves, freehand, rectangles, circles - and extrude or revolve it into a solid. Esc or Done when finished." />
                     <Button Style="{StaticResource ToolButton}" Content="Import" Tag="{StaticResource IconImport}"
                             Command="{Binding ImportCommand}" ToolTip="Bring in an STL, an OBJ, or another 3DFastCraft project - its objects join what is already on the plate (Ctrl+I)" />
                     <Separator Margin="8,0" Visibility="{Binding IsAdvancedMode, Converter={StaticResource BoolToVisibility}}" />
                     <Button Style="{StaticResource ToolButton}" Content="Library" Visibility="{Binding IsAdvancedMode, Converter={StaticResource BoolToVisibility}}" Tag="{StaticResource IconLibrary}"
                             Command="{Binding OpenLibraryCommand}" MinWidth="64" AutomationProperties.AutomationId="Library"
-                            ToolTip="BETA - new, and still being proved out; check what it gives you before printing it. Parts made to your numbers: boxes, organisers, hinges, clips, threads and other fasteners, gears and mechanisms, stairs, windows, doors and roofs, and the brick fit test. Pick one, set its sizes with the preview on the plate, and insert it." />
+                            ToolTip="Beta. Parts made to your numbers: boxes, organizers, hinges, fasteners, gears and mechanisms, building parts, lithophanes and lamps, calibration prints. (Ctrl+L)" />
                 </WrapPanel>
             </TabItem>
 
@@ -541,7 +539,7 @@
                             ToolTip="Copy the selection and take it away (Ctrl+X). One undo step puts it back." />
                     <Button Style="{StaticResource ToolButton}" Content="Paste" Tag="{StaticResource IconPaste}"
                             Command="{Binding PasteCommand}"
-                            ToolTip="Put the clipboard back exactly where it was taken from (Ctrl+V) - which means a paste can land inside the thing it was copied from. Use Duplicate for a copy set beside the original." />
+                            ToolTip="Paste exactly where it was copied from (Ctrl+V), so it may land inside the original. Use Duplicate for a copy beside it." />
                     <Separator Margin="8,0" />
                     <Button Style="{StaticResource ToolButton}" Content="Duplicate" Tag="{StaticResource IconDuplicate}"
                             Command="{Binding DuplicateCommand}"
@@ -555,7 +553,7 @@
                     <Separator Margin="8,0" />
                     <Button Style="{StaticResource ToolButton}" Content="Subtract" Tag="{StaticResource IconSubtract}"
                             Command="{Binding BeginSubtractCommand}" MinWidth="80"
-                            ToolTip="Take the last object picked away from everything picked before it. Each of those is cut on its own and stays a separate object. Opens the options on the right: a tolerance, and whether to keep the cutter. Needs two or more objects selected, the cutter picked last. (Ctrl+-)" />
+                            ToolTip="Cut the last picked object out of the others; each stays a separate object. Options on the right: tolerance, keep the cutter. Select two or more, the cutter last. (Ctrl+-)" />
                     <Button Style="{StaticResource ToolButton}" Content="Intersect" Tag="{StaticResource IconIntersect}"
                             Command="{Binding BooleanCommand}" CommandParameter="Intersect"
                             ToolTip="Keep only the overlapping volume. Needs two or more objects selected." />
@@ -569,23 +567,23 @@
                     <Separator Visibility="{Binding IsExtendedMode, Converter={StaticResource BoolToVisibility}}" Margin="8,0" />
                     <Button Style="{StaticResource ToolButton}" Content="Set pivot" Visibility="{Binding IsExtendedMode, Converter={StaticResource BoolToVisibility}}" Tag="{StaticResource IconPivot}"
                             Command="{Binding SetPivotCommand}" MinWidth="80"
-                            ToolTip="Click a point on the object to measure and turn it about - a shaft hole, a corner, a hinge line. The position boxes then read that point, a turn goes round it, and lining it up with another part compares it rather than the middle of its box. Kept with the project. Needs exactly one object selected." />
-                    <Button Style="{StaticResource ToolButton}" Content="Pivot to centre" Visibility="{Binding IsExtendedMode, Converter={StaticResource BoolToVisibility}}" Tag="{StaticResource IconPivotCentre}"
+                            ToolTip="Click a point to turn and measure about - a shaft hole, a corner, a hinge line. The position boxes then read that point. Saved with the project. Select one object." />
+                    <Button Style="{StaticResource ToolButton}" Content="Pivot to center" Visibility="{Binding IsExtendedMode, Converter={StaticResource BoolToVisibility}}" Tag="{StaticResource IconPivotCentre}"
                             Command="{Binding PivotToCentreCommand}" MinWidth="104"
                             ToolTip="Puts the pivot back in the middle of the object's box, where it starts out. Needs exactly one object selected." />
                     <Separator Visibility="{Binding IsAdvancedMode, Converter={StaticResource BoolToVisibility}}" Margin="8,0" />
                     <Button Style="{StaticResource ToolButton}" Content="Round" Visibility="{Binding IsAdvancedMode, Converter={StaticResource BoolToVisibility}}" Tag="{StaticResource IconRound}"
                             Command="{Binding RoundCommand}" MinWidth="82"
-                            ToolTip="Round the edges of a cube or cylinder. Only shapes still described by their parameters can be rounded. Needs a cube or cylinder that has not been cut or reshaped since it was inserted." />
+                            ToolTip="Round the edges of a cube or cylinder that hasn't been cut or reshaped since it was inserted." />
                     <Button Style="{StaticResource ToolButton}" Content="Twist" Visibility="{Binding IsAdvancedMode, Converter={StaticResource BoolToVisibility}}" Tag="{StaticResource IconTwist}"
                             Command="{Binding TwistCommand}" MinWidth="70"
                             ToolTip="Turn a shape about its upright axis by more the higher up it goes - twisted columns, vases and spirals. The bottom stays put." />
                     <Button Style="{StaticResource ToolButton}" Content="Taper" Visibility="{Binding IsAdvancedMode, Converter={StaticResource BoolToVisibility}}" Tag="{StaticResource IconTaper}"
                             Command="{Binding TaperCommand}" MinWidth="70"
-                            ToolTip="Narrow or widen a shape towards the top - tapered columns, spires, flared vases. The bottom keeps its size." />
+                            ToolTip="Narrow or widen a shape toward the top - tapered columns, spires, flared vases. The bottom keeps its size." />
                     <Button Style="{StaticResource ToolButton}" Content="Bend" Visibility="{Binding IsAdvancedMode, Converter={StaticResource BoolToVisibility}}" Tag="{StaticResource IconBend}"
                             Command="{Binding BendCommand}" MinWidth="70"
-                            ToolTip="Curve a shape over as if round a pipe, towards X or Y - arches, horns, hooks. The bottom stays put." />
+                            ToolTip="Curve a shape over as if round a pipe, toward X or Y - arches, horns, hooks. The bottom stays put." />
                     <Separator Margin="8,0" />
                     <Button Style="{StaticResource ToolButton}" Content="Simplify" Tag="{StaticResource IconSimplify}"
                             Command="{Binding SimplifyCommand}" MinWidth="82"
@@ -597,7 +595,7 @@
                             Command="{Binding HollowCommand}" MinWidth="78"
                             ToolTip="Turn a solid into a shell of a chosen wall thickness, to save material" />
                     <Separator Margin="8,0" />
-                    <Button Style="{StaticResource ToolButton}" Content="Colour" Tag="{StaticResource IconColour}"
+                    <Button Style="{StaticResource ToolButton}" Content="Color" Tag="{StaticResource IconColour}"
                             Command="{Binding PickColourCommand}" MinWidth="78"
                             ToolTip="Paint the selection. The palette in the right-hand panel is one click." />
                 </WrapPanel>
@@ -607,32 +605,32 @@
                 <WrapPanel Margin="4">
                     <Button Style="{StaticResource ToolButton}" Content="Drop to plate" Tag="{StaticResource IconDropToPlate}"
                             Command="{Binding AlignToPlateCommand}" MinWidth="90"
-                            ToolTip="Set the selection down on z = 0, so it is standing on the bed rather than floating over it" />
-                    <Button Style="{StaticResource ToolButton}" Content="Lay on face" Visibility="{Binding IsAdvancedMode, Converter={StaticResource BoolToVisibility}}" Tag="{StaticResource IconLayOnFace}"
+                            ToolTip="Set the selection down on z = 0, so it is standing on the plate rather than floating over it" />
+                    <Button Style="{StaticResource ToolButton}" Content="Place on face" Visibility="{Binding IsAdvancedMode, Converter={StaticResource BoolToVisibility}}" Tag="{StaticResource IconLayOnFace}"
                             Command="{Binding BeginLayCommand}" MinWidth="86"
                             ToolTip="Pick a face and the object is tipped over to stand on it - the flat side down, for printing. Needs exactly one object selected." />
                     <Button Style="{StaticResource ToolButton}" Content="Best face down" Visibility="{Binding IsAdvancedMode, Converter={StaticResource BoolToVisibility}}" Tag="{StaticResource IconBestFace}"
                             Command="{Binding BestFaceCommand}" MinWidth="106"
                             AutomationProperties.AutomationId="BestFaceDown"
-                            ToolTip="Work out every way up the part could be printed and put them in order - how much support each would need, how tall it would stand, how much of it touches the bed and how easily it is knocked over. Hover one to see it, click to stand it there. Needs exactly one object selected." />
+                            ToolTip="Rank every way up the part could print - support, height, footprint, stability. Hover to preview, click to stand it there. Select one object." />
                     <Button Style="{StaticResource ToolButton}" Content="Align to" Visibility="{Binding IsAdvancedMode, Converter={StaticResource BoolToVisibility}}" Tag="{StaticResource IconAlignCentre}"
                             Command="{Binding AlignToSelectionCommand}" MinWidth="72"
-                            ToolTip="Move the first object you picked so its bounding box is centred on the second's. Two objects: the first moves, the second stays. Nothing is rotated or resized. Needs exactly two objects selected." />
+                            ToolTip="Center the first picked object's box on the second's. Nothing is rotated or resized. Select two objects." />
                     <Button Style="{StaticResource ToolButton}" Content="Align to face" Visibility="{Binding IsExtendedMode, Converter={StaticResource BoolToVisibility}}" Tag="{StaticResource IconAlignToFace}"
                             Command="{Binding BeginAlignFaceCommand}" MinWidth="86"
-                            ToolTip="Pick a face on any object, then choose for X, Y and Z a place on the face - its near edge, middle or far edge - and the point of the selection that goes there. The whole selection moves together, keeping its own arrangement - nothing is rotated or resized." />
-                    <Button Style="{StaticResource ToolButton}" Content="Centre face to face" Visibility="{Binding IsExtendedMode, Converter={StaticResource BoolToVisibility}}" Tag="{StaticResource IconCentreFaceToFace}"
+                            ToolTip="Pick a face, then choose a place on it and the point of the selection that goes there, for X, Y and Z. The selection moves as one; nothing is rotated or resized." />
+                    <Button Style="{StaticResource ToolButton}" Content="Center face to face" Visibility="{Binding IsExtendedMode, Converter={StaticResource BoolToVisibility}}" Tag="{StaticResource IconCentreFaceToFace}"
                             Command="{Binding BeginCentreFaceCommand}" MinWidth="96"
-                            ToolTip="Pick a face on the selected object(s), then a face on a different, unselected one, then choose which axes should match. The whole selection moves together so the two faces' middles coincide on those axes - the way you'd centre a lid on an opening or a flange on its mate." />
+                            ToolTip="Pick a face on the selection, then one on another object; the selection moves so their middles line up - like centering a lid on an opening. Round faces line up by their axis." />
                     <Separator Margin="8,0" Visibility="{Binding IsAdvancedMode, Converter={StaticResource BoolToVisibility}}" />
                     <Button Style="{StaticResource ToolButton}" Content="Fit" Visibility="{Binding IsAdvancedMode, Converter={StaticResource BoolToVisibility}}" Tag="{StaticResource IconFitBed}"
                             Command="{Binding FitToBedCommand}" MinWidth="58"
                             AutomationProperties.Name="Fit to bed"
-                            ToolTip="Shrink the selection to fit the printable area, 20 mm clear of the edge, and stand it in the middle of the bed. Only shrinks what is too big - nothing is ever made bigger. The size and height come from View, Grid." />
+                            ToolTip="Shrink the selection to fit the printable area, 20 mm from the edge, and center it on the plate. Never enlarges. The size is set in View, Grid." />
                     <Button Style="{StaticResource ToolButton}" Content="Distribute" Visibility="{Binding IsAdvancedMode, Converter={StaticResource BoolToVisibility}}" Tag="{StaticResource IconArrangeBed}"
                             Command="{Binding DistributeOnBedCommand}" MinWidth="72"
                             AutomationProperties.Name="Distribute on bed"
-                            ToolTip="Set the selected objects out in rows across the bed, a gap you choose apart, standing on it. Needs two or more objects selected." />
+                            ToolTip="Set the selected objects out in rows across the plate, a gap you choose apart, standing on it. Needs two or more objects selected." />
                     <Separator Margin="8,0" />
                     <Button Style="{StaticResource ToolButton}" Content="Mirror X" Tag="{StaticResource IconMirror}"
                             Command="{Binding MirrorCommand}" CommandParameter="X" />
@@ -645,13 +643,13 @@
                                Foreground="#FF5A5F66" Margin="10,0,4,0" />
                     <Button Visibility="{Binding IsAdvancedMode, Converter={StaticResource BoolToVisibility}}" Style="{StaticResource ToolButton}" Content="Left" Tag="{StaticResource IconAlignMin}"
                             Command="{Binding AlignCommand}" CommandParameter="X:Minimum" MinWidth="58"
-                            ToolTip="With several selected, moves every other one to match the last picked; with one, moves it to the bed's edge." />
-                    <Button Visibility="{Binding IsAdvancedMode, Converter={StaticResource BoolToVisibility}}" Style="{StaticResource ToolButton}" Content="Centre" Tag="{StaticResource IconAlignCentre}"
+                            ToolTip="With several selected, moves every other one to match the last picked; with one, moves it to the plate's edge." />
+                    <Button Visibility="{Binding IsAdvancedMode, Converter={StaticResource BoolToVisibility}}" Style="{StaticResource ToolButton}" Content="Center" Tag="{StaticResource IconAlignCentre}"
                             Command="{Binding AlignCommand}" CommandParameter="X:Centre" MinWidth="58"
-                            ToolTip="With several selected, moves every other one to match the last picked; with one, centres it on the bed." />
+                            ToolTip="With several selected, moves every other one to match the last picked; with one, centers it on the plate." />
                     <Button Visibility="{Binding IsAdvancedMode, Converter={StaticResource BoolToVisibility}}" Style="{StaticResource ToolButton}" Content="Right" Tag="{StaticResource IconAlignMax}"
                             Command="{Binding AlignCommand}" CommandParameter="X:Maximum" MinWidth="58"
-                            ToolTip="With several selected, moves every other one to match the last picked; with one, moves it to the bed's edge." />
+                            ToolTip="With several selected, moves every other one to match the last picked; with one, moves it to the plate's edge." />
                     <Button Visibility="{Binding IsAdvancedMode, Converter={StaticResource BoolToVisibility}}" Style="{StaticResource ToolButton}" Content="Spread" Tag="{StaticResource IconDistribute}"
                             Command="{Binding AlignCommand}" CommandParameter="X:Distribute" MinWidth="58"
                             ToolTip="Even out the gaps along X, keeping the two outermost objects where they are. Needs two or more objects selected." />
@@ -660,13 +658,13 @@
                                Foreground="#FF5A5F66" Margin="10,0,4,0" />
                     <Button Visibility="{Binding IsAdvancedMode, Converter={StaticResource BoolToVisibility}}" Style="{StaticResource ToolButton}" Content="Front" Tag="{StaticResource IconAlignMin}"
                             Command="{Binding AlignCommand}" CommandParameter="Y:Minimum" MinWidth="58"
-                            ToolTip="With several selected, moves every other one to match the last picked; with one, moves it to the bed's edge." />
-                    <Button Visibility="{Binding IsAdvancedMode, Converter={StaticResource BoolToVisibility}}" Style="{StaticResource ToolButton}" Content="Centre" Tag="{StaticResource IconAlignCentre}"
+                            ToolTip="With several selected, moves every other one to match the last picked; with one, moves it to the plate's edge." />
+                    <Button Visibility="{Binding IsAdvancedMode, Converter={StaticResource BoolToVisibility}}" Style="{StaticResource ToolButton}" Content="Center" Tag="{StaticResource IconAlignCentre}"
                             Command="{Binding AlignCommand}" CommandParameter="Y:Centre" MinWidth="58"
-                            ToolTip="With several selected, moves every other one to match the last picked; with one, centres it on the bed." />
+                            ToolTip="With several selected, moves every other one to match the last picked; with one, centers it on the plate." />
                     <Button Visibility="{Binding IsAdvancedMode, Converter={StaticResource BoolToVisibility}}" Style="{StaticResource ToolButton}" Content="Back" Tag="{StaticResource IconAlignMax}"
                             Command="{Binding AlignCommand}" CommandParameter="Y:Maximum" MinWidth="58"
-                            ToolTip="With several selected, moves every other one to match the last picked; with one, moves it to the bed's edge." />
+                            ToolTip="With several selected, moves every other one to match the last picked; with one, moves it to the plate's edge." />
                     <Button Visibility="{Binding IsAdvancedMode, Converter={StaticResource BoolToVisibility}}" Style="{StaticResource ToolButton}" Content="Spread" Tag="{StaticResource IconDistribute}"
                             Command="{Binding AlignCommand}" CommandParameter="Y:Distribute" MinWidth="58"
                             ToolTip="Even out the gaps along Y, keeping the two outermost objects where they are. Needs two or more objects selected." />
@@ -675,13 +673,13 @@
                                Foreground="#FF5A5F66" Margin="10,0,4,0" />
                     <Button Visibility="{Binding IsAdvancedMode, Converter={StaticResource BoolToVisibility}}" Style="{StaticResource ToolButton}" Content="Bottom" Tag="{StaticResource IconAlignMin}"
                             Command="{Binding AlignCommand}" CommandParameter="Z:Minimum" MinWidth="58"
-                            ToolTip="With several selected, moves every other one to match the last picked; with one, moves it to the bed's edge." />
-                    <Button Visibility="{Binding IsAdvancedMode, Converter={StaticResource BoolToVisibility}}" Style="{StaticResource ToolButton}" Content="Centre" Tag="{StaticResource IconAlignCentre}"
+                            ToolTip="With several selected, moves every other one to match the last picked; with one, moves it to the plate's edge." />
+                    <Button Visibility="{Binding IsAdvancedMode, Converter={StaticResource BoolToVisibility}}" Style="{StaticResource ToolButton}" Content="Center" Tag="{StaticResource IconAlignCentre}"
                             Command="{Binding AlignCommand}" CommandParameter="Z:Centre" MinWidth="58"
-                            ToolTip="With several selected, moves every other one to match the last picked; with one, centres it on the bed." />
+                            ToolTip="With several selected, moves every other one to match the last picked; with one, centers it on the plate." />
                     <Button Visibility="{Binding IsAdvancedMode, Converter={StaticResource BoolToVisibility}}" Style="{StaticResource ToolButton}" Content="Top" Tag="{StaticResource IconAlignMax}"
                             Command="{Binding AlignCommand}" CommandParameter="Z:Maximum" MinWidth="58"
-                            ToolTip="With several selected, moves every other one to match the last picked; with one, moves it to the bed's edge." />
+                            ToolTip="With several selected, moves every other one to match the last picked; with one, moves it to the plate's edge." />
                     <Button Visibility="{Binding IsAdvancedMode, Converter={StaticResource BoolToVisibility}}" Style="{StaticResource ToolButton}" Content="Spread" Tag="{StaticResource IconDistribute}"
                             Command="{Binding AlignCommand}" CommandParameter="Z:Distribute" MinWidth="58"
                             ToolTip="Even out the gaps along Z, keeping the two outermost objects where they are. Needs two or more objects selected." />
@@ -694,12 +692,12 @@
                  the things that move objects, and it moves nothing at all. -->
             <TabItem Header="Tools">
                 <WrapPanel Margin="4">
-                    <Button Style="{StaticResource ToolButton}" Content="Mould" Visibility="{Binding IsAdvancedMode, Converter={StaticResource BoolToVisibility}}" Tag="{StaticResource IconHollow}"
+                    <Button Style="{StaticResource ToolButton}" Content="Mold" Visibility="{Binding IsAdvancedMode, Converter={StaticResource BoolToVisibility}}" Tag="{StaticResource IconHollow}"
                             Command="{Binding MouldCommand}" MinWidth="76"
-                            ToolTip="Make a mould of the selection to pour silicone into: a block with the model taken out of it, cut so the cast part comes out, with a pour hole and air vents. Select one object. Needs exactly one object selected." />
-                    <Button Style="{StaticResource ToolButton}" Content="Hull" Visibility="{Binding IsAdvancedMode, Converter={StaticResource BoolToVisibility}}" Tag="{StaticResource IconHull}"
+                            ToolTip="Make a silicone mold of the selected object: a block with the model taken out, cut to open, with a pour hole and air vents. Select one object." />
+                    <Button Style="{StaticResource ToolButton}" Content="Convex hull" Visibility="{Binding IsAdvancedMode, Converter={StaticResource BoolToVisibility}}" Tag="{StaticResource IconHull}"
                             Command="{Binding HullCommand}"
-                            ToolTip="Wrap the selection in one skin, as cling film pulled tight round it: two cylinders make a slot, a row of spheres a rounded bar. Replaces what was selected. Needs something selected." />
+                            ToolTip="Wrap the selection in one tight skin - two cylinders become a slot, a row of spheres a rounded bar. Replaces the selection." />
                     <Separator Margin="8,0" Visibility="{Binding IsAdvancedMode, Converter={StaticResource BoolToVisibility}}" />
                     <Button Style="{StaticResource ToolButton}" Content="Repair" Tag="{StaticResource IconRepair}"
                             Command="{Binding RepairCommand}"
@@ -710,29 +708,29 @@
                     <Separator Margin="8,0" />
                     <Button Style="{StaticResource ToolButton}" Content="Voronoi" Visibility="{Binding IsExtendedMode, Converter={StaticResource BoolToVisibility}}" Tag="{StaticResource IconVoronoi}"
                             Command="{Binding VoronoiCommand}" MinWidth="82"
-                            ToolTip="BETA - new, and still being proved out; check what it gives you before printing it. Cut the selection into a web of struts along the walls of a Voronoi tessellation - the openwork lamp or vase, or a foam through the inside of a part to take weight out of it. Worked out on a voxel grid, so it comes back watertight; detail finer than a voxel is gone. Needs something selected." />
+                            ToolTip="Beta. Cut the selection into a web of Voronoi struts - an openwork lamp or vase, or a lightweight core. Built on a voxel grid, so it is watertight; detail finer than a voxel is lost." />
                     <Button Style="{StaticResource ToolButton}" Content="Extrude down" Tag="{StaticResource IconExtrudeDown}"
                             Command="{Binding BeginExtrudeCommand}" MinWidth="90"
-                            ToolTip="Cut the model at a height and carry its outline straight down to a flat base on the plate. For a scan with a ragged bottom, a relief that is only a skin, or a part tilted off its feet." />
+                            ToolTip="Cut the model at a height and extend its outline straight down to a flat base - for a ragged scan, a relief skin or a tilted part." />
                     <Button Style="{StaticResource ToolButton}" Content="Split with connectors" Visibility="{Binding IsAdvancedMode, Converter={StaticResource BoolToVisibility}}" Tag="{StaticResource IconSplitConnectors}"
                             Command="{Binding BeginSplitWithConnectorsCommand}" MinWidth="120"
-                            ToolTip="Cut a model too big for the plate into two halves that go back together one way only: round pins in holes on both halves, or pegs on one half and sockets in the other." />
+                            ToolTip="Cut an oversized model into two halves that fit back together one way only - pins in holes, or pegs in sockets." />
                     <Button Style="{StaticResource ToolButton}" Content="Connect objects" Visibility="{Binding IsAdvancedMode, Converter={StaticResource BoolToVisibility}}" Tag="{StaticResource IconConnect}"
                             Command="{Binding BeginConnectCommand}" MinWidth="100"
-                            ToolTip="Pins or pegs through the face two parts rest against each other on - a floor on its basement, two blocks side by side - so they go together one way only. Select the two parts. Needs exactly two objects selected." />
+                            ToolTip="Add pins or pegs through the face where two parts meet - a floor on its basement, two blocks side by side - so they fit one way only. Select two objects." />
                     <Button Style="{StaticResource ToolButton}" Content="Hole" Visibility="{Binding IsAdvancedMode, Converter={StaticResource BoolToVisibility}}" Tag="{StaticResource IconHole}"
                             Command="{Binding InsertHoleCommand}" MinWidth="58"
-                            ToolTip="A screw hole - plain, countersunk or counterbored, with a nut pocket if asked - or a heat-set insert pocket, M2 to M8. Cut into the top of the one part selected, or made as a cutter to place and Subtract." />
+                            ToolTip="A screw hole - plain, countersunk or counterbored, with an optional nut pocket - or a heat-set insert pocket, M2 to M8. Cut into the selected part, or made as a cutter." />
                     <Button Style="{StaticResource ToolButton}" Content="Keyhole" Visibility="{Binding IsAdvancedMode, Converter={StaticResource BoolToVisibility}}" Tag="{StaticResource IconWallMount}"
                             Command="{Binding BeginWallMountCommand}" MinWidth="76"
-                            ToolTip="Keyhole slots to hang a part on a wall: select the part, press this, click the face that goes against the wall, drag the keyholes into place, and Apply. Printed wall studs and a drilling template if wanted." />
+                            ToolTip="Keyhole slots to hang a part on a wall: click the back face, drag the keyholes into place, Apply. Optional printed wall studs and a drilling template." />
                     <Separator Margin="8,0" />
                     <Button Style="{StaticResource ToolButton}" Content="Emboss" Tag="{StaticResource IconText}"
                             Command="{Binding BeginEmbossCommand}" MinWidth="78"
                             ToolTip="Raise lettering or a drawing off a face, or cut it in. Needs exactly one object selected." />
                     <Button Style="{StaticResource ToolButton}" Content="Engrave" Visibility="{Binding IsExtendedMode, Converter={StaticResource BoolToVisibility}}" Tag="{StaticResource IconEngrave}"
                             Command="{Binding BeginEngraveCommand}" MinWidth="82"
-                            ToolTip="LEGACY. Put brick, roof tiles, planks or grain on one flat face - cut in, or standing proud. Flat faces only, and one pattern at a time. Texture, in Emboss, does the same patterns and a good many more, wraps them round a curve, and has the shaped ones - lap siding, roof tiles and sawn boarding - that this cannot do at all. Kept because it is what the models made with it were made with." />
+                            ToolTip="Legacy. One pattern - brick, tiles, planks, grain - on one flat face. Texture in Emboss does all this and more, and wraps around curves. Kept for older models." />
                     <Separator Visibility="{Binding IsAdvancedMode, Converter={StaticResource BoolToVisibility}}" Margin="8,0" />
                     <Button Style="{StaticResource ToolButton}" Content="Repeat" Visibility="{Binding IsAdvancedMode, Converter={StaticResource BoolToVisibility}}" Tag="{StaticResource IconRepeat}"
                             Command="{Binding RepeatCommand}" MinWidth="76"
@@ -743,11 +741,11 @@
                             ToolTip="Click two points to measure between them, then drag either end to move it" />
                     <Button Style="{StaticResource ToolButton}" Content="Fit check" Visibility="{Binding IsAdvancedMode, Converter={StaticResource BoolToVisibility}}" Tag="{StaticResource IconMeasure}"
                             Command="{Binding FitCheckCommand}" MinWidth="72"
-                            ToolTip="Measures two parts against each other without changing either: how far they overlap, or how big the gap is. A pin with no hole and a frame too big for its opening both look right on screen. Needs exactly two objects selected." />
+                            ToolTip="Measure how far two parts overlap, or the gap between them, without changing either. Select two objects." />
                     <Button Style="{StaticResource ToolButton}" Content="Surface info" Tag="{StaticResource IconSurfaceInfo}"
                             Command="{Binding BeginSurfaceInfoCommand}" MinWidth="84"
                             AutomationProperties.AutomationId="SurfaceInfo"
-                            ToolTip="Where a face is and how big: point at a face on any object to light it, click to read its middle, which way it faces, its size and its area. Stays out until Cancel." />
+                            ToolTip="Point at a face to highlight it; click to read its middle, direction, size and area. Stays on until Cancel." />
                 </WrapPanel>
             </TabItem>
 
@@ -778,7 +776,7 @@
                             Command="{Binding SaveCommand}" ToolTip="Save the project (Ctrl+S)" />
                     <Button Style="{StaticResource ToolButton}" Content="Save as" Tag="{StaticResource IconSaveAs}" Command="{Binding SaveAsCommand}" MinWidth="86"
                             ToolTip="Save the project under a new name (Ctrl+Shift+S)" />
-                    <Button Style="{StaticResource ToolButton}" Content="Save a version" Tag="{StaticResource IconVersions}"
+                    <Button Style="{StaticResource ToolButton}" Content="Save version" Tag="{StaticResource IconVersions}"
                             Command="{Binding SaveVersionCommand}" MinWidth="88"
                             ToolTip="Keep a named snapshot inside this project file, so you can come back to it later" />
                     <Button Style="{StaticResource ToolButton}" Content="Versions" Tag="{StaticResource IconVersions}"
@@ -791,17 +789,17 @@
                     <Button Style="{StaticResource ToolButton}" Content="Blueprint" Visibility="{Binding IsAdvancedMode, Converter={StaticResource BoolToVisibility}}" Tag="{StaticResource IconDrawing}"
                             Command="{Binding PrintDrawingCommand}" MinWidth="70"
                             AutomationProperties.Name="Blueprint"
-                            ToolTip="A blueprint: front, top and right views, and an isometric, with the overall dimensions - to print, or save as a PDF. The selection, or everything when nothing is selected (Ctrl+P)" />
+                            ToolTip="Front, top and right views and an isometric, with dimensions - to print or save as PDF. The selection, or everything if nothing is selected. (Ctrl+P)" />
                     <Separator Margin="8,0" Visibility="{Binding IsExtendedMode, Converter={StaticResource BoolToVisibility}}" />
                     <Button Style="{StaticResource ToolButton}" Content="Export session" Visibility="{Binding IsExtendedMode, Converter={StaticResource BoolToVisibility}}" Tag="{StaticResource IconExportSession}"
                             Command="{Binding ExportSessionCommand}" MinWidth="96"
-                            ToolTip="Write out every undo step since the plate was last empty, one file per step, oldest first - as .3dfc, .3mf or .stl. Asks for a format and a folder. For a picture of each step, use Record instead." />
+                            ToolTip="Save every undo step since the plate was empty, one file each, as .3dfc, .3mf or .stl. For pictures, use Record." />
                     <Button Style="{StaticResource ToolButton}" Content="{Binding RecordButtonLabel}" Visibility="{Binding IsExtendedMode, Converter={StaticResource BoolToVisibility}}" Tag="{StaticResource IconRecord}"
                             Command="{Binding RecordCommand}" MinWidth="86"
-                            ToolTip="While on, saves a screenshot to a folder you choose after every action - and, for a tool with an Apply button, one just before it too. For building up a set of pictures of the tools as they are used." />
+                            ToolTip="While on, saves a screenshot after every action - and one just before each Apply - to a folder you choose." />
                     <Separator Margin="8,0" />
                     <Button Style="{StaticResource ToolButton}" Content="About" Tag="{StaticResource IconAbout}"
-                            Click="OnAbout" ToolTip="Version, licence and where the source lives" />
+                            Click="OnAbout" ToolTip="Version, license and where the source lives" />
                     <ToggleButton Style="{StaticResource ToolToggle}" Content="Shortcuts" Tag="{StaticResource IconKeyboard}"
                                   IsChecked="{Binding IsShortcutsPanelOpen, Mode=TwoWay}" MinWidth="76"
                                   AutomationProperties.Name="Shortcuts"
@@ -825,7 +823,7 @@
                                   ToolTip="Draw every triangle edge - useful for seeing how dense an import is" />
                     <ToggleButton Style="{StaticResource ToolToggle}" Content="X-ray" Tag="{StaticResource IconXray}"
                                   IsChecked="{Binding ShowXray}"
-                                  ToolTip="Fade everything that is not selected, to see a part buried inside another. While a tool has the plate to itself - a split, a preview - it also brings the rest back, drawn through rather than taken away (X)" />
+                                  ToolTip="Fade everything not selected, to see parts hidden inside others. During a tool, shows the rest see-through. (X)" />
                     <ToggleButton Style="{StaticResource ToolToggle}" Content="Outline" Visibility="{Binding IsExtendedMode, Converter={StaticResource BoolToVisibility}}" Tag="{StaticResource IconOutline}"
                                   IsChecked="{Binding ShowOutlines}" MinWidth="76"
                                   AutomationProperties.Name="Outline"
@@ -836,22 +834,22 @@
                     <ToggleButton Style="{StaticResource ToolToggle}" Content="Overhangs" Visibility="{Binding IsAdvancedMode, Converter={StaticResource BoolToVisibility}}" Tag="{StaticResource IconOverhang}"
                                   IsChecked="{Binding ShowOverhangs, Mode=TwoWay}" MinWidth="76"
                                   AutomationProperties.Name="Overhangs"
-                                  ToolTip="Faces that lean further from upright than the angle, marked in colour - what the slicer will want to support. Faces flat on the bed are left out: the bed holds them up. The angle and colour are set in the side panel while this is on." />
+                                  ToolTip="Mark faces steeper than the overhang angle - what the slicer will support. Faces flat on the plate are skipped. The angle and color are set in the side panel." />
                     <ToggleButton Style="{StaticResource ToolToggle}" Content="Grid" Tag="{StaticResource IconGrid}"
                                   IsChecked="{Binding IsGridPanelOpen, Mode=TwoWay}"
                                   AutomationProperties.Name="Grid"
                                   ToolTip="The printable area, and how the axes and distances are drawn on the plate" />
                     <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="6,0,0,0">
                         <TextBlock Text="Units" Style="{StaticResource FieldLabel}" Margin="8,0,6,0"
-                                   ToolTip="What the position and size boxes are read and typed in. Display only: millimetres are what is stored and what is written to an STL, which has no unit of its own and is read as millimetres by every slicer." />
+                                   ToolTip="The unit the boxes read in. Display only: models are stored and exported in millimeters, as every slicer expects." />
                         <ComboBox Width="64" IsEditable="True" IsReadOnly="True"
                                   ItemsSource="{Binding Units}"
                                   AutomationProperties.AutomationId="MeasureUnit"
                                   SelectedItem="{Binding Unit, Mode=TwoWay}"
-                                  ToolTip="Millimetres, centimetres, metres, inches or feet." />
+                                  ToolTip="Millimeters, centimeters, meters, inches or feet." />
 
                         <TextBlock Text="Scale 1:" Style="{StaticResource FieldLabel}" Margin="14,0,6,0"
-                                   ToolTip="What the model is drawn to. It changes no geometry and no field - the millimetres stay millimetres, because that is what a slicer reads. What it changes is the grey reading beside them, which says what those millimetres come to at this scale." />
+                                   ToolTip="The scale the model is drawn to. It changes no geometry; the gray readings show what the millimeters come to at this scale." />
                         <!-- SelectionChanged as well as the Text binding: the binding commits on
                              focus loss, which is right while someone is typing "160" and wrong
                              when they pick a row - the scale would sit unchanged until they
@@ -1049,7 +1047,7 @@
                                 <Button x:Name="ColourDot" DockPanel.Dock="Left" Style="{StaticResource RowIconButton}" Margin="0,0,2,0"
                                         Command="{Binding DataContext.PickObjectColourCommand, RelativeSource={RelativeSource AncestorType=Window}}"
                                         CommandParameter="{Binding}" AutomationProperties.Name="Colour"
-                                        ToolTip="Colour: pick one for this object, or for the whole selection when it is part of it">
+                                        ToolTip="Color: pick one for this object, or for the whole selection when it is part of it">
                                     <Ellipse x:Name="ColourBubble" Width="11" Height="11" Stroke="#40000000" StrokeThickness="1"
                                              Fill="{Binding Colour, Converter={StaticResource ColourToBrush}}" />
                                 </Button>
@@ -1118,7 +1116,7 @@
                         <StackPanel Orientation="Horizontal" Margin="0,0,0,8"
                                     IsEnabled="{Binding SplitOffcutApplies}"
                                     Visibility="{Binding SplitKeepChoosable, Converter={StaticResource BoolToVisibility}}">
-                            <TextBlock Text="Off cut" Style="{StaticResource FieldLabel}" />
+                            <TextBlock Text="Discarded" Style="{StaticResource FieldLabel}" />
                             <RadioButton Content="Show" GroupName="SplitOffcut" Margin="0,0,8,0"
                                          Checked="OnSplitOffcutChanged" Tag="Shown" />
                             <RadioButton Content="Fade" GroupName="SplitOffcut" Margin="0,0,8,0" IsChecked="True"
@@ -1134,13 +1132,13 @@
                             <WrapPanel Margin="0,0,0,6">
                                 <RadioButton Content="Separate pins" GroupName="ConnectorStyle" Margin="0,0,10,0"
                                              IsChecked="{Binding ConnectorsArePins, Mode=TwoWay}"
-                                             ToolTip="Holes in both halves, and the pins made as parts of their own - printed lying down, so they are strong along their length. A broken pin is a reprint, not a lost half." />
+                                             ToolTip="Holes in both halves with separate pins, printed lying down for strength. A broken pin is a reprint, not a lost half." />
                                 <RadioButton Content="Pegs on one half" GroupName="ConnectorStyle" Margin="0,0,10,0"
                                              IsChecked="{Binding ConnectorsArePegs, Mode=TwoWay}"
                                              ToolTip="Pegs standing out of one half, sockets in the other. Nothing loose to lose, but pegs printed standing up are weak across their layers." />
                                 <RadioButton Content="Brick studs" GroupName="ConnectorStyle"
                                              IsChecked="{Binding ConnectorsAreBricks, Mode=TwoWay}"
-                                             ToolTip="Brick studs on the lower half and a shallow brick underside in the upper, on the 8 mm grid. The halves hold by grip, and each takes real bricks along the join. The grid repeats, so line the edges up by eye." />
+                                             ToolTip="Brick studs on the lower half and a brick underside in the upper, on the 8 mm grid. The halves grip each other and take real bricks at the join. Line up the edges by eye." />
                             </WrapPanel>
                             <StackPanel Orientation="Horizontal" Margin="0,0,0,6"
                                         Visibility="{Binding ConnectorsArePegs, Converter={StaticResource BoolToVisibility}}">
@@ -1150,15 +1148,15 @@
                                              ToolTip="Round pegs in round sockets. Use two or more: one round peg lets the halves turn on it." />
                                 <RadioButton Content="Square" GroupName="SplitPegShape" VerticalAlignment="Center"
                                              IsChecked="{Binding ConnectorPegSquare, Mode=TwoWay}"
-                                             ToolTip="Square pegs in square sockets, the size box giving the side. A square peg cannot turn, so even one lines the halves up. Its corners reach further than a round peg, so it keeps a little further from the edge." />
+                                             ToolTip="Square pegs in square sockets; the size is the side. One square peg is enough to align the halves. Kept a little further from the edge than round ones." />
                             </StackPanel>
                             <StackPanel Orientation="Horizontal" Margin="0,0,0,6"
                                         Visibility="{Binding ConnectorsAreBricks, Converter={StaticResource BoolToVisibility}}">
                                 <TextBlock Text="Fit" Style="{StaticResource FieldLabel}" Width="76"
-                                           ToolTip="How much fatter than standard the studs, and the tubes and walls that grip them, are made - in mm across, on both halves. The two halves add up: at -0.1 each there is about 0.2 mm of play in all. -0.1 suits PLA on a tuned printer, about -0.15 PETG." />
+                                           ToolTip="How much larger the studs, tubes and walls are made, in mm, on both halves - so -0.1 on each gives about 0.2 mm of play. Try -0.1 for PLA, -0.15 for PETG." />
                                 <TextBox Width="64" Style="{StaticResource NumberBox}" Tag="number"
-                                         Text="{Binding ConnectorBrickFit, StringFormat=N2, UpdateSourceTrigger=LostFocus}" />
-                                <TextBlock Text="mm" Foreground="#FF9AA0A8" VerticalAlignment="Center" Margin="5,0,0,0" />
+                                         Text="{Binding ConnectorBrickFit, StringFormat=N2, UpdateSourceTrigger=LostFocus, Converter={StaticResource Length}}" />
+                                <TextBlock Text="{Binding DataContext.UnitLabel, RelativeSource={RelativeSource AncestorType=Window}}" Foreground="#FF9AA0A8" VerticalAlignment="Center" Margin="5,0,0,0" />
                             </StackPanel>
                             <TextBlock TextWrapping="Wrap" Foreground="#FF7A8088" Margin="0,0,0,6"
                                        Visibility="{Binding ConnectorsAreBricks, Converter={StaticResource BoolToVisibility}}"
@@ -1173,7 +1171,7 @@
                                              ToolTip="Straight up and down, so the top half of a tilted cut still lifts straight off. Not on a vertical cut, which they would run along." />
                                 <RadioButton Content="Horizontal" GroupName="ConnectorDirection"
                                              IsChecked="{Binding ConnectorsHorizontal, Mode=TwoWay}"
-                                             ToolTip="Level, towards the cut, so a half on a leaning cut slides off sideways. Not on a level cut, which they would run along." />
+                                             ToolTip="Level, toward the cut, so a half on a leaning cut slides off sideways. Not on a level cut, which they would run along." />
                             </StackPanel>
                             <StackPanel Orientation="Horizontal" Margin="0,0,0,2">
                                 <TextBlock Text="How many" Style="{StaticResource FieldLabel}" Width="76"
@@ -1186,32 +1184,32 @@
                                 <TextBlock Text="{Binding ConnectorSizeLabel}" Style="{StaticResource FieldLabel}" Width="76" />
                                 <TextBox Width="64" Style="{StaticResource NumberBox}" Tag="number"
                                          AutomationProperties.AutomationId="ConnectorDiameter"
-                                         Text="{Binding ConnectorDiameter, StringFormat=N1, UpdateSourceTrigger=LostFocus}" />
-                                <TextBlock Text="mm" Foreground="#FF9AA0A8" VerticalAlignment="Center" Margin="5,0,0,0" />
+                                         Text="{Binding ConnectorDiameter, StringFormat=N1, UpdateSourceTrigger=LostFocus, Converter={StaticResource Length}}" />
+                                <TextBlock Text="{Binding DataContext.UnitLabel, RelativeSource={RelativeSource AncestorType=Window}}" Foreground="#FF9AA0A8" VerticalAlignment="Center" Margin="5,0,0,0" />
                             </StackPanel>
                             <StackPanel Orientation="Horizontal" Margin="0,0,0,2">
                                 <TextBlock Text="Depth" Style="{StaticResource FieldLabel}" Width="76"
                                            ToolTip="How far a connector goes into each half." />
                                 <TextBox Width="64" Style="{StaticResource NumberBox}" Tag="number"
                                          AutomationProperties.AutomationId="ConnectorDepth"
-                                         Text="{Binding ConnectorDepth, StringFormat=N1, UpdateSourceTrigger=LostFocus}" />
-                                <TextBlock Text="mm" Foreground="#FF9AA0A8" VerticalAlignment="Center" Margin="5,0,0,0" />
+                                         Text="{Binding ConnectorDepth, StringFormat=N1, UpdateSourceTrigger=LostFocus, Converter={StaticResource Length}}" />
+                                <TextBlock Text="{Binding DataContext.UnitLabel, RelativeSource={RelativeSource AncestorType=Window}}" Foreground="#FF9AA0A8" VerticalAlignment="Center" Margin="5,0,0,0" />
                             </StackPanel>
                             <StackPanel Orientation="Horizontal" Margin="0,0,0,2">
                                 <TextBlock Text="Clearance" Style="{StaticResource FieldLabel}" Width="76"
                                            ToolTip="Per side, as for Subtract: a 5 mm pin with 0.2 goes into a 5.4 mm hole." />
                                 <TextBox Width="64" Style="{StaticResource NumberBox}" Tag="number"
                                          AutomationProperties.AutomationId="ConnectorClearance"
-                                         Text="{Binding ConnectorClearance, StringFormat=N2, UpdateSourceTrigger=LostFocus}" />
-                                <TextBlock Text="mm" Foreground="#FF9AA0A8" VerticalAlignment="Center" Margin="5,0,0,0" />
+                                         Text="{Binding ConnectorClearance, StringFormat=N2, UpdateSourceTrigger=LostFocus, Converter={StaticResource Length}}" />
+                                <TextBlock Text="{Binding DataContext.UnitLabel, RelativeSource={RelativeSource AncestorType=Window}}" Foreground="#FF9AA0A8" VerticalAlignment="Center" Margin="5,0,0,0" />
                             </StackPanel>
                             <StackPanel Orientation="Horizontal" Margin="0,0,0,2">
                                 <TextBlock Text="From edge" Style="{StaticResource FieldLabel}" Width="76"
-                                           ToolTip="Material left between a hole and the outside of the part. Pins go out towards the edges until this much is left - further apart registers better, but a thin wall beside a hole can split." />
+                                           ToolTip="Material left between a hole and the part's edge. Pins spread out until this much is left; too thin a wall can split." />
                                 <TextBox Width="64" Style="{StaticResource NumberBox}" Tag="number"
                                          AutomationProperties.AutomationId="ConnectorEdgeDistance"
-                                         Text="{Binding ConnectorEdgeDistance, StringFormat=N1, UpdateSourceTrigger=LostFocus}" />
-                                <TextBlock Text="mm" Foreground="#FF9AA0A8" VerticalAlignment="Center" Margin="5,0,0,0" />
+                                         Text="{Binding ConnectorEdgeDistance, StringFormat=N1, UpdateSourceTrigger=LostFocus, Converter={StaticResource Length}}" />
+                                <TextBlock Text="{Binding DataContext.UnitLabel, RelativeSource={RelativeSource AncestorType=Window}}" Foreground="#FF9AA0A8" VerticalAlignment="Center" Margin="5,0,0,0" />
                             </StackPanel>
                             </StackPanel>
                             <TextBlock Text="Both halves are kept." Foreground="#FF7A8088" Margin="0,4,0,0" />
@@ -1278,23 +1276,23 @@
                         </StackPanel>
                         <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
                             <TextBlock Text="X" Style="{StaticResource FieldLabel}" />
-                            <RadioButton Content="Leave" GroupName="AlignFaceX" Margin="0,0,8,0" IsChecked="True" Checked="OnAlignFaceModeChanged" Tag="X:None" />
+                            <RadioButton Content="Don\'t move" GroupName="AlignFaceX" Margin="0,0,8,0" IsChecked="True" Checked="OnAlignFaceModeChanged" Tag="X:None" />
                             <RadioButton Content="Min" GroupName="AlignFaceX" Margin="0,0,8,0" Checked="OnAlignFaceModeChanged" Tag="X:Minimum" />
-                            <RadioButton Content="Centre" GroupName="AlignFaceX" Margin="0,0,8,0" Checked="OnAlignFaceModeChanged" Tag="X:Centre" />
+                            <RadioButton Content="Center" GroupName="AlignFaceX" Margin="0,0,8,0" Checked="OnAlignFaceModeChanged" Tag="X:Centre" />
                             <RadioButton Content="Max" GroupName="AlignFaceX" Checked="OnAlignFaceModeChanged" Tag="X:Maximum" />
                         </StackPanel>
                         <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
                             <TextBlock Text="Y" Style="{StaticResource FieldLabel}" />
-                            <RadioButton Content="Leave" GroupName="AlignFaceY" Margin="0,0,8,0" IsChecked="True" Checked="OnAlignFaceModeChanged" Tag="Y:None" />
+                            <RadioButton Content="Don\'t move" GroupName="AlignFaceY" Margin="0,0,8,0" IsChecked="True" Checked="OnAlignFaceModeChanged" Tag="Y:None" />
                             <RadioButton Content="Min" GroupName="AlignFaceY" Margin="0,0,8,0" Checked="OnAlignFaceModeChanged" Tag="Y:Minimum" />
-                            <RadioButton Content="Centre" GroupName="AlignFaceY" Margin="0,0,8,0" Checked="OnAlignFaceModeChanged" Tag="Y:Centre" />
+                            <RadioButton Content="Center" GroupName="AlignFaceY" Margin="0,0,8,0" Checked="OnAlignFaceModeChanged" Tag="Y:Centre" />
                             <RadioButton Content="Max" GroupName="AlignFaceY" Checked="OnAlignFaceModeChanged" Tag="Y:Maximum" />
                         </StackPanel>
                         <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
                             <TextBlock Text="Z" Style="{StaticResource FieldLabel}" />
-                            <RadioButton Content="Leave" GroupName="AlignFaceZ" Margin="0,0,8,0" IsChecked="True" Checked="OnAlignFaceModeChanged" Tag="Z:None" />
+                            <RadioButton Content="Don\'t move" GroupName="AlignFaceZ" Margin="0,0,8,0" IsChecked="True" Checked="OnAlignFaceModeChanged" Tag="Z:None" />
                             <RadioButton Content="Min" GroupName="AlignFaceZ" Margin="0,0,8,0" Checked="OnAlignFaceModeChanged" Tag="Z:Minimum" />
-                            <RadioButton Content="Centre" GroupName="AlignFaceZ" Margin="0,0,8,0" Checked="OnAlignFaceModeChanged" Tag="Z:Centre" />
+                            <RadioButton Content="Center" GroupName="AlignFaceZ" Margin="0,0,8,0" Checked="OnAlignFaceModeChanged" Tag="Z:Centre" />
                             <RadioButton Content="Max" GroupName="AlignFaceZ" Checked="OnAlignFaceModeChanged" Tag="Z:Maximum" />
                         </StackPanel>
                         <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
@@ -1303,23 +1301,23 @@
                         </StackPanel>
                         <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
                             <TextBlock Text="X" Style="{StaticResource FieldLabel}" />
-                            <RadioButton Content="Leave" Margin="0,0,8,0" Visibility="Hidden" IsTabStop="False" />
+                            <RadioButton Content="Don\'t move" Margin="0,0,8,0" Visibility="Hidden" IsTabStop="False" />
                             <RadioButton Content="Min" GroupName="AlignFromX" Margin="0,0,8,0" Checked="OnAlignFaceModeChanged" Tag="SX:Minimum" />
-                            <RadioButton Content="Centre" GroupName="AlignFromX" Margin="0,0,8,0" IsChecked="True" Checked="OnAlignFaceModeChanged" Tag="SX:Centre" />
+                            <RadioButton Content="Center" GroupName="AlignFromX" Margin="0,0,8,0" IsChecked="True" Checked="OnAlignFaceModeChanged" Tag="SX:Centre" />
                             <RadioButton Content="Max" GroupName="AlignFromX" Checked="OnAlignFaceModeChanged" Tag="SX:Maximum" />
                         </StackPanel>
                         <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
                             <TextBlock Text="Y" Style="{StaticResource FieldLabel}" />
-                            <RadioButton Content="Leave" Margin="0,0,8,0" Visibility="Hidden" IsTabStop="False" />
+                            <RadioButton Content="Don\'t move" Margin="0,0,8,0" Visibility="Hidden" IsTabStop="False" />
                             <RadioButton Content="Min" GroupName="AlignFromY" Margin="0,0,8,0" Checked="OnAlignFaceModeChanged" Tag="SY:Minimum" />
-                            <RadioButton Content="Centre" GroupName="AlignFromY" Margin="0,0,8,0" IsChecked="True" Checked="OnAlignFaceModeChanged" Tag="SY:Centre" />
+                            <RadioButton Content="Center" GroupName="AlignFromY" Margin="0,0,8,0" IsChecked="True" Checked="OnAlignFaceModeChanged" Tag="SY:Centre" />
                             <RadioButton Content="Max" GroupName="AlignFromY" Checked="OnAlignFaceModeChanged" Tag="SY:Maximum" />
                         </StackPanel>
                         <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
                             <TextBlock Text="Z" Style="{StaticResource FieldLabel}" />
-                            <RadioButton Content="Leave" Margin="0,0,8,0" Visibility="Hidden" IsTabStop="False" />
+                            <RadioButton Content="Don\'t move" Margin="0,0,8,0" Visibility="Hidden" IsTabStop="False" />
                             <RadioButton Content="Min" GroupName="AlignFromZ" Margin="0,0,8,0" Checked="OnAlignFaceModeChanged" Tag="SZ:Minimum" />
-                            <RadioButton Content="Centre" GroupName="AlignFromZ" Margin="0,0,8,0" IsChecked="True" Checked="OnAlignFaceModeChanged" Tag="SZ:Centre" />
+                            <RadioButton Content="Center" GroupName="AlignFromZ" Margin="0,0,8,0" IsChecked="True" Checked="OnAlignFaceModeChanged" Tag="SZ:Centre" />
                             <RadioButton Content="Max" GroupName="AlignFromZ" Checked="OnAlignFaceModeChanged" Tag="SZ:Maximum" />
                         </StackPanel>
 
@@ -1336,7 +1334,7 @@
                         BorderBrush="#FFB8D2F0" BorderThickness="1" CornerRadius="3"
                         Visibility="{Binding IsCentreFaceMode, Converter={StaticResource BoolToVisibility}}">
                     <StackPanel>
-                        <TextBlock Text="Centre face to face" FontWeight="SemiBold" Margin="0,0,0,6" />
+                        <TextBlock Text="Center face to face" FontWeight="SemiBold" Margin="0,0,0,6" />
                         <TextBlock TextWrapping="Wrap" Foreground="#FF5A5F66" Margin="0,0,0,6"
                                    Text="Click a face on the selected object(s), then a face on a different, unselected one. A round face - a pin's side, a hole's wall - is taken whole, by its axis." />
                         <TextBlock Text="{Binding CentreFaceStatusLabel}" FontStyle="Italic" Foreground="#FF5A5F66"
@@ -1345,9 +1343,9 @@
                         <!-- A round face picked: the axes are put on one line, so X, Y and Z give way
                              to what matters for a pin in a hole. -->
                         <StackPanel Margin="0,0,0,8" Visibility="{Binding CentreIsRound, Converter={StaticResource BoolToVisibility}}">
-                            <CheckBox Content="Turn to parallel" Margin="0,0,0,4" IsChecked="{Binding CentreTurnParallel, Mode=TwoWay}"
+                            <CheckBox Content="Make axes parallel" Margin="0,0,0,4" IsChecked="{Binding CentreTurnParallel, Mode=TwoWay}"
                                       ToolTip="First turn the selection so its axis runs the same way as the other - for a pin standing at a slant" />
-                            <CheckBox Content="Middles meet along the axis" IsChecked="{Binding CentreAlongAxis, Mode=TwoWay}"
+                            <CheckBox Content="Also center along the axis" IsChecked="{Binding CentreAlongAxis, Mode=TwoWay}"
                                       ToolTip="Also slide it along the axis until the two middles meet. Off: it keeps its height, and only comes onto the axis." />
                         </StackPanel>
 
@@ -1416,13 +1414,13 @@
                         <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
                             <Button Content="Load SVG" Style="{StaticResource PanelButton}" Command="{Binding SketchLoadDrawingCommand}"
                                     AutomationProperties.AutomationId="SketchLoadSvg"
-                                    ToolTip="Bring the filled shapes of an SVG drawing into the sketch, as wide as set here, its lower left corner on the origin - to extrude, revolve, or draw beside. Turn text into paths in the drawing program first." />
+                                    ToolTip="Load the filled shapes of an SVG drawing into the sketch at this width, lower-left corner on the origin. Convert text to paths first." />
                             <TextBlock Text="Width" Style="{StaticResource FieldLabel}" Margin="4,0,6,0"
                                        ToolTip="How wide the drawing comes in: a drawing's own units are not worth trusting" />
                             <TextBox Width="52" Style="{StaticResource NumberBox}" Tag="number"
                                      AutomationProperties.AutomationId="SketchDrawingWidth"
-                                     Text="{Binding SketchDrawingWidth, StringFormat=0.##, UpdateSourceTrigger=LostFocus}" />
-                            <TextBlock Text="mm" Foreground="#FF9AA0A8" VerticalAlignment="Center" />
+                                     Text="{Binding SketchDrawingWidth, StringFormat=0.##, UpdateSourceTrigger=LostFocus, Converter={StaticResource Length}}" />
+                            <TextBlock Text="{Binding DataContext.UnitLabel, RelativeSource={RelativeSource AncestorType=Window}}" Foreground="#FF9AA0A8" VerticalAlignment="Center" />
                         </StackPanel>
 
                         <TextBlock Text="Extrude" FontWeight="SemiBold" Margin="0,0,0,4" />
@@ -1430,8 +1428,8 @@
                             <TextBlock Text="Height" Style="{StaticResource FieldLabel}" Width="62" />
                             <TextBox Width="60" Style="{StaticResource NumberBox}" Tag="number"
                                      AutomationProperties.AutomationId="SketchHeight"
-                                     Text="{Binding SketchHeight, StringFormat=0.##, UpdateSourceTrigger=LostFocus}" />
-                            <TextBlock Text="mm" Foreground="#FF9AA0A8" VerticalAlignment="Center" Margin="0,0,8,0" />
+                                     Text="{Binding SketchHeight, StringFormat=0.##, UpdateSourceTrigger=LostFocus, Converter={StaticResource Length}}" />
+                            <TextBlock Text="{Binding DataContext.UnitLabel, RelativeSource={RelativeSource AncestorType=Window}}" Foreground="#FF9AA0A8" VerticalAlignment="Center" Margin="0,0,8,0" />
                             <Button Content="Extrude" Style="{StaticResource PanelButton}" Command="{Binding SketchExtrudeCommand}" />
                         </StackPanel>
 
@@ -1497,7 +1495,7 @@
                             <TextBlock Text="Engrave a pattern" FontWeight="SemiBold" VerticalAlignment="Center" />
                             <Border Margin="8,0,0,0" Padding="6,1" CornerRadius="8"
                                     Background="#FFE4E7EC" BorderBrush="#FFA9B0BC" BorderThickness="1"
-                                    ToolTip="Superseded by Texture, in Emboss, which does these patterns and more, wraps them round a curve, and has the shaped ones this cannot do. Kept because the models made with it were made with it.">
+                                    ToolTip="Superseded by Texture in Emboss, which does more and wraps around curves. Kept for older models.">
                                 <TextBlock Text="legacy" FontSize="10" FontWeight="SemiBold" Foreground="#FF525A66" />
                             </Border>
                         </StackPanel>
@@ -1525,34 +1523,34 @@
                             <TextBlock Text="Size" Style="{StaticResource FieldLabel}" Width="76"
                                        ToolTip="Brick length, board width, or the gap between stripes" />
                             <TextBox AutomationProperties.AutomationId="EngraveSize" Width="64" Style="{StaticResource NumberBox}" Tag="number"
-                                     Text="{Binding EngraveSize, StringFormat=N1, UpdateSourceTrigger=LostFocus}" />
-                            <TextBlock Text="mm" Foreground="#FF9AA0A8" VerticalAlignment="Center" />
+                                     Text="{Binding EngraveSize, StringFormat=N1, UpdateSourceTrigger=LostFocus, Converter={StaticResource Length}}" />
+                            <TextBlock Text="{Binding DataContext.UnitLabel, RelativeSource={RelativeSource AncestorType=Window}}" Foreground="#FF9AA0A8" VerticalAlignment="Center" />
                         </StackPanel>
 
                         <StackPanel Orientation="Horizontal" Margin="0,0,0,2"
                                     Visibility="{Binding EngraveIsGrooves, Converter={StaticResource BoolToVisibility}}">
                             <TextBlock Text="Line width" Style="{StaticResource FieldLabel}" Width="76" />
                             <TextBox AutomationProperties.AutomationId="EngraveWidth" Width="64" Style="{StaticResource NumberBox}" Tag="number"
-                                     Text="{Binding EngraveGrooveWidth, StringFormat=N2, UpdateSourceTrigger=LostFocus}" />
-                            <TextBlock Text="mm" Foreground="#FF9AA0A8" VerticalAlignment="Center" />
+                                     Text="{Binding EngraveGrooveWidth, StringFormat=N2, UpdateSourceTrigger=LostFocus, Converter={StaticResource Length}}" />
+                            <TextBlock Text="{Binding DataContext.UnitLabel, RelativeSource={RelativeSource AncestorType=Window}}" Foreground="#FF9AA0A8" VerticalAlignment="Center" />
                         </StackPanel>
 
                         <StackPanel Orientation="Horizontal" Margin="0,0,0,6"
                                     Visibility="{Binding EngraveDepthApplies, Converter={StaticResource BoolToVisibility}}">
                             <TextBlock Text="{Binding EngraveDepthLabel}" Style="{StaticResource FieldLabel}" Width="76" />
                             <TextBox AutomationProperties.AutomationId="EngraveDepth" Width="64" Style="{StaticResource NumberBox}" Tag="number"
-                                     Text="{Binding EngraveDepth, StringFormat=N2, UpdateSourceTrigger=LostFocus}" />
-                            <TextBlock Text="mm" Foreground="#FF9AA0A8" VerticalAlignment="Center" />
+                                     Text="{Binding EngraveDepth, StringFormat=N2, UpdateSourceTrigger=LostFocus, Converter={StaticResource Length}}" />
+                            <TextBlock Text="{Binding DataContext.UnitLabel, RelativeSource={RelativeSource AncestorType=Window}}" Foreground="#FF9AA0A8" VerticalAlignment="Center" />
                         </StackPanel>
 
                         <!-- Studs and brick undersides: the grid is fixed, only the fit is the printer's -->
                         <StackPanel Orientation="Horizontal" Margin="0,0,0,6"
                                     Visibility="{Binding EngraveIsStuds, Converter={StaticResource BoolToVisibility}}">
                             <TextBlock Text="Fit" Style="{StaticResource FieldLabel}" Width="76"
-                                       ToolTip="How much fatter than standard to make the studs, or the tubes and walls that grip them - in mm across. Positive grips harder, negative looser. Studs change by the whole Fit; tubes, rods and walls by half of it on each surface, so the space for a stud shrinks by the whole Fit too. Printed studs come out a little fat, so -0.1 suits PLA on a tuned printer and about -0.15 PETG. Print the Brick fit test from the Library to find yours." />
+                                       ToolTip="How much larger the studs, or the tubes and walls that grip them, are made, in mm. Positive grips harder, negative looser. Try -0.1 for PLA, -0.15 for PETG; the Brick fit test in the Library finds yours." />
                             <TextBox AutomationProperties.AutomationId="EngraveStudFit" Width="64" Style="{StaticResource NumberBox}" Tag="number"
-                                     Text="{Binding EngraveStudFit, StringFormat=N2, UpdateSourceTrigger=LostFocus}" />
-                            <TextBlock Text="mm" Foreground="#FF9AA0A8" VerticalAlignment="Center" />
+                                     Text="{Binding EngraveStudFit, StringFormat=N2, UpdateSourceTrigger=LostFocus, Converter={StaticResource Length}}" />
+                            <TextBlock Text="{Binding DataContext.UnitLabel, RelativeSource={RelativeSource AncestorType=Window}}" Foreground="#FF9AA0A8" VerticalAlignment="Center" />
                         </StackPanel>
 
                         <!-- Offsets: sliding the pattern is how a corner is made to line up -->
@@ -1560,16 +1558,16 @@
                             <TextBlock Text="Shift across" Style="{StaticResource FieldLabel}" Width="76"
                                        ToolTip="Slides the pattern sideways. Use it to line the joints up with the next wall - arrow keys and the wheel nudge it." />
                             <TextBox AutomationProperties.AutomationId="EngraveShiftAcross" Width="64" Style="{StaticResource NumberBox}" Tag="number"
-                                     Text="{Binding EngraveOffsetU, StringFormat=N2, UpdateSourceTrigger=LostFocus}" />
-                            <TextBlock Text="mm" Foreground="#FF9AA0A8" VerticalAlignment="Center" />
+                                     Text="{Binding EngraveOffsetU, StringFormat=N2, UpdateSourceTrigger=LostFocus, Converter={StaticResource Length}}" />
+                            <TextBlock Text="{Binding DataContext.UnitLabel, RelativeSource={RelativeSource AncestorType=Window}}" Foreground="#FF9AA0A8" VerticalAlignment="Center" />
                         </StackPanel>
 
                         <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
                             <TextBlock Text="Shift along" Style="{StaticResource FieldLabel}" Width="76"
-                                       ToolTip="Slides the pattern the other way, for lining courses up with a neighbouring face." />
+                                       ToolTip="Slides the pattern the other way, for lining courses up with a neighboring face." />
                             <TextBox AutomationProperties.AutomationId="EngraveShiftAlong" Width="64" Style="{StaticResource NumberBox}" Tag="number"
-                                     Text="{Binding EngraveOffsetV, StringFormat=N2, UpdateSourceTrigger=LostFocus}" />
-                            <TextBlock Text="mm" Foreground="#FF9AA0A8" VerticalAlignment="Center" />
+                                     Text="{Binding EngraveOffsetV, StringFormat=N2, UpdateSourceTrigger=LostFocus, Converter={StaticResource Length}}" />
+                            <TextBlock Text="{Binding DataContext.UnitLabel, RelativeSource={RelativeSource AncestorType=Window}}" Foreground="#FF9AA0A8" VerticalAlignment="Center" />
                         </StackPanel>
 
                         <StackPanel Orientation="Horizontal" Margin="0,0,0,2"
@@ -1586,7 +1584,7 @@
                                   Visibility="{Binding EngraveIsGrooves, Converter={StaticResource BoolToVisibility}}"
                                   AutomationProperties.AutomationId="EngraveRaised"
                                   IsChecked="{Binding EngraveRaised, Mode=TwoWay}"
-                                  ToolTip="Stand the bricks off the face rather than cutting the joints in. Separate pieces rather than one web of joints, which the boolean finds easier - and a raised line prints where a groove the same size is missed." />
+                                  ToolTip="Raise the bricks off the face instead of cutting the joints. Easier for the boolean, and raised lines print where thin grooves get lost." />
 
                         <!-- Printing advice: what these settings will actually do on a printer -->
                         <Border Background="#FFFFF6E8" BorderBrush="#FFE8C88A" BorderThickness="1"
@@ -1627,39 +1625,39 @@
                         <StackPanel Orientation="Horizontal" Margin="0,0,0,4" ToolTip="Middle to middle">
                             <TextBlock Text="Apart" Style="{StaticResource FieldLabel}" Width="92" />
                             <TextBox Width="64" Style="{StaticResource NumberBox}" Tag="number"
-                                     Text="{Binding KeyholeApart, StringFormat=N1, UpdateSourceTrigger=LostFocus}" />
-                            <TextBlock Text="mm" Foreground="#FF9AA0A8" VerticalAlignment="Center" />
+                                     Text="{Binding KeyholeApart, StringFormat=N1, UpdateSourceTrigger=LostFocus, Converter={StaticResource Length}}" />
+                            <TextBlock Text="{Binding DataContext.UnitLabel, RelativeSource={RelativeSource AncestorType=Window}}" Foreground="#FF9AA0A8" VerticalAlignment="Center" />
                         </StackPanel>
                         <StackPanel Orientation="Horizontal" Margin="0,0,0,4" ToolTip="How far the slot runs up from the round hole">
                             <TextBlock Text="Slot" Style="{StaticResource FieldLabel}" Width="92" />
                             <TextBox Width="64" Style="{StaticResource NumberBox}" Tag="number"
-                                     Text="{Binding KeyholeSlot, StringFormat=N1, UpdateSourceTrigger=LostFocus}" />
-                            <TextBlock Text="mm" Foreground="#FF9AA0A8" VerticalAlignment="Center" />
+                                     Text="{Binding KeyholeSlot, StringFormat=N1, UpdateSourceTrigger=LostFocus, Converter={StaticResource Length}}" />
+                            <TextBlock Text="{Binding DataContext.UnitLabel, RelativeSource={RelativeSource AncestorType=Window}}" Foreground="#FF9AA0A8" VerticalAlignment="Center" />
                         </StackPanel>
                         <StackPanel Orientation="Horizontal" Margin="0,0,0,4" ToolTip="How thick the part is over the head, holding it">
                             <TextBlock Text="Lip" Style="{StaticResource FieldLabel}" Width="92" />
                             <TextBox Width="64" Style="{StaticResource NumberBox}" Tag="number"
-                                     Text="{Binding KeyholeLip, StringFormat=N1, UpdateSourceTrigger=LostFocus}" />
-                            <TextBlock Text="mm" Foreground="#FF9AA0A8" VerticalAlignment="Center" />
+                                     Text="{Binding KeyholeLip, StringFormat=N1, UpdateSourceTrigger=LostFocus, Converter={StaticResource Length}}" />
+                            <TextBlock Text="{Binding DataContext.UnitLabel, RelativeSource={RelativeSource AncestorType=Window}}" Foreground="#FF9AA0A8" VerticalAlignment="Center" />
                         </StackPanel>
                         <StackPanel Orientation="Horizontal" Margin="0,0,0,4" ToolTip="How deep the space behind the lip is, for the head">
-                            <TextBlock Text="Head room" Style="{StaticResource FieldLabel}" Width="92" />
+                            <TextBlock Text="Headroom" Style="{StaticResource FieldLabel}" Width="92" />
                             <TextBox Width="64" Style="{StaticResource NumberBox}" Tag="number"
-                                     Text="{Binding KeyholeHeadRoom, StringFormat=N1, UpdateSourceTrigger=LostFocus}" />
-                            <TextBlock Text="mm" Foreground="#FF9AA0A8" VerticalAlignment="Center" />
+                                     Text="{Binding KeyholeHeadRoom, StringFormat=N1, UpdateSourceTrigger=LostFocus, Converter={StaticResource Length}}" />
+                            <TextBlock Text="{Binding DataContext.UnitLabel, RelativeSource={RelativeSource AncestorType=Window}}" Foreground="#FF9AA0A8" VerticalAlignment="Center" />
                         </StackPanel>
                         <!-- Where they sit. The handles drive the same numbers, as in Emboss. -->
                         <StackPanel Orientation="Horizontal" Margin="0,0,0,4" ToolTip="How far from the middle of the face, along it">
                             <TextBlock Text="Across" Style="{StaticResource FieldLabel}" Width="92" />
                             <TextBox Width="64" Style="{StaticResource NumberBox}" Tag="number" AutomationProperties.AutomationId="KeyholeAcross"
-                                     Text="{Binding KeyholeAcross, StringFormat=N2, UpdateSourceTrigger=LostFocus}" />
-                            <TextBlock Text="mm" Foreground="#FF9AA0A8" VerticalAlignment="Center" />
+                                     Text="{Binding KeyholeAcross, StringFormat=N2, UpdateSourceTrigger=LostFocus, Converter={StaticResource Length}}" />
+                            <TextBlock Text="{Binding DataContext.UnitLabel, RelativeSource={RelativeSource AncestorType=Window}}" Foreground="#FF9AA0A8" VerticalAlignment="Center" />
                         </StackPanel>
                         <StackPanel Orientation="Horizontal" Margin="0,0,0,4" ToolTip="How far from the middle of the face, up it">
                             <TextBlock Text="Up" Style="{StaticResource FieldLabel}" Width="92" />
                             <TextBox Width="64" Style="{StaticResource NumberBox}" Tag="number" AutomationProperties.AutomationId="KeyholeUp"
-                                     Text="{Binding KeyholeUp, StringFormat=N2, UpdateSourceTrigger=LostFocus}" />
-                            <TextBlock Text="mm" Foreground="#FF9AA0A8" VerticalAlignment="Center" />
+                                     Text="{Binding KeyholeUp, StringFormat=N2, UpdateSourceTrigger=LostFocus, Converter={StaticResource Length}}" />
+                            <TextBlock Text="{Binding DataContext.UnitLabel, RelativeSource={RelativeSource AncestorType=Window}}" Foreground="#FF9AA0A8" VerticalAlignment="Center" />
                         </StackPanel>
                         <StackPanel Orientation="Horizontal" Margin="0,0,0,4" ToolTip="Turned on the face from straight up">
                             <TextBlock Text="Turn" Style="{StaticResource FieldLabel}" Width="92" />
@@ -1673,22 +1671,22 @@
                         <StackPanel Orientation="Horizontal" Margin="0,0,0,4" ToolTip="The screw through each stud into the wall">
                             <TextBlock Text="Wall screw" Style="{StaticResource FieldLabel}" Width="92" />
                             <TextBox Width="64" Style="{StaticResource NumberBox}" Tag="number"
-                                     Text="{Binding KeyholeWallScrew, StringFormat=N1, UpdateSourceTrigger=LostFocus}" />
-                            <TextBlock Text="mm" Foreground="#FF9AA0A8" VerticalAlignment="Center" />
+                                     Text="{Binding KeyholeWallScrew, StringFormat=N1, UpdateSourceTrigger=LostFocus, Converter={StaticResource Length}}" />
+                            <TextBlock Text="{Binding DataContext.UnitLabel, RelativeSource={RelativeSource AncestorType=Window}}" Foreground="#FF9AA0A8" VerticalAlignment="Center" />
                         </StackPanel>
                         </StackPanel>
                         <StackPanel Visibility="{Binding ScrewKeyholes, Converter={StaticResource BoolToVisibility}}">
                         <StackPanel Orientation="Horizontal" Margin="0,0,0,4" ToolTip="Across the head of the screw it hangs on">
                             <TextBlock Text="Screw head" Style="{StaticResource FieldLabel}" Width="92" />
                             <TextBox Width="64" Style="{StaticResource NumberBox}" Tag="number"
-                                     Text="{Binding KeyholeHead, StringFormat=N1, UpdateSourceTrigger=LostFocus}" />
-                            <TextBlock Text="mm" Foreground="#FF9AA0A8" VerticalAlignment="Center" />
+                                     Text="{Binding KeyholeHead, StringFormat=N1, UpdateSourceTrigger=LostFocus, Converter={StaticResource Length}}" />
+                            <TextBlock Text="{Binding DataContext.UnitLabel, RelativeSource={RelativeSource AncestorType=Window}}" Foreground="#FF9AA0A8" VerticalAlignment="Center" />
                         </StackPanel>
                         <StackPanel Orientation="Horizontal" Margin="0,0,0,4" ToolTip="Across the screw below its head">
                             <TextBlock Text="Screw shank" Style="{StaticResource FieldLabel}" Width="92" />
                             <TextBox Width="64" Style="{StaticResource NumberBox}" Tag="number"
-                                     Text="{Binding KeyholeShank, StringFormat=N1, UpdateSourceTrigger=LostFocus}" />
-                            <TextBlock Text="mm" Foreground="#FF9AA0A8" VerticalAlignment="Center" />
+                                     Text="{Binding KeyholeShank, StringFormat=N1, UpdateSourceTrigger=LostFocus, Converter={StaticResource Length}}" />
+                            <TextBlock Text="{Binding DataContext.UnitLabel, RelativeSource={RelativeSource AncestorType=Window}}" Foreground="#FF9AA0A8" VerticalAlignment="Center" />
                         </StackPanel>
                         </StackPanel>
                         <CheckBox Content="Drilling template" IsChecked="{Binding KeyholeTemplate, Mode=TwoWay}" Margin="0,4,0,8"
@@ -1775,8 +1773,8 @@
                             <TextBlock Text="Spacing" Style="{StaticResource FieldLabel}" Width="62"
                                        ToolTip="Extra room after every letter. Negative draws the letters closer." />
                             <TextBox AutomationProperties.AutomationId="EmbossSpacing" Width="64" Style="{StaticResource NumberBox}" Tag="number"
-                                     Text="{Binding EmbossSpacing, StringFormat=N2, UpdateSourceTrigger=LostFocus}" />
-                            <TextBlock Text="mm" Foreground="#FF9AA0A8" VerticalAlignment="Center" />
+                                     Text="{Binding EmbossSpacing, StringFormat=N2, UpdateSourceTrigger=LostFocus, Converter={StaticResource Length}}" />
+                            <TextBlock Text="{Binding DataContext.UnitLabel, RelativeSource={RelativeSource AncestorType=Window}}" Foreground="#FF9AA0A8" VerticalAlignment="Center" />
                         </StackPanel>
 
                         <!-- A drawing instead of typed letters. It becomes outlines the moment it
@@ -1784,7 +1782,7 @@
                         <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
                             <Button Content="Drawing..." Style="{StaticResource PanelButton}"
                                     Command="{Binding LoadDrawingCommand}"
-                                    ToolTip="Stamp the filled shapes of an SVG file, or the dark parts of a picture - PNG, JPEG and the rest - instead of typing. A picture with see-through parts stamps what is not see-through." />
+                                    ToolTip="Stamp the filled shapes of an SVG, or the dark parts of a picture (PNG, JPEG...). In a picture with transparency, whatever isn't transparent is stamped." />
                             <Button Content="Use text" Style="{StaticResource PanelButton}"
                                     Command="{Binding ClearDrawingCommand}"
                                     Visibility="{Binding HasDrawing, Converter={StaticResource BoolToVisibility}}" />
@@ -1808,7 +1806,7 @@
                              that size a stamp and lay it out have nothing to say about one. -->
                         <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
                             <TextBlock Text="Texture" Style="{StaticResource FieldLabel}" Width="62"
-                                       ToolTip="Cover the whole face with a pattern instead of stamping something on it. Flat ones - knurling, ribs, honeycomb, pips, checker plate, brick and tile - are cut from outlines and wrap round a part with no seam. Shaped ones - roof tiles, boarding and lap siding - are built as a height over the face instead, which is the only way a lap, a slope or a grain can be said at all; Depth is how far they stand proud." />
+                                       ToolTip="Cover the whole face with a pattern. Flat patterns - knurling, ribs, honeycomb, pips, checker plate, brick, tile - wrap around with no seam. Shaped ones - roof tiles, boards, lap siding - stand proud by Depth." />
                             <ComboBox Width="130" ItemsSource="{Binding EmbossTextures}"
                                       SelectedItem="{Binding EmbossTexture, Mode=TwoWay}"
                                       AutomationProperties.AutomationId="EmbossTexture" />
@@ -1817,18 +1815,18 @@
                         <StackPanel Visibility="{Binding UsesTexture, Converter={StaticResource BoolToVisibility}}">
                             <StackPanel Orientation="Horizontal" Margin="0,0,0,2">
                                 <TextBlock Text="Pitch" Style="{StaticResource FieldLabel}" Width="62"
-                                           ToolTip="Middle to middle of one cell and the next, or the length of one brick, tile or board. A knurl on a knob is about 1 to 2 mm; a grip you can feel through a glove is 3 or more." />
+                                           ToolTip="Center to center of one cell and the next, or the length of a brick, tile or board. Knurling on a knob: 1-2 mm; a grip for gloved hands: 3 mm or more." />
                                 <TextBox AutomationProperties.AutomationId="EmbossTexturePitch" Width="64" Style="{StaticResource NumberBox}" Tag="number"
-                                         Text="{Binding EmbossTexturePitch, StringFormat=N2, UpdateSourceTrigger=LostFocus}" />
-                                <TextBlock Text="mm" Foreground="#FF9AA0A8" VerticalAlignment="Center" />
+                                         Text="{Binding EmbossTexturePitch, StringFormat=N2, UpdateSourceTrigger=LostFocus, Converter={StaticResource Length}}" />
+                                <TextBlock Text="{Binding DataContext.UnitLabel, RelativeSource={RelativeSource AncestorType=Window}}" Foreground="#FF9AA0A8" VerticalAlignment="Center" />
                             </StackPanel>
 
                             <StackPanel Orientation="Horizontal" Margin="0,0,0,2">
                                 <TextBlock Text="Groove" Style="{StaticResource FieldLabel}" Width="62"
                                            ToolTip="The gap left between one cell and the next, or the joint between two bricks. Under a nozzle width it closes up as it prints." />
                                 <TextBox AutomationProperties.AutomationId="EmbossTextureLine" Width="64" Style="{StaticResource NumberBox}" Tag="number"
-                                         Text="{Binding EmbossTextureLine, StringFormat=N2, UpdateSourceTrigger=LostFocus}" />
-                                <TextBlock Text="mm" Foreground="#FF9AA0A8" VerticalAlignment="Center" />
+                                         Text="{Binding EmbossTextureLine, StringFormat=N2, UpdateSourceTrigger=LostFocus, Converter={StaticResource Length}}" />
+                                <TextBlock Text="{Binding DataContext.UnitLabel, RelativeSource={RelativeSource AncestorType=Window}}" Foreground="#FF9AA0A8" VerticalAlignment="Center" />
                             </StackPanel>
 
                             <StackPanel Orientation="Horizontal" Margin="0,0,0,2"
@@ -1852,7 +1850,7 @@
                             <StackPanel Orientation="Horizontal" Margin="0,0,0,2"
                                         Visibility="{Binding TextureTilts, Converter={StaticResource BoolToVisibility}}">
                                 <TextBlock Text="Slope" Style="{StaticResource FieldLabel}" Width="62"
-                                           ToolTip="How far each piece is tilted. Four degrees reads as a lapped roof at model sizes; zero lays the pieces flat; negative lifts the other edge, so the courses lap the other way." />
+                                           ToolTip="How far each piece tilts. 4 degrees reads as a lapped roof at model sizes; 0 lays them flat; negative laps the other way." />
                                 <TextBox AutomationProperties.AutomationId="EmbossTextureSlope" Width="64" Style="{StaticResource NumberBox}" Tag="number"
                                          Text="{Binding EmbossTextureSlope, StringFormat=N1, UpdateSourceTrigger=LostFocus}" />
                                 <TextBlock Text="deg" Foreground="#FF9AA0A8" VerticalAlignment="Center" />
@@ -1861,7 +1859,7 @@
                             <StackPanel Orientation="Horizontal" Margin="0,0,0,2"
                                         Visibility="{Binding TextureTilts, Converter={StaticResource BoolToVisibility}}">
                                 <TextBlock Text="Tilt" Style="{StaticResource FieldLabel}" Width="62"
-                                           ToolTip="Roll lifts the tail of each piece so it laps the course below, which is how a roof is laid. Pitch lifts one end instead, so a course reads as shingles leaning the same way." />
+                                           ToolTip="Roll lifts each piece's tail over the course below, as a roof is laid. Pitch lifts one end, like leaning shingles." />
                                 <ComboBox Width="90" AutomationProperties.AutomationId="EmbossTextureSlopeWay"
                                           ItemsSource="{Binding EmbossTextureSlopeWays}"
                                           SelectedItem="{Binding EmbossTextureSlopeWay, Mode=TwoWay}" />
@@ -1870,31 +1868,31 @@
                             <CheckBox Content="Run the other way" IsChecked="{Binding EmbossTextureAcross, Mode=TwoWay}"
                                       AutomationProperties.AutomationId="EmbossTextureAcross" Margin="0,2,0,6"
                                       Visibility="{Binding TextureRuns, Converter={StaticResource BoolToVisibility}}"
-                                      ToolTip="Ribs run up the face and boards lie along it, which is what each is normally wanted for. This turns them the other way. Courses of brick and tile are level by definition and take no notice." />
+                                      ToolTip="Turn ribs and boards the other way. Brick and tile courses always stay level." />
                         </StackPanel>
 
                         <StackPanel Orientation="Horizontal" Margin="0,0,0,2"
                                     Visibility="{Binding UsesStamp, Converter={StaticResource BoolToVisibility}}">
                             <TextBlock Text="Height" Style="{StaticResource FieldLabel}" Width="62" />
                             <TextBox AutomationProperties.AutomationId="EmbossHeight" Width="64" Style="{StaticResource NumberBox}" Tag="number"
-                                     Text="{Binding EmbossHeight, StringFormat=N1, UpdateSourceTrigger=LostFocus}" />
-                            <TextBlock Text="mm" Foreground="#FF9AA0A8" VerticalAlignment="Center" />
+                                     Text="{Binding EmbossHeight, StringFormat=N1, UpdateSourceTrigger=LostFocus, Converter={StaticResource Length}}" />
+                            <TextBlock Text="{Binding DataContext.UnitLabel, RelativeSource={RelativeSource AncestorType=Window}}" Foreground="#FF9AA0A8" VerticalAlignment="Center" />
                         </StackPanel>
 
                         <StackPanel Orientation="Horizontal" Margin="0,0,0,2">
                             <TextBlock Text="Depth" Style="{StaticResource FieldLabel}" Width="62"
                                        ToolTip="How deep it is cut, or how far it stands proud" />
                             <TextBox AutomationProperties.AutomationId="EmbossDepth" Width="64" Style="{StaticResource NumberBox}" Tag="number"
-                                     Text="{Binding EmbossDepth, StringFormat=N2, UpdateSourceTrigger=LostFocus}" />
-                            <TextBlock Text="mm" Foreground="#FF9AA0A8" VerticalAlignment="Center" />
+                                     Text="{Binding EmbossDepth, StringFormat=N2, UpdateSourceTrigger=LostFocus, Converter={StaticResource Length}}" />
+                            <TextBlock Text="{Binding DataContext.UnitLabel, RelativeSource={RelativeSource AncestorType=Window}}" Foreground="#FF9AA0A8" VerticalAlignment="Center" />
                         </StackPanel>
 
                         <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
                             <TextBlock Text="Bevel" Style="{StaticResource FieldLabel}" Width="62"
                                        ToolTip="Slopes the walls, so raised lettering has no step to bridge and cut lettering is not a slot one line wide. Zero leaves them upright." />
                             <TextBox AutomationProperties.AutomationId="EmbossBevel" Width="64" Style="{StaticResource NumberBox}" Tag="number"
-                                     Text="{Binding EmbossBevel, StringFormat=N2, UpdateSourceTrigger=LostFocus}" />
-                            <TextBlock Text="mm" Foreground="#FF9AA0A8" VerticalAlignment="Center" />
+                                     Text="{Binding EmbossBevel, StringFormat=N2, UpdateSourceTrigger=LostFocus, Converter={StaticResource Length}}" />
+                            <TextBlock Text="{Binding DataContext.UnitLabel, RelativeSource={RelativeSource AncestorType=Window}}" Foreground="#FF9AA0A8" VerticalAlignment="Center" />
                         </StackPanel>
 
                         <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
@@ -1910,16 +1908,16 @@
                             <TextBlock Text="Across" Style="{StaticResource FieldLabel}" Width="62"
                                        ToolTip="How far from the middle, along the lettering. A texture slides round the part on this one." />
                             <TextBox AutomationProperties.AutomationId="EmbossAcross" Width="64" Style="{StaticResource NumberBox}" Tag="number"
-                                     Text="{Binding EmbossAcross, StringFormat=N2, UpdateSourceTrigger=LostFocus}" />
-                            <TextBlock Text="mm" Foreground="#FF9AA0A8" VerticalAlignment="Center" />
+                                     Text="{Binding EmbossAcross, StringFormat=N2, UpdateSourceTrigger=LostFocus, Converter={StaticResource Length}}" />
+                            <TextBlock Text="{Binding DataContext.UnitLabel, RelativeSource={RelativeSource AncestorType=Window}}" Foreground="#FF9AA0A8" VerticalAlignment="Center" />
                         </StackPanel>
 
                         <StackPanel Orientation="Horizontal" Margin="0,0,0,2">
                             <TextBlock Text="Up" Style="{StaticResource FieldLabel}" Width="62"
                                        ToolTip="How far from the middle, across the lettering. A texture slides up and down the part on this one." />
                             <TextBox AutomationProperties.AutomationId="EmbossUp" Width="64" Style="{StaticResource NumberBox}" Tag="number"
-                                     Text="{Binding EmbossUp, StringFormat=N2, UpdateSourceTrigger=LostFocus}" />
-                            <TextBlock Text="mm" Foreground="#FF9AA0A8" VerticalAlignment="Center" />
+                                     Text="{Binding EmbossUp, StringFormat=N2, UpdateSourceTrigger=LostFocus, Converter={StaticResource Length}}" />
+                            <TextBlock Text="{Binding DataContext.UnitLabel, RelativeSource={RelativeSource AncestorType=Window}}" Foreground="#FF9AA0A8" VerticalAlignment="Center" />
                         </StackPanel>
 
                         <StackPanel Orientation="Horizontal" Margin="0,0,0,6" Visibility="{Binding UsesStamp, Converter={StaticResource BoolToVisibility}}">
@@ -1934,7 +1932,7 @@
                              and the next, so it means the same thing whatever is being stamped. -->
                         <StackPanel Orientation="Horizontal" Margin="0,6,0,0" Visibility="{Binding UsesStamp, Converter={StaticResource BoolToVisibility}}">
                             <TextBlock Text="Repeat" Style="{StaticResource FieldLabel}" Width="62"
-                                       ToolTip="How many copies of the stamp go across the face and how many rows of them go up it. 1 x 1 is a single stamp. Ignored while Fill the face is on, which works the numbers out for itself." />
+                                       ToolTip="Copies across the face and rows up it; 1 x 1 is one stamp. Ignored while Fill the face is on." />
                             <TextBox AutomationProperties.AutomationId="EmbossColumns" Width="44" Style="{StaticResource NumberBox}" Tag="number"
                                      Text="{Binding EmbossColumns, UpdateSourceTrigger=LostFocus}" />
                             <TextBlock Text="x" Foreground="#FF9AA0A8" VerticalAlignment="Center" Margin="4,0" />
@@ -1946,14 +1944,14 @@
                             <TextBlock Text="Distance" Style="{StaticResource FieldLabel}" Width="62"
                                        ToolTip="The blank left between one copy and the next, edge to edge." />
                             <TextBox AutomationProperties.AutomationId="EmbossGap" Width="64" Style="{StaticResource NumberBox}" Tag="number"
-                                     Text="{Binding EmbossGap, StringFormat=N2, UpdateSourceTrigger=LostFocus}" />
-                            <TextBlock Text="mm" Foreground="#FF9AA0A8" VerticalAlignment="Center" />
+                                     Text="{Binding EmbossGap, StringFormat=N2, UpdateSourceTrigger=LostFocus, Converter={StaticResource Length}}" />
+                            <TextBlock Text="{Binding DataContext.UnitLabel, RelativeSource={RelativeSource AncestorType=Window}}" Foreground="#FF9AA0A8" VerticalAlignment="Center" />
                         </StackPanel>
 
                         <CheckBox Content="Fill the face" IsChecked="{Binding EmbossFill, Mode=TwoWay}"
                                   Visibility="{Binding UsesStamp, Converter={StaticResource BoolToVisibility}}"
                                   AutomationProperties.AutomationId="EmbossFill" Margin="0,4,0,8"
-                                  ToolTip="Covers the whole face with as many as fit at that distance, instead of the numbers above. Wrapped round a part, it goes the whole way round and the distance takes up the difference so there is no seam." />
+                                  ToolTip="Cover the face with as many as fit at this spacing. Wrapped around a part, the spacing adjusts so there is no seam." />
 
                         <CheckBox Content="Raised instead of cut" IsChecked="{Binding EmbossRaised, Mode=TwoWay}"
                                   AutomationProperties.AutomationId="EmbossRaised"
@@ -1963,7 +1961,7 @@
                         <CheckBox Content="Keep as its own part" IsChecked="{Binding EmbossSeparate, Mode=TwoWay}"
                                   AutomationProperties.AutomationId="EmbossSeparate"
                                   Margin="0,0,0,8"
-                                  ToolTip="For printing the lettering in another filament. Cut, the object gets the recess and the letters come back as the plug that fills it flush; raised, they stand on it. The letters go onto the next filament up, and the pair export to a 3MF that says so." />
+                                  ToolTip="For lettering in another filament: cut, the letters come back as a plug that fills the recess; raised, they stand on it. They go on the next filament and export together as 3MF." />
 
                         <StackPanel Orientation="Horizontal">
                             <Button Content="Apply" Style="{StaticResource PanelButton}"
@@ -1990,13 +1988,13 @@
                             <WrapPanel Margin="0,0,0,6">
                                 <RadioButton Content="Separate pins" GroupName="ConnectStyle" Margin="0,0,10,0"
                                              IsChecked="{Binding ConnectorsArePins, Mode=TwoWay}"
-                                             ToolTip="Holes in both halves, and the pins made as parts of their own - printed lying down, so they are strong along their length. A broken pin is a reprint, not a lost half." />
+                                             ToolTip="Holes in both halves with separate pins, printed lying down for strength. A broken pin is a reprint, not a lost half." />
                                 <RadioButton Content="Pegs on one half" GroupName="ConnectStyle" Margin="0,0,10,0"
                                              IsChecked="{Binding ConnectorsArePegs, Mode=TwoWay}"
                                              ToolTip="Pegs standing out of one half, sockets in the other. Nothing loose to lose, but pegs printed standing up are weak across their layers." />
                                 <RadioButton Content="Brick studs" GroupName="ConnectStyle"
                                              IsChecked="{Binding ConnectorsAreBricks, Mode=TwoWay}"
-                                             ToolTip="Brick studs on the lower half and a shallow brick underside in the upper, on the 8 mm grid. The halves hold by grip, and each takes real bricks along the join. The grid repeats, so line the edges up by eye." />
+                                             ToolTip="Brick studs on the lower half and a brick underside in the upper, on the 8 mm grid. The halves grip each other and take real bricks at the join. Line up the edges by eye." />
                             </WrapPanel>
                             <StackPanel Orientation="Horizontal" Margin="0,0,0,6"
                                         Visibility="{Binding ConnectorsArePegs, Converter={StaticResource BoolToVisibility}}">
@@ -2006,15 +2004,15 @@
                                              ToolTip="Round pegs in round sockets. Use two or more: one round peg lets the halves turn on it." />
                                 <RadioButton Content="Square" GroupName="ConnectPegShape" VerticalAlignment="Center"
                                              IsChecked="{Binding ConnectorPegSquare, Mode=TwoWay}"
-                                             ToolTip="Square pegs in square sockets, the size box giving the side. A square peg cannot turn, so even one lines the halves up. Its corners reach further than a round peg, so it keeps a little further from the edge." />
+                                             ToolTip="Square pegs in square sockets; the size is the side. One square peg is enough to align the halves. Kept a little further from the edge than round ones." />
                             </StackPanel>
                             <StackPanel Orientation="Horizontal" Margin="0,0,0,6"
                                         Visibility="{Binding ConnectorsAreBricks, Converter={StaticResource BoolToVisibility}}">
                                 <TextBlock Text="Fit" Style="{StaticResource FieldLabel}" Width="76"
-                                           ToolTip="How much fatter than standard the studs, and the tubes and walls that grip them, are made - in mm across, on both halves. The two halves add up: at -0.1 each there is about 0.2 mm of play in all. -0.1 suits PLA on a tuned printer, about -0.15 PETG." />
+                                           ToolTip="How much larger the studs, tubes and walls are made, in mm, on both halves - so -0.1 on each gives about 0.2 mm of play. Try -0.1 for PLA, -0.15 for PETG." />
                                 <TextBox Width="64" Style="{StaticResource NumberBox}" Tag="number"
-                                         Text="{Binding ConnectorBrickFit, StringFormat=N2, UpdateSourceTrigger=LostFocus}" />
-                                <TextBlock Text="mm" Foreground="#FF9AA0A8" VerticalAlignment="Center" Margin="5,0,0,0" />
+                                         Text="{Binding ConnectorBrickFit, StringFormat=N2, UpdateSourceTrigger=LostFocus, Converter={StaticResource Length}}" />
+                                <TextBlock Text="{Binding DataContext.UnitLabel, RelativeSource={RelativeSource AncestorType=Window}}" Foreground="#FF9AA0A8" VerticalAlignment="Center" Margin="5,0,0,0" />
                             </StackPanel>
                             <TextBlock TextWrapping="Wrap" Foreground="#FF7A8088" Margin="0,0,0,6"
                                        Visibility="{Binding ConnectorsAreBricks, Converter={StaticResource BoolToVisibility}}"
@@ -2029,7 +2027,7 @@
                                              ToolTip="Straight up and down, so the top half of a tilted cut still lifts straight off. Not on a vertical cut, which they would run along." />
                                 <RadioButton Content="Horizontal" GroupName="ConnectDirection"
                                              IsChecked="{Binding ConnectorsHorizontal, Mode=TwoWay}"
-                                             ToolTip="Level, towards the cut, so a half on a leaning cut slides off sideways. Not on a level cut, which they would run along." />
+                                             ToolTip="Level, toward the cut, so a half on a leaning cut slides off sideways. Not on a level cut, which they would run along." />
                             </StackPanel>
                             <StackPanel Orientation="Horizontal" Margin="0,0,0,2">
                                 <TextBlock Text="How many" Style="{StaticResource FieldLabel}" Width="76"
@@ -2042,32 +2040,32 @@
                                 <TextBlock Text="{Binding ConnectorSizeLabel}" Style="{StaticResource FieldLabel}" Width="76" />
                                 <TextBox Width="64" Style="{StaticResource NumberBox}" Tag="number"
                                          AutomationProperties.AutomationId="ConnectDiameter"
-                                         Text="{Binding ConnectorDiameter, StringFormat=N1, UpdateSourceTrigger=LostFocus}" />
-                                <TextBlock Text="mm" Foreground="#FF9AA0A8" VerticalAlignment="Center" Margin="5,0,0,0" />
+                                         Text="{Binding ConnectorDiameter, StringFormat=N1, UpdateSourceTrigger=LostFocus, Converter={StaticResource Length}}" />
+                                <TextBlock Text="{Binding DataContext.UnitLabel, RelativeSource={RelativeSource AncestorType=Window}}" Foreground="#FF9AA0A8" VerticalAlignment="Center" Margin="5,0,0,0" />
                             </StackPanel>
                             <StackPanel Orientation="Horizontal" Margin="0,0,0,2">
                                 <TextBlock Text="Depth" Style="{StaticResource FieldLabel}" Width="76"
                                            ToolTip="How far a connector goes into each half." />
                                 <TextBox Width="64" Style="{StaticResource NumberBox}" Tag="number"
                                          AutomationProperties.AutomationId="ConnectDepth"
-                                         Text="{Binding ConnectorDepth, StringFormat=N1, UpdateSourceTrigger=LostFocus}" />
-                                <TextBlock Text="mm" Foreground="#FF9AA0A8" VerticalAlignment="Center" Margin="5,0,0,0" />
+                                         Text="{Binding ConnectorDepth, StringFormat=N1, UpdateSourceTrigger=LostFocus, Converter={StaticResource Length}}" />
+                                <TextBlock Text="{Binding DataContext.UnitLabel, RelativeSource={RelativeSource AncestorType=Window}}" Foreground="#FF9AA0A8" VerticalAlignment="Center" Margin="5,0,0,0" />
                             </StackPanel>
                             <StackPanel Orientation="Horizontal" Margin="0,0,0,2">
                                 <TextBlock Text="Clearance" Style="{StaticResource FieldLabel}" Width="76"
                                            ToolTip="Per side, as for Subtract: a 5 mm pin with 0.2 goes into a 5.4 mm hole." />
                                 <TextBox Width="64" Style="{StaticResource NumberBox}" Tag="number"
                                          AutomationProperties.AutomationId="ConnectClearance"
-                                         Text="{Binding ConnectorClearance, StringFormat=N2, UpdateSourceTrigger=LostFocus}" />
-                                <TextBlock Text="mm" Foreground="#FF9AA0A8" VerticalAlignment="Center" Margin="5,0,0,0" />
+                                         Text="{Binding ConnectorClearance, StringFormat=N2, UpdateSourceTrigger=LostFocus, Converter={StaticResource Length}}" />
+                                <TextBlock Text="{Binding DataContext.UnitLabel, RelativeSource={RelativeSource AncestorType=Window}}" Foreground="#FF9AA0A8" VerticalAlignment="Center" Margin="5,0,0,0" />
                             </StackPanel>
                             <StackPanel Orientation="Horizontal" Margin="0,0,0,2">
                                 <TextBlock Text="From edge" Style="{StaticResource FieldLabel}" Width="76"
-                                           ToolTip="Material left between a hole and the outside of the part. Pins go out towards the edges until this much is left - further apart registers better, but a thin wall beside a hole can split." />
+                                           ToolTip="Material left between a hole and the part's edge. Pins spread out until this much is left; too thin a wall can split." />
                                 <TextBox Width="64" Style="{StaticResource NumberBox}" Tag="number"
                                          AutomationProperties.AutomationId="ConnectEdgeDistance"
-                                         Text="{Binding ConnectorEdgeDistance, StringFormat=N1, UpdateSourceTrigger=LostFocus}" />
-                                <TextBlock Text="mm" Foreground="#FF9AA0A8" VerticalAlignment="Center" Margin="5,0,0,0" />
+                                         Text="{Binding ConnectorEdgeDistance, StringFormat=N1, UpdateSourceTrigger=LostFocus, Converter={StaticResource Length}}" />
+                                <TextBlock Text="{Binding DataContext.UnitLabel, RelativeSource={RelativeSource AncestorType=Window}}" Foreground="#FF9AA0A8" VerticalAlignment="Center" Margin="5,0,0,0" />
                             </StackPanel>
                             </StackPanel>
                             <TextBlock Text="Both parts are kept, each as itself." Foreground="#FF7A8088" Margin="0,4,0,0" />
@@ -2126,15 +2124,15 @@
                                        ToolTip="How much bigger than the cutter the opening comes out, on every side. A 3 mm pin subtracted with 0.2 leaves a 3.4 mm bore." />
                             <TextBox Width="64" Style="{StaticResource NumberBox}" Tag="number"
                                      AutomationProperties.AutomationId="SubtractTolerance"
-                                     ToolTip="Millimetres per side. Exact on a cube, a cylinder or a sphere; on anything else it asks first, since a sloped or off-axis face can come out with less than the number typed. 0 subtracts exactly as before."
-                                     Text="{Binding SubtractTolerance, StringFormat=N2, UpdateSourceTrigger=LostFocus}" />
-                            <TextBlock Text="mm" Foreground="#FF9AA0A8" VerticalAlignment="Center" Margin="5,0,0,0" />
+                                     ToolTip="Millimeters per side. Exact on a cube, cylinder or sphere; on other shapes it asks first, since sloped faces can get less. 0 subtracts exactly."
+                                     Text="{Binding SubtractTolerance, StringFormat=N2, UpdateSourceTrigger=LostFocus, Converter={StaticResource Length}}" />
+                            <TextBlock Text="{Binding DataContext.UnitLabel, RelativeSource={RelativeSource AncestorType=Window}}" Foreground="#FF9AA0A8" VerticalAlignment="Center" Margin="5,0,0,0" />
                         </StackPanel>
 
                         <CheckBox Content="Keep what is taken away" Margin="0,6,0,10"
                                   AutomationProperties.AutomationId="SubtractKeepsCutter"
                                   IsChecked="{Binding SubtractKeepsCutter, Mode=TwoWay}"
-                                  ToolTip="Leave the cutter on the plate afterwards. A pin that bored its own hole is usually a part in its own right, and modelling it twice is how the two stop matching." />
+                                  ToolTip="Leave the cutter on the plate afterwards. A pin that bored its own hole is usually a part in its own right, and modeling it twice is how the two stop matching." />
 
                         <StackPanel Orientation="Horizontal">
                             <Button Content="Apply" Style="{StaticResource PanelButton}"
@@ -2179,7 +2177,7 @@
                                        Foreground="#FF3A3F45" FontSize="11" />
                         </Border>
 
-                        <TextBlock Text="Colour" Style="{StaticResource FieldLabel}" HorizontalAlignment="Left" Margin="0,0,0,4" />
+                        <TextBlock Text="Color" Style="{StaticResource FieldLabel}" HorizontalAlignment="Left" Margin="0,0,0,4" />
                         <ItemsControl ItemsSource="{Binding OverhangSwatches}" Margin="0,0,0,6">
                             <ItemsControl.ItemsPanel>
                                 <ItemsPanelTemplate>
@@ -2198,7 +2196,7 @@
                             </ItemsControl.ItemTemplate>
                         </ItemsControl>
                         <Button Content="Custom..." Command="{Binding PickOverhangColourCommand}"
-                                HorizontalAlignment="Left" Padding="10,3" ToolTip="Pick any colour" />
+                                HorizontalAlignment="Left" Padding="10,3" ToolTip="Pick any color" />
                     </StackPanel>
                 </Border>
 
@@ -2211,7 +2209,7 @@
                         <TextBlock Text="Grid" FontWeight="SemiBold" Margin="0,0,0,6" />
 
                         <TextBlock Text="Printable area" Style="{StaticResource FieldLabel}" HorizontalAlignment="Left"
-                                   ToolTip="The build volume in millimetres. A guide, not a limit: Fit and Distribute use it, and nothing else is held to it." />
+                                   ToolTip="The build volume in millimeters. A guide, not a limit: Fit and Distribute use it, and nothing else is held to it." />
                         <StackPanel Orientation="Horizontal" Margin="0,2,0,6">
                             <TextBlock Text="W" Style="{StaticResource GizmoLabelX}" Margin="0,0,3,0" />
                             <TextBox Width="48" Style="{StaticResource NumberBox}" Tag="number"
@@ -2306,7 +2304,7 @@
                                 <TextBlock Text="Properties" FontWeight="SemiBold" Foreground="#FF33373D" />
                             </Expander.Header>
                             <StackPanel>
-                                <TextBlock Text="Colour" Style="{StaticResource SectionHeader}" Margin="0,6,0,4" />
+                                <TextBlock Text="Color" Style="{StaticResource SectionHeader}" Margin="0,6,0,4" />
                                 <ItemsControl ItemsSource="{Binding Swatches}">
                                     <ItemsControl.ItemsPanel>
                                         <ItemsPanelTemplate>
@@ -2326,13 +2324,13 @@
                                 </ItemsControl>
                                 <Button Content="Custom..." Command="{Binding PickColourCommand}"
                                         HorizontalAlignment="Left" Padding="10,3" Margin="1,6,0,0"
-                                        ToolTip="Pick any colour" />
+                                        ToolTip="Pick any color" />
 
                                 <!-- Which spool prints it. Not the colour: the colour is how the
                                      model is looked at while it is being made. -->
                                 <StackPanel Orientation="Horizontal" Margin="0,10,0,0">
                                     <TextBlock Text="Filament" Style="{StaticResource FieldLabel}" Width="62"
-                                               ToolTip="Which filament prints the selection on a printer that has more than one - an AMS slot, an MMU tool. 1 unless you say otherwise. Carried into an exported 3MF; STL and OBJ have nowhere to put it." />
+                                               ToolTip="Which filament prints the selection on a multi-material printer (an AMS slot, an MMU tool). Saved in 3MF; STL and OBJ can't carry it." />
                                     <TextBox AutomationProperties.AutomationId="ObjectFilament" Width="48"
                                              Style="{StaticResource NumberBox}" Tag="number"
                                              Text="{Binding ObjectFilament, UpdateSourceTrigger=LostFocus}" />
@@ -2429,7 +2427,7 @@
                                          reading, and typing, is where in the part it sits. -->
                                     <StackPanel Visibility="{Binding DataContext.ShowPivotFields, RelativeSource={RelativeSource AncestorType=Window}, Converter={StaticResource BoolToVisibility}}">
                                         <TextBlock Text="{Binding DataContext.UnitLabel, RelativeSource={RelativeSource AncestorType=Window}, StringFormat='Pivot, from the middle ({0})'}" Style="{StaticResource SectionHeader}"
-                                                   ToolTip="Where the object turns and is measured about, as an offset from the middle of its own box. 0, 0, 0 is the middle. Set it by clicking a point with Set pivot on the Edit tab, or type it here." />
+                                                   ToolTip="Where the object turns and is measured about, as an offset from the middle of its box. Set it with Set pivot on the Edit tab, or type it here." />
                                         <Grid>
                                             <Grid.ColumnDefinitions>
                                                 <ColumnDefinition Width="Auto" />
@@ -2482,7 +2480,7 @@
         </Border>
 
         <!-- The side panel's edge, to drag it wider or narrower. -->
-        <Thumb DockPanel.Dock="Right" Width="5" Cursor="SizeWE" DragDelta="OnSidePanelResize"
+        <Thumb DockPanel.Dock="Right" Width="5" Cursor="SizeWE" DragDelta="OnSidePanelResize" DragCompleted="OnSidePanelResized"
                ToolTip="Drag to make the panel wider or narrower" AutomationProperties.AutomationId="SidePanelEdge">
             <Thumb.Template>
                 <ControlTemplate TargetType="Thumb">
@@ -2493,6 +2491,14 @@
 
         <!-- Viewport -->
         <Grid>
+            <!-- A warning from the status bar, repeated where it will be seen, for a few seconds. -->
+            <Border Panel.ZIndex="100" HorizontalAlignment="Center" VerticalAlignment="Top" Margin="0,48,0,0"
+                    MaxWidth="560" Padding="12,7" CornerRadius="4" Background="#F2FFF4E0"
+                    BorderBrush="#FFE0A030" BorderThickness="1" IsHitTestVisible="False"
+                    AutomationProperties.AutomationId="Notice"
+                    Visibility="{Binding HasNotice, Converter={StaticResource BoolToVisibility}}">
+                <TextBlock Text="{Binding Notice}" TextWrapping="Wrap" Foreground="#FF5C3A00" />
+            </Border>
             <hx:Viewport3DX x:Name="View"
                             BackgroundColor="#FFB8BCC2"
                             MSAA="Four"
@@ -2618,8 +2624,8 @@
                         <TextBox Style="{StaticResource GizmoBox}" Tag="number"
                                  AutomationProperties.AutomationId="SplitOffset"
                                  ToolTip="How far along its own facing the plane sits, from the middle of the plate"
-                                 Text="{Binding SplitOffset, StringFormat=N2, UpdateSourceTrigger=LostFocus}" />
-                        <TextBlock Text="mm" Style="{StaticResource GizmoUnit}" />
+                                 Text="{Binding SplitOffset, StringFormat=N2, UpdateSourceTrigger=LostFocus, Converter={StaticResource Length}}" />
+                        <TextBlock Text="{Binding DataContext.UnitLabel, RelativeSource={RelativeSource AncestorType=Window}}" Style="{StaticResource GizmoUnit}" />
                     </StackPanel>
 
                     <!-- Roll, pitch and yaw are turns about X, Y and Z, the same as an object's.
@@ -2678,7 +2684,7 @@
                             </Canvas>
                         </Viewbox>
                     </ToggleButton>
-                    <ToggleButton Style="{StaticResource ModeButton}" ToolTip="Resize (S). While dragging a handle: Ctrl flips Keep proportions, Alt flips One way only, Shift snaps the size to whole millimetres."
+                    <ToggleButton Style="{StaticResource ModeButton}" ToolTip="Resize (S). While dragging a handle: Ctrl flips Keep proportions, Alt flips One way only, Shift snaps the size to whole millimeters."
                                   AutomationProperties.Name="Resize"
                                   Visibility="{Binding ResizeOffered, Converter={StaticResource BoolToVisibility}}"
                                   IsChecked="{Binding IsScaleMode, Mode=TwoWay}">
@@ -2736,7 +2742,7 @@
                             <TextBlock Text="X" Style="{StaticResource GizmoLabelX}" />
                             <TextBox Style="{StaticResource GizmoBox}" Tag="transform"
                                      AutomationProperties.AutomationId="RealPosX"
-                                     ToolTip="Where it is at the scene's scale. Editing it sets the millimetres beside it."
+                                     ToolTip="Where it is at the scene's scale. Editing it sets the millimeters beside it."
                                      Text="{Binding RealX, StringFormat=N3, UpdateSourceTrigger=LostFocus}" />
                             <TextBlock Text="Y" Style="{StaticResource GizmoLabelY}" />
                             <TextBox Style="{StaticResource GizmoBox}" Tag="transform"
@@ -2757,7 +2763,7 @@
                             <RadioButton Content="off" GroupName="Snap" VerticalAlignment="Center" Margin="0,0,7,0"
                                          IsChecked="{Binding SnapOff, Mode=TwoWay}" />
                             <RadioButton Content="1" GroupName="Snap" VerticalAlignment="Center" Margin="0,0,7,0"
-                                         IsChecked="{Binding SnapOne, Mode=TwoWay}" ToolTip="Snap moves to whole millimetres" />
+                                         IsChecked="{Binding SnapOne, Mode=TwoWay}" ToolTip="Snap moves to whole millimeters" />
                             <RadioButton Content="5" GroupName="Snap" VerticalAlignment="Center" Margin="0,0,3,0"
                                          IsChecked="{Binding SnapFive, Mode=TwoWay}" ToolTip="Snap moves to 5 mm" />
 
@@ -2778,7 +2784,7 @@
                         </ToggleButton>
 
                         <ToggleButton Style="{StaticResource ModeButton}" Margin="2,0,0,0"
-                                      ToolTip="Keep on bed: nothing is moved below the bed. Off: parts go wherever they are put, into the bed too."
+                                      ToolTip="Keep on plate: nothing is moved below the plate. Off: parts go wherever they are put, into the plate too."
                                       AutomationProperties.Name="Keep on bed when moving"
                                       IsChecked="{Binding KeepOnBedMove, Mode=TwoWay}">
                             <!-- A block standing on the hatched bed. -->
@@ -2945,7 +2951,7 @@
                             <TextBlock Text="W" Style="{StaticResource GizmoLabelX}" ToolTip="Width - along X" />
                             <TextBox Style="{StaticResource GizmoBox}" Tag="transform"
                                      AutomationProperties.AutomationId="RealSizeW"
-                                     ToolTip="How big it is at the scene's scale. Editing it sets the millimetres beside it."
+                                     ToolTip="How big it is at the scene's scale. Editing it sets the millimeters beside it."
                                      Text="{Binding RealW, StringFormat=N3, UpdateSourceTrigger=LostFocus}" />
                             <TextBlock Text="D" Style="{StaticResource GizmoLabelY}" ToolTip="Depth - along Y" />
                             <TextBox Style="{StaticResource GizmoBox}" Tag="transform"
@@ -2977,7 +2983,7 @@
                                   Stretch="Uniform" Width="15" Height="15" />
                         </ToggleButton>
                         <ToggleButton Style="{StaticResource ModeButton}" Margin="2,0,0,0"
-                                      ToolTip="Keep on bed: a part standing on the bed stays on it and grows upward only, and nothing is resized below the bed. Off: it grows about its middle, into the bed as well."
+                                      ToolTip="Keep on plate: a part on the plate grows upward only, and nothing goes below the plate. Off: it grows about its middle."
                                       AutomationProperties.Name="Keep on bed when resizing"
                                       IsChecked="{Binding KeepOnBedScale, Mode=TwoWay}">
                             <Path Data="{StaticResource IconKeepOnBed}"
@@ -2991,7 +2997,7 @@
                          buttons: it is a setting of whichever mode is up, not a mode of its own. -->
                     <ToggleButton Style="{StaticResource ModeButton}" Margin="2,0,0,0"
                                   AutomationProperties.Name="As one"
-                                  ToolTip="On: move, turn and resize the selection as one object, around its centre. Off: each object on its own, around its own centre."
+                                  ToolTip="On: move, turn and resize the selection as one object, around its center. Off: each object on its own, around its own center."
                                   IsChecked="{Binding AroundSelectionCentre, Mode=TwoWay}"
                                   Visibility="{Binding HasManySelected, Converter={StaticResource BoolToVisibility}}">
                         <!-- A frame round three parts: the lot taken together. -->
@@ -3027,7 +3033,7 @@
               Focusable="False"
               ItemsSource="{Binding UiModes}" SelectedItem="{Binding UiMode, Mode=TwoWay}"
               AutomationProperties.AutomationId="UiMode"
-              ToolTip="Classic shows the tools 3D Builder had. Advanced adds the working set - sketches, holes, the Library of threads, gears, stairs and more, blueprints. Extended adds the specialised and the experimental on top of that: the lithophane, the pivot, the session recorder, Voronoi and the legacy Engrave. Keys work the same at all three, and no tool&apos;s own settings are ever hidden - only its button.">
+              ToolTip="Classic: the tools 3D Builder had. Advanced: the working set - sketches, holes, the Library, blueprints. Extended: specialized and experimental tools too - pivot, session recorder, Voronoi, legacy Engrave. Keys work at every level; only buttons are hidden.">
         <ComboBox.ItemTemplate>
             <DataTemplate>
                 <StackPanel Orientation="Horizontal" ToolTip="{Binding Hint}">

@@ -20,7 +20,7 @@ public sealed class BatteryHolder : Generator<BatteryHolder.Settings>
 {
     public override string Id => "organiser.battery";
     public override int Version => 1;
-    public override string Category => "Organisers";
+    public override string Category => "Organizers";
     public override string Title => "Battery holder";
     public override string Summary => "A block with a pocket for every cell, in rows and columns.";
 

@@ -44,7 +44,9 @@ public sealed partial class MainViewModel
     public System.Windows.Input.ICommand InsertGeneratedCommand =>
         insertGenerated ??= Track(new RelayCommand(p =>
         {
-            if (p is Generator generator) InsertGenerated(generator);
+            // An entry for a tool of the app's own opens the tool, not a panel of numbers.
+            if (p is FastCraft3D.Generators.Lithophanes.IOpensTool { Tool: "lithophane" }) InsertLithophaneCommand.Execute(null);
+            else if (p is Generator generator) InsertGenerated(generator);
         }));
 
     /// <summary>Opens the generator that made the selected part, filled in as it was made.</summary>

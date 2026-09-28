@@ -60,10 +60,10 @@
                      AutomationProperties.AutomationId="HoleCount" />
             <RadioButton x:Name="RowBox" GroupName="HolePattern" Content="Row" Margin="10,0,10,0" VerticalAlignment="Center" Checked="OnChoice"
                          AutomationProperties.AutomationId="HoleRow"
-                         ToolTip="In a line along the cutter's own X, centred on the handles" />
+                         ToolTip="In a line along the cutter's own X, centered on the handles" />
             <RadioButton x:Name="CircleBox" GroupName="HolePattern" Content="Circle" VerticalAlignment="Center" Checked="OnChoice"
                          AutomationProperties.AutomationId="HoleCircle"
-                         ToolTip="Evenly round a circle centred on the handles: a bolt circle" />
+                         ToolTip="Evenly round a circle centered on the handles: a bolt circle" />
         </StackPanel>
         <StackPanel Orientation="Horizontal">
             <TextBlock Text="Spacing" Style="{DynamicResource FieldLabel}" Width="62" ToolTip="From the middle of one hole to the next, in a row" />

@@ -135,8 +135,8 @@ public partial class VoronoiDialog : ToolPanel
 
         if (Base <= 0f && !lattice)
             warning += Environment.NewLine + Environment.NewLine
-                     + "With no solid base the web runs all the way to the bed and the first layer "
-                     + "is a handful of struts. A few millimetres of base is usually worth it.";
+                     + "With no solid base the web runs all the way to the plate and the first layer "
+                     + "is a handful of struts. A few millimeters of base is usually worth it.";
 
         WarningText.Text = warning;
 

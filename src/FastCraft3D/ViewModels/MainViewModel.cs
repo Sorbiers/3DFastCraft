@@ -998,7 +998,53 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
     public string Status
     {
         get => status;
-        set => Set(ref status, value);
+        set
+        {
+            Set(ref status, value);
+            if (IsWarning(value)) ShowNotice(value);
+        }
+    }
+
+    private string notice = "";
+    private DispatcherTimer? noticeTimer;
+
+    /// <summary>
+    /// A message worth not missing - that something could not be done, or that nothing changed -
+    /// shown over the viewport for a few seconds as well as in the status bar, which is at the far
+    /// edge of the window from where anyone is looking when they press Apply.
+    /// </summary>
+    public string Notice
+    {
+        get => notice;
+        private set
+        {
+            Set(ref notice, value);
+            Raise(nameof(HasNotice));
+        }
+    }
+
+    public bool HasNotice => notice.Length > 0;
+
+    private static readonly string[] WarningWords =
+        ["nothing was changed", "nothing was added", "could not", "cannot", "can't", "failed", "would not", "no room", "is not a", "not closed", "too small", "too big", "too short"];
+
+    private static bool IsWarning(string? message) =>
+        !string.IsNullOrEmpty(message) && WarningWords.Any(w => message.Contains(w, StringComparison.OrdinalIgnoreCase));
+
+    private void ShowNotice(string message)
+    {
+        Notice = message;
+        noticeTimer ??= new DispatcherTimer { Interval = TimeSpan.FromSeconds(5) };
+        noticeTimer.Stop();
+        noticeTimer.Tick -= ClearNotice;
+        noticeTimer.Tick += ClearNotice;
+        noticeTimer.Start();
+    }
+
+    private void ClearNotice(object? sender, EventArgs e)
+    {
+        noticeTimer?.Stop();
+        Notice = "";
     }
 
     public bool IsBusy
@@ -1515,8 +1561,12 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
             if (unit.Label == value.Label) return;
 
             Set(ref unit, value);
+            View.LengthConverter.Unit = value;
             Raise(nameof(UnitLabel));
             RaiseTransformFields();
+
+            // Every tool panel's length box reads in the unit too; an empty name refreshes them all.
+            Raise(string.Empty);
             SettingChanged();
         }
     }
@@ -2277,12 +2327,12 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
 
         foreach (var o in selection) o.Position += offset;
 
-        if (TransformCommand.CreateIfChanged("Centre face to face", selection, before) is { } command)
+        if (TransformCommand.CreateIfChanged("Center face to face", selection, before) is { } command)
         {
             Undo.Execute(command);
             Status = CentreIsRound
                 ? $"Put {selection.Count} object(s) on the other's axis{warn}"
-                : $"Aligned {selection.Count} object(s) so the two faces' centres match";
+                : $"Aligned {selection.Count} object(s) so the two faces' centers match";
         }
         else
         {
@@ -2930,7 +2980,7 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
 
         if (!accepted)
         {
-            Status = "Best face down cancelled";
+            Status = "Best face down canceled";
             return;
         }
 
@@ -4553,12 +4603,27 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
         ShowShadows = settings.ShowShadows;
         ShowReflections = settings.ShowReflections;
         StickySelection = !settings.SingleSelection;
+        sidePanelWidth = settings.SidePanelWidth;
     }
 
     public RememberedSettings Remembered =>
         new(plateWidth, plateDepth, plateHeight, unit.Label, showAxes, showZAxis, showGridLabels, !showProperties,
             uiLevel == UiLevel.Classic, showShadows, showReflections, !stickySelection,
-            uiLevel == UiLevel.Extended);
+            uiLevel == UiLevel.Extended, sidePanelWidth);
+
+    private float sidePanelWidth;
+
+    /// <summary>How wide the side panel was last dragged; nought for the default. Remembered, not part of a project.</summary>
+    public float SidePanelWidth
+    {
+        get => sidePanelWidth;
+        set
+        {
+            if (MathF.Abs(sidePanelWidth - value) < 0.5f) return;
+            sidePanelWidth = value;
+            SettingsChanged?.Invoke();
+        }
+    }
 
     private void SettingChanged()
     {
@@ -5672,6 +5737,30 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
     }
 
     /// <summary>
+    /// Applies whichever tool has the object, as its Apply button would, and says whether it did:
+    /// what Enter does. A tool panel of the other kind - Repeat, Smooth and the rest - keeps its
+    /// own buttons.
+    /// </summary>
+    public bool ApplyActiveTool()
+    {
+        System.Windows.Input.ICommand? apply =
+            isSplitMode ? ApplySplitCommand
+            : isEmbossMode ? ApplyEmbossCommand
+            : isEngraveMode ? ApplyEngraveCommand
+            : isWallMountMode ? ApplyWallMountCommand
+            : isAlignFaceMode ? ApplyAlignFaceCommand
+            : isCentreFaceMode ? ApplyCentreFaceCommand
+            : isExtrudeMode ? ApplyExtrudeCommand
+            : isConnectMode ? ApplyConnectCommand
+            : isSubtractMode ? ApplySubtractCommand
+            : null;
+
+        if (apply is null || !apply.CanExecute(null)) return false;
+        apply.Execute(null);
+        return true;
+    }
+
+    /// <summary>
     /// Puts down whichever tool has the object, and says whether there was one.
     ///
     /// Escape is the key everybody reaches for, and every tool has its own Cancel button in its
@@ -5715,7 +5804,7 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
         else if (IsSubtractMode) IsSubtractMode = false;
         else return false;
 
-        Status = "Cancelled - nothing was changed";
+        Status = "Canceled - nothing was changed";
         return true;
     }
 
@@ -5983,14 +6072,14 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
 
         if (study.Pulls.Count == 0)
         {
-            Status = "Nothing to make a mould of";
+            Status = "Nothing to make a mold of";
             return;
         }
 
         var dialog = new MouldDialog(source.Name, study, model);
         if (dialog.ShowDialog() != true) return;
 
-        token = StartWork($"Moulding {source.Name}");
+        token = StartWork($"Molding {source.Name}");
         try
         {
             var result = await Task.Run(
@@ -5998,7 +6087,7 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
 
             if (result.Parts.Count == 0)
             {
-                Status = "The mould came out empty";
+                Status = "The mold came out empty";
                 return;
             }
 
@@ -6008,7 +6097,7 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
                 Colour = NextAutomaticColour()
             }.Centred()).ToList();
 
-            Undo.Execute(new AddObjectsCommand("Mould", made));
+            Undo.Execute(new AddObjectsCommand("Mold", made));
             RefreshSelection();
 
             Status = result.Summary;
@@ -6026,7 +6115,7 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
         }
         catch (Exception ex)
         {
-            Status = $"The mould failed: {ex.Message}";
+            Status = $"The mold failed: {ex.Message}";
             MessageBox.Show(ex.Message, "3DFastCraft", MessageBoxButton.OK, MessageBoxImage.Error);
         }
         finally
@@ -6211,7 +6300,7 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
 
             var grid = Lithophane.Grid(picture.Width, picture.Height, options);
             Status = $"Added {dialog.PictureName} - {grid.Width:0.#} x {grid.Height:0.#} mm, "
-                   + $"{Lithophane.GreyLevels(options)} greys, {built.TriangleCount:N0} triangles. It needs a light behind it.";
+                   + $"{Lithophane.GreyLevels(options)} grays, {built.TriangleCount:N0} triangles. It needs a light behind it.";
         }
         catch (Exception abort) when (WasAborted(abort))
         {
@@ -7007,7 +7096,7 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
             return;
         }
 
-        Undo.Execute(new PivotCommand("Pivot to centre", target, centre, own: false, wasOwn: target.PivotIsOwn));
+        Undo.Execute(new PivotCommand("Pivot to center", target, centre, own: false, wasOwn: target.PivotIsOwn));
         RefreshSelection();
         Status = $"{target.Name} turns about its middle again";
     }
@@ -7071,15 +7160,15 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
         float ratio = BedPlacement.FitRatio(BedPlacement.Reach(selection).Size, plateWidth, plateDepth, plateHeight);
         BedPlacement.Fit(selection, ratio);
 
-        if (TransformCommand.CreateIfChanged("Fit to bed", selection, before) is { } command)
+        if (TransformCommand.CreateIfChanged("Fit to plate", selection, before) is { } command)
             Undo.Execute(command);
 
         RefreshSelection();
         ZoomExtentsRequested?.Invoke();
 
         Status = ratio < 1f
-            ? $"Scaled to {ratio * 100f:0.#}% to fit the bed, and centred on it"
-            : "Centred on the bed - it already fitted, so nothing was scaled";
+            ? $"Scaled to {ratio * 100f:0.#}% to fit the plate, and centered on it"
+            : "Centered on the plate - it already fitted, so nothing was scaled";
     }
 
     /// <summary>
@@ -7116,7 +7205,7 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
         RefreshSelection();
         Status = covers.X <= plateWidth + 0.01f && covers.Y <= plateDepth + 0.01f
             ? $"Distributed {selection.Count} objects {chosen:0.##} mm apart"
-            : $"Distributed {selection.Count} objects {chosen:0.##} mm apart - they cover {covers.X:0} x {covers.Y:0} mm, more than the bed";
+            : $"Distributed {selection.Count} objects {chosen:0.##} mm apart - they cover {covers.X:0} x {covers.Y:0} mm, more than the plate";
     }
 
     /// <summary>Whether anything is hidden, for the list's Show all.</summary>
@@ -7231,7 +7320,7 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
             Status = mode switch
             {
                 AlignMode.Distribute => $"Spread {selection.Count} objects evenly along {axis}",
-                _ when selection.Count == 1 => $"Aligned {selection[0].Name} to {mode} on the bed's {axis}",
+                _ when selection.Count == 1 => $"Aligned {selection[0].Name} to {mode} on the plate's {axis}",
                 _ => $"Aligned {selection.Count - 1} object(s) to {mode} on {axis}, against {selection[^1].Name}"
             };
         }
@@ -7289,7 +7378,7 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
         if (selection.Count == 0) return;
 
         string hex = Palette.ToHex(colour);
-        string label = selection.Count == 1 ? "Colour" : $"Colour {selection.Count} objects";
+        string label = selection.Count == 1 ? "Color" : $"Color {selection.Count} objects";
 
         if (ColourCommand.CreateIfChanged(label, selection, colour) is not { } command)
         {
@@ -7648,7 +7737,7 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
                         + "On a sloped or off-axis face - a cone, a pyramid, a wedge - it delivers "
                         + "less than the number typed, by roughly the cosine of the slope: a real "
                         + "risk of a gap too tight to fit. On a shape that is roughly round about "
-                        + "its own centre - a gear about its own axis - most of the surface sits "
+                        + "its own center - a gear about its own axis - most of the surface sits "
                         + "at much the same distance from the middle, so it comes out close to "
                         + "even.\n\n"
                         + "Grow it anyway?",
@@ -8116,17 +8205,17 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
         (world, value, _) => MeshDeform.Twist(world, value));
 
     private static readonly DeformSpec TaperSpec = new(
-        "Taper", "Tapering", "It narrows or widens towards the top, about its upright axis; the bottom keeps its size.",
+        "Taper", "Tapering", "It narrows or widens toward the top, about its upright axis; the bottom keeps its size.",
         "Top", "% of the bottom", MeshDeform.SmallestTaper * 100, 300, 5, 100, "narrower", "wider", false,
         (world, value, _) => MeshDeform.Taper(world, value / 100f));
 
     private static readonly DeformSpec BendSpec = new(
         "Bend", "Bending", "It curves over as if round a pipe; the bottom stays where it is and the top leans over.",
-        "Bend", "degrees", -360, 360, 5, 0, "the other way", "towards +X or +Y", true,
+        "Bend", "degrees", -360, 360, 5, 0, "the other way", "toward +X or +Y", true,
         (world, value, axis) => MeshDeform.Bend(world, value, axis),
         (world, value, axis) => MeshDeform.Folds(world, value, axis)
             ? $"Bent this far the inside of the curve would fold through itself. This shape takes at most "
-              + $"{MeshDeform.LargestBend(world, axis):0}° towards {axis}; a taller or thinner shape takes more."
+              + $"{MeshDeform.LargestBend(world, axis):0}° toward {axis}; a taller or thinner shape takes more."
             : null);
 
     private void TwistSelection() => DeformSelection(TwistSpec);
@@ -8217,7 +8306,7 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
 
         if (!accepted)
         {
-            Status = "Smoothing cancelled";
+            Status = "Smoothing canceled";
             return;
         }
 

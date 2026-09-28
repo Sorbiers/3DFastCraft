@@ -9,7 +9,7 @@ public sealed class Drawers : Generator<Drawers.Settings>
 {
     public override string Id => "organiser.drawers";
     public override int Version => 1;
-    public override string Category => "Organisers";
+    public override string Category => "Organizers";
     public override string Title => "Drawers and cabinet";
     public override string Summary => "A cabinet and the drawers that slide into it, each with a pull.";
 

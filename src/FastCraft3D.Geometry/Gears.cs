@@ -484,7 +484,7 @@ public static partial class Gears
 
                         // Its pivot marked as its bore, so a pin can be stood in it where the pawl goes.
                         parts.Add(new("Pawl", laid, Matrix4x4.CreateTranslation(-apart, 0f, 0f), Bore(o, laid, pawl.Pivot + new Vector2(apart, 0f))));
-                        notes.Add($"The pawl's pivot goes {pawl.Pivot.Length():0.#} mm from the centre, as shown.");
+                        notes.Add($"The pawl's pivot goes {pawl.Pivot.Length():0.#} mm from the center, as shown.");
                     }
                     else
                     {
@@ -531,12 +531,12 @@ public static partial class Gears
             case GearKind.Gear:
                 lines.Add($"Pitch diameter {F(m * o.Teeth)} mm, outside {F(m * (o.Teeth + 2))} mm, roots {F(m * (o.Teeth - 2.5f))} mm.");
                 if (o.PartnerTeeth > 0)
-                    lines.Add($"Ratio 1 : {F(o.PartnerTeeth / (float)o.Teeth)} - centres {F(m * (o.Teeth + o.PartnerTeeth) / 2f)} mm apart.");
+                    lines.Add($"Ratio 1 : {F(o.PartnerTeeth / (float)o.Teeth)} - centers {F(m * (o.Teeth + o.PartnerTeeth) / 2f)} mm apart.");
                 break;
             case GearKind.Ring:
                 lines.Add($"Pitch diameter {F(m * o.Teeth)} mm, inside the teeth {F(m * (o.Teeth - 2))} mm, outside {F(m * (o.Teeth + 2.5f) + 2f * o.Rim)} mm.");
                 if (o.PartnerTeeth > 0 && o.PartnerTeeth <= o.Teeth - 3)
-                    lines.Add($"Ratio 1 : {F(o.Teeth / (float)o.PartnerTeeth)} - the gear's centre {F(m * (o.Teeth - o.PartnerTeeth) / 2f)} mm from the ring's.");
+                    lines.Add($"Ratio 1 : {F(o.Teeth / (float)o.PartnerTeeth)} - the gear's center {F(m * (o.Teeth - o.PartnerTeeth) / 2f)} mm from the ring's.");
                 break;
             case GearKind.Bevel:
             {

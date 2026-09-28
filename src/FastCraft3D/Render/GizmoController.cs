@@ -901,7 +901,7 @@ public sealed class GizmoController
             $"Rotate {active.Axis} {degrees:+0.#;-0.#;0} deg{(SnapRotation ? " (snapped)" : "")}{pivot}");
     }
 
-    private static string BedNote(bool held) => held ? ", kept on the bed" : "";
+    private static string BedNote(bool held) => held ? ", kept on the plate" : "";
 
     /// <summary>+1 when the axis points towards the camera, -1 when away.</summary>
     private float FacingSign(Axis axis) =>

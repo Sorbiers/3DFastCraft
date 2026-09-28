@@ -126,7 +126,7 @@ public static class MouldBuilder
 
         var bounds = model.ComputeBounds();
         if (bounds.IsEmpty || model.TriangleCount == 0)
-            return new MouldResult([], "Nothing to make a mould of.");
+            return new MouldResult([], "Nothing to make a mold of.");
 
         // Cut exactly whenever the model will allow it, and sample when it will not.
         //
@@ -324,7 +324,7 @@ public static class MouldBuilder
 
             var healed = MeshHealer.Heal(mesh, token: token).Mesh;
             parts.Add(new MouldPart(
-                $"Mould {(char)('A' + i)}", healed, healed.CheckHealth().IsWatertight));
+                $"Mold {(char)('A' + i)}", healed, healed.CheckHealth().IsWatertight));
         }
 
         return parts;

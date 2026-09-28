@@ -106,7 +106,11 @@ public partial class MainWindow : Window
         DataContext = viewModel;
 
         // Before the plate is first drawn, or it is drawn at the default size and then redrawn.
-        if (LocalSettings.Load() is { } remembered) viewModel.ApplySettings(remembered);
+        if (LocalSettings.Load() is { } remembered)
+        {
+            viewModel.ApplySettings(remembered);
+            if (remembered.SidePanelWidth >= 260f) SidePanel.Width = remembered.SidePanelWidth;
+        }
         viewModel.SettingsChanged += () => LocalSettings.Save(viewModel.Remembered);
 
         ToolPanel.Host = viewModel.ShowPanel;
@@ -458,6 +462,21 @@ public partial class MainWindow : Window
             else viewModel.UndoSketch();
             e.Handled = true;
             return;
+        }
+
+        // Enter applies the tool, as Escape puts it down: from anywhere but a box being typed in,
+        // where Enter keeps meaning "take this number", or a button or list that has its own use
+        // for it. Ctrl+Enter applies from inside a box too, taking the number first.
+        if (e.Key is Key.Enter && !viewModel.IsSketchMode
+            && (Keyboard.Modifiers is ModifierKeys.Control
+                || (Keyboard.Modifiers is ModifierKeys.None && Keyboard.FocusedElement is not (TextBox or ButtonBase or ComboBox))))
+        {
+            if (Keyboard.FocusedElement is TextBox box) box.GetBindingExpression(TextBox.TextProperty)?.UpdateSource();
+            if (viewModel.ApplyActiveTool())
+            {
+                e.Handled = true;
+                return;
+            }
         }
 
         // Any chord with Ctrl in it, Ctrl+Shift+A - select nothing - among them. Catching Ctrl alone
@@ -2062,6 +2081,9 @@ public partial class MainWindow : Window
         double most = Math.Max(300, ActualWidth - 420);
         SidePanel.Width = Math.Clamp(SidePanel.Width - e.HorizontalChange, 260, most);
     }
+
+    /// <summary>Let go: the width is kept for next time. Saved once, not at every step of the drag.</summary>
+    private void OnSidePanelResized(object sender, DragCompletedEventArgs e) => viewModel.SidePanelWidth = (float)SidePanel.Width;
 
     /// <summary>The anchor spheres, sized to the plate's contents as the pivot's is to its part.</summary>
     private void ShowAnchors(IReadOnlyList<Vector3> points, IReadOnlyList<Vector3>? linked = null)

@@ -20,13 +20,13 @@ public sealed class Geneva : Generator<Geneva.Settings>
 
     public sealed record Settings(
         [Count("Slots", 3, 8)] int Slots = 4,
-        [Length("Centre distance", 20, 120, Hint = "Between the driver's axis and the wheel's")] float Distance = 40f,
+        [Length("Center distance", 20, 120, Hint = "Between the driver's axis and the wheel's")] float Distance = 40f,
         [Length("Pin", 2, 10, Hint = "The driving pin's diameter")] float Pin = 4f,
         [Length("Thickness", 3, 15)] float Thickness = 5f,
         [Length("Bore", 0, 10, Hint = "For both shafts. Nought for none.")] float Bore = 4f,
-        [Clearance("Clearance", 0.15, 1, Hint = "Round the pin in the slot, and round the locking disc. Under 0.15 a printed Geneva binds.")] float Clearance = 0.3f,
-        [Toggle("Demo", Group = "Demo", Hint = "A model to turn by hand: the driver and the wheel keyed on D-shafts the bore's size through a base, a crank on the driver")] bool Demo = false,
-        [Toggle("Organize", Hint = "Laid out on the bed to print. Off: put on the plate as it goes together, as the preview shows it.")] bool Organise = true);
+        [Clearance("Clearance", 0.15, 1, Hint = "Round the pin in the slot, and round the locking disk. Under 0.15 a printed Geneva binds.")] float Clearance = 0.3f,
+        [Toggle("Working model", Group = "Working model", Hint = "A model to turn by hand: the driver and the wheel keyed on D-shafts the bore's size through a base, a crank on the driver")] bool Demo = false,
+        [Toggle("Lay out for printing", Hint = "On: the parts side by side, ready to print. Off: put down assembled, as the preview shows it.")] bool Organise = true);
 
     private sealed record Layout(float Crank, float Wheel, float Lock, float SlotBottom, float Beta);
 
@@ -44,16 +44,16 @@ public sealed class Geneva : Generator<Geneva.Settings>
         var p = Plan(s);
         if (s.Pin / 2f > 0.25f * p.Crank) yield return $"The pin is too big for the crank: at most {0.5f * p.Crank:0.#} mm.";
         if (s.Bore / 2f + 2f > p.SlotBottom) yield return "The wheel's bore runs into its slots. A smaller bore or a bigger drive.";
-        if (s.Bore / 2f + 2f > p.Lock - p.Crank * 0.2f) yield return "The driver's bore is too big for its locking disc.";
+        if (s.Bore / 2f + 2f > p.Lock - p.Crank * 0.2f) yield return "The driver's bore is too big for its locking disk.";
         if (s.Demo)
         {
             float hole = new Demo(printer, s.Bore).HoleRadius;
             if (hole + 2f > p.SlotBottom || hole + 2f > p.Lock - p.Crank * 0.2f)
-                yield return "There is no room for D-shafts: a bigger centre distance, or a smaller bore.";
+                yield return "There is no room for D-shafts: a bigger center distance, or a smaller bore.";
 
             // The wheel's boss stands up past the driver's crank plate, which reaches under the wheel.
             else if (p.Crank + s.Pin / 2f + 2f + hole + 2.5f + Demo.Gap > s.Distance)
-                yield return "The driver's plate would run into the wheel's shaft: a bigger centre distance, or a smaller pin or bore.";
+                yield return "The driver's plate would run into the wheel's shaft: a bigger center distance, or a smaller pin or bore.";
         }
     }
 
@@ -207,22 +207,22 @@ public sealed class Cam : Generator<Cam.Settings>
     public override string Id => "mechanism.cam";
     public override int Version => 1;
     public override string Category => "Mechanisms";
-    public override string Title => "Disc cam";
+    public override string Title => "Disk cam";
     public override string Summary => "A cam that lifts its follower by a rise, dwell and return you choose.";
 
     public sealed record Settings(
         [Length("Base circle", 5, 60, Hint = "The cam's radius where the follower rests at its lowest")] float Base = 15f,
         [Length("Rise", 1, 40)] float Rise = 10f,
-        [Angle("Rising over", 30, 240, Group = "Motion")] float RiseAngle = 120f,
+        [Angle("Rise angle", 30, 240, Group = "Motion")] float RiseAngle = 120f,
         [Angle("Dwell at the top", 0, 180, Group = "Motion")] float Dwell = 60f,
-        [Angle("Returning over", 30, 240, Group = "Motion")] float ReturnAngle = 120f,
-        [Choice("Law", Group = "Motion", Hint = "Cycloidal starts and stops most gently; harmonic is smoothest in the middle")] CamLaw Law = CamLaw.Cycloidal,
+        [Angle("Return angle", 30, 240, Group = "Motion")] float ReturnAngle = 120f,
+        [Choice("Motion profile", Group = "Motion", Hint = "Cycloidal starts and stops most gently; harmonic is smoothest in the middle")] CamLaw Law = CamLaw.Cycloidal,
         [Choice("Follower", Group = "Follower")] FollowerKind Follower = FollowerKind.Roller,
         [Length("Roller radius", 2, 15, Group = "Follower"), ShowWhen(nameof(Follower), FollowerKind.Roller)] float Roller = 5f,
         [Length("Thickness", 3, 20)] float Thickness = 6f,
         [Length("Bore", 0, 12)] float Bore = 5f,
-        [Toggle("Demo", Group = "Demo", Hint = "A model to turn by hand: the cam keyed on a D-shaft through a base, a crank on it, the follower in a channel with pegs for a rubber band to bring it back")] bool Demo = false,
-        [Toggle("Organize", Hint = "Laid out on the bed to print. Off: put on the plate as it goes together, as the preview shows it.")] bool Organise = true);
+        [Toggle("Working model", Group = "Working model", Hint = "A model to turn by hand: the cam keyed on a D-shaft through a base, a crank on it, the follower in a channel with pegs for a rubber band to bring it back")] bool Demo = false,
+        [Toggle("Lay out for printing", Hint = "On: the parts side by side, ready to print. Off: put down assembled, as the preview shows it.")] bool Organise = true);
 
     protected override IEnumerable<string> Check(Settings s, Printer printer)
     {

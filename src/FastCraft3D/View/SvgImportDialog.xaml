@@ -31,7 +31,7 @@
         </StackPanel>
 
         <CheckBox x:Name="SeparateBox" Content="One object per shape"
-                  ToolTip="Each filled shape in the drawing becomes an object of its own, to colour or move apart. Off, the whole drawing is one object." />
+                  ToolTip="Each filled shape in the drawing becomes an object of its own, to color or move apart. Off, the whole drawing is one object." />
 
         <Border Margin="0,12,0,0" Padding="10,8" CornerRadius="3"
                 Background="#FFEFF1F4" BorderBrush="#FFDDE0E4" BorderThickness="1">

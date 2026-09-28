@@ -525,7 +525,7 @@ public sealed class Door : Generator<Door.Settings>
         {
             var panel = Panels(s)[0];
             if (panel.X1 - panel.X0 < 0.5f || panel.Y1 - panel.Y0 < 0.5f)
-                yield return "The panels would be under half a millimetre. Fewer of them, or a bigger door.";
+                yield return "The panels would be under half a millimeter. Fewer of them, or a bigger door.";
             if (s.Recess >= s.Depth - s.SetBack - 0.2f) yield return "The panels are sunk through the leaf.";
         }
 
@@ -533,7 +533,7 @@ public sealed class Door : Generator<Door.Settings>
         {
             if (s.Glazed > s.Panels) yield return $"Only {s.Panels} panels to glaze.";
             else if (PanesOf(s, Panels(s)[0]).Any(p => p.X1 - p.X0 < 0.5f || p.Y1 - p.Y0 < 0.5f))
-                yield return "The glazing bars leave panes under half a millimetre. Fewer panes, or a bigger door.";
+                yield return "The glazing bars leave panes under half a millimeter. Fewer panes, or a bigger door.";
             if (s.GlassThickness >= s.Depth - s.SetBack) yield return "The glass is as thick as the leaf.";
         }
     }

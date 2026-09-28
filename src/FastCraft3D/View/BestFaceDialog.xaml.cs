@@ -77,7 +77,7 @@ public partial class BestFaceDialog : ToolPanel
 
         return new Row(
             Heading: support,
-            Detail: $"{choice.HeightMm:0.#} mm tall · {choice.FootprintMm2 / 100f:0.#} cm² on the bed "
+            Detail: $"{choice.HeightMm:0.#} mm tall · {choice.FootprintMm2 / 100f:0.#} cm² on the plate "
                   + $"· tips at {choice.TipDegrees:0}°{alike}",
             Mark: choice.IsCurrent ? "standing on it" : ReferenceEquals(choice, best) ? "best" : "",
             Hint: choice.TipDegrees < 10f

@@ -18,7 +18,7 @@ public sealed class PegboardHook : Generator<PegboardHook.Settings>
 
     public override string Id => "organiser.pegboard-hook";
     public override int Version => 1;
-    public override string Category => "Organisers";
+    public override string Category => "Organizers";
     public override string Title => "Pegboard hook";
     public override string Summary => "A hook for one-inch pegboard with quarter-inch holes.";
 
