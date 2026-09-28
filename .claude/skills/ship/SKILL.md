@@ -40,9 +40,10 @@ gh release create v1.2.0 "build/3DFastCraft.exe" --title "3DFastCraft 1.2.0" --n
 gh release view v1.2.0 --json assets --jq '.assets[] | "\(.name) \(.size)"'
 ```
 
-Model the notes on the previous release (`gh release view v1.1.0`). What each one carries:
+Model the notes on the previous release (`gh release view v1.1.0`), but leave out the old epigraph
+("In loving memory of Windows 3D Builder...") - it was dropped from the notes, the site and the
+README in 4.1.1. What each one carries:
 
-- The epigraph: *In loving memory of Windows 3D Builder. Rest in peace.*
 - A **Download** section linking the asset by its full release URL, saying it is a single
   self-contained file needing no .NET, and warning that SmartScreen will object to an unsigned
   exe the first time (*More info* → *Run anyway*).
