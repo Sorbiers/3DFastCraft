@@ -191,6 +191,33 @@ public class ToolFlowTests
     });
 
     [Fact]
+    public void DropDownLandsOnThePartUnderneathAndOverlapGoesALittleIntoIt() => WithModel(model =>
+    {
+        var plate = new SceneObject("Plate", Primitives.Box(40, 40, 6)) { Position = new Vector3(0, 0, 3) };
+        var block = new SceneObject("Block", Primitives.Box(10, 10, 10)) { Position = new Vector3(5, 5, 30) };
+        model.Scene.Objects.Add(plate);
+        model.Scene.Objects.Add(block);
+        block.IsSelected = true;
+        model.RefreshSelection();
+
+        model.DropDownCommand.Execute(null);
+        Assert.Equal(6f, block.WorldBounds.Min.Z, 3);
+
+        block.Position += new Vector3(0, 0, 10);
+        model.DropDownCommand.Execute("Overlap");
+        Assert.Equal(6f - MainViewModel.DropOverlap, block.WorldBounds.Min.Z, 3);
+
+        // Again, it is resting on it already, and stays.
+        model.DropDownCommand.Execute(null);
+        Assert.Equal(6f - MainViewModel.DropOverlap, block.WorldBounds.Min.Z, 3);
+
+        // Moved off the plate, there is nothing under it but the build plate.
+        block.Position += new Vector3(60, 0, 0);
+        model.DropDownCommand.Execute(null);
+        Assert.Equal(0f, block.WorldBounds.Min.Z, 3);
+    });
+
+    [Fact]
     public void AddLeavesThePartWholeAndPutsTheCutterWhereItStood() => WithModel(model =>
     {
         var cube = new SceneObject("Cube", Primitives.Box(20, 20, 20)) { Position = new Vector3(0, 0, 10) };

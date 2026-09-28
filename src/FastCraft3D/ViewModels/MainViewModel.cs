@@ -218,6 +218,9 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
             _ => Scene.Selection.Count > 0);
         MirrorCommand = new RelayCommand(p => Mirror(p), _ => Scene.Selection.Count > 0);
         AlignToPlateCommand = RelayCommand.Simple(AlignToPlate, () => Scene.Selection.Count > 0);
+        DropDownCommand = new RelayCommand(p => DropDown(p is "Overlap"
+            || (System.Windows.Input.Keyboard.Modifiers & (System.Windows.Input.ModifierKeys.Control | System.Windows.Input.ModifierKeys.Shift)) != 0),
+            _ => Scene.Selection.Count > 0);
         FitToBedCommand = RelayCommand.Simple(FitToBed, () => Scene.Selection.Count > 0);
         DistributeOnBedCommand = RelayCommand.Simple(DistributeOnBed, () => Scene.Selection.Count > 1);
         SelectAllCommand = RelayCommand.Simple(SelectAll, () => Scene.Objects.Count > 0);
@@ -356,6 +359,8 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
     public System.Windows.Input.ICommand DuplicateCommand { get; }
     public System.Windows.Input.ICommand MirrorCommand { get; }
     public System.Windows.Input.ICommand AlignToPlateCommand { get; }
+
+    public System.Windows.Input.ICommand DropDownCommand { get; }
     public System.Windows.Input.ICommand FitToBedCommand { get; }
     public System.Windows.Input.ICommand DistributeOnBedCommand { get; }
     public System.Windows.Input.ICommand SelectAllCommand { get; }
@@ -7180,6 +7185,71 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
 
         RefreshSelection();
         Status = "Aligned to the build plate";
+    }
+
+    /// <summary>How far Drop down sinks a part into the one under it, when asked to, for Merge to join them.</summary>
+    public const float DropOverlap = 0.2f;
+
+    /// <summary>
+    /// Moves the selection straight down, as one, until it rests on whatever is under it - or on
+    /// the plate, when nothing is. With <paramref name="overlap"/> it goes a little way into the
+    /// part it lands on, so the two share material rather than a face and Merge joins them into
+    /// one solid; meeting face to face, the union is left to decide whether they touch.
+    /// </summary>
+    private void DropDown(bool overlap)
+    {
+        var selection = Scene.Selection.ToList();
+        if (selection.Count == 0) return;
+
+        var moving = Mesh.Combine(selection.Select(o => o.ToWorldMesh()));
+        var reach = moving.ComputeBounds();
+
+        // Only what is under some of it can be landed on.
+        (SceneObject Object, float Distance)? under = null;
+        foreach (var o in Scene.Objects)
+        {
+            if (o.IsSelected || o.IsHidden) continue;
+            var b = o.WorldBounds;
+            if (b.Min.X > reach.Max.X || reach.Min.X > b.Max.X || b.Min.Y > reach.Max.Y || reach.Min.Y > b.Max.Y || b.Min.Z >= reach.Max.Z) continue;
+
+            if (VerticalDrop.Distance(moving, o.ToWorldMesh()) is { } d && (under is null || d < under.Value.Distance))
+                under = (o, d);
+        }
+
+        float drop;
+        string said;
+        if (under is { } landed && landed.Distance <= reach.Min.Z + 1e-4f)
+        {
+            if (landed.Distance <= 1e-3f)
+            {
+                Status = $"Already resting on {landed.Object.Name} - nothing was moved";
+                return;
+            }
+
+            drop = landed.Distance + (overlap ? DropOverlap : 0f);
+            said = overlap
+                ? $"Dropped onto {landed.Object.Name}, {DropOverlap:0.#} mm into it - Merge to join them"
+                : $"Dropped onto {landed.Object.Name}";
+        }
+        else
+        {
+            drop = reach.Min.Z;
+            said = "Nothing under it - dropped to the plate";
+            if (MathF.Abs(drop) < 1e-4f)
+            {
+                Status = "Already on the plate, with nothing under it - nothing was moved";
+                return;
+            }
+        }
+
+        var before = selection.Select(TransformState.Capture).ToList();
+        foreach (var o in selection) o.Position = o.Position with { Z = o.Position.Z - drop };
+
+        if (TransformCommand.CreateIfChanged("Drop down", selection, before) is { } command)
+            Undo.Execute(command);
+
+        RefreshSelection();
+        Status = said;
     }
 
     /// <summary>

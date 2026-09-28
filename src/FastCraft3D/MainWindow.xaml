@@ -606,6 +606,10 @@
                     <Button Style="{StaticResource ToolButton}" Content="Drop to plate" Tag="{StaticResource IconDropToPlate}"
                             Command="{Binding AlignToPlateCommand}" MinWidth="90"
                             ToolTip="Set the selection down on z = 0, so it is standing on the plate rather than floating over it" />
+                    <Button Style="{StaticResource ToolButton}" Content="Drop down" Tag="{StaticResource IconDropDown}"
+                            Visibility="{Binding IsAdvancedMode, Converter={StaticResource BoolToVisibility}}"
+                            Command="{Binding DropDownCommand}" MinWidth="76" AutomationProperties.AutomationId="DropDown"
+                            ToolTip="Move the selection straight down until it rests on whatever is under it, or on the plate. Ctrl or Shift: 0.2 mm into it, ready to Merge. (End)" />
                     <Button Style="{StaticResource ToolButton}" Content="Place on face" Visibility="{Binding IsAdvancedMode, Converter={StaticResource BoolToVisibility}}" Tag="{StaticResource IconLayOnFace}"
                             Command="{Binding BeginLayCommand}" MinWidth="86"
                             ToolTip="Pick a face and the object is tipped over to stand on it - the flat side down, for printing. Needs exactly one object selected." />

@@ -105,6 +105,8 @@ public static class Shortcuts
         new("Move, rotate, resize", "Nudge forward, along -Y", Key.Down, Action: KeyAction.NudgeForward),
         new("Move, rotate, resize", "Nudge up, along +Z", Key.PageUp, Action: KeyAction.NudgeUp),
         new("Move, rotate, resize", "Nudge down, along -Z", Key.PageDown, Action: KeyAction.NudgeDown),
+        new("Move, rotate, resize", "Drop down onto whatever is under it, or the plate", Key.End, Command: "DropDownCommand", Advanced: true),
+        new("Move, rotate, resize", "Drop down 0.2 mm into it, ready to Merge", Key.End, Ctrl, "DropDownCommand", "Overlap", Advanced: true),
         new("Move, rotate, resize", "A nudge is the snap step, or 1 mm with snap off; Shift makes it ten", Text: "Shift"),
         new("Move, rotate, resize", "Put down the tool in hand", Key.Escape, Action: KeyAction.None, Text: "Esc"),
         new("Move, rotate, resize", "Apply the tool in hand; Ctrl+Enter from inside a number box", Text: "Enter"),
