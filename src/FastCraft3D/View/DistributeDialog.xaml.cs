@@ -29,7 +29,7 @@ public partial class DistributeDialog : ToolPanel
         this.arrange = arrange;
 
         SubjectText.Text = $"Setting {count} objects out in rows across the plate, centered on it.";
-        GapBox.Text = gap.ToString("0.##", CultureInfo.CurrentCulture);
+        GapBox.Put(gap);
 
         Loaded += (_, _) =>
         {
@@ -42,7 +42,7 @@ public partial class DistributeDialog : ToolPanel
     public float? Result { get; private set; }
 
     private bool TryGap(out float gap) =>
-        float.TryParse(GapBox?.Text, NumberStyles.Float, CultureInfo.CurrentCulture, out gap)
+        GapBox.TryRead(out gap)
         && float.IsFinite(gap) && gap >= 0f;
 
     private void OnChanged(object sender, RoutedEventArgs e) => Describe();

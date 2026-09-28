@@ -39,14 +39,14 @@ public partial class HoleDialog : ToolPanel
         CountersunkBox.IsChecked = start.Head == HoleHead.Countersunk;
         CounterboredBox.IsChecked = start.Head == HoleHead.Counterbored;
         NutBox.IsChecked = start.NutPocket;
-        DepthBox.Text = Format(start.Depth);
+        DepthBox.Put(start.Depth);
         ThroughBox.IsChecked = target is not null;
-        ClearanceBox.Text = Format(start.ExtraClearance);
+        ClearanceBox.Put(start.ExtraClearance);
         CountBox.Text = Math.Max(1, start.Count).ToString(CultureInfo.CurrentCulture);
         RowBox.IsChecked = start.Pattern == HolePattern.Row;
         CircleBox.IsChecked = start.Pattern == HolePattern.Circle;
-        SpacingBox.Text = Format(start.Spacing);
-        CircleDiameterBox.Text = Format(start.CircleDiameter);
+        SpacingBox.Put(start.Spacing);
+        CircleDiameterBox.Put(start.CircleDiameter);
 
         IntroText.Text = target is null
             ? "Nothing is selected, so this makes the hole as a cutter to Subtract later. Drag its handles to put it where the hole goes."
@@ -88,7 +88,7 @@ public partial class HoleDialog : ToolPanel
     }
 
     private static float Number(TextBox box, float otherwise) =>
-        float.TryParse(box.Text, NumberStyles.Float, CultureInfo.CurrentCulture, out float v) && float.IsFinite(v) ? v : otherwise;
+        box.Read(otherwise);
 
     private void Refresh()
     {

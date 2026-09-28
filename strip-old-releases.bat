@@ -26,11 +26,11 @@ $tags = @(gh release list --limit 200 --json tagName --jq '.[].tagName')
 $doomed = @()
 foreach ($tag in $tags) {
     if ($tag -eq $latest) { continue }
-    $assets = @(gh release view $tag --json assets --jq '.assets[] | .name + "|" + (.size|tostring)')
+    # Parsed here rather than by --jq: PowerShell 5.1 strips the double quotes out of an argument
+    # to a native program, so a jq string literal such as "|" arrives as a bare | and jq fails.
+    $assets = (gh release view $tag --json assets | Out-String | ConvertFrom-Json).assets
     foreach ($a in $assets) {
-        if (-not $a) { continue }
-        $name, $size = $a -split '\|', 2
-        $doomed += [pscustomobject]@{ Tag = $tag; Name = $name; MB = [math]::Round([double]$size / 1MB, 1) }
+        $doomed += [pscustomobject]@{ Tag = $tag; Name = $a.name; MB = [math]::Round([double]$a.size / 1MB, 1) }
     }
 }
 

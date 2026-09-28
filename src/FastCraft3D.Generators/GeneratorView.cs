@@ -75,7 +75,7 @@ public sealed class GeneratorView : UserControl
     private readonly Button savePreset = new() { Content = "Save as preset" };
     // Docked rather than stacked, so the name box takes what room the panel has: at a fixed width
     // beside the label's column and the Keep button it ran off the side of the panel.
-    private readonly DockPanel naming = new() { Visibility = Visibility.Collapsed, Margin = new Thickness(96, 2, 0, 0) };
+    private readonly DockPanel naming = new() { Visibility = Visibility.Collapsed };
     private readonly TextBox presetName = new() { MinWidth = 60, Margin = new Thickness(0, 2, 4, 2) };
     private List<(string Label, string? Mine, Func<object?> Settings)> presets = [];
     private bool fillingPresets;
@@ -90,6 +90,60 @@ public sealed class GeneratorView : UserControl
     private (object Settings, Exception Error)? failed;
 
     private sealed record Row(int Index, GeneratorParameter Parameter, FrameworkElement Element, Action<object> Set, TextBlock? Unit);
+
+    private const double LabelWidth = 96;
+
+    // The least a column of settings needs: a label, a box, and "mm, from the printer" after it.
+    private const double ColumnWidth = 290;
+
+    private readonly List<TextBlock> labels = [];
+    private readonly List<StackPanel> blocks = [];
+    private double column = double.NaN;
+
+    /// <summary>
+    /// Splits the width into as many equal columns as fit and sizes the blocks to one each, so
+    /// they wrap into a grid. Labels are capped to part of a column, not of the whole panel.
+    /// </summary>
+    private void Flow(double width)
+    {
+        if (width <= 0) return;
+
+        // The gap is on every block's right, the last column's too, so it is taken off every column.
+        int columns = Math.Max(1, (int)(width / ColumnWidth));
+        double gap = columns > 1 ? 12 : 0;
+        double each = Math.Floor(width / columns - gap) - 1;
+        if (each == column) return;
+
+        column = each;
+        foreach (var block in blocks)
+        {
+            block.Width = each;
+            block.Margin = new Thickness(0, 0, gap, 8);
+        }
+
+        double most = Math.Max(LabelWidth, each * 0.45);
+        foreach (var label in labels) label.MaxWidth = most;
+    }
+
+    /// <summary>A label in the panel's shared label column and whatever it names beside it.</summary>
+    private Grid Labelled(TextBlock? label, UIElement field, Thickness margin)
+    {
+        var grid = new Grid { Margin = margin };
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto, SharedSizeGroup = "Label", MinWidth = LabelWidth });
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+
+        if (label is not null)
+        {
+            label.TextWrapping = TextWrapping.Wrap;
+            label.MaxWidth = Math.Max(LabelWidth, (double.IsNaN(column) ? ActualWidth : column) * 0.45);
+            labels.Add(label);
+            grid.Children.Add(label);
+        }
+
+        Grid.SetColumn(field, 1);
+        grid.Children.Add(field);
+        return grid;
+    }
 
     /// <summary>Each heading, and the rows under it: a heading with nothing shown under it goes too.</summary>
     private readonly List<(TextBlock Heading, List<Row> Rows)> headings = [];
@@ -144,9 +198,15 @@ public sealed class GeneratorView : UserControl
         Content = Lay(notice);
         reading = false;
 
+        // One label column for the whole panel, as wide as its longest label, so the boxes line
+        // up. A fixed 96 cut "Lay out for printing" short; the cap makes long labels wrap rather
+        // than push the boxes off a narrow panel.
+        Grid.SetIsSharedSizeScope(this, true);
+
         Loaded += (_, _) =>
         {
-            if (rows.Select(r => r.Element).OfType<StackPanel>().SelectMany(r => r.Children.OfType<TextBox>()).FirstOrDefault() is { } first)
+            if (rows.Select(r => r.Element).OfType<Grid>().SelectMany(g => g.Children.OfType<StackPanel>())
+                    .SelectMany(r => r.Children.OfType<TextBox>()).FirstOrDefault() is { } first)
             {
                 first.Focus();
                 first.SelectAll();
@@ -253,10 +313,22 @@ public sealed class GeneratorView : UserControl
         if (generator.Presets.Count > 0 || context.Memory is not null)
             panel.Children.Add(PresetRow());
 
+        // Each group is a block, and the blocks flow into as many columns as the panel has room
+        // for: one on a narrow panel, as before, and side by side on a wide one, where a single
+        // column ran off the bottom of a 1080-line screen with half the panel empty.
+        var flow = new WrapPanel();
+        StackPanel? block = null;
         string? group = null;
         for (int i = 0; i < generator.Parameters.Count; i++)
         {
             var p = generator.Parameters[i];
+
+            if (block is null || (p.Group is not null && p.Group != group))
+            {
+                block = new StackPanel { Margin = new Thickness(0, 0, 0, 8) };
+                blocks.Add(block);
+                flow.Children.Add(block);
+            }
 
             if (p.Group is not null && p.Group != group)
             {
@@ -266,17 +338,20 @@ public sealed class GeneratorView : UserControl
                     Text = group,
                     FontWeight = FontWeights.SemiBold,
                     Foreground = Brush(0xFF3A4550),
-                    Margin = new Thickness(0, panel.Children.Count > 1 ? 8 : 0, 0, 2)
+                    Margin = new Thickness(0, 0, 0, 2)
                 };
                 headings.Add((heading, []));
-                panel.Children.Add(heading);
+                block.Children.Add(heading);
             }
 
             var row = MakeRow(p, i);
             rows.Add(row);
             if (p.Group is not null) headings[^1].Rows.Add(row);
-            panel.Children.Add(row.Element);
+            block.Children.Add(row.Element);
         }
+
+        flow.SizeChanged += (_, _) => Flow(flow.ActualWidth);
+        panel.Children.Add(flow);
 
         MarkPrinterSettings();
 
@@ -342,10 +417,8 @@ public sealed class GeneratorView : UserControl
         var outer = new StackPanel { Margin = new Thickness(0, 0, 0, 8) };
 
         // Docked for the same reason as the naming row: a long preset name widened the list past the panel.
-        var row = new DockPanel();
-        var label = new TextBlock { Text = "Preset", Width = 96, ToolTip = "Sizes worth starting from. Choosing one fills in every setting." };
+        var label = new TextBlock { Text = "Preset", ToolTip = "Sizes worth starting from. Choosing one fills in every setting." };
         label.SetResourceReference(StyleProperty, "FieldLabel");
-        row.Children.Add(label);
 
         AutomationProperties.SetAutomationId(presetList, "Preset");
         presetList.SelectionChanged += (_, _) =>
@@ -356,12 +429,11 @@ public sealed class GeneratorView : UserControl
             forgetPreset.Visibility = mine is null ? Visibility.Collapsed : Visibility.Visible;
             if (settings() is { } chosen) Apply(chosen);
         };
-        row.Children.Add(presetList);
-        outer.Children.Add(row);
+        outer.Children.Add(Labelled(label, presetList, default));
 
         if (context.Memory is { } memory)
         {
-            var buttons = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(96, 2, 0, 0) };
+            var buttons = new StackPanel { Orientation = Orientation.Horizontal };
 
             savePreset.SetResourceReference(StyleProperty, "PanelButton");
             AutomationProperties.SetAutomationId(savePreset, "PresetSave");
@@ -383,7 +455,7 @@ public sealed class GeneratorView : UserControl
                 FillPresets(null);
             };
             buttons.Children.Add(forgetPreset);
-            outer.Children.Add(buttons);
+            outer.Children.Add(Labelled(null, buttons, new Thickness(0, 2, 0, 0)));
 
             AutomationProperties.SetAutomationId(presetName, "PresetName");
             var keep = new Button { Content = "Keep" };
@@ -400,7 +472,7 @@ public sealed class GeneratorView : UserControl
             DockPanel.SetDock(keep, Dock.Right);
             naming.Children.Add(keep);
             naming.Children.Add(presetName);
-            outer.Children.Add(naming);
+            outer.Children.Add(Labelled(null, naming, new Thickness(0, 2, 0, 0)));
         }
 
         FillPresets(null);
@@ -494,13 +566,12 @@ public sealed class GeneratorView : UserControl
         return printerSection;
     }
 
-    private StackPanel PrinterRow(string label, string id, float value, float least, float most, string hint, Func<float, Printer> changed)
+    private Grid PrinterRow(string label, string id, float value, float least, float most, string hint, Func<float, Printer> changed)
     {
-        var row = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 0, 0, 3) };
+        var row = new StackPanel { Orientation = Orientation.Horizontal };
 
-        var name = new TextBlock { Text = label, Width = 96, ToolTip = hint };
+        var name = new TextBlock { Text = label, ToolTip = hint };
         name.SetResourceReference(StyleProperty, "FieldLabel");
-        row.Children.Add(name);
 
         var box = new TextBox { Width = 64, Text = value.ToString("0.###", CultureInfo.CurrentCulture) };
         box.SetResourceReference(StyleProperty, "NumberBox");
@@ -517,7 +588,7 @@ public sealed class GeneratorView : UserControl
 
         row.Children.Add(box);
         row.Children.Add(new TextBlock { Text = "mm", Foreground = Brush(0xFF9AA0A8), VerticalAlignment = VerticalAlignment.Center });
-        return row;
+        return Labelled(name, row, new Thickness(0, 0, 0, 3));
     }
 
     private void SetPrinter(Printer changed)
@@ -552,15 +623,14 @@ public sealed class GeneratorView : UserControl
     /// <summary>One setting's row, and how to put a value into it from outside.</summary>
     private Row MakeRow(GeneratorParameter p, int index)
     {
-        var row = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 0, 0, 3) };
+        var row = new StackPanel { Orientation = Orientation.Horizontal };
 
-        var label = new TextBlock { Text = p.Label, Width = 96 };
+        var label = new TextBlock { Text = p.Label };
         label.SetResourceReference(StyleProperty, "FieldLabel");
         label.ToolTip = (p.Hint is null ? "" : p.Hint + Environment.NewLine + Environment.NewLine)
                         + (p.FromPrinter
                             ? "Double-click to go back to the printer's number."
                             : $"Double-click to go back to {Say(p, p.Default)}.");
-        row.Children.Add(label);
 
         string id = $"{generator.Id}.{p.Name}";
         Action<object> set;
@@ -655,7 +725,7 @@ public sealed class GeneratorView : UserControl
             if (e.ClickCount == 2) Reset(index);
         };
 
-        return new Row(index, p, row, set, unit);
+        return new Row(index, p, Labelled(label, row, new Thickness(0, 0, 0, 3)), set, unit);
     }
 
     /// <summary>
@@ -714,6 +784,11 @@ public sealed class GeneratorView : UserControl
             row.Element.Visibility = generator.Shows(current, row.Parameter) ? Visibility.Visible : Visibility.Collapsed;
         foreach (var (heading, under) in headings)
             heading.Visibility = under.Any(r => r.Element.Visibility == Visibility.Visible) ? Visibility.Visible : Visibility.Collapsed;
+
+        // An empty block would still hold a place in the flow.
+        foreach (var block in blocks)
+            block.Visibility = block.Children.OfType<UIElement>().Any(c => c.Visibility == Visibility.Visible)
+                ? Visibility.Visible : Visibility.Collapsed;
 
         failed = null;
         motion = null;

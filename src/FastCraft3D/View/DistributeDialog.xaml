@@ -10,9 +10,9 @@
         <StackPanel Orientation="Horizontal">
             <TextBlock Text="Gap" Style="{DynamicResource FieldLabel}" Width="62"
                        ToolTip="The distance between neighboring objects, and between one row and the next" />
-            <TextBox x:Name="GapBox" Width="56" Style="{DynamicResource NumberBox}" Tag="number"
+            <TextBox x:Name="GapBox" view:Units.Length="True" Width="56" Style="{DynamicResource NumberBox}" Tag="number"
                      AutomationProperties.AutomationId="DistributeGap" TextChanged="OnChanged" />
-            <TextBlock Text="mm" Foreground="#FF9AA0A8" VerticalAlignment="Center" />
+            <TextBlock Text="mm" view:Units.Label="True" Foreground="#FF9AA0A8" VerticalAlignment="Center" />
         </StackPanel>
 
         <StackPanel Orientation="Horizontal" Margin="0,10,0,0">

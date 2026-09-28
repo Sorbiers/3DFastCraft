@@ -111,12 +111,12 @@ public partial class MouldDialog : ToolPanel
 
         Options = new MouldOptions(
             Resolution: cells,
-            Wall: Number(WallBox?.Text, 8f),
-            SprueRadius: Number(SprueBox?.Text, 10f) / 2f,
-            VentRadius: Number(VentBox?.Text, 2f) / 2f,
+            Wall: Number(WallBox, 8f),
+            SprueRadius: Number(SprueBox, 10f) / 2f,
+            VentRadius: Number(VentBox, 2f) / 2f,
             AddVents: VentsBox?.IsChecked == true,
-            KeyRadius: Number(KeyBox?.Text, 8f) / 2f,
-            KeyClearance: Number(ClearanceBox?.Text, 0.2f));
+            KeyRadius: Number(KeyBox, 8f) / 2f,
+            KeyClearance: Number(ClearanceBox, 0.2f));
 
         // Which of the two routes this model will take, and what it costs.
         if (RouteText is not null)
@@ -141,10 +141,8 @@ public partial class MouldDialog : ToolPanel
                 : Chosen.Cuts.Count < study.Cuts.Count ? "fewer than it asked for" : "as recommended";
     }
 
-    private static float Number(string? text, float fallback) =>
-        float.TryParse(text, NumberStyles.Float, CultureInfo.CurrentCulture, out float v) && v >= 0f
-            ? v
-            : fallback;
+    private static float Number(System.Windows.Controls.TextBox? box, float fallback) =>
+        box.TryRead(out float v) && v >= 0f ? v : fallback;
 
     private void OnAccept(object sender, RoutedEventArgs e)
     {

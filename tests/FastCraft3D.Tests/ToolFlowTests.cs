@@ -1,4 +1,4 @@
-﻿using System.Diagnostics;
+using System.Diagnostics;
 using System.Numerics;
 using System.Runtime.ExceptionServices;
 using System.Windows;
@@ -222,6 +222,60 @@ public class ToolFlowTests
         Assert.Equal(-30f, thread.Position.X, 1);
         Assert.Equal(10f, thread.Position.Y, 1);
         Assert.Equal(90f, thread.Rotation.X, 1);
+    });
+
+    [Fact]
+    public void ASetLaidOutForPrintingGoesDownAsItsPartsEachInItsOwnColour() => WithModel(model =>
+    {
+        var generator = FastCraft3D.Generators.GeneratorRegistry.Find("mechanism.gear-train")!;
+        AnswerPanel(model, "GeneratorInsert", () => PumpUntil(() => model.Scene.Objects.Count > 0));
+        model.InsertGeneratedCommand.Execute(generator);
+        PumpUntil(() => model.Scene.Objects.Count > 1 && !model.HasOpenPanel);
+
+        Assert.True(model.Scene.Objects.Count >= 3);
+        Assert.DoesNotContain(model.Scene.Objects, o => o.Recipe?.Role == "(set)");
+        Assert.True(model.Scene.Objects.Select(o => o.Colour).Distinct().Count() > 1);
+    });
+
+    [Theory]
+    [InlineData("mechanism.gear-train", 3)]
+    [InlineData("mechanism.planetary", 4)]
+    public void AnAssembledSetGoesDownGroupedIsRemadeGroupedWhereItStandsAndUngroupsIntoItsParts(string id, int atLeast) => WithModel(model =>
+    {
+        var generator = FastCraft3D.Generators.GeneratorRegistry.Find(id)!;
+        AnswerPanel(model, "GeneratorInsert", panel =>
+        {
+            PumpUntil(() => model.Scene.Objects.Count > 0);
+            var layout = Named<CheckBox>(panel, $"{id}.Organise");
+            layout.IsChecked = false;
+            layout.RaiseEvent(new System.Windows.RoutedEventArgs(System.Windows.Controls.Primitives.ButtonBase.ClickEvent));
+
+            // Insert waits for the set to be made again with the new setting.
+            PumpUntil(() => Named<Button>(panel, "GeneratorInsert").IsEnabled);
+        });
+        model.InsertGeneratedCommand.Execute(generator);
+        PumpUntil(() => model.Scene.Objects.Count == 1 && !model.HasOpenPanel);
+
+        var set = Assert.Single(model.Scene.Objects);
+        Assert.Equal("(set)", set.Recipe?.Role);
+        set.Position += new Vector3(20, -15, 0);
+        var at = set.Position;
+
+        set.IsSelected = true;
+        model.RefreshSelection();
+        AnswerPanel(model, "GeneratorInsert", () => PumpUntil(() => model.Scene.Objects.Count >= 2));
+        model.EditGeneratedCommand.Execute(null);
+        PumpUntil(() => model.Scene.Objects.Count == 1 && !model.HasOpenPanel);
+
+        var again = Assert.Single(model.Scene.Objects);
+        Assert.Equal("(set)", again.Recipe?.Role);
+        Assert.Equal(at.X, again.Position.X, 2);
+        Assert.Equal(at.Y, again.Position.Y, 2);
+
+        again.IsSelected = true;
+        model.RefreshSelection();
+        model.UngroupCommand.Execute(null);
+        Assert.True(model.Scene.Objects.Count >= atLeast);
     });
 
     [Fact]

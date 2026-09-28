@@ -4,7 +4,7 @@
                 xmlns:view="clr-namespace:FastCraft3D.View"
                 Title="Text">
 
-    <StackPanel>
+    <view:ColumnFlow>
         <TextBlock Text="Lettering as an object of its own: a sign, a name tag, a keychain. The preview is on the plate. To put letters on a face that is already there, use Emboss or Engrave."
                    TextWrapping="Wrap" Foreground="#FF3A4550" Margin="0,0,0,8" />
 
@@ -49,24 +49,24 @@
 
         <StackPanel Orientation="Horizontal">
             <TextBlock Text="Height" Style="{DynamicResource FieldLabel}" Width="62" ToolTip="How tall the capitals stand" />
-            <TextBox x:Name="HeightBox" Width="60" Style="{DynamicResource NumberBox}" Tag="number" TextChanged="OnChanged"
+            <TextBox x:Name="HeightBox" view:Units.Length="True" Width="60" Style="{DynamicResource NumberBox}" Tag="number" TextChanged="OnChanged"
                      AutomationProperties.AutomationId="TextObjectHeight" />
-            <TextBlock Text="mm" Foreground="#FF9AA0A8" VerticalAlignment="Center" />
+            <TextBlock Text="mm" view:Units.Label="True" Foreground="#FF9AA0A8" VerticalAlignment="Center" />
         </StackPanel>
 
         <StackPanel Orientation="Horizontal">
             <TextBlock Text="Depth" Style="{DynamicResource FieldLabel}" Width="62" ToolTip="How thick the letters are" />
-            <TextBox x:Name="DepthBox" Width="60" Style="{DynamicResource NumberBox}" Tag="number" TextChanged="OnChanged"
+            <TextBox x:Name="DepthBox" view:Units.Length="True" Width="60" Style="{DynamicResource NumberBox}" Tag="number" TextChanged="OnChanged"
                      AutomationProperties.AutomationId="TextObjectDepth" />
-            <TextBlock Text="mm" Foreground="#FF9AA0A8" VerticalAlignment="Center" />
+            <TextBlock Text="mm" view:Units.Label="True" Foreground="#FF9AA0A8" VerticalAlignment="Center" />
         </StackPanel>
 
         <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
             <TextBlock Text="Spacing" Style="{DynamicResource FieldLabel}" Width="62"
                        ToolTip="Added after every letter; below nought draws them closer" />
-            <TextBox x:Name="SpacingBox" Width="60" Style="{DynamicResource NumberBox}" Tag="number" TextChanged="OnChanged"
+            <TextBox x:Name="SpacingBox" view:Units.Length="True" Width="60" Style="{DynamicResource NumberBox}" Tag="number" TextChanged="OnChanged"
                      AutomationProperties.AutomationId="TextObjectSpacing" />
-            <TextBlock Text="mm" Foreground="#FF9AA0A8" VerticalAlignment="Center" />
+            <TextBlock Text="mm" view:Units.Label="True" Foreground="#FF9AA0A8" VerticalAlignment="Center" />
         </StackPanel>
 
         <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
@@ -84,9 +84,9 @@
         <StackPanel x:Name="RadiusRow" Orientation="Horizontal" Margin="0,0,0,6">
             <TextBlock Text="Radius" Style="{DynamicResource FieldLabel}" Width="62"
                        ToolTip="To the feet of the letters, so they stand outside it. The circle a 30 mm radius draws is 60 mm across and 188 mm round." />
-            <TextBox x:Name="RadiusBox" Width="60" Style="{DynamicResource NumberBox}" Tag="number" TextChanged="OnChanged"
+            <TextBox x:Name="RadiusBox" view:Units.Length="True" Width="60" Style="{DynamicResource NumberBox}" Tag="number" TextChanged="OnChanged"
                      AutomationProperties.AutomationId="TextObjectRadius" />
-            <TextBlock x:Name="RadiusText" Text="mm" Foreground="#FF9AA0A8" VerticalAlignment="Center" />
+            <TextBlock x:Name="RadiusText" Text="mm" view:Units.Label="True" Foreground="#FF9AA0A8" VerticalAlignment="Center" />
         </StackPanel>
 
         <StackPanel x:Name="InwardRow" Orientation="Horizontal" Margin="0,0,0,6">
@@ -106,5 +106,5 @@
                 Background="White" BorderBrush="#FFD5DEEA" BorderThickness="1">
             <TextBlock x:Name="SummaryText" TextWrapping="Wrap" Foreground="#FF3A3F45" />
         </Border>
-    </StackPanel>
+    </view:ColumnFlow>
 </view:ToolPanel>

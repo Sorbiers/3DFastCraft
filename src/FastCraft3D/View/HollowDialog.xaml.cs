@@ -89,7 +89,7 @@ public partial class HollowDialog : ToolPanel
                            + "cylinder and Subtract will cut.";
 
         updating = true;
-        try { WallBox.Text = Wall.ToString("0.##", CultureInfo.CurrentCulture); }
+        try { WallBox.Put(Wall); }
         finally { updating = false; }
     }
 
@@ -98,7 +98,7 @@ public partial class HollowDialog : ToolPanel
     private void OnWallTyped(object sender, TextChangedEventArgs e)
     {
         if (updating) return;
-        if (!float.TryParse(WallBox.Text, NumberStyles.Float, CultureInfo.CurrentCulture, out float typed)) return;
+        if (!WallBox.TryRead(out float typed)) return;
 
         WallSlider.Value = Math.Clamp(typed, WallSlider.Minimum, WallSlider.Maximum);
     }

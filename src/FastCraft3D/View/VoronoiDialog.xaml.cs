@@ -143,9 +143,9 @@ public partial class VoronoiDialog : ToolPanel
         updating = true;
         try
         {
-            StrutBox.Text = Strut.ToString("0.##", CultureInfo.CurrentCulture);
-            SkinBox.Text = Skin.ToString("0.##", CultureInfo.CurrentCulture);
-            BaseBox.Text = Base.ToString("0.##", CultureInfo.CurrentCulture);
+            StrutBox.Put(Strut);
+            SkinBox.Put(Skin);
+            BaseBox.Put(Base);
         }
         finally { updating = false; }
 
@@ -213,7 +213,7 @@ public partial class VoronoiDialog : ToolPanel
     private void Typed(TextBox box, Slider slider)
     {
         if (updating) return;
-        if (!float.TryParse(box.Text, NumberStyles.Float, CultureInfo.CurrentCulture, out float value)) return;
+        if (!box.TryRead(out float value)) return;
 
         slider.Value = Math.Clamp(value, slider.Minimum, slider.Maximum);
     }

@@ -893,7 +893,7 @@
         <!-- Right panel -->
         <Border x:Name="SidePanel" DockPanel.Dock="Right" Width="300" Background="#FFFAFAFB"
                 BorderBrush="#FFD8DBE0" BorderThickness="1,0,0,0">
-            <Grid Margin="10">
+            <Grid Margin="10" view:LabelColumn.Fit="True">
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto" />
                     <RowDefinition Height="180" />
@@ -1088,7 +1088,7 @@
                             </Style.Triggers>
                         </Style>
                     </Border.Style>
-                    <StackPanel>
+                    <view:ColumnFlow>
                         <TextBlock Text="Split with a plane" FontWeight="SemiBold" Margin="0,0,0,6" />
                         <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
                             <TextBlock Text="Axis" Style="{StaticResource FieldLabel}" />
@@ -1224,7 +1224,7 @@
                             <Button Content="Split" Style="{StaticResource PanelButton}" Command="{Binding ApplySplitCommand}" />
                             <Button Content="Cancel" Style="{StaticResource PanelButton}" Command="{Binding CancelSplitCommand}" />
                         </StackPanel>
-                    </StackPanel>
+                    </view:ColumnFlow>
                 </Border>
 
                 <!-- Surface info, shown while the tool is out. In the align-to-face row: no two
@@ -1232,7 +1232,7 @@
                 <Border Grid.Row="2" Margin="0,10,0,0" Padding="8" Background="#FFEFF5FF"
                         BorderBrush="#FFB8D2F0" BorderThickness="1" CornerRadius="3"
                         Visibility="{Binding IsSurfaceInfoMode, Converter={StaticResource BoolToVisibility}}">
-                    <StackPanel>
+                    <view:ColumnFlow>
                         <TextBlock Text="Surface info" FontWeight="SemiBold" Margin="0,0,0,6" />
                         <TextBlock TextWrapping="Wrap" Foreground="#FF5A5F66" Margin="0,0,0,8"
                                    Text="Point at a face on any object to light it; click to read it. Click another to read that one." />
@@ -1254,7 +1254,7 @@
                         </ItemsControl>
                         <Button Content="Cancel" Style="{StaticResource PanelButton}" HorizontalAlignment="Left"
                                 Command="{Binding CancelSurfaceInfoCommand}" />
-                    </StackPanel>
+                    </view:ColumnFlow>
                 </Border>
 
                 <!-- Align-to-face panel, shown only while that tool is running. Shares Split's row:
@@ -1262,7 +1262,7 @@
                 <Border Grid.Row="2" Margin="0,10,0,0" Padding="8" Background="#FFEFF5FF"
                         BorderBrush="#FFB8D2F0" BorderThickness="1" CornerRadius="3"
                         Visibility="{Binding IsAlignFaceMode, Converter={StaticResource BoolToVisibility}}">
-                    <StackPanel>
+                    <view:ColumnFlow>
                         <TextBlock Text="Align to a face" FontWeight="SemiBold" Margin="0,0,0,6" />
                         <TextBlock TextWrapping="Wrap" Foreground="#FF5A5F66" Margin="0,0,0,6"
                                    Text="Click a face on any object - it does not have to be part of the selection. On each axis, choose a place on the face and the point of the selection that goes there: least to least sits it flush, least to greatest stands it beside. Leave keeps that axis where it is." />
@@ -1325,7 +1325,7 @@
                             <Button Content="Apply" Style="{StaticResource PanelButton}" Command="{Binding ApplyAlignFaceCommand}" />
                             <Button Content="Cancel" Style="{StaticResource PanelButton}" Command="{Binding CancelAlignFaceCommand}" />
                         </StackPanel>
-                    </StackPanel>
+                    </view:ColumnFlow>
                 </Border>
 
                 <!-- Centre-face-to-face panel, shown only while that tool is running. Shares
@@ -1333,7 +1333,7 @@
                 <Border Grid.Row="2" Margin="0,10,0,0" Padding="8" Background="#FFEFF5FF"
                         BorderBrush="#FFB8D2F0" BorderThickness="1" CornerRadius="3"
                         Visibility="{Binding IsCentreFaceMode, Converter={StaticResource BoolToVisibility}}">
-                    <StackPanel>
+                    <view:ColumnFlow>
                         <TextBlock Text="Center face to face" FontWeight="SemiBold" Margin="0,0,0,6" />
                         <TextBlock TextWrapping="Wrap" Foreground="#FF5A5F66" Margin="0,0,0,6"
                                    Text="Click a face on the selected object(s), then a face on a different, unselected one. A round face - a pin's side, a hole's wall - is taken whole, by its axis." />
@@ -1360,7 +1360,7 @@
                             <Button Content="Apply" Style="{StaticResource PanelButton}" Command="{Binding ApplyCentreFaceCommand}" />
                             <Button Content="Cancel" Style="{StaticResource PanelButton}" Command="{Binding CancelCentreFaceCommand}" />
                         </StackPanel>
-                    </StackPanel>
+                    </view:ColumnFlow>
                 </Border>
 
                 <!-- Sketch panel, shown only while sketching. Shares a row with Measure: the two are
@@ -1369,7 +1369,7 @@
                         BorderBrush="#FFB8D2F0" BorderThickness="1" CornerRadius="3"
                         AutomationProperties.AutomationId="SketchPanel"
                         Visibility="{Binding IsSketchMode, Converter={StaticResource BoolToVisibility}}">
-                    <StackPanel>
+                    <view:ColumnFlow>
                         <TextBlock Text="Sketch" FontWeight="SemiBold" Margin="0,0,0,6" />
                         <WrapPanel Margin="0,0,0,6">
                             <RadioButton Content="Line" GroupName="SketchTool" Margin="0,0,12,4"
@@ -1464,14 +1464,14 @@
                         <Button Content="Done" Style="{StaticResource PanelButton}" HorizontalAlignment="Left"
                                 Command="{Binding DoneSketchCommand}"
                                 ToolTip="Leave the sketch. It is kept, to extrude or revolve again later." />
-                    </StackPanel>
+                    </view:ColumnFlow>
                 </Border>
 
                 <!-- Measure panel, shown only while measuring -->
                 <Border Grid.Row="3" Margin="0,10,0,0" Padding="8" Background="#FFEFF5FF"
                         BorderBrush="#FFB8D2F0" BorderThickness="1" CornerRadius="3"
                         Visibility="{Binding IsMeasureMode, Converter={StaticResource BoolToVisibility}}">
-                    <StackPanel>
+                    <view:ColumnFlow>
                         <TextBlock Text="Measure" FontWeight="SemiBold" Margin="0,0,0,6" />
                         <TextBlock Text="{Binding MeasureSummary}" TextWrapping="Wrap"
                                    Foreground="#FF3A4550" Margin="0,0,0,8" />
@@ -1480,14 +1480,14 @@
                                   ToolTip="Pull each click onto the nearest corner or edge midpoint, so the reading is exact" />
                         <Button Content="Done" Style="{StaticResource PanelButton}"
                                 Command="{Binding CancelMeasureCommand}" HorizontalAlignment="Left" />
-                    </StackPanel>
+                    </view:ColumnFlow>
                 </Border>
 
                 <!-- Engrave panel, shown only while a face is being picked -->
                 <Border Grid.Row="4" Margin="0,10,0,0" Padding="8" Background="#FFEFF5FF"
                         BorderBrush="#FFB8D2F0" BorderThickness="1" CornerRadius="3"
                         Visibility="{Binding IsEngraveMode, Converter={StaticResource BoolToVisibility}}">
-                    <StackPanel>
+                    <view:ColumnFlow>
                         <!-- Superseded, not broken. The mark is the same one a beta tool carries,
                              in the other direction: said plainly rather than left to be worked out
                              from a tooltip nobody opens. -->
@@ -1599,14 +1599,14 @@
                             <Button Content="Cancel" Style="{StaticResource PanelButton}"
                                     Command="{Binding CancelEngraveCommand}" />
                         </StackPanel>
-                    </StackPanel>
+                    </view:ColumnFlow>
                 </Border>
 
                 <!-- Keyhole panel, shown while keyholes are being placed on a face -->
                 <Border Grid.Row="5" Margin="0,10,0,0" Padding="8" Background="#FFEFF5FF"
                         BorderBrush="#FFB8D2F0" BorderThickness="1" CornerRadius="3"
                         Visibility="{Binding IsWallMountMode, Converter={StaticResource BoolToVisibility}}">
-                    <StackPanel>
+                    <view:ColumnFlow>
                         <TextBlock Text="Keyhole" FontWeight="SemiBold" Margin="0,0,0,6" />
                         <TextBlock Text="{Binding WallMountSummary}" TextWrapping="Wrap" Foreground="#FF3A4550" Margin="0,0,0,8" />
                         <StackPanel Orientation="Horizontal" Margin="0,0,0,4" ToolTip="How many, side by side">
@@ -1695,14 +1695,14 @@
                             <Button Content="Apply" Style="{StaticResource PanelButton}" Command="{Binding ApplyWallMountCommand}" />
                             <Button Content="Cancel" Style="{StaticResource PanelButton}" Command="{Binding CancelWallMountCommand}" />
                         </StackPanel>
-                    </StackPanel>
+                    </view:ColumnFlow>
                 </Border>
 
                 <!-- Lettering panel, shown only while a face is being lettered -->
                 <Border Grid.Row="5" Margin="0,10,0,0" Padding="8" Background="#FFEFF5FF"
                         BorderBrush="#FFB8D2F0" BorderThickness="1" CornerRadius="3"
                         Visibility="{Binding IsEmbossMode, Converter={StaticResource BoolToVisibility}}">
-                    <StackPanel>
+                    <view:ColumnFlow>
                         <TextBlock Text="Emboss" FontWeight="SemiBold" Margin="0,0,0,6" />
                         <TextBlock Text="{Binding EmbossSummary}" TextWrapping="Wrap"
                                    Foreground="#FF3A4550" Margin="0,0,0,8" />
@@ -1969,7 +1969,7 @@
                             <Button Content="Cancel" Style="{StaticResource PanelButton}"
                                     Command="{Binding CancelEmbossCommand}" />
                         </StackPanel>
-                    </StackPanel>
+                    </view:ColumnFlow>
                 </Border>
 
                 <!-- Colour. Bound to the view model rather than to Selected, because painting
@@ -1979,7 +1979,7 @@
                 <Border Grid.Row="6" Margin="0,10,0,0" Padding="8" Background="#FFEFF5FF"
                         BorderBrush="#FFB8D2F0" BorderThickness="1" CornerRadius="3"
                         Visibility="{Binding IsConnectMode, Converter={StaticResource BoolToVisibility}}">
-                    <StackPanel>
+                    <view:ColumnFlow>
                         <TextBlock Text="Connect objects" FontWeight="SemiBold" Margin="0,0,0,6" />
                         <TextBlock Text="{Binding ConnectSummary}" TextWrapping="Wrap"
                                    Foreground="#FF3A4550" Margin="0,0,0,8" />
@@ -2078,14 +2078,14 @@
                             <Button Content="Cancel" Style="{StaticResource PanelButton}"
                                     Command="{Binding CancelConnectCommand}" />
                         </StackPanel>
-                    </StackPanel>
+                    </view:ColumnFlow>
                 </Border>
 
                 <!-- Extrude down panel. The plane on the model shows where the cut goes. -->
                 <Border Grid.Row="6" Margin="0,10,0,0" Padding="8" Background="#FFEFF5FF"
                         BorderBrush="#FFB8D2F0" BorderThickness="1" CornerRadius="3"
                         Visibility="{Binding IsExtrudeMode, Converter={StaticResource BoolToVisibility}}">
-                    <StackPanel>
+                    <view:ColumnFlow>
                         <TextBlock Text="Extrude down" FontWeight="SemiBold" Margin="0,0,0,6" />
                         <TextBlock TextWrapping="Wrap" Foreground="#FF3A4550" Margin="0,0,0,8"
                                    Text="Everything below the plane is replaced by straight walls down to a flat base on the plate, following the model's outline at that height. Drag the arrows to move the plane, or type the height." />
@@ -2106,7 +2106,7 @@
                             <Button Content="Cancel" Style="{StaticResource PanelButton}"
                                     Command="{Binding CancelExtrudeCommand}" />
                         </StackPanel>
-                    </StackPanel>
+                    </view:ColumnFlow>
                 </Border>
 
                 <!-- Subtract panel. A boolean cannot be taken back except by undo, and the two
@@ -2114,7 +2114,7 @@
                 <Border Grid.Row="6" Margin="0,10,0,0" Padding="8" Background="#FFEFF5FF"
                         BorderBrush="#FFB8D2F0" BorderThickness="1" CornerRadius="3"
                         Visibility="{Binding IsSubtractMode, Converter={StaticResource BoolToVisibility}}">
-                    <StackPanel>
+                    <view:ColumnFlow>
                         <TextBlock Text="Subtract" FontWeight="SemiBold" Margin="0,0,0,6" />
                         <TextBlock Text="{Binding SubtractSummary}" TextWrapping="Wrap"
                                    Foreground="#FF3A4550" Margin="0,0,0,8" />
@@ -2142,7 +2142,7 @@
                                     AutomationProperties.AutomationId="SubtractCancel"
                                     Command="{Binding CancelSubtractCommand}" />
                         </StackPanel>
-                    </StackPanel>
+                    </view:ColumnFlow>
                 </Border>
 
                 <StackPanel Grid.Row="8">
@@ -2152,7 +2152,7 @@
                         BorderBrush="#FFB8D2F0" BorderThickness="1" CornerRadius="3"
                         AutomationProperties.AutomationId="OverhangsPanel"
                         Visibility="{Binding ShowOverhangs, Converter={StaticResource BoolToVisibility}}">
-                    <StackPanel>
+                    <view:ColumnFlow>
                         <DockPanel Margin="0,0,0,6">
                             <Button DockPanel.Dock="Right" Content="Close" Style="{StaticResource PanelButton}"
                                     Command="{Binding CloseOverhangsPanelCommand}" />
@@ -2197,7 +2197,7 @@
                         </ItemsControl>
                         <Button Content="Custom..." Command="{Binding PickOverhangColourCommand}"
                                 HorizontalAlignment="Left" Padding="10,3" ToolTip="Pick any color" />
-                    </StackPanel>
+                    </view:ColumnFlow>
                 </Border>
 
                 <!-- Grid settings: the printable area, and what is drawn on the plate. Not a tool - it
@@ -2205,7 +2205,7 @@
                 <Border Margin="0,10,0,0" Padding="8" Background="#FFEFF5FF"
                         BorderBrush="#FFB8D2F0" BorderThickness="1" CornerRadius="3"
                         Visibility="{Binding IsGridPanelOpen, Converter={StaticResource BoolToVisibility}}">
-                    <StackPanel>
+                    <view:ColumnFlow>
                         <TextBlock Text="Grid" FontWeight="SemiBold" Margin="0,0,0,6" />
 
                         <TextBlock Text="Printable area" Style="{StaticResource FieldLabel}" HorizontalAlignment="Left"
@@ -2239,7 +2239,7 @@
 
                         <Button Content="Close" Style="{StaticResource PanelButton}" HorizontalAlignment="Left"
                                 Command="{Binding CloseGridPanelCommand}" />
-                    </StackPanel>
+                    </view:ColumnFlow>
                 </Border>
 
                 <!-- Keyboard and mouse: listed from View/Shortcuts, which is what binds the keys. -->
@@ -2461,7 +2461,7 @@
                               Visibility="{Binding HasOpenPanel, Converter={StaticResource BoolToVisibility}}">
                     <Border Padding="8" Background="#FFEFF5FF" BorderBrush="#FFB8D2F0"
                             BorderThickness="1" CornerRadius="3" VerticalAlignment="Top">
-                        <StackPanel>
+                        <view:ColumnFlow>
                             <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
                                 <TextBlock Text="{Binding OpenPanel.Title}" FontWeight="SemiBold" VerticalAlignment="Center" />
                                 <!-- Still being proved out. See ToolPanel.IsBeta. -->
@@ -2472,8 +2472,8 @@
                                     <TextBlock Text="beta" FontSize="10" FontWeight="SemiBold" Foreground="#FF5C4708" />
                                 </Border>
                             </StackPanel>
-                            <ContentControl Content="{Binding OpenPanel}" Focusable="False" />
-                        </StackPanel>
+                            <ContentControl Content="{Binding OpenPanel}" Focusable="False" view:ColumnFlow.Span="True" />
+                        </view:ColumnFlow>
                     </Border>
                 </ScrollViewer>
             </Grid>

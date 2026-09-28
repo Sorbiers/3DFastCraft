@@ -4,7 +4,7 @@
                 xmlns:view="clr-namespace:FastCraft3D.View"
                 Title="Mold">
 
-    <StackPanel>
+    <view:ColumnFlow>
         <TextBlock x:Name="SubjectText" TextWrapping="Wrap" Foreground="#FF3A4550" Margin="0,0,0,8" />
 
         <Border Padding="8,6" CornerRadius="3" Margin="0,0,0,8"
@@ -38,25 +38,25 @@
         <StackPanel Orientation="Horizontal">
             <TextBlock Text="Wall" Style="{DynamicResource FieldLabel}" Width="62"
                        ToolTip="Material between the model and the outside of the block." />
-            <TextBox x:Name="WallBox" Width="56" Style="{DynamicResource NumberBox}" Text="8"
+            <TextBox x:Name="WallBox" view:Units.Length="True" Width="56" Style="{DynamicResource NumberBox}" Text="8"
                      AutomationProperties.AutomationId="MouldWall" TextChanged="OnChanged" />
-            <TextBlock Text="mm" Foreground="#FF9AA0A8" VerticalAlignment="Center" />
+            <TextBlock Text="mm" view:Units.Label="True" Foreground="#FF9AA0A8" VerticalAlignment="Center" />
         </StackPanel>
 
         <StackPanel Orientation="Horizontal">
             <TextBlock Text="Pour hole" Style="{DynamicResource FieldLabel}" Width="62"
                        ToolTip="Across. Silicone is thick and slow, so a generous hole is worth the material." />
-            <TextBox x:Name="SprueBox" Width="56" Style="{DynamicResource NumberBox}" Text="10"
+            <TextBox x:Name="SprueBox" view:Units.Length="True" Width="56" Style="{DynamicResource NumberBox}" Text="10"
                      AutomationProperties.AutomationId="MouldSprue" TextChanged="OnChanged" />
-            <TextBlock Text="mm" Foreground="#FF9AA0A8" VerticalAlignment="Center" />
+            <TextBlock Text="mm" view:Units.Label="True" Foreground="#FF9AA0A8" VerticalAlignment="Center" />
         </StackPanel>
 
         <StackPanel Orientation="Horizontal">
             <TextBlock Text="Air vents" Style="{DynamicResource FieldLabel}" Width="62"
                        ToolTip="Across. Thin holes at every pocket that would otherwise hold a bubble." />
-            <TextBox x:Name="VentBox" Width="56" Style="{DynamicResource NumberBox}" Text="2"
+            <TextBox x:Name="VentBox" view:Units.Length="True" Width="56" Style="{DynamicResource NumberBox}" Text="2"
                      AutomationProperties.AutomationId="MouldVent" TextChanged="OnChanged" />
-            <TextBlock Text="mm" Foreground="#FF9AA0A8" VerticalAlignment="Center" />
+            <TextBlock Text="mm" view:Units.Label="True" Foreground="#FF9AA0A8" VerticalAlignment="Center" />
             <CheckBox x:Name="VentsBox" Content="add them" IsChecked="True" Margin="10,0,0,0"
                       VerticalAlignment="Center" Click="OnChanged"
                       AutomationProperties.AutomationId="MouldAddVents" />
@@ -65,17 +65,17 @@
         <StackPanel Orientation="Horizontal">
             <TextBlock Text="Keys" Style="{DynamicResource FieldLabel}" Width="62"
                        ToolTip="Registration keys, across: a dome on one face of every joint and a socket in the other, so the pieces close one way round only. Zero leaves the faces plain." />
-            <TextBox x:Name="KeyBox" Width="56" Style="{DynamicResource NumberBox}" Text="8"
+            <TextBox x:Name="KeyBox" view:Units.Length="True" Width="56" Style="{DynamicResource NumberBox}" Text="8"
                      AutomationProperties.AutomationId="MouldKey" TextChanged="OnChanged" />
-            <TextBlock Text="mm" Foreground="#FF9AA0A8" VerticalAlignment="Center" />
+            <TextBlock Text="mm" view:Units.Label="True" Foreground="#FF9AA0A8" VerticalAlignment="Center" />
         </StackPanel>
 
         <StackPanel Orientation="Horizontal">
             <TextBlock Text="Clearance" Style="{DynamicResource FieldLabel}" Width="62"
                        ToolTip="Room between a key and its socket" />
-            <TextBox x:Name="ClearanceBox" Width="56" Style="{DynamicResource NumberBox}" Text="0.20"
+            <TextBox x:Name="ClearanceBox" view:Units.Length="True" Width="56" Style="{DynamicResource NumberBox}" Text="0.20"
                      AutomationProperties.AutomationId="MouldKeyClearance" TextChanged="OnChanged" />
-            <TextBlock Text="mm" Foreground="#FF9AA0A8" VerticalAlignment="Center" />
+            <TextBlock Text="mm" view:Units.Label="True" Foreground="#FF9AA0A8" VerticalAlignment="Center" />
         </StackPanel>
 
         <StackPanel Orientation="Horizontal" Margin="0,10,0,0">
@@ -88,5 +88,5 @@
                 Background="White" BorderBrush="#FFD5DEEA" BorderThickness="1">
             <TextBlock x:Name="SummaryText" TextWrapping="Wrap" Foreground="#FF3A3F45" />
         </Border>
-    </StackPanel>
+    </view:ColumnFlow>
 </view:ToolPanel>

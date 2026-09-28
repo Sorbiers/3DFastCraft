@@ -27,9 +27,9 @@
 
         <StackPanel Orientation="Horizontal">
             <TextBlock Text="Radius" Style="{DynamicResource FieldLabel}" Width="62" />
-            <TextBox x:Name="RadiusBox" Width="64" Style="{DynamicResource NumberBox}"
+            <TextBox x:Name="RadiusBox" view:Units.Length="True" Width="64" Style="{DynamicResource NumberBox}"
                      TextChanged="OnRadiusTyped" />
-            <TextBlock Text="mm" Foreground="#FF9AA0A8" VerticalAlignment="Center" />
+            <TextBlock Text="mm" view:Units.Label="True" Foreground="#FF9AA0A8" VerticalAlignment="Center" />
         </StackPanel>
 
         <Slider x:Name="RadiusSlider" Minimum="0" TickFrequency="0.5" IsSnapToTickEnabled="False"

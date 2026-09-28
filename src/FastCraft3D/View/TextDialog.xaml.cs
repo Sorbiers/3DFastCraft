@@ -24,11 +24,11 @@ public partial class TextDialog : ToolPanel
         TextBox.Text = start.Text;
         BoldBox.IsChecked = start.Bold;
         ItalicBox.IsChecked = start.Italic;
-        HeightBox.Text = Format(start.Height);
-        DepthBox.Text = Format(start.Depth);
-        SpacingBox.Text = Format(start.Spacing);
+        HeightBox.Put(start.Height);
+        DepthBox.Put(start.Depth);
+        SpacingBox.Put(start.Spacing);
         LayoutBox.SelectedIndex = (int)start.Layout;
-        RadiusBox.Text = Format(start.Radius);
+        RadiusBox.Put(start.Radius);
         InwardBox.IsChecked = start.Inward;
 
         loading = false;
@@ -65,7 +65,7 @@ public partial class TextDialog : ToolPanel
         }.Sane();
 
         static float Number(TextBox box, float otherwise) =>
-            float.TryParse(box.Text, NumberStyles.Float, CultureInfo.CurrentCulture, out float v) ? v : otherwise;
+            box.Read(otherwise);
     }
 
     /// <summary>

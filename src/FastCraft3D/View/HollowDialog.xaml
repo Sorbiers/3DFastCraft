@@ -9,9 +9,9 @@
 
         <StackPanel Orientation="Horizontal">
             <TextBlock Text="Wall" Style="{DynamicResource FieldLabel}" Width="62" />
-            <TextBox x:Name="WallBox" Width="64" Style="{DynamicResource NumberBox}"
+            <TextBox x:Name="WallBox" view:Units.Length="True" Width="64" Style="{DynamicResource NumberBox}"
                      TextChanged="OnWallTyped" />
-            <TextBlock Text="mm" Foreground="#FF9AA0A8" VerticalAlignment="Center" />
+            <TextBlock Text="mm" view:Units.Label="True" Foreground="#FF9AA0A8" VerticalAlignment="Center" />
         </StackPanel>
         <Slider x:Name="WallSlider" Minimum="0.4" Maximum="15" TickFrequency="0.2"
                 IsSnapToTickEnabled="True" ValueChanged="OnWallDragged" Margin="0,4,0,8" />

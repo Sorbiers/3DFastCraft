@@ -28,9 +28,9 @@
         <StackPanel Orientation="Horizontal">
             <TextBlock Text="Strut" Style="{DynamicResource FieldLabel}" Width="62"
                        ToolTip="How wide the struts come out. Two nozzle widths is the floor; the grid has to hold it, so a fine strut asks for high detail." />
-            <TextBox x:Name="StrutBox" Width="64" Style="{DynamicResource NumberBox}"
+            <TextBox x:Name="StrutBox" view:Units.Length="True" Width="64" Style="{DynamicResource NumberBox}"
                      TextChanged="OnStrutTyped" AutomationProperties.AutomationId="VoronoiStrut" />
-            <TextBlock Text="mm" Foreground="#FF9AA0A8" VerticalAlignment="Center" />
+            <TextBlock Text="mm" view:Units.Label="True" Foreground="#FF9AA0A8" VerticalAlignment="Center" />
         </StackPanel>
         <Slider x:Name="StrutSlider" Minimum="0.8" Maximum="12" TickFrequency="0.1"
                 IsSnapToTickEnabled="True" ValueChanged="OnDragged" Margin="0,4,0,8" />
@@ -38,9 +38,9 @@
         <StackPanel Orientation="Horizontal">
             <TextBlock x:Name="SkinLabel" Text="Skin" Style="{DynamicResource FieldLabel}" Width="62"
                        ToolTip="For a shell, how thick the web itself is. For a lattice, the solid face over the foam - 0 leaves it bare." />
-            <TextBox x:Name="SkinBox" Width="64" Style="{DynamicResource NumberBox}"
+            <TextBox x:Name="SkinBox" view:Units.Length="True" Width="64" Style="{DynamicResource NumberBox}"
                      TextChanged="OnSkinTyped" AutomationProperties.AutomationId="VoronoiSkin" />
-            <TextBlock Text="mm" Foreground="#FF9AA0A8" VerticalAlignment="Center" />
+            <TextBlock Text="mm" view:Units.Label="True" Foreground="#FF9AA0A8" VerticalAlignment="Center" />
         </StackPanel>
         <Slider x:Name="SkinSlider" Minimum="0" Maximum="15" TickFrequency="0.2"
                 IsSnapToTickEnabled="True" ValueChanged="OnDragged" Margin="0,4,0,8" />
@@ -48,9 +48,9 @@
         <StackPanel Orientation="Horizontal">
             <TextBlock Text="Solid base" Style="{DynamicResource FieldLabel}" Width="62"
                        ToolTip="How much of the bottom to leave whole, so the thing stands and has a first layer to print on. 0 leaves the web running all the way down." />
-            <TextBox x:Name="BaseBox" Width="64" Style="{DynamicResource NumberBox}"
+            <TextBox x:Name="BaseBox" view:Units.Length="True" Width="64" Style="{DynamicResource NumberBox}"
                      TextChanged="OnBaseTyped" AutomationProperties.AutomationId="VoronoiBase" />
-            <TextBlock Text="mm" Foreground="#FF9AA0A8" VerticalAlignment="Center" />
+            <TextBlock Text="mm" view:Units.Label="True" Foreground="#FF9AA0A8" VerticalAlignment="Center" />
         </StackPanel>
         <Slider x:Name="BaseSlider" Minimum="0" Maximum="30" TickFrequency="0.5"
                 IsSnapToTickEnabled="True" ValueChanged="OnDragged" Margin="0,4,0,8" />

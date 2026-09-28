@@ -221,11 +221,13 @@ public sealed partial class MainViewModel
         LibraryMemory.Shared.Used(generator.Id);
 
         string? set = result.Parts.Count > 1 ? Guid.NewGuid().ToString("N") : null;
-        var parts = Objects(result, assembled: !result.LaidOut, ColourOf, part => Recipes.For(generator, settings, part.Role, set));
+        var parts = InOne(result)
+            ? [Together(generator, result, ColourOf(0), Recipes.For(generator, settings, WholeSet))]
+            : Objects(result, assembled: !result.LaidOut, ColourOf, part => Recipes.For(generator, settings, part.Role, set));
         foreach (var o in parts) o.Name = Scene.UniqueName(o.Name);
 
         var beside = new List<SceneObject>();
-        if (held is not null && (parts.Count == 1 || result.Parts[0].Cutter))
+        if (held is not null && (result.Parts.Count == 1 || result.Parts[0].Cutter))
         {
             parts[0].Rotation = held.Rotation;
             parts[0].Scale = held.Scale;
@@ -328,12 +330,15 @@ public sealed partial class MainViewModel
                 : $"Made with a later version of {generator.Title} than this app has. Applying makes it again with this one.";
 
         var start = Recipes.Read(generator, recipe.Settings);
+        bool grouped = recipe.Role == WholeSet;
         var (applied, view) = OpenGenerator(generator, start, "Apply", notice, null,
-            made => (Remade(members, generator, settings: null, made, NextAutomaticColour), true, null));
+            made => (grouped ? Apart(picked, generator, made) : Remade(members, generator, settings: null, made, NextAutomaticColour), true, null));
 
         if (!applied || view.Result is not { } settings || view.Made is not { Parts.Count: > 0 } result) return;
 
-        var produced = Remade(members, generator, settings, result, NextAutomaticColour);
+        var produced = grouped && InOne(result)
+            ? [Regrouped(picked, generator, settings, result)]
+            : Remade(members, generator, settings, result, NextAutomaticColour);
         foreach (var o in produced.Where(o => members.All(m => m.Name != o.Name))) o.Name = Scene.UniqueName(o.Name);
 
         Undo.Execute(new ReplaceObjectsCommand($"Edit {generator.Title.ToLowerInvariant()}", members, produced));
@@ -588,6 +593,64 @@ public sealed partial class MainViewModel
             if (recipe is not null) o.Recipe = recipe(part);
             return o.CentredOn(at is { } shown ? Vector3.Transform(part.Pivot, shown) : part.Pivot);
         }).ToList();
+
+    /// <summary>The role a set carries when all its parts went down as one object.</summary>
+    private const string WholeSet = "(set)";
+
+    /// <summary>
+    /// Whether a set goes down as one object: one put down assembled, with more than one part.
+    /// Laid out for printing, each part is its own object in its own colour, to be printed or
+    /// moved about singly. A set cut into a part - a thread's cutter, a wall mount's keyholes -
+    /// always goes its own ways.
+    /// </summary>
+    private static bool InOne(Generated made) => !made.LaidOut && made.Parts.Count > 1 && !made.Parts.Any(p => p.Cutter || p.CutOnly);
+
+    /// <summary>
+    /// Every part of an assembled set as one object, as Group makes one: not fused, so Ungroup
+    /// takes them apart again. Put down in loose parts, an assembled working model came apart the
+    /// first time anything in it was moved.
+    /// </summary>
+    private static SceneObject Together(Generator generator, Generated made, Vector3 colour, Recipe recipe)
+    {
+        bool assembled = !made.LaidOut;
+        Matrix4x4? At(GeneratedPart part) => assembled ? part.Assembled : null;
+
+        return new SceneObject(generator.Title, Mesh.Combine(made.Parts.Select(p => At(p) is { } m ? MeshTransform.Transformed(p.Mesh, m) : p.Mesh)))
+        {
+            Colour = made.Parts[0].Colour ?? colour,
+            Filament = made.Parts[0].Filament > 0 ? made.Parts[0].Filament : 1,
+            Anchors = made.Parts.SelectMany(p => p.Anchors is not { Count: > 0 } marked ? []
+                : At(p) is { } moved ? marked.Select(a => a.Through(moved)) : marked).ToList(),
+            Recipe = recipe
+        }.Centred();
+    }
+
+    /// <summary>A grouped set made again, where the old one stood, with its name, colour, turn and scale.</summary>
+    private static SceneObject Regrouped(SceneObject old, Generator generator, object settings, Generated made)
+    {
+        var o = Together(generator, made, old.Colour, Recipes.For(generator, settings, WholeSet));
+        o.Name = old.Name;
+        o.Colour = old.Colour;
+        o.Filament = old.Filament;
+        o.IsHidden = old.IsHidden;
+        o.IsLocked = old.IsLocked;
+        o.Rotation = old.Rotation;
+        o.Scale = old.Scale;
+        Keep(o, o.Recipe!.Origin, Vector3.Transform(old.Recipe?.Origin ?? Vector3.Zero, old.Transform));
+        return o;
+    }
+
+    /// <summary>
+    /// A grouped set's preview while its settings are edited: the parts apart and put together,
+    /// on the group's origin, so Turn it can move them.
+    /// </summary>
+    private static List<SceneObject> Apart(SceneObject group, Generator generator, Generated made)
+    {
+        var origin = Vector3.Transform(group.Recipe?.Origin ?? Vector3.Zero, group.Transform);
+        var parts = Objects(made, assembled: true, _ => group.Colour, part => Recipes.For(generator, generator.Defaults(), part.Role));
+        foreach (var o in parts) Keep(o, o.Recipe!.Origin, origin);
+        return parts;
+    }
 
     /// <summary>
     /// Moves an object, without turning it, so the point <paramref name="inMesh"/> of its mesh -

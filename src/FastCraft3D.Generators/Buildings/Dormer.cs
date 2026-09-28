@@ -55,7 +55,10 @@ public sealed class Dormer : Generator<Dormer.Settings>
         return panes;
     }
 
-    protected override IEnumerable<string> Check(Settings s, Printer printer)
+    protected override IEnumerable<string> Check(Settings s, Printer printer) => Faults(s);
+
+    /// <summary>What is wrong with a dormer's settings: for the Roof, which puts dormers on its slopes too.</summary>
+    internal static IEnumerable<string> Faults(Settings s)
     {
         var pane = Panes(s)[0];
         if (pane.X1 - pane.X0 < 0.5f || pane.Z1 - pane.Z0 < 0.5f)
@@ -65,32 +68,56 @@ public sealed class Dormer : Generator<Dormer.Settings>
             yield return "The window is recessed deeper than the dormer reaches back into the roof.";
     }
 
-    protected override Generated Build(Settings s, Printer printer, CancellationToken token)
-    {
-        float w = s.Width / 2f, h = s.Height, o = s.Overhang;
-        float slope = MathF.Tan(s.Pitch * MathF.PI / 180f), own = MathF.Tan(s.OwnPitch * MathF.PI / 180f);
-        float gable = (w + o) * own, back = (h + gable) / slope + 1f;
+    /// <summary>
+    /// The gable of its roof, in the dormer's own terms: how far the roof stands out past the
+    /// cheeks, and how high its ridge stands over its eaves.
+    /// </summary>
+    /// <summary>How thick its roof is at the eaves.</summary>
+    internal const float Fascia = 0.6f;
 
-        // Across, front to back, up: outlines drawn side on or end on and run through.
-        var sideOn = new Matrix4x4(0, 1, 0, 0, 0, 0, 1, 0, 1, 0, 0, 0, 0, 0, 0, 1);
+    internal static (float Overhang, float Gable) RoofOf(Settings s) =>
+        (s.Overhang, (s.Width / 2f + s.Overhang) * MathF.Tan(s.OwnPitch * MathF.PI / 180f));
+
+    /// <summary>
+    /// The dormer, windows cut, glass left out: across X, back into the roof along +Y, up Z, the
+    /// middle of its front on the roof's surface at the origin. Its underside is the roof's slope
+    /// let down by <paramref name="sink"/>, for it to go a little way into a roof it is merged with
+    /// rather than meet the surface face to face.
+    /// </summary>
+    internal static Mesh Solid(Settings s, float sink = 0f)
+    {
+        float w = s.Width / 2f, h = s.Height;
+        float slope = MathF.Tan(s.Pitch * MathF.PI / 180f);
+        var (o, gable) = RoofOf(s);
+        float back = (h + gable) / slope + 1f;
+
+        // Front to back and up, drawn end on and run across.
         var endOn = new Matrix4x4(1, 0, 0, 0, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 1);
 
-        // The body: from the front back to where the slope comes up to the eaves.
-        var body = MeshTransform.Transformed(Shapes.Prism([new(0, 0), new(h / slope, h), new(0, h)], -w, w), sideOn);
+        // The body: from the front back to where the slope comes up to the eaves - the block cut
+        // down to the slope below.
+        var body = Shapes.Box(-w, 0, -sink - 2f, w, back, h);
 
-        // Its roof, a gable from over the front back into the main roof.
-        var roof = MeshTransform.Transformed(Shapes.Prism([new(-w - o, h - 0.01f), new(w + o, h - 0.01f), new(0, h + gable)], -o, back), endOn);
+        // Its roof, a gable from over the front back into the main roof, with a fascia under its
+        // eaves. Coming to an edge there, it was too thin for tiles laid on it to stay above its
+        // underside, and merged with them it did not close.
+        var roof = MeshTransform.Transformed(Shapes.Prism(
+            [new(-w - o, h - Fascia), new(w + o, h - Fascia), new(w + o, h), new(0, h + gable), new(-w - o, h)], -o, back), endOn);
 
         // All of it kept above the main roof's slope, so its underside is the slope.
         float c = MathF.Cos(MathF.Atan(slope)), sn = MathF.Sin(MathF.Atan(slope)), reach = back + h + gable + 10f;
-        var above = MeshTransform.Transformed(Shapes.Box(-reach, -reach, 0, reach, reach, reach),
+        var above = MeshTransform.Transformed(Shapes.Box(-reach, -reach, -sink, reach, reach, reach),
             new Matrix4x4(1, 0, 0, 0, 0, c, sn, 0, 0, -sn, c, 0, 0, 0, 0, 1));
 
-        token.ThrowIfCancellationRequested();
         var dormer = Shapes.Intersect(Shapes.Union(body, roof), above);
+        return Shapes.Subtract(dormer, Panes(s).Select(p => Shapes.Box(p.X0, -1, p.Z0, p.X1, s.Recess, p.Z1)).ToList());
+    }
 
+    protected override Generated Build(Settings s, Printer printer, CancellationToken token)
+    {
+        token.ThrowIfCancellationRequested();
+        var dormer = Solid(s);
         var panes = Panes(s);
-        dormer = Shapes.Subtract(dormer, panes.Select(p => Shapes.Box(p.X0, -1, p.Z0, p.X1, s.Recess, p.Z1)).ToList());
 
         var parts = new List<GeneratedPart> { new("Dormer", dormer, Role: "dormer") };
         var notes = new List<string>();

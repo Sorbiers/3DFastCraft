@@ -19,11 +19,28 @@ internal static class Glazing
     /// as they are.
     /// </summary>
     public static GeneratedPart Panes(IEnumerable<List<Vector2>> openings, float thickness) =>
-        new("Glass", Mesh.Combine(openings.Select(o => Shapes.Prism(o, 0, thickness))), Role: "glass")
+        new("Glass", Mesh.Combine(openings.Select(o => Shapes.Prism(DrawnIn(o), 0, thickness))), Role: "glass")
         {
             Filament = Filament,
             Colour = Colour
         };
+
+    /// <summary>
+    /// How far each pane stands in from the frame it fills. Filling its opening exactly, a pane
+    /// shared the frame's corners, and grouped into one object those welded into edges that four
+    /// faces meet at - a group that is not a solid, which the health check and Export refuse. A
+    /// hundredth of a millimetre is far under anything a printer lays down, and a slicer closes it.
+    /// </summary>
+    public const float Hair = 0.01f;
+
+    /// <summary>A pane's outline drawn in by about <see cref="Hair"/> all round, toward its middle - panes are convex.</summary>
+    private static List<Vector2> DrawnIn(List<Vector2> outline)
+    {
+        var middle = outline.Aggregate(Vector2.Zero, (sum, p) => sum + p) / outline.Count;
+        float least = MathF.Min(outline.Max(p => p.X) - outline.Min(p => p.X), outline.Max(p => p.Y) - outline.Min(p => p.Y));
+        float k = 1f - 2f * Hair / MathF.Max(least, 4f * Hair);
+        return outline.Select(p => middle + (p - middle) * k).ToList();
+    }
 
     public static List<Vector2> Rect((float X0, float Y0, float X1, float Y1) r) => Shapes.Rect(r.X0, r.Y0, r.X1, r.Y1);
 
@@ -47,12 +64,34 @@ internal static class Glazing
         ? "Printed lying on its back, the face up. Stand it in its opening once printed."
         : "Shown standing, as it goes in the wall. Tick Lay flat to print it on its back, which prints it best.";
 
-    public static List<string> Notes(float thickness, Printer printer)
+    /// <summary>
+    /// The glass put in with what it glazes as one object, as Group does: the shells side by side
+    /// and not fused, so Ungroup takes the glass out again. Grouped because a window whose glass
+    /// was a loose object ended up scattered across the plate, and a window printed flat gets its
+    /// clear glass from one filament change after the glass's layers anyway.
+    /// </summary>
+    public static List<GeneratedPart> Grouped(List<GeneratedPart> parts)
     {
+        if (parts.FirstOrDefault(p => p.Role == "glass") is not { } glass || parts.Count < 2) return parts;
+
+        var glazed = parts[0];
+        return [glazed with { Mesh = Mesh.Combine([glazed.Mesh, glass.Mesh]) }, .. parts.Skip(1).Where(p => !ReferenceEquals(p, glass))];
+    }
+
+    /// <param name="grouped">The glass is in the frame's object (see <see cref="Grouped"/>), not a part of its own.</param>
+    /// <param name="flat">Printed lying down, so the glass is the bottom layers.</param>
+    public static List<string> Notes(float thickness, Printer printer, bool grouped = false, bool flat = true)
+    {
+        int layers = Math.Max(1, (int)MathF.Round(thickness / printer.Layer));
         var notes = new List<string>
         {
-            $"The glass is its own part on filament {Filament}: print it in a clear filament, "
-            + $"or pause after its {Math.Max(1, (int)MathF.Round(thickness / printer.Layer))} layers to change to one."
+            !grouped
+                ? $"The glass is its own part on filament {Filament}: print it in a clear filament, "
+                  + $"or pause after its {layers} layers to change to one."
+                : flat
+                    ? $"The glass is grouped with the frame and is its first {layers} layers: print those in a clear "
+                      + "filament and change to the frame's after them, or Ungroup to give the glass a filament of its own."
+                    : "The glass is grouped with the frame. Ungroup to give it a clear filament of its own."
         };
 
         if (thickness < 2 * printer.Layer)
@@ -316,7 +355,8 @@ public sealed class Window : Generator<Window.Settings>
                 {
                     float x = f + c * (wide + s.Bar), y = 2 * f + r * (tall + s.Bar);
                     cuts.Add(MeshTransform.Transformed(Shapes.Box(x, y, -1, x + wide, y + tall, d + 1), place));
-                    if (s.Glass) glass.Add(MeshTransform.Transformed(Shapes.Box(x, y, d - s.GlassThickness, x + wide, y + tall, d), place));
+                    const float hair = Glazing.Hair;
+                    if (s.Glass) glass.Add(MeshTransform.Transformed(Shapes.Box(x + hair, y + hair, d - s.GlassThickness, x + wide - hair, y + tall - hair, d), place));
                 }
         }
 
@@ -326,11 +366,11 @@ public sealed class Window : Generator<Window.Settings>
         if (s.Glass)
         {
             parts.Add(new GeneratedPart("Glass", Mesh.Combine(glass), Role: "glass") { Filament = Glazing.Filament, Colour = Glazing.Colour });
-            notes.AddRange(Glazing.Notes(s.GlassThickness, printer));
+            notes.AddRange(Glazing.Notes(s.GlassThickness, printer, grouped: true, flat: false));
         }
 
         notes.Add($"Stands {reach:0.#} mm out from the wall, open at the back: set it against the wall and Merge.");
-        return new Generated(parts, notes);
+        return new Generated(Glazing.Grouped(parts), notes);
     }
 
     protected override Generated Build(Settings s, Printer printer, CancellationToken token)
@@ -356,11 +396,11 @@ public sealed class Window : Generator<Window.Settings>
         if (s.Glass)
         {
             parts.Add(Glazing.Panes(panes, s.GlassThickness));
-            notes.AddRange(Glazing.Notes(s.GlassThickness, printer));
+            notes.AddRange(Glazing.Notes(s.GlassThickness, printer, grouped: true, s.Flat));
         }
 
         notes.Add(Glazing.Printing(s.Flat));
-        return new Generated(Glazing.Stood(parts, s.Flat), notes);
+        return new Generated(Glazing.Stood(Glazing.Grouped(parts), s.Flat), notes);
     }
 
     protected override IEnumerable<string> Describe(Settings s, float modelScale)
@@ -597,11 +637,11 @@ public sealed class Door : Generator<Door.Settings>
         if (glass.Count > 0)
         {
             parts.Add(Glazing.Panes(glass.Select(Glazing.Rect), s.GlassThickness));
-            notes.AddRange(Glazing.Notes(s.GlassThickness, printer));
+            notes.AddRange(Glazing.Notes(s.GlassThickness, printer, grouped: true, s.Flat));
         }
 
         notes.Add(Glazing.Printing(s.Flat));
-        return new Generated(Glazing.Stood(parts, s.Flat), notes);
+        return new Generated(Glazing.Stood(Glazing.Grouped(parts), s.Flat), notes);
     }
 
     protected override IEnumerable<string> Describe(Settings s, float modelScale)

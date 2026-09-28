@@ -160,7 +160,7 @@ public partial class RoundDialog : ToolPanel
         set
         {
             RadiusSlider.Value = Math.Clamp(value, 0, maximum);
-            RadiusBox.Text = RadiusSlider.Value.ToString("0.##", CultureInfo.CurrentCulture);
+            RadiusBox.Put((float)RadiusSlider.Value);
         }
     }
 
@@ -168,7 +168,7 @@ public partial class RoundDialog : ToolPanel
     {
         if (updating || !IsLoaded) return;
         updating = true;
-        RadiusBox.Text = RadiusSlider.Value.ToString("0.##", CultureInfo.CurrentCulture);
+        RadiusBox.Put((float)RadiusSlider.Value);
         updating = false;
         UpdateSummary();
         ShowPreview();
@@ -177,7 +177,7 @@ public partial class RoundDialog : ToolPanel
     private void OnRadiusTyped(object sender, TextChangedEventArgs e)
     {
         if (updating || !IsLoaded) return;
-        if (!float.TryParse(RadiusBox.Text, NumberStyles.Float, CultureInfo.CurrentCulture, out float typed)) return;
+        if (!RadiusBox.TryRead(out float typed)) return;
 
         updating = true;
         RadiusSlider.Value = Math.Clamp(typed, 0, maximum);

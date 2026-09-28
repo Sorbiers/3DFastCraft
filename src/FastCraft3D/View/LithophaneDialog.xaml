@@ -23,7 +23,7 @@
         </Style>
     </view:ToolPanel.Resources>
 
-    <StackPanel>
+    <view:ColumnFlow>
         <TextBlock Text="A picture carried as thickness in a thin plate: thin where it is white, thick where it is dark. It shows nothing until it is lit from behind."
                    TextWrapping="Wrap" Foreground="#FF3A4550" Margin="0,0,0,8" />
 
@@ -49,9 +49,9 @@
             </Grid.ColumnDefinitions>
             <TextBlock Text="Width" Style="{DynamicResource FieldLabel}"
                        ToolTip="Across the picture itself; the height follows its proportions" />
-            <TextBox Grid.Column="1" x:Name="WidthBox" Style="{DynamicResource NumberBox}" Tag="number" TextChanged="OnChanged"
+            <TextBox Grid.Column="1" x:Name="WidthBox" view:Units.Length="True" Style="{DynamicResource NumberBox}" Tag="number" TextChanged="OnChanged"
                      AutomationProperties.AutomationId="LithophaneWidth" />
-            <TextBlock Text="mm" Style="{StaticResource LithoUnit}" />
+            <TextBlock Text="mm" view:Units.Label="True" Style="{StaticResource LithoUnit}" />
             <Slider x:Name="WidthSlider" Style="{StaticResource LithoSlider}" Minimum="20" Maximum="300"
                     TickFrequency="1" ValueChanged="OnSlide" />
         </Grid>
@@ -65,9 +65,9 @@
             </Grid.ColumnDefinitions>
             <TextBlock Text="Thinnest" Style="{DynamicResource FieldLabel}"
                        ToolTip="Where the picture is white. Thin enough to pass the light, thick enough to print: 0.8 mm suits most printers." />
-            <TextBox Grid.Column="1" x:Name="MinBox" Style="{DynamicResource NumberBox}" Tag="number" TextChanged="OnChanged"
+            <TextBox Grid.Column="1" x:Name="MinBox" view:Units.Length="True" Style="{DynamicResource NumberBox}" Tag="number" TextChanged="OnChanged"
                      AutomationProperties.AutomationId="LithophaneMin" />
-            <TextBlock Text="mm" Style="{StaticResource LithoUnit}" />
+            <TextBlock Text="mm" view:Units.Label="True" Style="{StaticResource LithoUnit}" />
             <Slider x:Name="MinSlider" Style="{StaticResource LithoSlider}" Minimum="0.2" Maximum="3"
                     TickFrequency="0.05" ValueChanged="OnSlide" />
         </Grid>
@@ -81,9 +81,9 @@
             </Grid.ColumnDefinitions>
             <TextBlock Text="Thickest" Style="{DynamicResource FieldLabel}"
                        ToolTip="Where it is black. Further apart than the thin end gives more contrast, and takes longer to print." />
-            <TextBox Grid.Column="1" x:Name="MaxBox" Style="{DynamicResource NumberBox}" Tag="number" TextChanged="OnChanged"
+            <TextBox Grid.Column="1" x:Name="MaxBox" view:Units.Length="True" Style="{DynamicResource NumberBox}" Tag="number" TextChanged="OnChanged"
                      AutomationProperties.AutomationId="LithophaneMax" />
-            <TextBlock Text="mm" Style="{StaticResource LithoUnit}" />
+            <TextBlock Text="mm" view:Units.Label="True" Style="{StaticResource LithoUnit}" />
             <Slider x:Name="MaxSlider" Style="{StaticResource LithoSlider}" Minimum="0.6" Maximum="8"
                     TickFrequency="0.05" ValueChanged="OnSlide" />
         </Grid>
@@ -97,9 +97,9 @@
             </Grid.ColumnDefinitions>
             <TextBlock Text="Detail" Style="{DynamicResource FieldLabel}"
                        ToolTip="Millimeters between samples. About the nozzle's own width is as fine as there is any point going: finer only adds triangles." />
-            <TextBox Grid.Column="1" x:Name="PitchBox" Style="{DynamicResource NumberBox}" Tag="number" TextChanged="OnChanged"
+            <TextBox Grid.Column="1" x:Name="PitchBox" view:Units.Length="True" Style="{DynamicResource NumberBox}" Tag="number" TextChanged="OnChanged"
                      AutomationProperties.AutomationId="LithophanePitch" />
-            <TextBlock Text="mm" Style="{StaticResource LithoUnit}" />
+            <TextBlock Text="mm" view:Units.Label="True" Style="{StaticResource LithoUnit}" />
             <Slider x:Name="PitchSlider" Style="{StaticResource LithoSlider}" Minimum="0.1" Maximum="1"
                     TickFrequency="0.05" ValueChanged="OnSlide" />
         </Grid>
@@ -113,9 +113,9 @@
             </Grid.ColumnDefinitions>
             <TextBlock Text="Layers" Style="{DynamicResource FieldLabel}"
                        ToolTip="The layer height it will be printed at. It decides how many grays survive, and is only used to say so." />
-            <TextBox Grid.Column="1" x:Name="LayerBox" Style="{DynamicResource NumberBox}" Tag="number" TextChanged="OnChanged"
+            <TextBox Grid.Column="1" x:Name="LayerBox" view:Units.Length="True" Style="{DynamicResource NumberBox}" Tag="number" TextChanged="OnChanged"
                      AutomationProperties.AutomationId="LithophaneLayer" />
-            <TextBlock Text="mm" Style="{StaticResource LithoUnit}" />
+            <TextBlock Text="mm" view:Units.Label="True" Style="{StaticResource LithoUnit}" />
             <Slider x:Name="LayerSlider" Style="{StaticResource LithoSlider}" Minimum="0.04" Maximum="0.4"
                     TickFrequency="0.01" ValueChanged="OnSlide" />
         </Grid>
@@ -129,9 +129,9 @@
             </Grid.ColumnDefinitions>
             <TextBlock Text="Frame" Style="{DynamicResource FieldLabel}"
                        ToolTip="A border at the full thickness round the picture, which stops the light and stiffens the plate. Zero for none." />
-            <TextBox Grid.Column="1" x:Name="FrameBox" Style="{DynamicResource NumberBox}" Tag="number" TextChanged="OnChanged"
+            <TextBox Grid.Column="1" x:Name="FrameBox" view:Units.Length="True" Style="{DynamicResource NumberBox}" Tag="number" TextChanged="OnChanged"
                      AutomationProperties.AutomationId="LithophaneFrame" />
-            <TextBlock Text="mm" Style="{StaticResource LithoUnit}" />
+            <TextBlock Text="mm" view:Units.Label="True" Style="{StaticResource LithoUnit}" />
             <Slider x:Name="FrameSlider" Style="{StaticResource LithoSlider}" Minimum="0" Maximum="12"
                     TickFrequency="0.5" ValueChanged="OnSlide" />
         </Grid>
@@ -213,15 +213,15 @@
             <StackPanel x:Name="SocketPanel" Visibility="Collapsed">
                 <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
                     <TextBlock Text="Socket hole" Style="{DynamicResource FieldLabel}" Width="80" />
-                    <TextBox x:Name="SocketHoleBox" Width="48" Style="{DynamicResource NumberBox}" Tag="number" TextChanged="OnChanged"
+                    <TextBox x:Name="SocketHoleBox" view:Units.Length="True" Width="48" Style="{DynamicResource NumberBox}" Tag="number" TextChanged="OnChanged"
                              ToolTip="40 mm for a socket held by its shade ring; 10.5 mm for one on a threaded nipple (1/8 IP). Measure yours." />
-                    <TextBlock Text="mm" Foreground="#FF9AA0A8" VerticalAlignment="Center" Margin="4,0,0,0" />
+                    <TextBlock Text="mm" view:Units.Label="True" Foreground="#FF9AA0A8" VerticalAlignment="Center" Margin="4,0,0,0" />
                 </StackPanel>
                 <StackPanel Orientation="Horizontal">
                     <TextBlock Text="Base height" Style="{DynamicResource FieldLabel}" Width="80" />
-                    <TextBox x:Name="SocketBaseBox" Width="48" Style="{DynamicResource NumberBox}" Tag="number" TextChanged="OnChanged"
+                    <TextBox x:Name="SocketBaseBox" view:Units.Length="True" Width="48" Style="{DynamicResource NumberBox}" Tag="number" TextChanged="OnChanged"
                              ToolTip="Room under the floor for the socket's body below its ring, and the cable" />
-                    <TextBlock Text="mm" Foreground="#FF9AA0A8" VerticalAlignment="Center" Margin="4,0,0,0" />
+                    <TextBlock Text="mm" view:Units.Label="True" Foreground="#FF9AA0A8" VerticalAlignment="Center" Margin="4,0,0,0" />
                 </StackPanel>
             </StackPanel>
         </StackPanel>
@@ -252,5 +252,5 @@
                 Background="White" BorderBrush="#FFD5DEEA" BorderThickness="1">
             <TextBlock x:Name="SummaryText" TextWrapping="Wrap" Foreground="#FF3A3F45" />
         </Border>
-    </StackPanel>
+    </view:ColumnFlow>
 </view:ToolPanel>

@@ -4,7 +4,7 @@
                 xmlns:view="clr-namespace:FastCraft3D.View"
                 Title="Repeat">
 
-    <StackPanel>
+    <view:ColumnFlow>
         <TextBlock x:Name="SubjectText" TextWrapping="Wrap" Foreground="#FF3A4550" Margin="0,0,0,8" />
 
         <StackPanel x:Name="CountRow" Orientation="Horizontal" Margin="0,0,0,6">
@@ -46,16 +46,16 @@
                          AutomationProperties.AutomationId="GridLayers" TextChanged="OnChanged" ToolTip="Layers, stacked up Z" />
             </StackPanel>
 
-            <TextBlock Text="Spacing (mm)" Foreground="#FF5A5F66" Margin="0,0,0,2" />
+            <TextBlock Text="Spacing (mm)" view:Units.Label="True" Foreground="#FF5A5F66" Margin="0,0,0,2" />
             <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
                 <TextBlock Text="X" VerticalAlignment="Center" Foreground="#FF5A5F66" Width="12" />
-                <TextBox x:Name="SpacingXBox" Width="54" Style="{DynamicResource NumberBox}" Text="5"
+                <TextBox x:Name="SpacingXBox" view:Units.Length="True" Width="54" Style="{DynamicResource NumberBox}" Text="5"
                          AutomationProperties.AutomationId="GridSpacingX" TextChanged="OnChanged" />
                 <TextBlock Text="Y" VerticalAlignment="Center" Foreground="#FF5A5F66" Width="12" Margin="4,0,0,0" />
-                <TextBox x:Name="SpacingYBox" Width="54" Style="{DynamicResource NumberBox}" Text="5"
+                <TextBox x:Name="SpacingYBox" view:Units.Length="True" Width="54" Style="{DynamicResource NumberBox}" Text="5"
                          AutomationProperties.AutomationId="GridSpacingY" TextChanged="OnChanged" />
                 <TextBlock Text="Z" VerticalAlignment="Center" Foreground="#FF5A5F66" Width="12" Margin="4,0,0,0" />
-                <TextBox x:Name="SpacingZBox" Width="54" Style="{DynamicResource NumberBox}" Text="5"
+                <TextBox x:Name="SpacingZBox" view:Units.Length="True" Width="54" Style="{DynamicResource NumberBox}" Text="5"
                          AutomationProperties.AutomationId="GridSpacingZ" TextChanged="OnChanged" />
             </StackPanel>
             <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
@@ -67,16 +67,16 @@
         </StackPanel>
 
         <StackPanel x:Name="LinePanel">
-            <TextBlock Text="Step between copies (mm)" Foreground="#FF5A5F66" Margin="0,0,0,2" />
+            <TextBlock Text="Step between copies (mm)" view:Units.Label="True" Foreground="#FF5A5F66" Margin="0,0,0,2" />
             <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
                 <TextBlock Text="X" VerticalAlignment="Center" Foreground="#FF5A5F66" Width="12" />
-                <TextBox x:Name="StepXBox" Width="54" Style="{DynamicResource NumberBox}" Text="0"
+                <TextBox x:Name="StepXBox" view:Units.Length="True" Width="54" Style="{DynamicResource NumberBox}" Text="0"
                          AutomationProperties.AutomationId="RepeatStepX" TextChanged="OnChanged" />
                 <TextBlock Text="Y" VerticalAlignment="Center" Foreground="#FF5A5F66" Width="12" Margin="4,0,0,0" />
-                <TextBox x:Name="StepYBox" Width="54" Style="{DynamicResource NumberBox}" Text="0"
+                <TextBox x:Name="StepYBox" view:Units.Length="True" Width="54" Style="{DynamicResource NumberBox}" Text="0"
                          AutomationProperties.AutomationId="RepeatStepY" TextChanged="OnChanged" />
                 <TextBlock Text="Z" VerticalAlignment="Center" Foreground="#FF5A5F66" Width="12" Margin="4,0,0,0" />
-                <TextBox x:Name="StepZBox" Width="54" Style="{DynamicResource NumberBox}" Text="0"
+                <TextBox x:Name="StepZBox" view:Units.Length="True" Width="54" Style="{DynamicResource NumberBox}" Text="0"
                          AutomationProperties.AutomationId="RepeatStepZ" TextChanged="OnChanged" />
             </StackPanel>
 
@@ -95,19 +95,19 @@
                 <TextBlock Text="Center" Style="{DynamicResource FieldLabel}" Width="48"
                            ToolTip="The point on the plate the ring turns about." />
                 <TextBlock Text="X" VerticalAlignment="Center" Foreground="#FF5A5F66" Width="12" />
-                <TextBox x:Name="CentreXBox" Width="56" Style="{DynamicResource NumberBox}" Text="0"
+                <TextBox x:Name="CentreXBox" view:Units.Length="True" Width="56" Style="{DynamicResource NumberBox}" Text="0"
                          AutomationProperties.AutomationId="RingCentreX" TextChanged="OnChanged" />
                 <TextBlock Text="Y" VerticalAlignment="Center" Foreground="#FF5A5F66" Width="12" Margin="4,0,0,0" />
-                <TextBox x:Name="CentreYBox" Width="56" Style="{DynamicResource NumberBox}" Text="0"
+                <TextBox x:Name="CentreYBox" view:Units.Length="True" Width="56" Style="{DynamicResource NumberBox}" Text="0"
                          AutomationProperties.AutomationId="RingCentreY" TextChanged="OnChanged" />
             </StackPanel>
 
             <StackPanel Orientation="Horizontal">
                 <TextBlock Text="Radius" Style="{DynamicResource FieldLabel}" Width="62"
                            ToolTip="Filled in from where the selection already stands, so leaving it alone repeats it where it is. Type a different number and the whole ring moves in or out - the original with it, or it would be left off the circle." />
-                <TextBox x:Name="RadiusBox" Width="56" Style="{DynamicResource NumberBox}" Text="0"
+                <TextBox x:Name="RadiusBox" view:Units.Length="True" Width="56" Style="{DynamicResource NumberBox}" Text="0"
                          AutomationProperties.AutomationId="RingRadius" TextChanged="OnChanged" />
-                <TextBlock Text="mm" Foreground="#FF9AA0A8" VerticalAlignment="Center" />
+                <TextBlock Text="mm" view:Units.Label="True" Foreground="#FF9AA0A8" VerticalAlignment="Center" />
             </StackPanel>
 
             <CheckBox x:Name="FullTurnBox" Content="Spread evenly over a full turn" IsChecked="True"
@@ -125,9 +125,9 @@
             <StackPanel Orientation="Horizontal">
                 <TextBlock Text="Rise" Style="{DynamicResource FieldLabel}" Width="62"
                            ToolTip="How much higher each copy is than the one before it. A ring with a rise is a spiral stair." />
-                <TextBox x:Name="RiseBox" Width="56" Style="{DynamicResource NumberBox}" Text="0"
+                <TextBox x:Name="RiseBox" view:Units.Length="True" Width="56" Style="{DynamicResource NumberBox}" Text="0"
                          AutomationProperties.AutomationId="RingRise" TextChanged="OnChanged" />
-                <TextBlock Text="mm per copy" Foreground="#FF9AA0A8" VerticalAlignment="Center" />
+                <TextBlock Text="mm per copy" view:Units.Label="True" Foreground="#FF9AA0A8" VerticalAlignment="Center" />
             </StackPanel>
 
             <CheckBox x:Name="FaceBox" Content="Turn each copy to face the center" IsChecked="True"
@@ -136,17 +136,17 @@
         </StackPanel>
 
         <StackPanel x:Name="GrowPanel">
-        <TextBlock Text="Grow each copy by (mm)" Foreground="#FF5A5F66" Margin="0,0,0,2"
+        <TextBlock Text="Grow each copy by (mm)" view:Units.Label="True" Foreground="#FF5A5F66" Margin="0,0,0,2"
                    ToolTip="Each copy is this much larger than the one before it. A staircase is a step and a rise." />
         <StackPanel Orientation="Horizontal">
             <TextBlock Text="X" VerticalAlignment="Center" Foreground="#FF5A5F66" Width="12" />
-            <TextBox x:Name="GrowXBox" Width="54" Style="{DynamicResource NumberBox}" Text="0"
+            <TextBox x:Name="GrowXBox" view:Units.Length="True" Width="54" Style="{DynamicResource NumberBox}" Text="0"
                      AutomationProperties.AutomationId="RepeatGrowX" TextChanged="OnChanged" />
             <TextBlock Text="Y" VerticalAlignment="Center" Foreground="#FF5A5F66" Width="12" Margin="4,0,0,0" />
-            <TextBox x:Name="GrowYBox" Width="54" Style="{DynamicResource NumberBox}" Text="0"
+            <TextBox x:Name="GrowYBox" view:Units.Length="True" Width="54" Style="{DynamicResource NumberBox}" Text="0"
                      AutomationProperties.AutomationId="RepeatGrowY" TextChanged="OnChanged" />
             <TextBlock Text="Z" VerticalAlignment="Center" Foreground="#FF5A5F66" Width="12" Margin="4,0,0,0" />
-            <TextBox x:Name="GrowZBox" Width="54" Style="{DynamicResource NumberBox}" Text="0"
+            <TextBox x:Name="GrowZBox" view:Units.Length="True" Width="54" Style="{DynamicResource NumberBox}" Text="0"
                      AutomationProperties.AutomationId="RepeatGrowZ" TextChanged="OnChanged" />
         </StackPanel>
         </StackPanel>
@@ -161,5 +161,5 @@
                 Background="White" BorderBrush="#FFD5DEEA" BorderThickness="1">
             <TextBlock x:Name="SummaryText" TextWrapping="Wrap" Foreground="#FF3A3F45" />
         </Border>
-    </StackPanel>
+    </view:ColumnFlow>
 </view:ToolPanel>

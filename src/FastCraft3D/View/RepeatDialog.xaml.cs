@@ -48,9 +48,7 @@ public partial class RepeatDialog : ToolPanel
         {
             // Seeded from where the selection already stands, so choosing the circle and pressing
             // Repeat leaves it where it is rather than flinging it out to some default radius.
-            RadiusBox.Text = RepeatArray
-                .DistanceFromCentre(subjects, Vector2.Zero)
-                .ToString("0.##", CultureInfo.CurrentCulture);
+            RadiusBox.Put(RepeatArray.DistanceFromCentre(subjects, Vector2.Zero));
 
             CountBox.SelectAll();
             CountBox.Focus();
@@ -148,7 +146,7 @@ public partial class RepeatDialog : ToolPanel
             return null;
 
         return new GridSettings(columns, rows, layers,
-            new Vector3(Number(SpacingXBox?.Text), Number(SpacingYBox?.Text), Number(SpacingZBox?.Text)),
+            new Vector3(Number(SpacingXBox), Number(SpacingYBox), Number(SpacingZBox)),
             GapsBox?.IsChecked == true);
 
         static bool Whole(string? text, out int value) =>
@@ -232,7 +230,7 @@ public partial class RepeatDialog : ToolPanel
 
         return new RepeatSettings(
             copies,
-            new Vector3(Number(StepXBox?.Text), Number(StepYBox?.Text), Number(StepZBox?.Text)),
+            new Vector3(Number(StepXBox), Number(StepYBox), Number(StepZBox)),
             Grow(),
             AnchorBox?.IsChecked == true);
     }
@@ -243,16 +241,16 @@ public partial class RepeatDialog : ToolPanel
 
         return new RingSettings(
             copies,
-            new Vector2(Number(CentreXBox?.Text), Number(CentreYBox?.Text)),
-            MathF.Max(Number(RadiusBox?.Text), 0f),
-            Number(AngleBox?.Text),
-            Number(RiseBox?.Text),
+            new Vector2(Number(CentreXBox), Number(CentreYBox)),
+            MathF.Max(Number(RadiusBox), 0f),
+            Number(AngleBox),
+            Number(RiseBox),
             FaceBox?.IsChecked == true,
             Grow());
     }
 
     private Vector3 Grow() =>
-        new(Number(GrowXBox?.Text), Number(GrowYBox?.Text), Number(GrowZBox?.Text));
+        new(Number(GrowXBox), Number(GrowYBox), Number(GrowZBox));
 
     private static string Grown(Vector3 grow, int copies) =>
         grow.Length() < 1e-4f
@@ -260,8 +258,7 @@ public partial class RepeatDialog : ToolPanel
             : $" The last one is {grow.X * copies:0.##} x {grow.Y * copies:0.##} x " +
               $"{grow.Z * copies:0.##} mm larger than the first.";
 
-    private static float Number(string? text) =>
-        float.TryParse(text, NumberStyles.Float, CultureInfo.CurrentCulture, out float v) ? v : 0f;
+    private static float Number(System.Windows.Controls.TextBox? box) => box.Read(0f);
 
     private void OnAccept(object sender, RoutedEventArgs e)
     {

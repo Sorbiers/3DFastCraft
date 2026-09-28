@@ -26,6 +26,12 @@ public enum RoofCovering
     [ShownAs("Standing seam")] StandingSeam
 }
 
+public enum DormerSides
+{
+    [ShownAs("One slope")] One,
+    [ShownAs("Both slopes")] Both
+}
+
 /// <summary>
 /// A roof to sit on a model's walls: gable, hip, half hip, lean-to, gambrel, mansard or flat,
 /// hollow or solid, its slopes tiled, slated, shingled or sheeted in relief.
@@ -71,7 +77,12 @@ public sealed class Roof : Generator<Roof.Settings>
         [Length("Course", 0.5, 10, Group = "Covering", Hint = "How much of each row of tiles shows, up the slope")] float Course = 2.2f,
         [Length("Tile width", 0.5, 20, Group = "Covering", Hint = "Across the slope; for sheet, the spacing of its ribs")] float TileWidth = 2.6f,
         [Length("Relief", 0.1, 3, Group = "Covering", Hint = "How far the tiles or ribs stand off the slopes")] float Relief = 0.4f,
-        [Toggle("Ridge tiles", Group = "Covering", Hint = "A rounded capping along the ridge and the hips")] bool Ridge = true);
+        [Toggle("Ridge tiles", Group = "Covering", Hint = "A rounded capping along the ridge and the hips")] bool Ridge = true,
+        [Count("Dormers", 0, 8, Group = "Dormers", UnitText = "on a slope", Hint = "Spaced evenly along the long slopes and merged in, tiled as the roof is. Nought for none")] int Dormers = 0,
+        [Choice("On", Group = "Dormers")] DormerSides DormerSides = DormerSides.Both,
+        [Length("Dormer width", 4, 100, Group = "Dormers", Hint = "Across its front")] float DormerWidth = 14f,
+        [Length("Dormer height", 3, 100, Group = "Dormers", Hint = "Its front, from the roof up to its eaves")] float DormerHeight = 10f,
+        [Length("Set back", 0, 100, Group = "Dormers", Hint = "From the wall line up the slope to its front")] float DormerSetBack = 2f);
 
     protected override IEnumerable<(string Name, Settings Settings)> Shipped =>
     [
@@ -125,6 +136,9 @@ public sealed class Roof : Generator<Roof.Settings>
         nameof(Settings.Course) => Sloped(s) && Tiled(s),
         nameof(Settings.TileWidth) or nameof(Settings.Relief) => Sloped(s) && s.Covering != RoofCovering.Smooth,
         nameof(Settings.Ridge) => Sloped(s) && s.Shape != RoofShape.LeanTo,
+        nameof(Settings.Dormers) => Sloped(s),
+        nameof(Settings.DormerSides) => Sloped(s) && s.Dormers > 0 && s.Shape != RoofShape.LeanTo,
+        nameof(Settings.DormerWidth) or nameof(Settings.DormerHeight) or nameof(Settings.DormerSetBack) => Sloped(s) && s.Dormers > 0,
         _ => true
     };
 
@@ -329,6 +343,12 @@ public sealed class Roof : Generator<Roof.Settings>
             if (!Tiled(s) && pieces > MostRibs)
                 yield return $"That is about {pieces:0} ribs across, more than {MostRibs}. Wider spacing, or a smaller roof.";
         }
+
+        if (Sloped(s) && s.Dormers > 0)
+        {
+            var placed = Dormers(s);
+            foreach (var fault in placed.Faults) yield return fault;
+        }
     }
 
     protected override Generated Build(Settings s, Printer printer, CancellationToken token)
@@ -387,16 +407,24 @@ public sealed class Roof : Generator<Roof.Settings>
             }
         }
 
+        // Everything on the roof is merged in one go: the covering, the capping, the dormers and
+        // what is on them. A tile under a dormer's cheek is taken into the cheek.
+        var on = new List<Mesh>();
         token.ThrowIfCancellationRequested();
-        if (s.Covering != RoofCovering.Smooth)
-        {
-            var laid = Covering(s, slopes, a, b, printer, token);
-            if (laid.Count > 0) roof = Shapes.Union([roof, .. laid]);
-        }
+        if (s.Covering != RoofCovering.Smooth) on.AddRange(Covering(s, slopes, a, b, printer, token));
 
         token.ThrowIfCancellationRequested();
-        if (s.Ridge && s.Shape != RoofShape.LeanTo && Caps(s, slopes, a, b, top) is { } caps)
-            roof = Shapes.Union(roof, caps);
+        if (s.Ridge && s.Shape != RoofShape.LeanTo && Caps(s, slopes, a, b, top) is { } caps) on.Add(caps);
+
+        if (s.Dormers > 0)
+        {
+            var placed = Dormers(s);
+            if (placed.Faults.Count > 0) throw new Refusal(placed.Faults[0]);
+            on.AddRange(DormersOn(s, placed.At, printer, token));
+            notes.Add($"{placed.At.Count} dormer(s), merged in. Their windows are open recesses, without glass.");
+        }
+
+        if (on.Count > 0) roof = Shapes.Union([roof, .. on]);
 
         notes.Add($"Sits on walls {s.Width:0.#} x {s.Length:0.#} mm. Printed as it sits, the eaves on the plate.");
         return new Generated([new GeneratedPart("Roof", roof, Role: "roof")], notes);
@@ -502,10 +530,35 @@ public sealed class Roof : Generator<Roof.Settings>
 
             ribs.Add(seam
                 ? Shapes.Box(u - half, v0, -TileSolid.SinkMm, u + half, v1, d)
-                : Shapes.RodAlongY(half, v0, v1, u, d - half, 12));
+                : Corrugation(u, half, d, v0, v1));
         }
 
         return MeshTransform.Transformed(Mesh.Combine(ribs), slope.Frame);
+    }
+
+    /// <summary>
+    /// One rounded rib of corrugated sheet: the part of a rod of radius <paramref name="half"/>,
+    /// standing <paramref name="d"/> proud, above a hair under the sheet. The whole rod, with a
+    /// wide spacing and a shallow relief, was mostly buried, and at the eaves of a shallow roof its
+    /// buried side came out under the eave and below the plate.
+    /// </summary>
+    private static Mesh Corrugation(float u, float half, float d, float v0, float v1)
+    {
+        float middle = d - half, floor = -TileSolid.SinkMm;
+        if (middle - half >= floor) return Shapes.RodAlongY(half, v0, v1, u, middle, 12);
+
+        // The arc above the floor, closed by a chord along it, drawn across and up and run up the slope.
+        float reach = MathF.Acos(Math.Clamp((floor - middle) / half, -1f, 1f));
+        const int steps = 12;
+        var outline = new List<Vector2>();
+        for (int k = 0; k <= steps; k++)
+        {
+            float a = -reach + 2 * reach * k / steps;
+            outline.Add(new Vector2(u + half * MathF.Sin(a), middle + half * MathF.Cos(a)));
+        }
+
+        var upSlope = new Matrix4x4(1, 0, 0, 0, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 1);
+        return MeshTransform.Transformed(Shapes.Prism(outline, v0, v1), upSlope);
     }
 
     /// <summary>Where a line across the slope at <paramref name="u"/> is inside a convex outline, up the slope.</summary>
@@ -578,6 +631,140 @@ public sealed class Roof : Generator<Roof.Settings>
         float length = Vector3.Distance(from, to) + 2 * radius;
         return MeshTransform.Transformed(Shapes.Cylinder(radius, 0, length, sides: 12),
             MeshTransform.RotationBetween(Vector3.UnitZ, along) * Matrix4x4.CreateTranslation(from - along * radius));
+    }
+
+    /// <summary>A dormer's place: the slope it stands on, and the middle of its front, in plan, on the roof.</summary>
+    private readonly record struct DormerAt(Slope Slope, Vector2 Front);
+
+    /// <summary>
+    /// The dormer that goes on a slope: the Dormer generator's, at the slope's pitch, with fewer
+    /// panes when it is small.
+    /// </summary>
+    private static Dormer.Settings DormerOn(Settings s, Slope slope) => new(
+        Width: s.DormerWidth,
+        Height: s.DormerHeight,
+        Pitch: slope.Pitch * 180f / MathF.PI,
+        Columns: s.DormerWidth < 10f ? 1 : 2,
+        Rows: s.DormerHeight < 8f ? 1 : 2);
+
+    /// <summary>
+    /// Where the dormers go: spaced evenly along each long slope - the steep lower one of a broken
+    /// roof, where a mansard's dormers stand - between the verges or hips, with room for their
+    /// roofs' overhangs and a gap. Where they do not fit, why not.
+    /// </summary>
+    private static (List<DormerAt> At, List<string> Faults) Dormers(Settings s)
+    {
+        var at = new List<DormerAt>();
+        var faults = new List<string>();
+        var (a, b) = Eaves(s);
+        var slopes = Slopes(s);
+
+        // The slopes rising across from the eaves at either side.
+        var long_ = Enumerable.Range(0, slopes.Count)
+            .Where(i => MathF.Abs(slopes[i].Up.X) > 0.99f && MathF.Abs(MathF.Abs(slopes[i].Eave.X) - a) < 1e-3f)
+            .ToList();
+        if (s.DormerSides == DormerSides.One) long_ = long_.Take(1).ToList();
+        if (long_.Count == 0) return (at, ["This roof has no slope for dormers."]);
+
+        var first = DormerOn(s, slopes[long_[0]]);
+        foreach (var fault in Dormer.Faults(first)) faults.Add("Dormers: " + fault);
+
+        float margin = (s.Ridge ? Capping(s) : 0f) + 0.5f;
+        foreach (int i in long_)
+        {
+            var slope = slopes[i];
+            var (o, gable) = Dormer.RoofOf(DormerOn(s, slope));
+            float front = s.Eaves + s.DormerSetBack;
+            float reach = front + (s.DormerHeight + gable) / slope.Rise;
+
+            // The slope in its own terms, up it and along it, for the room at the front and at the back.
+            var region = Region(slopes, i, a, b, hip: margin, kink: 0.5f);
+            var flat = region.Select(q => new Vector2(Vector2.Dot(q - slope.Eave, slope.Up), Vector2.Dot(q - slope.Eave, slope.Along))).ToList();
+            if (region.Count == 0 || Span(flat, front) is not { } near || Span(flat, reach) is not { } far)
+            {
+                faults.Add("The dormers reach past the top of their slope: lower them, or set them back less.");
+                break;
+            }
+
+            float low = MathF.Max(near.Low, far.Low), high = MathF.Min(near.High, far.High), each = s.DormerWidth + 2 * o + 1f;
+            if (high - low < s.Dormers * each)
+            {
+                faults.Add($"{s.Dormers} dormers {s.DormerWidth:0.#} mm wide want {s.Dormers * each:0} mm along the slope; there is {MathF.Max(0, high - low):0}. Fewer, or narrower.");
+                break;
+            }
+
+            for (int k = 0; k < s.Dormers; k++)
+            {
+                float along = low + (high - low) * (k + 0.5f) / s.Dormers;
+                at.Add(new DormerAt(slope, slope.Eave + slope.Up * front + slope.Along * along));
+            }
+        }
+
+        return (faults.Count > 0 ? [] : at, faults);
+    }
+
+    /// <summary>From a dormer's own terms - across, back into the roof, up - to the roof's.</summary>
+    private static Matrix4x4 Placed(DormerAt at) => new(
+        at.Slope.Along.X, at.Slope.Along.Y, 0, 0,
+        at.Slope.Up.X, at.Slope.Up.Y, 0, 0,
+        0, 0, 1, 0,
+        at.Front.X, at.Front.Y, at.Slope.At(at.Front), 1);
+
+    /// <summary>
+    /// The dormers, each sunk a little into the roof so the two merge rather than meet face to
+    /// face, and what goes on their own roofs: the same covering, and a capping on the ridge.
+    /// </summary>
+    private static List<Mesh> DormersOn(Settings s, List<DormerAt> dormers, Printer printer, CancellationToken token)
+    {
+        float sink = MathF.Min(1f, (s.Hollow ? s.Shell : s.Fascia) / 2f);
+        float joint = MathF.Max(printer.Nozzle, TextureOptions.LeastLineMm);
+        var made = new List<Mesh>();
+
+        foreach (var at in dormers)
+        {
+            token.ThrowIfCancellationRequested();
+            var d = DormerOn(s, at.Slope);
+            var place = Placed(at);
+            made.Add(MeshTransform.Transformed(Dormer.Solid(d, sink), place));
+
+            var (o, gable) = Dormer.RoofOf(d);
+            float w = d.Width / 2f + o, h = d.Height, meets = (h + gable) / at.Slope.Rise;
+            Vector2 Plan(float x, float y) => at.Front + at.Slope.Along * x + at.Slope.Up * y;
+
+            if (s.Covering != RoofCovering.Smooth)
+            {
+                float stop = s.Ridge ? Capping(s) + 0.1f : 0.3f;
+                foreach (float side in new[] { -1f, 1f })
+                {
+                    // Each side of its roof as a slope of its own, from its eave up to its ridge.
+                    var mine = new Slope(Plan(side * w, 0), at.Slope.Along * -side, at.Slope.At(at.Front) + h, MathF.Atan(gable / w));
+                    float eave = w - 0.2f;
+                    var region = new List<Vector2> { Plan(side * eave, -o + 0.2f), Plan(side * stop, -o + 0.2f), Plan(side * stop, meets + 1f), Plan(side * eave, meets + 1f) };
+
+                    // Only where it stands over the main roof, held back from the valley between them.
+                    var main = at.Slope;
+                    var k = main.Up * main.Rise - mine.Up * mine.Rise;
+                    float c = main.Z - Vector2.Dot(main.Eave, main.Up) * main.Rise - (mine.Z - Vector2.Dot(mine.Eave, mine.Up) * mine.Rise);
+                    region = Clip(region, k, c + 0.3f * k.Length());
+                    if (region.Count < 3) continue;
+
+                    var pieces = s.Covering is RoofCovering.Corrugated or RoofCovering.StandingSeam
+                        ? Ribs(s, mine, region, printer)
+                        : Tiles(s, mine, region, joint);
+                    if (pieces is { TriangleCount: > 0 }) made.Add(pieces);
+                }
+            }
+
+            if (s.Ridge)
+            {
+                // Along its ridge, from over its front back into the main roof.
+                var from = Vector3.Transform(new Vector3(0, -o, h + gable), place);
+                var to = Vector3.Transform(new Vector3(0, meets, h + gable), place);
+                made.Add(Rod(from, to, Capping(s)));
+            }
+        }
+
+        return made;
     }
 
     protected override IEnumerable<string> Describe(Settings s, float modelScale)

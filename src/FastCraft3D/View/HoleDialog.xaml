@@ -4,7 +4,7 @@
                 xmlns:view="clr-namespace:FastCraft3D.View"
                 Title="Hole">
 
-    <StackPanel>
+    <view:ColumnFlow>
         <TextBlock x:Name="IntroText" TextWrapping="Wrap" Foreground="#FF3A4550" Margin="0,0,0,8" />
 
         <WrapPanel Margin="0,0,0,6">
@@ -36,9 +36,9 @@
 
             <StackPanel Orientation="Horizontal">
                 <TextBlock Text="Depth" Style="{DynamicResource FieldLabel}" Width="62" ToolTip="How deep the hole goes below the surface" />
-                <TextBox x:Name="DepthBox" Width="60" Style="{DynamicResource NumberBox}" Tag="number" TextChanged="OnChanged"
+                <TextBox x:Name="DepthBox" view:Units.Length="True" Width="60" Style="{DynamicResource NumberBox}" Tag="number" TextChanged="OnChanged"
                          AutomationProperties.AutomationId="HoleDepth" />
-                <TextBlock Text="mm" Foreground="#FF9AA0A8" VerticalAlignment="Center" />
+                <TextBlock Text="mm" view:Units.Label="True" Foreground="#FF9AA0A8" VerticalAlignment="Center" />
             </StackPanel>
             <CheckBox x:Name="ThroughBox" Content="All the way through" Margin="0,2,0,6" Click="OnClicked"
                       AutomationProperties.AutomationId="HoleThrough"
@@ -47,9 +47,9 @@
             <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
                 <TextBlock Text="Clearance" Style="{DynamicResource FieldLabel}" Width="62"
                            ToolTip="Added to every diameter, as printed holes come out small. Not added to an insert's pocket, which should be tight." />
-                <TextBox x:Name="ClearanceBox" Width="60" Style="{DynamicResource NumberBox}" Tag="number" TextChanged="OnChanged"
+                <TextBox x:Name="ClearanceBox" view:Units.Length="True" Width="60" Style="{DynamicResource NumberBox}" Tag="number" TextChanged="OnChanged"
                          AutomationProperties.AutomationId="HoleClearance" />
-                <TextBlock Text="mm" Foreground="#FF9AA0A8" VerticalAlignment="Center" />
+                <TextBlock Text="mm" view:Units.Label="True" Foreground="#FF9AA0A8" VerticalAlignment="Center" />
             </StackPanel>
         </StackPanel>
 
@@ -67,15 +67,15 @@
         </StackPanel>
         <StackPanel Orientation="Horizontal">
             <TextBlock Text="Spacing" Style="{DynamicResource FieldLabel}" Width="62" ToolTip="From the middle of one hole to the next, in a row" />
-            <TextBox x:Name="SpacingBox" Width="60" Style="{DynamicResource NumberBox}" Tag="number" TextChanged="OnChanged"
+            <TextBox x:Name="SpacingBox" view:Units.Length="True" Width="60" Style="{DynamicResource NumberBox}" Tag="number" TextChanged="OnChanged"
                      AutomationProperties.AutomationId="HoleSpacing" />
-            <TextBlock Text="mm" Foreground="#FF9AA0A8" VerticalAlignment="Center" />
+            <TextBlock Text="mm" view:Units.Label="True" Foreground="#FF9AA0A8" VerticalAlignment="Center" />
         </StackPanel>
         <StackPanel Orientation="Horizontal">
             <TextBlock Text="Circle" Style="{DynamicResource FieldLabel}" Width="62" ToolTip="Across the circle the holes' middles lie on" />
-            <TextBox x:Name="CircleDiameterBox" Width="60" Style="{DynamicResource NumberBox}" Tag="number" TextChanged="OnChanged"
+            <TextBox x:Name="CircleDiameterBox" view:Units.Length="True" Width="60" Style="{DynamicResource NumberBox}" Tag="number" TextChanged="OnChanged"
                      AutomationProperties.AutomationId="HoleCircleDiameter" />
-            <TextBlock Text="mm across" Foreground="#FF9AA0A8" VerticalAlignment="Center" />
+            <TextBlock Text="mm across" view:Units.Label="True" Foreground="#FF9AA0A8" VerticalAlignment="Center" />
         </StackPanel>
 
         <StackPanel Orientation="Horizontal" Margin="0,10,0,0">
@@ -92,5 +92,5 @@
                 Background="White" BorderBrush="#FFD5DEEA" BorderThickness="1">
             <TextBlock x:Name="SummaryText" TextWrapping="Wrap" Foreground="#FF3A3F45" />
         </Border>
-    </StackPanel>
+    </view:ColumnFlow>
 </view:ToolPanel>

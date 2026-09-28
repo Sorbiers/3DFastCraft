@@ -4,7 +4,7 @@
                 xmlns:view="clr-namespace:FastCraft3D.View"
                 Title="Custom shape">
 
-    <StackPanel>
+    <view:ColumnFlow>
         <TextBlock Text="A shape with its size and smoothness chosen before it is made. The preview is on the plate."
                    TextWrapping="Wrap" Foreground="#FF3A4550" Margin="0,0,0,8" />
 
@@ -16,24 +16,24 @@
 
         <StackPanel Orientation="Horizontal">
             <TextBlock Text="Width" Style="{DynamicResource FieldLabel}" Width="70" ToolTip="Along X" />
-            <TextBox x:Name="WidthBox" Width="60" Style="{DynamicResource NumberBox}" TextChanged="OnChanged"
+            <TextBox x:Name="WidthBox" view:Units.Length="True" Width="60" Style="{DynamicResource NumberBox}" TextChanged="OnChanged"
                      AutomationProperties.AutomationId="CustomWidth" />
-            <TextBlock Text="mm" Foreground="#FF9AA0A8" VerticalAlignment="Center" />
+            <TextBlock Text="mm" view:Units.Label="True" Foreground="#FF9AA0A8" VerticalAlignment="Center" />
         </StackPanel>
 
         <StackPanel Orientation="Horizontal">
             <TextBlock Text="Depth" Style="{DynamicResource FieldLabel}" Width="70" ToolTip="Along Y" />
-            <TextBox x:Name="DepthBox" Width="60" Style="{DynamicResource NumberBox}" TextChanged="OnChanged"
+            <TextBox x:Name="DepthBox" view:Units.Length="True" Width="60" Style="{DynamicResource NumberBox}" TextChanged="OnChanged"
                      AutomationProperties.AutomationId="CustomDepth" />
-            <TextBlock Text="mm" Foreground="#FF9AA0A8" VerticalAlignment="Center" />
+            <TextBlock Text="mm" view:Units.Label="True" Foreground="#FF9AA0A8" VerticalAlignment="Center" />
         </StackPanel>
 
         <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
             <TextBlock x:Name="HeightLabel" Text="Height" Style="{DynamicResource FieldLabel}" Width="70"
                        ToolTip="Along Z. For a ring, the thickness of the ring." />
-            <TextBox x:Name="HeightBox" Width="60" Style="{DynamicResource NumberBox}" TextChanged="OnChanged"
+            <TextBox x:Name="HeightBox" view:Units.Length="True" Width="60" Style="{DynamicResource NumberBox}" TextChanged="OnChanged"
                      AutomationProperties.AutomationId="CustomHeight" />
-            <TextBlock x:Name="HeightNote" Text="mm" Foreground="#FF9AA0A8" VerticalAlignment="Center" />
+            <TextBlock x:Name="HeightNote" Text="mm" view:Units.Label="True" Foreground="#FF9AA0A8" VerticalAlignment="Center" />
         </StackPanel>
 
         <StackPanel Orientation="Horizontal">
@@ -72,5 +72,5 @@
                 Background="White" BorderBrush="#FFD5DEEA" BorderThickness="1">
             <TextBlock x:Name="SummaryText" TextWrapping="Wrap" Foreground="#FF3A3F45" />
         </Border>
-    </StackPanel>
+    </view:ColumnFlow>
 </view:ToolPanel>

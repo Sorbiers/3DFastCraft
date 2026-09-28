@@ -68,24 +68,24 @@ public partial class LithophaneDialog : ToolPanel
         };
 
         loading = true;
-        WidthBox.Text = Format(start.Width);
-        MinBox.Text = Format(start.MinThickness);
-        MaxBox.Text = Format(start.MaxThickness);
-        PitchBox.Text = Format(start.Pitch);
-        LayerBox.Text = Format(start.LayerHeight);
-        FrameBox.Text = Format(start.Frame);
-        BrightnessBox.Text = Format(start.Brightness);
-        ContrastBox.Text = Format(start.Contrast);
-        GammaBox.Text = Format(start.Gamma);
-        AngleBox.Text = Format(start.Angle);
+        WidthBox.Put(start.Width);
+        MinBox.Put(start.MinThickness);
+        MaxBox.Put(start.MaxThickness);
+        PitchBox.Put(start.Pitch);
+        LayerBox.Put(start.LayerHeight);
+        FrameBox.Put(start.Frame);
+        BrightnessBox.Put(start.Brightness);
+        ContrastBox.Put(start.Contrast);
+        GammaBox.Put(start.Gamma);
+        AngleBox.Put(start.Angle);
         NegativeBox.IsChecked = start.Negative;
         FlatBox.IsChecked = start.Shape == LithophaneShape.Flat;
         CurvedBox.IsChecked = start.Shape == LithophaneShape.Curved;
         CubeBox.IsChecked = start.Shape == LithophaneShape.Lamp;
         SidesBox.Text = start.LampSides.ToString(CultureInfo.CurrentCulture);
         SocketBox.IsChecked = start.Socket;
-        SocketHoleBox.Text = Format(start.SocketHole);
-        SocketBaseBox.Text = Format(start.SocketBase);
+        SocketHoleBox.Put(start.SocketHole);
+        SocketBaseBox.Put(start.SocketBase);
         loading = false;
 
         SyncSliders();
@@ -184,9 +184,7 @@ public partial class LithophaneDialog : ToolPanel
         }.Sane();
 
         static float Number(TextBox box, float otherwise) =>
-            float.TryParse(box.Text, NumberStyles.Float, CultureInfo.CurrentCulture, out float v) && float.IsFinite(v)
-                ? v
-                : otherwise;
+            box.Read(otherwise);
     }
 
     /// <summary>Asks for the previews, once whatever is being changed has stopped changing.</summary>
@@ -283,7 +281,7 @@ public partial class LithophaneDialog : ToolPanel
 
         foreach (var (box, slider) in pairs)
         {
-            if (!float.TryParse(box.Text, NumberStyles.Float, CultureInfo.CurrentCulture, out float v) || !float.IsFinite(v))
+            if (!box.TryRead(out float v))
                 continue;
 
             // A typed number keeps its own precision; only dragging moves in steps.
@@ -306,7 +304,7 @@ public partial class LithophaneDialog : ToolPanel
         if (box is null) return;
 
         syncing = true;
-        box.Text = Format((float)e.NewValue);
+        box.Put((float)e.NewValue);
         syncing = false;
 
         Refresh();

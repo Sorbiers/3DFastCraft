@@ -29,12 +29,12 @@ public partial class CustomShapeDialog : ToolPanel
         foreach (var kind in CustomShape.Kinds) KindBox.Items.Add(kind);
         KindBox.SelectedItem = start.Kind;
 
-        WidthBox.Text = Format(start.Width);
-        DepthBox.Text = Format(start.Depth);
-        HeightBox.Text = Format(start.Height);
+        WidthBox.Put(start.Width);
+        DepthBox.Put(start.Depth);
+        HeightBox.Put(start.Height);
         SegmentsBox.Text = start.Segments.ToString(CultureInfo.CurrentCulture);
         RingsBox.Text = start.Rings.ToString(CultureInfo.CurrentCulture);
-        RoundnessBox.Text = Format(start.Roundness);
+        RoundnessBox.Put(start.Roundness);
         WireframeBox.IsChecked = showingWireframe;
         loading = false;
 
@@ -62,7 +62,7 @@ public partial class CustomShapeDialog : ToolPanel
             Number(RoundnessBox, 0f));
 
         static float Number(TextBox box, float otherwise) =>
-            float.TryParse(box.Text, NumberStyles.Float, CultureInfo.CurrentCulture, out float v) ? v : otherwise;
+            box.Read(otherwise);
 
         static int Whole(TextBox box, int otherwise) =>
             int.TryParse(box.Text, NumberStyles.Integer, CultureInfo.CurrentCulture, out int v) ? v : otherwise;

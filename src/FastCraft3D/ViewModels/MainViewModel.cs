@@ -228,6 +228,10 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
         UnlockAllCommand = RelayCommand.Simple(UnlockAll, () => AnyLocked);
         InvertSelectionCommand = RelayCommand.Simple(InvertSelection, () => Scene.Objects.Count > 0);
         GroupCommand = RelayCommand.Simple(Group, () => Scene.Selection.Count > 1);
+
+        // The boxes' unit is shared by every panel; a new model starts it at its own, rather than
+        // at whatever the last one was left on.
+        View.LengthConverter.Unit = unit;
         UngroupCommand = RelayCommand.Simple(Ungroup, () => Scene.Selection.Count > 0);
         DeselectAllCommand = RelayCommand.Simple(
             () => { Scene.ClearSelection(); RefreshSelection(); },

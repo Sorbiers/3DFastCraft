@@ -162,21 +162,82 @@ public class LibraryGeneratorTests
     }
 
     [Fact]
-    public void AWindowsGlassIsAPartOfItsOwnOnTheClearFilamentFillingEveryPane()
+    public void AWindowsGlassComesGroupedWithItsFrameFillingEveryPaneAndUngroupsApart()
     {
         var window = new FastCraft3D.Generators.Buildings.Window();
         var s = window.Default with { Columns = 3, Rows = 2, GlassThickness = 0.4f, Flat = true };
-        var made = window.Make(s, Printer.Default);
-
-        var glass = Assert.Single(made.Parts, p => p.Role == "glass");
-        Assert.Equal(2, glass.Filament);
-        Assert.NotNull(glass.Colour);
+        var glazed = Assert.Single(window.Make(s, Printer.Default).Parts);
+        var bare = Assert.Single(window.Make(s with { Glass = false }, Printer.Default).Parts);
 
         double panes = FastCraft3D.Generators.Buildings.Window.Panes(s).Sum(p => (p.X1 - p.X0) * (p.Y1 - p.Y0));
-        Assert.Equal(panes * 0.4, glass.Mesh.ComputeSignedVolume(), 2);
-        Assert.Equal(0f, glass.Mesh.ComputeBounds().Min.Z, 4);
+        // Within the hair each pane is drawn in by, so as not to share the frame's corners.
+        Assert.InRange(glazed.Mesh.ComputeSignedVolume() - bare.Mesh.ComputeSignedVolume(), panes * 0.4 * 0.97, panes * 0.4);
+        Assert.True(glazed.Mesh.CheckHealth().IsWatertight);
 
-        Assert.DoesNotContain(window.Make(s with { Glass = false }, Printer.Default).Parts, p => p.Role == "glass");
+        // Ungroup reads the pieces off the mesh: the frame, and one pane of glass in each opening.
+        var pieces = MeshComponents.Split(glazed.Mesh);
+        Assert.Equal(1 + 3 * 2, pieces.Count);
+        Assert.All(pieces.Where(p => p.ComputeBounds().Max.Z < 0.5f), p => Assert.Equal(0f, p.ComputeBounds().Min.Z, 4));
+    }
+
+    [Theory]
+    [InlineData(FastCraft3D.Generators.Buildings.RoofShape.Gable, FastCraft3D.Generators.Buildings.RoofCovering.Tiles)]
+    [InlineData(FastCraft3D.Generators.Buildings.RoofShape.Hip, FastCraft3D.Generators.Buildings.RoofCovering.Slates)]
+    [InlineData(FastCraft3D.Generators.Buildings.RoofShape.Mansard, FastCraft3D.Generators.Buildings.RoofCovering.Smooth)]
+    [InlineData(FastCraft3D.Generators.Buildings.RoofShape.Gable, FastCraft3D.Generators.Buildings.RoofCovering.Corrugated)]
+    public void DormersAreMergedIntoTheRoofAsOneSoundSolid(FastCraft3D.Generators.Buildings.RoofShape shape, FastCraft3D.Generators.Buildings.RoofCovering covering)
+    {
+        var roof = new FastCraft3D.Generators.Buildings.Roof();
+        var s = roof.Default with { Shape = shape, Covering = covering, Width = 60, Length = 90, Dormers = 2, DormerHeight = 6, DormerSetBack = 0 };
+        var bare = Assert.Single(roof.Make(s with { Dormers = 0 }, Printer.Default).Parts).Mesh;
+        var with = Assert.Single(roof.Make(s, Printer.Default).Parts).Mesh;
+
+        Assert.True(with.CheckHealth().IsWatertight);
+        Assert.True(with.ComputeSignedVolume() > bare.ComputeSignedVolume() + 4 * 100);
+    }
+
+    [Fact]
+    public void DormersOnEveryRoofShapeAndCoveringAreRefusedOrSound()
+    {
+        var roof = new FastCraft3D.Generators.Buildings.Roof();
+        var faults = new List<string>();
+        int made = 0;
+
+        foreach (var shape in Enum.GetValues<FastCraft3D.Generators.Buildings.RoofShape>().Where(r => r != FastCraft3D.Generators.Buildings.RoofShape.Flat))
+            foreach (var covering in Enum.GetValues<FastCraft3D.Generators.Buildings.RoofCovering>())
+                foreach (var (count, sides, width, height, back) in new[]
+                         {
+                             (1, FastCraft3D.Generators.Buildings.DormerSides.One, 14f, 8f, 2f),
+                             (3, FastCraft3D.Generators.Buildings.DormerSides.Both, 10f, 6f, 0f),
+                             (2, FastCraft3D.Generators.Buildings.DormerSides.Both, 20f, 12f, 6f)
+                         })
+                {
+                    var s = roof.Default with
+                    {
+                        Shape = shape, Covering = covering, Width = 70, Length = 110,
+                        Dormers = count, DormerSides = sides, DormerWidth = width, DormerHeight = height, DormerSetBack = back
+                    };
+                    var result = roof.Make(s, Printer.Default);
+                    if (result.IsRefused) continue;
+
+                    made++;
+                    var mesh = Assert.Single(result.Parts).Mesh;
+                    if (!mesh.CheckHealth().IsWatertight) faults.Add($"{shape} {covering} {count}x{width}: not closed");
+                    if (mesh.ComputeBounds().Min.Z < -1e-3f) faults.Add($"{shape} {covering} {count}x{width}: below the plate");
+                }
+
+        Assert.Empty(faults);
+        Assert.True(made > 40, $"Only {made} made - the sweep is mostly refusals");
+    }
+
+    [Fact]
+    public void MoreDormersThanASlopeHasRoomForAreRefused()
+    {
+        var roof = new FastCraft3D.Generators.Buildings.Roof();
+        var made = roof.Make(roof.Default with { Length = 40, Dormers = 5 }, Printer.Default);
+
+        Assert.True(made.IsRefused);
+        Assert.Contains("Fewer, or narrower", made.Refusal);
     }
 
     [Fact]
@@ -193,15 +254,16 @@ public class LibraryGeneratorTests
     {
         var door = new FastCraft3D.Generators.Buildings.Door();
         var s = door.Default with { Leaf = FastCraft3D.Generators.Buildings.DoorLeaf.Glazed, Panels = 3, Glazed = 1, Flat = true };
-        var made = door.Make(s, Printer.Default);
+        var made = Assert.Single(door.Make(s, Printer.Default).Parts);
 
-        var glass = Assert.Single(made.Parts, p => p.Role == "glass");
+        // The glass is grouped in with the door, the pieces that lie within its thickness.
+        var glass = Assert.Single(MeshComponents.Split(made.Mesh), p => p.ComputeBounds().Max.Z <= s.GlassThickness + 1e-3f);
         var top = FastCraft3D.Generators.Buildings.Door.Panels(s)[0];
-        var bounds = glass.Mesh.ComputeBounds();
-        Assert.Equal(top.Y0, bounds.Min.Y, 3);
-        Assert.Equal(top.Y1, bounds.Max.Y, 3);
+        var bounds = glass.ComputeBounds();
+        Assert.Equal(top.Y0, bounds.Min.Y, 1);
+        Assert.Equal(top.Y1, bounds.Max.Y, 1);
 
-        Assert.DoesNotContain(door.Make(door.Default, Printer.Default).Parts, p => p.Role == "glass");
+        Assert.Single(MeshComponents.Split(Assert.Single(door.Make(door.Default, Printer.Default).Parts).Mesh));
     }
 
     [Fact]
