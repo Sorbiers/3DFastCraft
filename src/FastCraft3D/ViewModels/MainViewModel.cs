@@ -1,4 +1,4 @@
-﻿using System.ComponentModel;
+using System.ComponentModel;
 using System.Diagnostics;
 using System.IO;
 using System.Numerics;
@@ -6701,8 +6701,9 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
     private HoleOptions lastHole = new();
 
     /// <summary>
-    /// Screw holes or insert pockets: one, a row or a bolt circle, cut into the one part selected or
-    /// added as a cutter to place and Subtract.
+    /// Screw holes or insert pockets: one, a row or a bolt circle, cut into the parts selected or
+    /// added as a cutter to place and Subtract. With several selected - a lid on its box, plates to
+    /// be bolted together - the holes go through all of them at once, lined up, so they join.
     ///
     /// The red cutter has the handles while the panel is open. It starts at the middle of the part's
     /// top, pointing down; moved and turned, the holes go wherever it is put - into a side, at an
@@ -6715,9 +6716,14 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
     {
         if (IsBusy) return;
 
-        var selection = Scene.Selection.ToList();
-        var target = selection.Count == 1 ? selection[0] : null;
-        var targetWorld = target?.ToWorldMesh();
+        var targets = Scene.Selection.ToList();
+        var target = targets.FirstOrDefault();
+
+        // All of them as one, for the holes to be measured through: the last surface along a
+        // hole's axis is the far side of the last part it goes through.
+        var targetWorld = targets.Count == 0 ? null : Mesh.Combine(targets.Select(t => t.ToWorldMesh()));
+        var targetBounds = targetWorld?.ComputeBounds();
+        string? targetName = targets.Count switch { 0 => null, 1 => target!.Name, _ => $"the {targets.Count} selected objects, through all of them" };
         var red = new Vector3(0.88f, 0.3f, 0.28f);
 
         SceneObject? shown = null;
@@ -6768,7 +6774,7 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
                 shown.Mesh = Mesh.Combine(cutters);
         }
 
-        var dialog = new HoleDialog(lastHole, target?.Name, (options, through) =>
+        var dialog = new HoleDialog(lastHole, targetName, (options, through) =>
         {
             if (options is null)
             {
@@ -6788,8 +6794,8 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
             var at = shown is not null
                 ? TransformState.Capture(shown)
                 : new TransformState(
-                    targetWorld is not null
-                        ? new Vector3(target!.WorldBounds.Center.X, target.WorldBounds.Center.Y, target.WorldBounds.Max.Z)
+                    targetBounds is { } reach
+                        ? new Vector3(reach.Center.X, reach.Center.Y, reach.Max.Z)
                         : Vector3.Zero,
                     Vector3.Zero, Vector3.One);
 
@@ -6833,6 +6839,7 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
 
         ReleasePreview();
         Scene.SelectOnly(target);
+        foreach (var t in targets) t.IsSelected = true;
         RefreshSelection();
 
         if (!accepted || dialog.Result is not { } chosen || place is not { } where) return;
@@ -6863,27 +6870,49 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
         var token = StartWork(made.Count == 1 ? $"Cutting {what}" : $"Cutting {what}");
         try
         {
-            var world = targetWorld!;
             var cutters = made.Select(m => MeshTransform.Transformed(m, frame)).ToList();
-            var result = await Task.Run(() =>
+            var parts = targets.Select(t => (Object: t, World: t.ToWorldMesh())).ToList();
+            var results = await Task.Run(() => parts.Select(p =>
             {
                 // One at a time, each locally: a hole touches a little of the part, and cutting
-                // each where it is costs what the hole costs rather than what the part does.
-                var part = world;
-                foreach (var cutter in cutters) part = LocalCsg.Subtract(part, cutter, token);
-                return MeshHealer.Heal(part, token: token).Mesh;
-            });
+                // each where it is costs what the hole costs rather than what the part does. A
+                // part a hole misses is left alone.
+                var box = p.World.ComputeBounds();
+                var into = cutters.Where(c => Overlap(box, c.ComputeBounds())).ToList();
+                if (into.Count == 0) return (Mesh?)null;
 
-            if (result.TriangleCount == 0 || !result.CheckHealth().IsWatertight)
+                var part = p.World;
+                foreach (var cutter in into) part = LocalCsg.Subtract(part, cutter, token);
+                return MeshHealer.Heal(part, token: token).Mesh;
+            }).ToList());
+
+            var cutParts = new List<SceneObject>();
+            var replaced = new List<SceneObject>();
+            for (int i = 0; i < parts.Count; i++)
             {
-                Status = $"The holes would not cut cleanly into {target.Name} - nothing was changed";
+                if (results[i] is not { } result) continue;
+                var t = parts[i].Object;
+
+                // All or nothing: half a stack drilled is worse than none.
+                if (result.TriangleCount == 0 || !result.CheckHealth().IsWatertight)
+                {
+                    Status = $"The holes would not cut cleanly into {t.Name} - nothing was changed";
+                    return;
+                }
+
+                replaced.Add(t);
+                cutParts.Add(new SceneObject(t.Name, result) { Colour = t.Colour, Filament = t.Filament }.Centred());
+            }
+
+            if (replaced.Count == 0)
+            {
+                Status = "The holes miss everything selected - nothing was changed";
                 return;
             }
 
-            var cut = new SceneObject(target.Name, result) { Colour = target.Colour }.Centred();
-            Undo.Execute(new ReplaceObjectsCommand(made.Count == 1 ? "Hole" : "Holes", [target], [cut]));
+            Undo.Execute(new ReplaceObjectsCommand(made.Count == 1 ? "Hole" : "Holes", replaced, cutParts));
             RefreshSelection();
-            Status = $"Cut {what} into {target.Name}";
+            Status = replaced.Count == 1 ? $"Cut {what} into {replaced[0].Name}" : $"Cut {what} through {replaced.Count} objects";
         }
         catch (Exception abort) when (WasAborted(abort))
         {
@@ -6898,6 +6927,9 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
             EndWork();
         }
     }
+
+    private static bool Overlap(Bounds a, Bounds b) =>
+        a.Min.X <= b.Max.X && b.Min.X <= a.Max.X && a.Min.Y <= b.Max.Y && b.Min.Y <= a.Max.Y && a.Min.Z <= b.Max.Z && b.Min.Z <= a.Max.Z;
 
     private bool panelHandles;
     private GizmoMode modeBeforeHandles;

@@ -20,6 +20,9 @@ public enum PlacementHandles
     /// <summary>The dashed outline showing how much of the surface is covered.</summary>
     Box = 4,
 
+    /// <summary>Squares at the outline's corners that resize it in proportion, along the surface.</summary>
+    Scale = 8,
+
     All = Move | Turn | Box
 }
 
@@ -49,6 +52,11 @@ public sealed class SurfacePlacementGizmo
     public const string MoveTag = "lettering-move";
 
     public const string TurnTag = "lettering-turn";
+
+    /// <summary>A corner's tag is this and its number, 0 to 3, going round from lower left.</summary>
+    public const string ScaleTag = "placement-scale-";
+
+    private const double CornerSize = 10.0;
 
     private const double GripRadius = 9.0;
     private const double KnobRadius = 7.0;
@@ -104,6 +112,11 @@ public sealed class SurfacePlacementGizmo
         IsHitTestVisible = false
     };
 
+    private readonly Rectangle[] corners = new Rectangle[4];
+
+    // The layout corners, going round from lower left, for a half-size of one.
+    private static readonly Vector2[] CornerSigns = [new(-1, -1), new(1, -1), new(1, 1), new(-1, 1)];
+
     private IPlacementSurface? surface;
     private SurfacePlacement placement = SurfacePlacement.Middle;
     private Vector2 extent;
@@ -112,6 +125,9 @@ public sealed class SurfacePlacementGizmo
 
     private bool movingDrag;
     private bool turningDrag;
+    private int scalingCorner = -1;
+    private Vector2 dragStartExtent;
+    private float scale = 1f;
     private Point dragStart;
     private SurfacePlacement dragStartPlacement;
 
@@ -124,8 +140,32 @@ public sealed class SurfacePlacementGizmo
         layer.Children.Add(stem);
         layer.Children.Add(grip);
         layer.Children.Add(knob);
+
+        for (int i = 0; i < corners.Length; i++)
+        {
+            corners[i] = new Rectangle
+            {
+                Width = CornerSize,
+                Height = CornerSize,
+                Fill = new SolidColorBrush(BoxColour),
+                Stroke = Brushes.White,
+                StrokeThickness = 1.4,
+                Cursor = i % 2 == 0 ? Cursors.SizeNESW : Cursors.SizeNWSE,
+                Tag = ScaleTag + i,
+                ToolTip = "Drag to resize it in proportion, the opposite corner staying put"
+            };
+            layer.Children.Add(corners[i]);
+        }
+
         layer.Visibility = Visibility.Collapsed;
     }
+
+    /// <summary>
+    /// Raised once a corner is let go, with how many times bigger it has been made. The new
+    /// middle comes with <see cref="Changed"/> straight after. Not while dragging: resizing
+    /// rebuilds what is being placed, and a traced picture takes too long to do that every step.
+    /// </summary>
+    public event Action<float>? Resized;
 
     /// <summary>Raised while dragging, with where the lettering has got to.</summary>
     public event Action<SurfacePlacement>? Changed;
@@ -133,7 +173,7 @@ public sealed class SurfacePlacementGizmo
     /// <summary>Live readout for the status bar.</summary>
     public event Action<string>? Feedback;
 
-    public bool IsDragging => movingDrag || turningDrag;
+    public bool IsDragging => movingDrag || turningDrag || scalingCorner >= 0;
     public bool SnapRotation { get; set; } = true;
 
     /// <summary>What the readout calls the thing being placed.</summary>
@@ -179,6 +219,15 @@ public sealed class SurfacePlacementGizmo
         stem.Visibility = knob.Visibility;
 
         Place(grip, centre, GripRadius);
+
+        for (int i = 0; i < corners.Length; i++)
+        {
+            Point corner = default;
+            bool shown = wanted.HasFlag(PlacementHandles.Scale)
+                         && projector.TryProject(WorldAt(placement.Apply(CornerSigns[i] * extent)), out corner);
+            corners[i].Visibility = shown ? Visibility.Visible : Visibility.Collapsed;
+            if (shown) Place(corners[i], corner, CornerSize / 2);
+        }
 
         if (!wanted.HasFlag(PlacementHandles.Turn)) return;
 
@@ -278,16 +327,28 @@ public sealed class SurfacePlacementGizmo
 
         movingDrag = tag == MoveTag && wanted.HasFlag(PlacementHandles.Move);
         turningDrag = tag == TurnTag && wanted.HasFlag(PlacementHandles.Turn);
-        if (!movingDrag && !turningDrag) return false;
+        scalingCorner = tag is not null && tag.StartsWith(ScaleTag, StringComparison.Ordinal) && wanted.HasFlag(PlacementHandles.Scale)
+            ? int.Parse(tag[ScaleTag.Length..], System.Globalization.CultureInfo.InvariantCulture)
+            : -1;
+        if (!movingDrag && !turningDrag && scalingCorner < 0) return false;
 
         dragStart = screen;
         dragStartPlacement = placement;
+        dragStartExtent = extent;
+        scale = 1f;
         return true;
     }
 
     public void ContinueDrag(Point screen)
     {
         if (surface is null) return;
+
+        if (scalingCorner >= 0)
+        {
+            DragScale(screen);
+            Reposition();
+            return;
+        }
 
         if (movingDrag) DragMove(screen);
         else if (turningDrag) DragTurn(screen);
@@ -299,8 +360,46 @@ public sealed class SurfacePlacementGizmo
 
     public void EndDrag()
     {
+        bool scaled = scalingCorner >= 0 && MathF.Abs(scale - 1f) > 1e-4f;
         movingDrag = false;
         turningDrag = false;
+        scalingCorner = -1;
+
+        if (!scaled) return;
+        Resized?.Invoke(scale);
+        Changed?.Invoke(placement);
+    }
+
+    /// <summary>
+    /// A corner dragged over the surface: the pointer's move read as a move along the surface, as
+    /// the grip reads it, and the size taken from how far the corner now is from the opposite one
+    /// in the direction it was. The opposite corner stays where it was, so the middle moves.
+    /// </summary>
+    private void DragScale(Point screen)
+    {
+        var origin = dragStartPlacement.OffsetMm;
+        if (!projector.TryProject(WorldAt(origin), out Point anchor)) return;
+        if (!ScreenStep(origin, new Vector2(ReferenceMm, 0), anchor, out Vector across)) return;
+        if (!ScreenStep(origin, new Vector2(0, ReferenceMm), anchor, out Vector up)) return;
+
+        var delta = new Vector(screen.X - dragStart.X, screen.Y - dragStart.Y);
+        if (GizmoMath.AcrossSurface(delta, across, up) is not { } moved)
+        {
+            Feedback?.Invoke($"Turn the view - the {Noun.ToLowerInvariant()} is edge-on");
+            return;
+        }
+
+        // In the surface's terms, where the corner and the opposite one were.
+        var corner = dragStartPlacement.Apply(CornerSigns[scalingCorner] * dragStartExtent);
+        var opposite = dragStartPlacement.Apply(-CornerSigns[scalingCorner] * dragStartExtent);
+        var diagonal = corner - opposite;
+        var reached = corner + new Vector2((float)moved.X, (float)moved.Y);
+
+        scale = Math.Clamp(Vector2.Dot(reached - opposite, diagonal) / diagonal.LengthSquared(), 0.05f, 20f);
+        extent = dragStartExtent * scale;
+        placement = dragStartPlacement with { OffsetMm = opposite + diagonal * scale * 0.5f };
+
+        Feedback?.Invoke($"{Noun} {extent.X * 2:0.#} x {extent.Y * 2:0.#} mm ({scale * 100:0}%) - let go to apply");
     }
 
     private void DragMove(Point screen)

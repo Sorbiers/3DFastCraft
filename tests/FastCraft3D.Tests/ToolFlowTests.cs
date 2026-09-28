@@ -157,6 +157,40 @@ public class ToolFlowTests
     });
 
     [Fact]
+    public void AHoleThroughSeveralSelectedPartsGoesThroughEveryOneLinedUp() => WithModel(model =>
+    {
+        // Two plates, one over the other with air between, as a lid over a box's rim.
+        var lower = new SceneObject("Lower", Primitives.Box(40, 40, 6)) { Position = new Vector3(0, 0, 3) };
+        var upper = new SceneObject("Upper", Primitives.Box(40, 40, 6)) { Position = new Vector3(0, 0, 13) };
+        model.Scene.Objects.Add(lower);
+        model.Scene.Objects.Add(upper);
+        lower.IsSelected = upper.IsSelected = true;
+        model.RefreshSelection();
+        double before = lower.ToWorldMesh().ComputeSignedVolume();
+
+        AnswerPanel(model, "AcceptButton", panel =>
+        {
+            var through = (CheckBox)panel.FindName("ThroughBox")!;
+            through.IsChecked = true;
+            through.RaiseEvent(new RoutedEventArgs(ButtonBase.ClickEvent));
+        });
+        model.InsertHoleCommand.Execute(null);
+        PumpUntil(() => !model.Scene.Objects.Contains(lower) && !model.Scene.Objects.Contains(upper) && !model.IsBusy, 60000);
+
+        Assert.Equal(2, model.Scene.Objects.Count);
+        foreach (var plate in model.Scene.Objects)
+        {
+            var mesh = plate.ToWorldMesh();
+            Assert.True(mesh.CheckHealth().IsWatertight);
+
+            // Each has lost a hole's worth, in the middle, where the other's is.
+            Assert.True(mesh.ComputeSignedVolume() < before - 20);
+            Assert.DoesNotContain(mesh.Positions, p => new Vector2(p.X, p.Y).Length() < 1f);
+            Assert.Contains(mesh.Positions, p => new Vector2(p.X, p.Y).Length() < 5f);
+        }
+    });
+
+    [Fact]
     public void AddLeavesThePartWholeAndPutsTheCutterWhereItStood() => WithModel(model =>
     {
         var cube = new SceneObject("Cube", Primitives.Box(20, 20, 20)) { Position = new Vector3(0, 0, 10) };

@@ -132,6 +132,49 @@ public class SurfacePlacementGizmoTests
     }
 
     [Fact]
+    public void DraggingACornerResizesInProportionWithTheOppositeCornerStayingPut()
+    {
+        RunSta(() =>
+        {
+            var layer = new Canvas();
+            var gizmo = new SurfacePlacementGizmo(layer, new TopProjector());
+            gizmo.Show(true, TopOfAPlate(), SurfacePlacement.Middle, new Vector2(12, 5), PlacementHandles.All | PlacementHandles.Scale);
+
+            float? factor = null;
+            SurfacePlacement? moved = null;
+            gizmo.Resized += f => factor = f;
+            gizmo.Changed += p => moved = p;
+
+            // The upper right corner, dragged out along its diagonal to half as big again.
+            var upperRight = layer.Children.OfType<Shape>().First(s => (s.Tag as string) == SurfacePlacementGizmo.ScaleTag + 2);
+            var from = Middle(layer, SurfacePlacementGizmo.ScaleTag + 2);
+            var to = new Point(from.X + 12 * TopProjector.PixelsPerMm, from.Y - 5 * TopProjector.PixelsPerMm);
+
+            Assert.True(gizmo.TryBeginDrag(from, upperRight));
+            gizmo.ContinueDrag(to);
+            Assert.Null(factor);
+            gizmo.EndDrag();
+
+            Assert.Equal(1.5f, factor!.Value, 3);
+
+            // The lower left corner, at -12, -5, is where it was; the middle has moved half the drag.
+            Assert.Equal(6f, moved!.Value.OffsetMm.X, 3);
+            Assert.Equal(2.5f, moved.Value.OffsetMm.Y, 3);
+        });
+    }
+
+    [Fact]
+    public void TheCornersAreOnlyThereForAToolThatAsksForThem()
+    {
+        RunSta(() =>
+        {
+            var (_, layer, _) = Setup();
+            Assert.All(layer.Children.OfType<Shape>().Where(s => (s.Tag as string)?.StartsWith(SurfacePlacementGizmo.ScaleTag) == true),
+                corner => Assert.Equal(Visibility.Collapsed, corner.Visibility));
+        });
+    }
+
+    [Fact]
     public void TheHandlesAreHiddenUntilThereIsLetteringToPlace()
     {
         RunSta(() =>

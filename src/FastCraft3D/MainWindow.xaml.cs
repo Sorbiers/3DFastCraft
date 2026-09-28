@@ -215,6 +215,10 @@ public partial class MainWindow : Window
             else if (viewModel.IsWallMountMode) viewModel.WallMountPlacement = placement;
             else if (viewModel.IsEngraveMode) viewModel.EngravePlacement = placement;
         };
+        placeGizmo.Resized += factor =>
+        {
+            if (viewModel.IsEmbossMode) viewModel.EmbossHeight *= factor;
+        };
         PlacementGizmoLayer.PreviewMouseLeftButtonDown += OnTextGizmoDown;
         PlacementGizmoLayer.PreviewMouseMove += OnTextGizmoMove;
         PlacementGizmoLayer.PreviewMouseLeftButtonUp += OnTextGizmoUp;
@@ -814,7 +818,7 @@ public partial class MainWindow : Window
             placeGizmo.Show(
                 viewModel.HasEmbossFace, viewModel.EmbossSurface(),
                 viewModel.EmbossPlacement, viewModel.EmbossExtent,
-                laid ? PlacementHandles.Move : PlacementHandles.All);
+                laid ? PlacementHandles.Move : PlacementHandles.All | PlacementHandles.Scale);
         }
         else if (viewModel.IsWallMountMode)
         {
