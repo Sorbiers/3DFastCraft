@@ -149,14 +149,21 @@ public partial class MainWindow : Window
         viewModel.GeneratorFaceChanged += () => renderer?.ShowFace(viewModel.GeneratorFace, tint: AlignFacePickedColour);
         viewModel.WallMountChanged += () => renderer?.ShowFace(viewModel.WallMountFace, null, viewModel.WallMountPreview());
         viewModel.RestingFacesChanged += () => renderer?.ShowRestingFaces(viewModel.RestingFaceList, viewModel.RestingHover);
-        viewModel.AlignFaceChanged += () => renderer?.ShowFace(
-            viewModel.AlignFace, tint: viewModel.HasAlignFaceTarget ? AlignFacePickedColour : null);
-        viewModel.SurfaceInfoChanged += () => renderer?.ShowFace(
-            viewModel.SurfaceInfoFace, tint: viewModel.SurfaceInfoShowsPicked ? AlignFacePickedColour : null);
+        viewModel.AlignFaceChanged += () =>
+        {
+            renderer?.ShowFace(viewModel.AlignFace, tint: viewModel.HasAlignFaceTarget ? AlignFacePickedColour : null);
+            ShowAnchors(viewModel.AlignFaceAnchors, viewModel.AlignFaceLinkPoints);
+        };
+        viewModel.SurfaceInfoChanged += () =>
+        {
+            renderer?.ShowFace(viewModel.SurfaceInfoFace, tint: viewModel.SurfaceInfoShowsPicked ? AlignFacePickedColour : null);
+            ShowAnchors(viewModel.SurfaceInfoAnchors);
+        };
         viewModel.CentreFaceChanged += () =>
         {
             renderer?.ShowFace(viewModel.CentreFaceA, tint: viewModel.HasCentreFaceA ? AlignFacePickedColour : null);
             renderer?.ShowSecondFace(viewModel.CentreFaceB, tint: viewModel.HasCentreFaceB ? CentreFaceSecondColour : null);
+            ShowAnchors(viewModel.CentreFaceAnchors);
         };
         viewModel.Applying += OnRecordBefore;
         viewModel.Undo.Executed += OnRecordAfter;
@@ -2056,15 +2063,26 @@ public partial class MainWindow : Window
         SidePanel.Width = Math.Clamp(SidePanel.Width - e.HorizontalChange, 260, most);
     }
 
+    /// <summary>The anchor spheres, sized to the plate's contents as the pivot's is to its part.</summary>
+    private void ShowAnchors(IReadOnlyList<Vector3> points, IReadOnlyList<Vector3>? linked = null)
+    {
+        if (renderer is null) return;
+        var reach = BedPlacement.Reach(viewModel.Scene.Objects.Where(o => !o.IsHidden));
+        float radius = reach.IsEmpty ? 1f : Math.Clamp(reach.Size.Length() * 0.008f, 0.4f, 2.5f);
+        renderer.ShowAnchors(points, radius, linked);
+    }
+
     private void OnAlignFaceModeChanged(object sender, RoutedEventArgs e)
     {
         if (sender is not RadioButton { Tag: string tag }) return;
 
+        // "X:Minimum" is a place on the face; "SX:Minimum" the point of the selection that goes there.
         var parts = tag.Split(':');
-        if (parts.Length != 2 || !Enum.TryParse<Axis>(parts[0], out var axis)) return;
+        bool ofSelection = parts[0].StartsWith('S');
+        if (parts.Length != 2 || !Enum.TryParse<Axis>(parts[0].TrimStart('S'), out var axis)) return;
 
         AlignMode? mode = parts[1] != "None" && Enum.TryParse<AlignMode>(parts[1], out var parsed) ? parsed : null;
-        viewModel.SetAlignFaceMode(axis, mode);
+        viewModel.SetAlignFaceMode(axis, mode, ofSelection);
     }
 
     /// <summary>

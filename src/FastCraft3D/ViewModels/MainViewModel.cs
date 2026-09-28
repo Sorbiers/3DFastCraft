@@ -112,7 +112,7 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
     private bool centreFaceAPicked, centreFaceBPicked;
     private string? centreFaceALabel, centreFaceBLabel;
     private bool centreAxisX = true, centreAxisY = true, centreAxisZ = true;
-    private RoundSurface? centreRoundA, centreRoundB;
+    private RoundSurface? centreRoundA, centreRoundB, centreHoverRound;
     private bool centreTurnParallel, centreAlongAxis;
 
     /// <summary>Each object's mesh in the world while Centre face to face is out, since hovering asks on every move.</summary>
@@ -157,7 +157,7 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
     private Vector3 splitNormal = Vector3.UnitZ;
     private readonly List<SceneObject> clipboard = new();
     private GizmoMode gizmoMode = GizmoMode.Move;
-    private bool uniformScale = true;
+    private bool uniformScale;
     private bool scaleInPercent;
     private MeasureUnit unit = MeasureUnit.Default;
     private bool snapRotation = true;
@@ -1832,6 +1832,46 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
     /// <summary>Whether a face has been picked (as against merely hovered), so Apply has something to work with.</summary>
     public bool HasAlignFaceTarget => alignFacePicked;
 
+    /// <summary>The point the selection is lined up against: the middle of the face shown.</summary>
+    /// <summary>
+    /// Where on the face the selection lines up, as the axes are set: the face's least, middle or
+    /// greatest on each - the middle on an axis left alone. It follows the choices, so the place
+    /// on the face is seen before anything moves.
+    /// </summary>
+    public IReadOnlyList<Vector3> AlignFaceAnchors =>
+        alignFace is { } f ? [AlignTools.PointOf(FaceBox(f), alignFaceModeX, alignFaceModeY, alignFaceModeZ)] : [];
+
+    /// <summary>The matching point of the selection: the one that goes to the point on the face.</summary>
+    public IReadOnlyList<Vector3> AlignFaceLinkPoints =>
+        isAlignFaceMode && SelectionBox() is { IsEmpty: false } b ? [AlignTools.PointOf(b, alignFromX, alignFromY, alignFromZ)] : [];
+
+    // Which point of the selection goes to the place on the face, on each axis.
+    private AlignMode alignFromX = AlignMode.Centre, alignFromY = AlignMode.Centre, alignFromZ = AlignMode.Centre;
+
+    private Bounds SelectionBox()
+    {
+        var b = Bounds.Empty;
+        foreach (var o in Scene.Selection) b = b.Union(o.WorldBounds);
+        return b;
+    }
+
+    /// <summary>The box round a face's own triangles, in the world.</summary>
+    private static Bounds FaceBox(FacePatch face)
+    {
+        var b = Bounds.Empty;
+        foreach (int t in face.Triangles)
+            for (int k = 0; k < 3; k++)
+            {
+                var p = face.Mesh.Positions[face.Mesh.Indices[t + k]];
+                b = b.Union(new Bounds(p, p));
+            }
+
+        return b;
+    }
+
+    /// <summary>The middle of a flat face, or of the triangles of a round one.</summary>
+    private static Vector3 Middle(FacePatch face) => face.Normal == Vector3.Zero ? face.Origin : face.ToLocal((face.Min + face.Max) * 0.5f);
+
     public string AlignFaceTargetLabel => alignFaceTargetLabel is { } name
         ? $"Picked a face on {name}"
         : "Click a face on any object";
@@ -1903,16 +1943,31 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
     }
 
     /// <summary>Which way, if any, the selection's group box should line up on this axis with the picked face.</summary>
-    public void SetAlignFaceMode(Axis axis, AlignMode? mode)
+    /// <param name="ofSelection">The point of the selection, rather than the place on the face.</param>
+    public void SetAlignFaceMode(Axis axis, AlignMode? mode, bool ofSelection = false)
     {
-        switch (axis)
+        if (ofSelection)
         {
-            case Axis.X: alignFaceModeX = mode; break;
-            case Axis.Y: alignFaceModeY = mode; break;
-            default: alignFaceModeZ = mode; break;
+            var from = mode ?? AlignMode.Centre;
+            switch (axis)
+            {
+                case Axis.X: alignFromX = from; break;
+                case Axis.Y: alignFromY = from; break;
+                default: alignFromZ = from; break;
+            }
+        }
+        else
+        {
+            switch (axis)
+            {
+                case Axis.X: alignFaceModeX = mode; break;
+                case Axis.Y: alignFaceModeY = mode; break;
+                default: alignFaceModeZ = mode; break;
+            }
         }
 
         System.Windows.Input.CommandManager.InvalidateRequerySuggested();
+        AlignFaceChanged?.Invoke();
     }
 
     /// <summary>
@@ -1933,12 +1988,18 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
         var selection = Scene.Selection.ToList();
         if (selection.Count == 0) return;
 
-        var bounds = Bounds.Empty;
-        foreach (var o in selection) bounds = bounds.Union(o.WorldBounds);
+        var bounds = SelectionBox();
         if (bounds.IsEmpty) return;
 
-        var target = face.ToLocal((face.Min + face.Max) * 0.5f);
-        var offset = AlignTools.OffsetToPoint(bounds, target, alignFaceModeX, alignFaceModeY, alignFaceModeZ);
+        // The point of the selection chosen, onto the place on the face chosen, on each axis not
+        // left alone. Every choice used to land on the face's middle, so the selection could not be
+        // put flush with the face's edge, nor stood beside it.
+        var to = AlignTools.PointOf(FaceBox(face), alignFaceModeX, alignFaceModeY, alignFaceModeZ);
+        var from = AlignTools.PointOf(bounds, alignFromX, alignFromY, alignFromZ);
+        var offset = new Vector3(
+            alignFaceModeX is null ? 0 : to.X - from.X,
+            alignFaceModeY is null ? 0 : to.Y - from.Y,
+            alignFaceModeZ is null ? 0 : to.Z - from.Z);
 
         var before = selection.Select(TransformState.Capture).ToList();
         foreach (var o in selection) o.Position += offset;
@@ -1993,6 +2054,19 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
     public event Action? CentreFaceChanged;
 
     public FacePatch? CentreFaceA => centreFaceA;
+
+    /// <summary>
+    /// The two points Centre face to face brings together: each face's middle, or a round one's
+    /// point on its axis - which is the one worth seeing, being inside the part.
+    /// </summary>
+    public IReadOnlyList<Vector3> CentreFaceAnchors =>
+        new[] { centreFaceA, centreFaceB }.OfType<FacePatch>().Select(f => RoundAt(f) ?? Middle(f)).ToList();
+
+    /// <summary>A hovered round surface's axis point: the same patch as the last one found round, if it was.</summary>
+    private Vector3? RoundAt(FacePatch patch) =>
+        ReferenceEquals(centreRoundA?.Patch, patch) ? centreRoundA!.Centre
+        : ReferenceEquals(centreRoundB?.Patch, patch) ? centreRoundB!.Centre
+        : ReferenceEquals(centreHoverRound?.Patch, patch) ? centreHoverRound!.Centre : null;
     public FacePatch? CentreFaceB => centreFaceB;
     public bool HasCentreFaceA => centreFaceAPicked;
     public bool HasCentreFaceB => centreFaceBPicked;
@@ -2057,7 +2131,12 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
         if (!centreMeshes.TryGetValue(target, out var world))
             centreMeshes[target] = world = target.ToWorldMesh();
 
-        if (RoundSurface.Find(world, worldPoint, worldNormal) is { } round) return (round.Patch, round);
+        if (RoundSurface.Find(world, worldPoint, worldNormal) is { } round)
+        {
+            centreHoverRound = round;
+            return (round.Patch, round);
+        }
+
         return (FacePatch.Find(world, worldPoint, worldNormal), null);
     }
 

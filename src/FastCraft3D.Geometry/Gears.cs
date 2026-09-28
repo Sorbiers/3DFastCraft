@@ -480,7 +480,10 @@ public static partial class Gears
                     {
                         // Drawn where it catches; moved clear of the wheel to print.
                         float apart = (float)tipRadius + 2f - pawl.Mesh.ComputeBounds().Min.X;
-                        parts.Add(new("Pawl", Moved(pawl.Mesh, new Vector3(apart, 0f, 0f)), Matrix4x4.CreateTranslation(-apart, 0f, 0f)));
+                        var laid = Moved(pawl.Mesh, new Vector3(apart, 0f, 0f));
+
+                        // Its pivot marked as its bore, so a pin can be stood in it where the pawl goes.
+                        parts.Add(new("Pawl", laid, Matrix4x4.CreateTranslation(-apart, 0f, 0f), Bore(o, laid, pawl.Pivot + new Vector2(apart, 0f))));
                         notes.Add($"The pawl's pivot goes {pawl.Pivot.Length():0.#} mm from the centre, as shown.");
                     }
                     else

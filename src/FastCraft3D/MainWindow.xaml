@@ -620,7 +620,7 @@
                             ToolTip="Move the first object you picked so its bounding box is centred on the second's. Two objects: the first moves, the second stays. Nothing is rotated or resized. Needs exactly two objects selected." />
                     <Button Style="{StaticResource ToolButton}" Content="Align to face" Visibility="{Binding IsExtendedMode, Converter={StaticResource BoolToVisibility}}" Tag="{StaticResource IconAlignToFace}"
                             Command="{Binding BeginAlignFaceCommand}" MinWidth="86"
-                            ToolTip="Pick a face on any object, then choose for X, Y and Z whether the selection's near edge, middle or far edge should land on the middle of that face. The whole selection moves together, keeping its own arrangement - nothing is rotated or resized." />
+                            ToolTip="Pick a face on any object, then choose for X, Y and Z a place on the face - its near edge, middle or far edge - and the point of the selection that goes there. The whole selection moves together, keeping its own arrangement - nothing is rotated or resized." />
                     <Button Style="{StaticResource ToolButton}" Content="Centre face to face" Visibility="{Binding IsExtendedMode, Converter={StaticResource BoolToVisibility}}" Tag="{StaticResource IconCentreFaceToFace}"
                             Command="{Binding BeginCentreFaceCommand}" MinWidth="96"
                             ToolTip="Pick a face on the selected object(s), then a face on a different, unselected one, then choose which axes should match. The whole selection moves together so the two faces' middles coincide on those axes - the way you'd centre a lid on an opening or a flange on its mate." />
@@ -1267,9 +1267,15 @@
                     <StackPanel>
                         <TextBlock Text="Align to a face" FontWeight="SemiBold" Margin="0,0,0,6" />
                         <TextBlock TextWrapping="Wrap" Foreground="#FF5A5F66" Margin="0,0,0,6"
-                                   Text="Click a face on any object - it does not have to be part of the selection - then choose how each axis should land on its middle." />
+                                   Text="Click a face on any object - it does not have to be part of the selection. On each axis, choose a place on the face and the point of the selection that goes there: least to least sits it flush, least to greatest stands it beside. Leave keeps that axis where it is." />
                         <TextBlock Text="{Binding AlignFaceTargetLabel}" FontStyle="Italic" Foreground="#FF5A5F66" Margin="0,0,0,8" />
 
+                        <!-- Two places, one on each side of the move: where on the face (red), and which
+                             point of the selection goes there (blue). -->
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
+                            <Ellipse Width="9" Height="9" Fill="#FFFF2222" Margin="0,0,6,0" VerticalAlignment="Center" />
+                            <TextBlock Text="On the face" FontWeight="SemiBold" Foreground="#FF3A4550" />
+                        </StackPanel>
                         <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
                             <TextBlock Text="X" Style="{StaticResource FieldLabel}" />
                             <RadioButton Content="Leave" GroupName="AlignFaceX" Margin="0,0,8,0" IsChecked="True" Checked="OnAlignFaceModeChanged" Tag="X:None" />
@@ -1290,6 +1296,31 @@
                             <RadioButton Content="Min" GroupName="AlignFaceZ" Margin="0,0,8,0" Checked="OnAlignFaceModeChanged" Tag="Z:Minimum" />
                             <RadioButton Content="Centre" GroupName="AlignFaceZ" Margin="0,0,8,0" Checked="OnAlignFaceModeChanged" Tag="Z:Centre" />
                             <RadioButton Content="Max" GroupName="AlignFaceZ" Checked="OnAlignFaceModeChanged" Tag="Z:Maximum" />
+                        </StackPanel>
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
+                            <Ellipse Width="9" Height="9" Fill="#FF268CFF" Margin="0,0,6,0" VerticalAlignment="Center" />
+                            <TextBlock Text="Of the selection" FontWeight="SemiBold" Foreground="#FF3A4550" />
+                        </StackPanel>
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
+                            <TextBlock Text="X" Style="{StaticResource FieldLabel}" />
+                            <RadioButton Content="Leave" Margin="0,0,8,0" Visibility="Hidden" IsTabStop="False" />
+                            <RadioButton Content="Min" GroupName="AlignFromX" Margin="0,0,8,0" Checked="OnAlignFaceModeChanged" Tag="SX:Minimum" />
+                            <RadioButton Content="Centre" GroupName="AlignFromX" Margin="0,0,8,0" IsChecked="True" Checked="OnAlignFaceModeChanged" Tag="SX:Centre" />
+                            <RadioButton Content="Max" GroupName="AlignFromX" Checked="OnAlignFaceModeChanged" Tag="SX:Maximum" />
+                        </StackPanel>
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
+                            <TextBlock Text="Y" Style="{StaticResource FieldLabel}" />
+                            <RadioButton Content="Leave" Margin="0,0,8,0" Visibility="Hidden" IsTabStop="False" />
+                            <RadioButton Content="Min" GroupName="AlignFromY" Margin="0,0,8,0" Checked="OnAlignFaceModeChanged" Tag="SY:Minimum" />
+                            <RadioButton Content="Centre" GroupName="AlignFromY" Margin="0,0,8,0" IsChecked="True" Checked="OnAlignFaceModeChanged" Tag="SY:Centre" />
+                            <RadioButton Content="Max" GroupName="AlignFromY" Checked="OnAlignFaceModeChanged" Tag="SY:Maximum" />
+                        </StackPanel>
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+                            <TextBlock Text="Z" Style="{StaticResource FieldLabel}" />
+                            <RadioButton Content="Leave" Margin="0,0,8,0" Visibility="Hidden" IsTabStop="False" />
+                            <RadioButton Content="Min" GroupName="AlignFromZ" Margin="0,0,8,0" Checked="OnAlignFaceModeChanged" Tag="SZ:Minimum" />
+                            <RadioButton Content="Centre" GroupName="AlignFromZ" Margin="0,0,8,0" IsChecked="True" Checked="OnAlignFaceModeChanged" Tag="SZ:Centre" />
+                            <RadioButton Content="Max" GroupName="AlignFromZ" Checked="OnAlignFaceModeChanged" Tag="SZ:Maximum" />
                         </StackPanel>
 
                         <StackPanel Orientation="Horizontal">

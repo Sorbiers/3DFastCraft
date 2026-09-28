@@ -61,6 +61,9 @@ public partial class MainViewModel
 
     public bool HasSurfaceInfo => infoFace is not null;
 
+    /// <summary>The middle of the face read, where the numbers are measured from.</summary>
+    public IReadOnlyList<Vector3> SurfaceInfoAnchors => infoFace is { } f ? [f.ToLocal((f.Min + f.Max) * 0.5f)] : [];
+
     private void RaiseSurfaceInfo()
     {
         Raise(nameof(HasSurfaceInfo));

@@ -219,7 +219,7 @@ public sealed partial class MainViewModel
         LibraryMemory.Shared.Used(generator.Id);
 
         string? set = result.Parts.Count > 1 ? Guid.NewGuid().ToString("N") : null;
-        var parts = Objects(result, assembled: false, ColourOf, part => Recipes.For(generator, settings, part.Role, set));
+        var parts = Objects(result, assembled: !result.LaidOut, ColourOf, part => Recipes.For(generator, settings, part.Role, set));
         foreach (var o in parts) o.Name = Scene.UniqueName(o.Name);
 
         var beside = new List<SceneObject>();
@@ -492,7 +492,7 @@ public sealed partial class MainViewModel
                 FilmStep? latest = null;
                 for (int i = 0; i < 2 && steps.TryDequeue(out var step); i++) latest = step;
 
-                if (latest is { } pose) Pose(mechanism, pose.Pose, shift);
+                if (latest is { } pose) Pose(mechanism, pose.Pose, pose.Shifts, shift);
 
                 if (latest is { Jammed: var (a, b) })
                 {
@@ -516,9 +516,14 @@ public sealed partial class MainViewModel
             timer.Start();
         }
 
-        private void Pose(Mechanism mechanism, double[] pose, Vector2 shift)
+        private void Pose(Mechanism mechanism, double[] pose, Vector2[]? moves, Vector2 shift)
         {
-            foreach (var m in mechanism.Moving)
+            // A shaft or a crank turns about the same centre as the gear it is keyed to.
+            var all = mechanism.Moving.Concat((mechanism.Riders ?? [])
+                .Select(r => mechanism.Moving.FirstOrDefault(m => m.Part == r.With) is { } rode ? rode with { Part = r.Part } : null)
+                .OfType<MovingPart>());
+
+            foreach (var m in all)
             {
                 var (o, position, rotation, _) = home[m.Part];
                 double at = pose[m.Part];
@@ -530,11 +535,11 @@ public sealed partial class MainViewModel
                     var from = new Vector2(position.X, position.Y) - centre;
                     var to = centre + new Vector2(cos * from.X - sin * from.Y, sin * from.X + cos * from.Y);
                     o.Rotation = rotation + new Vector3(0, 0, (float)(at * 180.0 / Math.PI));
-                    o.Position = new Vector3(to, position.Z);
+                    o.Position = new Vector3(to + (moves?[m.Part] ?? Vector2.Zero), position.Z);
                 }
                 else
                 {
-                    o.Position = position + new Vector3(Vector2.Normalize(m.Direction) * (float)at, 0);
+                    o.Position = position + new Vector3(Vector2.Normalize(m.Direction) * (float)at + (moves?[m.Part] ?? Vector2.Zero), 0);
                 }
             }
         }
@@ -607,24 +612,46 @@ public sealed partial class MainViewModel
         var loose = new List<SceneObject>();
         string? set = members.Select(m => m.Recipe?.Set).FirstOrDefault(s => s is not null);
 
+        // A set put down as it goes together is made again the same way, and moved as one: every
+        // part's origin is the set's, so one place for it keeps the lot together. Each put where
+        // its own old part stood, a gear pair made further apart would have come apart.
+        var first = made.LaidOut ? null
+            : made.Parts.Select(p => members.FirstOrDefault(m => m.Recipe?.Role == p.Role)).FirstOrDefault(m => m is not null);
+        Vector3? together = first is null ? null : Vector3.Transform(first.Recipe?.Origin ?? Vector3.Zero, first.Transform);
+
         for (int i = 0; i < made.Parts.Count; i++)
         {
             var part = made.Parts[i];
             var old = unused.FirstOrDefault(m => m.Recipe?.Role == part.Role)
                       ?? (part.Role is null && unused.Count > 0 ? unused[0] : null);
+            var at = made.LaidOut ? null : part.Assembled;
 
-            var o = new SceneObject(old?.Name ?? part.Name, part.Mesh)
+            var o = new SceneObject(old?.Name ?? part.Name, at is { } m ? MeshTransform.Transformed(part.Mesh, m) : part.Mesh)
             {
                 Colour = old?.Colour ?? part.Colour ?? nextColour(),
                 Filament = part.Filament > 0 ? part.Filament : 1,
-                Anchors = part.Anchors?.ToList() ?? [],
+                Anchors = part.Anchors is not { Count: > 0 } marked ? []
+                    : at is { } moved ? marked.Select(a => a.Through(moved)).ToList() : marked.ToList(),
 
                 // Always, so the generator's origin is known through the pivot's move; a preview's
                 // is thrown away with it.
                 Recipe = Recipes.For(generator, settings ?? generator.Defaults(), part.Role, set)
-            }.CentredOn(part.Pivot);
+            }.CentredOn(at is { } shown ? Vector3.Transform(part.Pivot, shown) : part.Pivot);
 
-            if (old is not null)
+            if (at is not null)
+            {
+                if (old is not null)
+                {
+                    unused.Remove(old);
+                    o.Filament = old.Filament;
+                    o.IsHidden = old.IsHidden;
+                    o.IsLocked = old.IsLocked;
+                }
+
+                if (together is { } origin) Keep(o, o.Recipe!.Origin, origin);
+                else loose.Add(o);
+            }
+            else if (old is not null)
             {
                 unused.Remove(old);
                 o.Filament = old.Filament;

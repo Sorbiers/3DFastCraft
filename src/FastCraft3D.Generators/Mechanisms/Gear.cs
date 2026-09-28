@@ -65,20 +65,8 @@ public sealed class Gear : Generator<Gear.Settings>
         [Length("Hub", 0, 300, Group = "Shaft", Hint = "The hub's diameter. Nought for none.")] float HubDiameter = 0f,
         [Length("Hub height", 0, 100, Group = "Shaft")] float HubHeight = 0f,
         [Length("Set screw", 0, 20, Group = "Shaft", Hint = "The set screw's hole through the hub. Nought for none.")] float SetScrew = 0f,
-        [Toggle("Base", Group = "Shaft", Hint = "A plate to turn it on by hand: a pin in each round bore, and for a ring or a rack, guides to keep it in mesh")] bool Base = false);
-
-    /// <summary>
-    /// Which sets a base is made for: a plain gear or pair on pins; a ring with its gear, the ring
-    /// kept round by posts; a rack with its pinion, the rack kept in mesh by a rail. A bevel and a
-    /// worm have a shaft lying down and want a bracket, not a plate, and a ratchet's pawl and a
-    /// framed gear have their own ways of being held.
-    /// </summary>
-    private static bool Standable(Settings s) => s.Kind switch
-    {
-        GearKind.Gear => !s.Partial && s.Bore == BoreShape.Round,
-        GearKind.Ring or GearKind.Rack => s.HasPartner,
-        _ => false
-    };
+        [Toggle("Demo", Group = "Demo", Hint = "A model to print and turn by hand: each gear keyed on a D-shaft the bore's size through a base, a crank or a handwheel to turn it, and guides for a ring, a rack or a frame")] bool Demo = false,
+        [Toggle("Organize", Hint = "Laid out on the bed to print. Off: put on the plate as it goes together, as the preview shows it.")] bool Organise = true);
 
     protected override IEnumerable<(string Name, Settings Settings)> Shipped =>
     [
@@ -127,7 +115,7 @@ public sealed class Gear : Generator<Gear.Settings>
             nameof(Settings.BoreFlat) => shaft && s.Bore == BoreShape.DShaft,
             nameof(Settings.HubDiameter) or nameof(Settings.HubHeight) => hubbed,
             nameof(Settings.SetScrew) => hubbed && s.HubDiameter > 0 && s.HubHeight > 0,
-            nameof(Settings.Base) => Standable(s),
+            nameof(Settings.Demo) => Demonstrable(s),
             _ => true
         };
     }
@@ -185,70 +173,241 @@ public sealed class Gear : Generator<Gear.Settings>
         if (gear.Kind == GearKind.Gear && gear.KeptTeeth > 0 && gear.Frame && Turned(gear) is { } jam)
             return Generated.Refused(jam);
 
-        // On a base, everything lifted onto it and a pin in each round bore.
-        bool based = s.Base && Standable(s);
-        float lift = based ? Mechanisms.Base.Lift : 0f;
+        if (s.Demo && Demonstrable(s)) return Demonstrate(s, printer, token);
 
         var parts = result.Parts.Select((part, i) => new GeneratedPart(
-            part.Name, part.Mesh, based ? (part.InMesh ?? Matrix4x4.Identity) * Matrix4x4.CreateTranslation(0, 0, lift) : part.InMesh, part.Anchors,
+            part.Name, part.Mesh, part.InMesh, part.Anchors,
             Role: i switch { 0 => "gear", 1 => "mate", _ => $"part {i + 1}" },
             Pivot: PivotOf(part))).ToList();
 
-        var motion = MotionOf(gear, parts, lift);
-        if (based) parts.Add(new GeneratedPart("Base", Stand(s, parts, printer), Role: "base"));
-
-        return new Generated(parts, notes) { Motion = motion };
+        var motion = MotionOf(gear, parts.Select(p => new Vector2(p.Pivot.X, p.Pivot.Y)).ToList(), parts);
+        return new Generated(parts, notes) { Motion = motion, LaidOut = s.Organise };
     }
 
-    /// <summary>The base for a set, the parts already lifted onto it as they go together.</summary>
-    private static Mesh Stand(Settings s, IReadOnlyList<GeneratedPart> parts, Printer printer)
+    /// <summary>
+    /// Which kinds a demonstration model is made for: anything with something to turn. A ring, a
+    /// rack, a bevel and a worm need their mate, or there is nothing for the handle to drive.
+    /// </summary>
+    private static bool Demonstrable(Settings s) => s.Kind switch
     {
-        var placed = parts.Select(p => p.Assembled is { } a ? MeshTransform.Transformed(p.Mesh, a) : p.Mesh).ToList();
-        Vector2 Axis(int i)
+        GearKind.Gear or GearKind.Ratchet => true,
+        GearKind.Ring or GearKind.Rack or GearKind.Bevel or GearKind.Worm => s.HasPartner,
+        _ => false
+    };
+
+    /// <summary>
+    /// The set as a model to print and turn by hand: every gear keyed on a D-shaft through a
+    /// base, the first turned by a crank - or a handwheel, on a shaft lying down - and whatever
+    /// has no shaft held where it runs: a ring by posts and a keeper over it, a rack or a frame in
+    /// a channel, a pawl on a pin with a spring of its own pressing it in.
+    /// </summary>
+    private static Generated Demonstrate(Settings s, Printer printer, CancellationToken token)
+    {
+        var demo = new Demo(printer, s.BoreSize);
+
+        // Bored round to the shaft's size, so each shaft's axis is marked; the D is cut
+        // over it, a hair wider than the circle, when the shafts go in.
+        var gear = (Options(s) with
         {
-            var at = Vector3.Transform(parts[i].Pivot, parts[i].Assembled ?? Matrix4x4.Identity);
-            return new Vector2(at.X, at.Y);
+            Bore = BoreShape.Round, BoreSize = demo.Size, SetScrew = 0,
+            MateBore = BoreShape.Round, MateBoreSize = demo.Size, MateSetScrew = 0
+        }).Sane();
+
+        token.ThrowIfCancellationRequested();
+        var result = Gears.Build(gear, token);
+        if (result.Parts.Count == 0) return Generated.Refused(result.Refusal ?? "No gear was made.");
+        if (gear.Kind == GearKind.Gear && gear.KeptTeeth > 0 && gear.Frame && Turned(gear) is { } jam) return Generated.Refused(jam);
+
+        var notes = Gears.Describe(gear);
+        notes.AddRange(result.Notes);
+
+        Matrix4x4 Place(GearPart p, float lift) => (p.InMesh ?? Matrix4x4.Identity) * Matrix4x4.CreateTranslation(0, 0, lift);
+        Anchor? Axis(GearPart p, float lift) =>
+            p.Anchors?.FirstOrDefault(a => a.Kind == AnchorKind.Bore) is { Size: > 0 } a ? a.Through(Place(p, lift)) : null;
+
+        // A shaft lying down wants room under it for its handwheel, and its gear clear of the base.
+        float lift = Demo.Lift;
+        if (gear.Kind is GearKind.Bevel or GearKind.Worm)
+            foreach (var p in result.Parts)
+                if (Axis(p, lift) is { } a && MathF.Abs(a.Along.Z) < 0.5f)
+                {
+                    float low = MeshTransform.Transformed(p.Mesh, Place(p, lift)).ComputeBounds().Min.Z;
+                    lift += MathF.Max(0, MathF.Max(Demo.Plate + 17f - a.At.Z, Demo.Lift - low));
+                }
+
+        var places = result.Parts.Select(p => Place(p, lift)).ToList();
+        for (int i = 0; i < result.Parts.Count; i++)
+        {
+            var p = result.Parts[i];
+            Matrix4x4.Invert(places[i], out var toPrint);
+            demo.Placed(p.Name, i switch { 0 => "gear", 1 => "mate", _ => $"part {i + 1}" }, MeshTransform.Transformed(p.Mesh, places[i]), toPrint);
         }
 
-        float Bore(int i) => (i == 0 ? s.Bore : s.MateBore) == BoreShape.Round ? (i == 0 ? s.BoreSize : s.MateBoreSize) : 0f;
-        float Top(int i) => placed[i].ComputeBounds().Max.Z;
+        var axes = result.Parts.Select(p => Axis(p, lift)).ToList();
+        Vector2 Flat(Anchor a) => new(a.At.X, a.At.Y);
+        var world = demo.Pieces;
+        float c = demo.Run;
 
-        if (s.Kind == GearKind.Gear)
-            return Mechanisms.Base.Plate(parts.Select((_, i) => (Axis(i), Bore(i), Top(i))).ToList(), printer);
-
-        float c = printer.XyClearance, plate = Mechanisms.Base.Thickness;
-        float pin = Bore(1) / 2f - c;
-        var pieces = new List<Mesh>();
-        if (pin >= 0.4f) pieces.Add(Shapes.Cylinder(pin, plate - 0.01f, Top(1) - 0.5f, Axis(1)));
-
-        var held = placed[0].ComputeBounds();
-        if (s.Kind == GearKind.Ring)
+        switch (gear.Kind)
         {
-            // Posts round the outside, the printer's clearance off it, to keep the ring round its middle.
-            float r = held.Size.X / 2f, post = 1.2f;
-            var middle = new Vector2(held.Center.X, held.Center.Y);
-            pieces.Add(Shapes.Cylinder(r + c + 2 * post + 2f, 0, plate, middle));
-            for (int k = 0; k < 6; k++)
+            case GearKind.Gear when gear.KeptTeeth > 0 && gear.Frame && world.Count > 1:
             {
-                float a = MathF.PI * k / 3f;
-                pieces.Add(Shapes.Cylinder(post, plate - 0.01f, Top(0) - 0.3f, middle + (r + c + post) * new Vector2(MathF.Cos(a), MathF.Sin(a))));
+                demo.Upright(Flat(axes[0]!.Value), [0], handle: true);
+
+                // The frame slides in a channel, on a bed with the gear's circle taken out of it.
+                var f = world[1].World.ComputeBounds();
+                float travel = f.Size.X / 2f + 5f, tip = gear.Module * (gear.Teeth + 2) / 2f;
+                float x0 = f.Min.X - travel, x1 = f.Max.X + travel;
+                var bed = Shapes.Subtract(Shapes.Box(x0, f.Min.Y, Demo.Plate - 0.01f, x1, f.Max.Y, f.Min.Z - Demo.Gap),
+                    Shapes.Cylinder(tip + 1.5f, -1, f.Max.Z + 1, Flat(axes[0]!.Value)));
+                demo.AddToBase(bed);
+                demo.AddToBase(Shapes.Box(x0, f.Min.Y - c - 2.5f, Demo.Plate - 0.01f, x1, f.Min.Y - c, f.Max.Z - 0.5f));
+                demo.AddToBase(Shapes.Box(x0, f.Max.Y + c, Demo.Plate - 0.01f, x1, f.Max.Y + c + 2.5f, f.Max.Z - 0.5f));
+                notes.Add("The frame slides in from the end of its channel.");
+                break;
             }
 
-            return Shapes.Union(pieces);
+            case GearKind.Gear:
+                for (int i = 0; i < world.Count; i++)
+                    if (axes[i] is { } a) demo.Upright(Flat(a), [i], handle: i == 0);
+                break;
+
+            case GearKind.Ring:
+            {
+                if (axes.Count < 2 || axes[1] is not { } pinion) return Generated.Refused("There is no pinion for the ring to run with.");
+                demo.Upright(Flat(pinion), [1], handle: true);
+
+                // The ring on a bed under its rim, kept round by posts and held down by a keeper
+                // pressed onto them.
+                var r = world[0].World.ComputeBounds();
+                var middle = new Vector2(r.Center.X, r.Center.Y);
+                float outer = r.Size.X / 2f, inner = gear.Module * (gear.Teeth - 2) / 2f;
+                float post = 2f, round = outer + c + post, keeper = r.Max.Z + Demo.Gap;
+
+                demo.AddToBase(Shapes.Tube(outer, inner + 0.5f, Demo.Plate - 0.01f, r.Min.Z - Demo.Gap, middle));
+                var holes = new List<Mesh>();
+                for (int k = 0; k < 6; k++)
+                {
+                    var at = middle + round * new Vector2(MathF.Cos(MathF.PI * k / 3f), MathF.Sin(MathF.PI * k / 3f));
+                    demo.AddToBase(Shapes.Cylinder(post, Demo.Plate - 0.01f, keeper + 2.2f, at, 24));
+                    holes.Add(Shapes.Cylinder(post + demo.Grip, keeper - 1, keeper + 4, at, 24));
+                }
+
+                var ring = Shapes.Subtract(Shapes.Tube(round + post + 3f, MathF.Max(outer - 2f, inner + 1f), keeper, keeper + 2.5f, middle), holes);
+                demo.Lying("Ring keeper", "keeper", ring);
+                notes.Add("Drop the ring onto its bed inside the posts, then press the keeper down onto the posts over it.");
+                break;
+            }
+
+            case GearKind.Rack:
+            {
+                if (axes.Count < 2 || axes[1] is not { } pinion) return Generated.Refused("There is no pinion for the rack to run with.");
+                demo.Upright(Flat(pinion), [1], handle: true);
+
+                // A channel along the rack: a bed, a rail along its back, and a post on its teeth's
+                // side either side of the pinion, each joined to the rail over the rack by a bridge
+                // - not a lip, which would print hanging in the air. It slides in from an end.
+                var r = world[0].World.ComputeBounds();
+                var at = Flat(pinion);
+                float length = r.Size.X, x0 = r.Min.X - length / 2f, x1 = r.Max.X + length / 2f, top = r.Max.Z;
+                float tip = gear.Module * (gear.PartnerTeeth + 2) / 2f, boss = demo.HoleRadius + 3f;
+                bool pinionAbove = at.Y > r.Center.Y;
+                float back = pinionAbove ? r.Min.Y : r.Max.Y, front = pinionAbove ? r.Max.Y : r.Min.Y, way = pinionAbove ? -1 : 1;
+
+                float bedFront = pinionAbove ? MathF.Min(front, at.Y - boss) : MathF.Max(front, at.Y + boss);
+                demo.AddToBase(Box2(x0, back, x1, bedFront, Demo.Plate - 0.01f, r.Min.Z - Demo.Gap));
+                demo.AddToBase(Box2(x0, back + way * c, x1, back + way * (c + 2.5f), Demo.Plate - 0.01f, top + Demo.Gap + 1.5f));
+                foreach (float side in new[] { -1f, 1f })
+                {
+                    float x = at.X + side * (tip + 6f);
+                    demo.AddToBase(Box2(x - 2, front - way * (c + 3f), x + 2, front - way * c, Demo.Plate - 0.01f, top + Demo.Gap + 1.5f));
+                    demo.AddToBase(Box2(x - 2, back + way * (c + 2.5f), x + 2, front - way * (c + 3f), top + Demo.Gap, top + Demo.Gap + 1.5f));
+                }
+
+                demo.Cover(x0, r.Min.Y, x1, r.Max.Y);
+                notes.Add("Slide the rack into its channel from one end, then turn it into mesh with the pinion.");
+                break;
+            }
+
+            case GearKind.Bevel:
+            {
+                if (axes.Count < 2 || axes[0] is not { } upright || axes[1] is not { } lying) return Generated.Refused("There is no mate for the bevel to run with.");
+                demo.Upright(Flat(upright), [0]);
+
+                // The handwheel on the mate's shaft, on the far side from the other gear.
+                var mid = world[1].World.ComputeBounds().Center;
+                var along = lying.Along;
+                if (Vector2.Dot(new Vector2(along.X, along.Y), new Vector2(mid.X, mid.Y) - Flat(upright)) < 0) along = -along;
+                demo.Lying(lying.At, along, [1], Demo.Supports.Outside, handle: true);
+                break;
+            }
+
+            case GearKind.Worm:
+            {
+                if (axes.Count < 2 || axes[0] is not { } worm || axes[1] is not { } wheel) return Generated.Refused("There is no wheel for the worm to drive.");
+                demo.Upright(Flat(wheel), [1]);
+                demo.Lying(worm.At, worm.Along, [0], Demo.Supports.Ends, handle: true);
+                break;
+            }
+
+            case GearKind.Ratchet:
+            {
+                demo.Upright(Flat(axes[0]!.Value), [0], handle: true);
+                if (world.Count > 1 && axes[1] is { } pivot) HoldPawl(demo, world[1], Flat(pivot), Flat(axes[0]!.Value), gear);
+                break;
+            }
         }
 
-        // A rack: a rail along its back, the far side from the pinion, as long as a whole turn of
-        // the pinion carries it either way.
-        float travel = MathF.PI * s.Module * s.PartnerTeeth, rail = 2f;
-        bool below = Axis(1).Y > held.Center.Y;
-        float y0 = below ? held.Min.Y - c - rail : held.Max.Y + c, y1 = y0 + rail;
-        float x0 = held.Min.X - travel, x1 = held.Max.X + travel;
-        pieces.Add(Shapes.Box(x0, y0, plate - 0.01f, x1, y1, Top(0) - 0.3f));
+        token.ThrowIfCancellationRequested();
+        var parts = demo.Finish(token);
 
-        var pinion = placed[1].ComputeBounds();
-        float lowY = MathF.Min(y0, pinion.Min.Y) - 3f, highY = MathF.Max(y1, pinion.Max.Y) + 3f;
-        pieces.Add(Shapes.Prism(Shapes.RoundedRect(x1 - x0 + 6f, highY - lowY, 3f, new Vector2((x0 + x1) / 2f, (lowY + highY) / 2f)), 0, plate));
-        return Shapes.Union(pieces);
+        notes.Add($"Shafts are {demo.Size:0.#} mm D-shafts: press each part onto its shaft - they grip it, {2 * demo.Grip:0.##} mm over - and the shaft turns in its hole with {2 * demo.Run:0.##} mm to spare.");
+        notes.Add("Upright shafts go in from under the base, their heads in the pockets; the crank goes on last.");
+
+        var motion = MotionOf(gear, axes.Take(result.Parts.Count).Select(a => a is { } x ? Flat(x) : Vector2.Zero).ToList(), parts, lift);
+        return new Generated(parts, notes)
+        {
+            Motion = motion is null ? null : motion with { Riders = demo.Riders },
+            LaidOut = s.Organise
+        };
+
+        static Mesh Box2(float xa, float ya, float xb, float yb, float z0, float z1) =>
+            Shapes.Box(MathF.Min(xa, xb), MathF.Min(ya, yb), z0, MathF.Max(xa, xb), MathF.Max(ya, yb), z1);
+    }
+
+    /// <summary>
+    /// A pawl on a pin standing from the base, a cap pressed on over it, and a spring of its own: a
+    /// thin tail from its boss, away from the wheel, lying against a post. Pushed out by a tooth,
+    /// the pawl bends its tail against the post, which sends it back in behind the tooth.
+    /// </summary>
+    private static void HoldPawl(Demo demo, DemoPiece pawl, Vector2 pivot, Vector2 wheel, GearOptions gear)
+    {
+        var b = pawl.World.ComputeBounds();
+        float pin = gear.BoreSize / 2f - demo.Run, boss = MathF.Max(gear.BoreSize / 2f + 1.6f, 3f);
+
+        // Which way the pawl turns to go in: the way that brings its point, nearest the wheel, nearer.
+        var point = pawl.World.Positions.MinBy(p => Vector2.Distance(new Vector2(p.X, p.Y), wheel));
+        var hook = new Vector2(point.X, point.Y);
+        var arm = hook - pivot;
+        var toward = wheel - hook;
+        float turn = MathF.Sign(arm.X * toward.Y - arm.Y * toward.X);
+        if (turn == 0) turn = 1;
+
+        var tail = Vector2.Normalize(pivot - wheel);
+        var side = new Vector2(-tail.Y, tail.X);
+        float length = 14f, width = 1.2f;
+        var from = pivot + tail * (boss - 0.5f);
+        var to = pivot + tail * (boss + length);
+        pawl.World = Shapes.Union(pawl.World, Shapes.Prism(
+            [from - side * width / 2f, to - side * width / 2f, to + side * width / 2f, from + side * width / 2f], b.Min.Z, b.Max.Z));
+
+        // The post on the side that pushes the pawl the way it goes in.
+        var post = to - tail * 2.5f - side * turn * (width / 2f + 2f + 0.05f);
+        demo.AddToBase(Shapes.Cylinder(2f, Demo.Plate - 0.01f, b.Max.Z, post, 24));
+
+        demo.AddToBase(Shapes.Cylinder(pin + 2.5f, Demo.Plate - 0.01f, b.Min.Z - Demo.Gap, pivot));
+        demo.AddToBase(Shapes.Cylinder(pin, Demo.Plate - 0.01f, b.Max.Z + Demo.Gap + 2.2f, pivot, 32));
+        demo.Lying("Pawl cap", "cap", Shapes.Subtract(Shapes.Cylinder(pin + 2.5f, b.Max.Z + Demo.Gap, b.Max.Z + Demo.Gap + 2.5f, pivot, 32), Shapes.Cylinder(pin + demo.Grip, b.Max.Z, b.Max.Z + 4f, pivot, 32)));
     }
 
     /// <summary>
@@ -256,18 +415,19 @@ public sealed class Gear : Generator<Gear.Settings>
     /// rack, a cut-away gear in its frame. A bevel and a worm turn out of the plane, and a
     /// ratchet's pawl is held by nothing but friction here, so those have none.
     /// </summary>
-    private static Mechanism? MotionOf(GearOptions gear, IReadOnlyList<GeneratedPart> parts, float lift = 0)
+    /// <param name="centres">Where each of the gear's own parts turns, as the set goes together.</param>
+    private static Mechanism? MotionOf(GearOptions gear, IReadOnlyList<Vector2> centres, IReadOnlyList<GeneratedPart> parts, float lift = 0)
     {
-        if (parts.Count != 2) return null;
+        if (centres.Count != 2 || parts.Count < 2) return null;
 
         float layer = lift + MathF.Min(gear.Thickness, gear.MateThickness ?? gear.Thickness) / 2f;
-        MovingPart Turning(int i, double reach = 0.3) => new(i, Joint.Revolute, new Vector2(parts[i].Pivot.X, parts[i].Pivot.Y), Reach: reach);
+        MovingPart Turning(int i, double reach = 0.3) => new(i, Joint.Revolute, centres[i], Reach: reach);
         MovingPart Sliding(int i) => new(i, Joint.Prismatic, default, Vector2.UnitX, Reach: 3);
 
         return gear.Kind switch
         {
             GearKind.Gear when gear.KeptTeeth > 0 && gear.Frame => new Mechanism([Turning(0), Sliding(1)], 0,
-                gear.LockHeight > 0 ? [gear.Thickness / 2f, gear.Thickness + gear.LockHeight / 2f] : [gear.Thickness / 2f], Reach: 3),
+                gear.LockHeight > 0 ? [lift + gear.Thickness / 2f, lift + gear.Thickness + gear.LockHeight / 2f] : [lift + gear.Thickness / 2f], Reach: 3),
             GearKind.Gear => new Mechanism([Turning(0), Turning(1)], 0, [layer]),
             GearKind.Ring => new Mechanism([Turning(0), Turning(1)], 1, [layer]),
             GearKind.Rack => new Mechanism([Sliding(0), Turning(1)], 1, [layer]),

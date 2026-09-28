@@ -1,4 +1,4 @@
-using System.Numerics;
+﻿using System.Numerics;
 using System.Runtime.ExceptionServices;
 using System.Windows;
 using System.Windows.Automation;
@@ -64,27 +64,27 @@ public class MotionFilmTests
     }
 
     [Fact]
-    public void APairOnItsBaseStillTurnsByItsRatioRoundThePins()
+    public void APairMadeIntoADemoStillTurnsByItsRatioOnItsShafts()
     {
-        var (film, made) = Turned(Toothed, Toothed.Default with { HasPartner = true, PartnerTeeth = 40, Base = true });
+        var (film, made) = Turned(Toothed, Toothed.Default with { HasPartner = true, PartnerTeeth = 40, Demo = true });
 
         Assert.Contains(made.Parts, p => p.Role == "base");
         Assert.InRange(Degrees(film, 1), -181, -179);
     }
 
     [Fact]
-    public void ARingOnItsBaseTurnsInsideItsPosts()
+    public void ARingMadeIntoADemoTurnsInsideItsPosts()
     {
-        var (film, made) = Turned(Toothed, Toothed.Default with { Kind = GearKind.Ring, Teeth = 48, HasPartner = true, PartnerTeeth = 16, Base = true });
+        var (film, made) = Turned(Toothed, Toothed.Default with { Kind = GearKind.Ring, Teeth = 48, HasPartner = true, PartnerTeeth = 16, Demo = true });
 
         Assert.Contains(made.Parts, p => p.Role == "base");
         Assert.InRange(Degrees(film, 0), 118, 122);
     }
 
     [Fact]
-    public void ARackOnItsBaseSlidesAlongItsRail()
+    public void ARackMadeIntoADemoSlidesAlongItsChannel()
     {
-        var (film, made) = Turned(Toothed, Toothed.Default with { Kind = GearKind.Rack, Teeth = 30, HasPartner = true, PartnerTeeth = 16, Base = true });
+        var (film, made) = Turned(Toothed, Toothed.Default with { Kind = GearKind.Rack, Teeth = 30, HasPartner = true, PartnerTeeth = 16, Demo = true });
 
         Assert.Contains(made.Parts, p => p.Role == "base");
         double travel = film.Frames.Max(f => f[0]) - film.Frames.Min(f => f[0]);
@@ -92,13 +92,50 @@ public class MotionFilmTests
     }
 
     [Fact]
-    public void ACamOnItsBaseLiftsItsFollowerBetweenItsRails()
+    public void ACamMadeIntoADemoLiftsItsFollowerBetweenItsRails()
     {
         var cam = new Cam();
-        var (film, made) = Turned(cam, cam.Default with { Rise = 10, WithBase = true });
+        var (film, made) = Turned(cam, cam.Default with { Rise = 10, Demo = true });
 
         Assert.Contains(made.Parts, p => p.Role == "base");
         Assert.InRange(film.Frames.Max(f => f[1]), 9.5, 10.3);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void AFourBarTurnsRightRoundWithItsRockerSwingingAsWorkedOut(bool demo)
+    {
+        var bar = new FourBar();
+        var (film, _) = Turned(bar, bar.Default with { Demo = demo });
+
+        Assert.Equal(361, film.Frames.Count);
+        int rocker = demo ? 1 : 3;
+        double swing = (film.Frames.Max(f => f[rocker]) - film.Frames.Min(f => f[rocker])) * 180 / Math.PI;
+        Assert.InRange(swing, 20, 120);
+    }
+
+    [Fact]
+    public void AFourBarThatCannotTurnRightRoundSaysWhereItLocks()
+    {
+        var bar = new FourBar();
+        var made = bar.Make(bar.Default with { Ground = 60, Crank = 50, Coupler = 40, Rocker = 30 }, Printer.Default);
+        Assert.Null(made.Refusal);
+        Assert.Contains("locks", Films.Shoot(made).Jam);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void ACrankAndSliderMovesItsSliderByItsStroke(bool demo)
+    {
+        var crank = new CrankSlider();
+        var settings = crank.Default with { Demo = demo };
+        var (film, _) = Turned(crank, settings);
+
+        int slider = demo ? 1 : 2;
+        double travel = film.Frames.Max(f => f[slider]) - film.Frames.Min(f => f[slider]);
+        Assert.InRange(travel, CrankSlider.Stroke(settings) - 0.5, CrankSlider.Stroke(settings) + 0.5);
     }
 
     [Fact]

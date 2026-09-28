@@ -108,7 +108,7 @@ public sealed class GizmoController
 
     /// <summary>How many handle shapes the current mode has laid out. Used by tests.</summary>
     public int HandleCount => handles.Count;
-    public bool UniformScale { get; set; } = true;
+    public bool UniformScale { get; set; }
 
     /// <summary>
     /// Off while another tool owns the object. Lettering puts its own handles on the very same
@@ -311,16 +311,20 @@ public sealed class GizmoController
             };
             AddHandle(new Handle(outline, Axis.X, HandleKind.BoxOutline, 0));
 
+            // The corners resize the lot in proportion, whatever Keep proportions says: a corner
+            // pulled out is the whole thing growing, which is what anyone reaching for one means.
             for (int corner = 0; corner < 8; corner++)
             {
                 AddHandle(new Handle(new Rectangle
                 {
-                    Width = 7,
-                    Height = 7,
+                    Width = 9,
+                    Height = 9,
                     Fill = Brushes.White,
                     Stroke = new SolidColorBrush(Color.FromRgb(0x55, 0x5B, 0x63)),
                     StrokeThickness = 1,
-                    IsHitTestVisible = false
+                    Cursor = Cursors.SizeAll,
+                    ToolTip = "Drag to resize in proportion. Alt holds the opposite corner.",
+                    IsHitTestVisible = true
                 }, Axis.X, HandleKind.Corner, corner));
             }
         }
@@ -594,7 +598,8 @@ public sealed class GizmoController
     {
         if (!enabled) return false;
         if (hitElement is not FrameworkElement { Tag: Handle handle }) return false;
-        if (handle.Kind is HandleKind.BoxOutline or HandleKind.Corner) return false;
+        if (handle.Kind is HandleKind.BoxOutline) return false;
+        if (handle.Kind is HandleKind.Corner && mode != GizmoMode.Scale) return false;
 
         var selection = scene.Selection;
         if (selection.Count == 0) return false;
@@ -620,6 +625,7 @@ public sealed class GizmoController
         lastScreen = screen;
 
         if (active.Kind == HandleKind.Ring) DragRotate(screen);
+        else if (active.Kind == HandleKind.Corner) DragCorner(screen);
         else if (mode == GizmoMode.Scale) DragScale(screen);
         else DragMove(screen);
 
@@ -821,6 +827,36 @@ public sealed class GizmoController
         Feedback?.Invoke((uniform
             ? $"Resize {ratio * 100:0.#}% (uniform{stillThere}{size}{pivotNote})"
             : $"Resize {active.Axis} {ratio * 100:0.#}%{stillThere}{size}{pivotNote}") + BedNote(onBed));
+    }
+
+    /// <summary>
+    /// A corner dragged: the whole selection grows or shrinks in proportion, by how far the
+    /// pointer has gone along the line from what stays put to the corner, as it is seen. What
+    /// stays put is the middle, or with one way only - Alt flipping it - the opposite corner.
+    /// </summary>
+    private void DragCorner(Point screen)
+    {
+        bool oneSide = ScaleOneSide ^ Modifiers.HasFlag(ModifierKeys.Alt);
+        var corner = dragFrame.Corner(active!.Sign);
+        var anchor = oneSide ? dragFrame.Corner(7 - active.Sign) : dragFrame.Centre;
+        if (!TryProject(anchor, out Point from) || !TryProject(corner, out Point to)) return;
+
+        var line = new Vector(to.X - from.X, to.Y - from.Y);
+        if (line.LengthSquared < 4) return;
+
+        var delta = new Vector(screen.X - dragStart.X, screen.Y - dragStart.Y);
+        float ratio = MathF.Max(0.02f, 1f + (float)((delta.X * line.X + delta.Y * line.Y) / line.LengthSquared));
+
+        for (int i = 0; i < dragObjects.Count; i++)
+        {
+            dragObjects[i].Scale = dragBefore[i].Scale * ratio;
+            dragObjects[i].Position = anchor + (dragBefore[i].Position - anchor) * ratio;
+        }
+
+        bool onBed = KeepOnBedScale && BedPlacement.HoldToBed(dragObjects, dragBounds, together: true, settle: true);
+
+        dragChanged = true;
+        Feedback?.Invoke($"Resize {ratio * 100:0.#}% (in proportion{(oneSide ? ", opposite corner held" : "")})" + BedNote(onBed));
     }
 
     private void DragRotate(Point screen)

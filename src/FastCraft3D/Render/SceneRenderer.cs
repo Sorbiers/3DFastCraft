@@ -308,6 +308,51 @@ public sealed class SceneRenderer : IDisposable
         root.Children.Add(pivotMark);
     }
 
+    private readonly List<MeshGeometryModel3D> anchorMarks = [];
+
+    /// <summary>
+    /// The points a face tool works from - the middle of a picked face, the axis of a round one -
+    /// as small spheres like the pivot's, so what Apply will line up is seen rather than guessed:
+    /// on a long face, or a hole, its middle is nowhere near where it was clicked. Drawn over
+    /// everything, since a hole's axis is inside the part.
+    /// </summary>
+    /// <param name="linked">Points of what is about to move, drawn in blue to tell them from where they are going.</param>
+    public void ShowAnchors(IReadOnlyList<Vector3> points, float radius, IReadOnlyList<Vector3>? linked = null)
+    {
+        Invalidate();
+
+        foreach (var mark in anchorMarks)
+        {
+            root.Children.Remove(mark);
+            mark.Dispose();
+        }
+
+        anchorMarks.Clear();
+
+        foreach (var (point, moving) in points.Select(p => (p, false)).Concat((linked ?? []).Select(p => (p, true))))
+        {
+            var ball = MeshTransform.Transformed(
+                Primitives.Sphere(MathF.Max(radius, 0.05f), 16, 10), Matrix4x4.CreateTranslation(point));
+
+            var mark = new MeshGeometryModel3D
+            {
+                Geometry = MeshConverter.ToGeometry(ball),
+                Material = new PhongMaterial
+                {
+                    DiffuseColor = moving ? new SharpDX.Color4(0.02f, 0.05f, 0.1f, 1f) : new SharpDX.Color4(0.1f, 0.02f, 0.02f, 1f),
+                    EmissiveColor = moving ? new SharpDX.Color4(0.15f, 0.55f, 1f, 1f) : new SharpDX.Color4(1f, 0.13f, 0.13f, 1f),
+                    AmbientColor = moving ? new SharpDX.Color4(0.04f, 0.1f, 0.3f, 1f) : new SharpDX.Color4(0.3f, 0.04f, 0.04f, 1f),
+                    SpecularColor = new SharpDX.Color4(0.4f, 0.4f, 0.4f, 1f)
+                },
+                DepthBias = -2000,
+                IsHitTestVisible = false
+            };
+
+            anchorMarks.Add(mark);
+            root.Children.Add(mark);
+        }
+    }
+
     /// <summary>
     /// Marks where the connectors will land on the cut, while the numbers are being set: a disc
     /// the width of each one, lying in the plane. Without them the panel asked for a diameter and

@@ -48,10 +48,9 @@ public sealed class GearTrain : Generator<GearTrain.Settings>
         [Count("Pinion", 8, 30, UnitText = "teeth", Hint = "The small gear of every stage")] int Pinion = 12,
         [Count("Largest", 20, 150, UnitText = "teeth", Hint = "The most teeth any gear may have")] int Largest = 60,
         [Length("Thickness", 3, 20)] float Thickness = 6f,
-        [Length("Bore", 0, 10, Hint = "For the shafts. Nought for none.")] float Bore = 3.2f,
-        [Toggle("Base", Hint = "A plate with a pin standing in each shaft's bore, to turn the train by hand")] bool Base = false);
-
-    protected override bool Shows(Settings s, string parameter) => parameter != nameof(Settings.Base) || s.Bore > 0;
+        [Length("Bore", 0, 10, Hint = "For the shafts. Nought for none. In a demo, the D-shafts' diameter.")] float Bore = 3.2f,
+        [Toggle("Demo", Group = "Demo", Hint = "A model to turn by hand: every shaft's gears keyed on a D-shaft through a base, a crank on the first")] bool Demo = false,
+        [Toggle("Organize", Hint = "Laid out on the bed to print. Off: put on the plate as it goes together, as the preview shows it.")] bool Organise = true);
 
     protected override IEnumerable<(string Name, Settings Settings)> Shipped =>
     [
@@ -66,6 +65,8 @@ public sealed class GearTrain : Generator<GearTrain.Settings>
             yield return $"{s.Stages} stages would each need a gear of {each:0} teeth, more than {s.Largest}. More stages, or allow larger gears.";
         if (s.Largest <= s.Pinion) yield return "The largest gear has to have more teeth than the pinion.";
         if (s.Bore > s.Module * (s.Pinion - 2.5f) - 2) yield return "The bore is wider than the pinion's roots allow.";
+        if (s.Demo && new Demo(printer, s.Bore).HoleRadius * 2 > s.Module * (s.Pinion - 2.5f) - 2)
+            yield return "The pinion is too small for a D-shaft: more teeth on the pinion, or a larger module.";
     }
 
     /// <summary>The larger gear of each stage, for the ratio nearest the one asked for.</summary>
@@ -116,10 +117,11 @@ public sealed class GearTrain : Generator<GearTrain.Settings>
         var shafts = new List<float> { 0f };
         for (int k = 0; k < s.Stages; k++) shafts.Add(shafts[^1] + Spur.Apart(m, s.Pinion, driven[k]));
 
-        var pinion = Spur.Gear(m, s.Pinion, t, s.Bore);
+        // In a demo the gears are bored by the D-shafts they go on, so none of their own.
+        float bore = s.Demo ? 0f : s.Bore;
+        var pinion = Spur.Gear(m, s.Pinion, t, bore);
         var parts = new List<(string, string, Mesh, Matrix4x4?)>();
-        bool based = s.Base && s.Bore > 0;
-        float lift = based ? Mechanisms.Base.Lift : 0f;
+        float lift = s.Demo ? Mechanisms.Demo.Lift : 0f;
 
         for (int j = 0; j <= s.Stages; j++)
         {
@@ -129,17 +131,13 @@ public sealed class GearTrain : Generator<GearTrain.Settings>
             // stacked, the larger one underneath; each part printed from its lowest gear.
             var gears = new List<Mesh>();
             int lowest = j == 0 ? 0 : j - 1;
-            if (j > 0) gears.Add(Spur.Gear(m, driven[j - 1], t, s.Bore, Spur.Meshing(driven[j - 1])));
+            if (j > 0) gears.Add(Spur.Gear(m, driven[j - 1], t, bore, Spur.Meshing(driven[j - 1])));
             if (j < s.Stages) gears.Add(Shapes.Moved(pinion, 0, 0, (j - lowest) * t));
 
             string name = j == 0 ? "Input pinion" : j == s.Stages ? "Output gear" : $"Shaft {j + 1} gears";
             parts.Add((name, $"shaft {j + 1}", Shapes.Union(gears), Matrix4x4.CreateTranslation(shafts[j], 0, lift + lowest * t)));
         }
 
-        if (based)
-            parts.Add(("Base", "base", Mechanisms.Base.Plate(
-                shafts.Select((x, j) => (new Vector2(x, 0), s.Bore, lift + (j == 0 ? t : j == s.Stages ? s.Stages * t : (j + 1) * t))).ToList(),
-                printer), Matrix4x4.Identity));
 
         double ratio = driven.Aggregate(1.0, (r, b) => r * b / s.Pinion);
         var notes = new List<string>
@@ -148,19 +146,24 @@ public sealed class GearTrain : Generator<GearTrain.Settings>
             $"Stages {string.Join(", ", driven.Select(b => $"{s.Pinion}:{b}"))}; shafts {string.Join(", ", shafts.Select(x => $"{x:0.##}"))} mm along."
         };
 
-        var laid = Shapes.InARow(parts);
-
         // Every shaft turns about its own axis, where the train goes together; the first drives.
-        var shaftsTurning = laid.Take(s.Stages + 1).Select((p, j) =>
-        {
-            var axis = Vector3.Transform(p.Pivot, p.Assembled ?? Matrix4x4.Identity);
-            return new MovingPart(j, Geometry.Motion.Joint.Revolute, new Vector2(axis.X, axis.Y));
-        }).ToList();
+        var turning = shafts.Select((x, j) => new MovingPart(j, Geometry.Motion.Joint.Revolute, new Vector2(x, 0))).ToList();
+        var layers = Enumerable.Range(0, s.Stages).Select(k => lift + k * t + t / 2f).ToList();
 
-        return new Generated(laid, notes)
+        if (s.Demo)
         {
-            Motion = new Mechanism(shaftsTurning, 0, Enumerable.Range(0, s.Stages).Select(k => lift + k * t + t / 2f).ToList())
-        };
+            // Each shaft's gears keyed on a D-shaft of its own, a crank on the first.
+            var demo = new Demo(printer, s.Bore);
+            foreach (var (name, role, mesh, together) in parts) demo.Lying(name, role, MeshTransform.Transformed(mesh, together!.Value));
+            for (int j = 0; j <= s.Stages; j++) demo.Upright(new Vector2(shafts[j], 0), [j], handle: j == 0);
+
+            token.ThrowIfCancellationRequested();
+            var built = demo.Finish(token);
+            notes.Add($"Shafts are {demo.Size:0.#} mm D-shafts, in from under the base; press each shaft's gears onto it, then the crank onto the first.");
+            return new Generated(built, notes) { Motion = new Mechanism(turning, 0, layers, Riders: demo.Riders), LaidOut = s.Organise };
+        }
+
+        return new Generated(Shapes.InARow(parts), notes) { Motion = new Mechanism(turning, 0, layers), LaidOut = s.Organise };
     }
 }
 
@@ -186,7 +189,9 @@ public sealed class Planetary : Generator<Planetary.Settings>
         [Length("Ring rim", 2, 10)] float Rim = 3f,
         [Length("Sun bore", 0, 10)] float Bore = 5f,
         [Length("Planet pins", 1.5, 8, Hint = "The carrier's pins, and the planets' bores round them")] float Pin = 3f,
-        [Clearance("Fit", 0.05, 1, Hint = "Round each planet's pin, and under the carrier")] float Fit = 0.25f);
+        [Clearance("Fit", 0.05, 1, Hint = "Round each planet's pin, and under the carrier")] float Fit = 0.25f,
+        [Toggle("Demo", Group = "Demo", Hint = "A model to turn by hand: the ring held in a cup on a base, the sun on a D-shaft with a crank, the carrier turning over the planets")] bool Demo = false,
+        [Toggle("Organize", Hint = "Laid out on the bed to print. Off: put on the plate as it goes together, as the preview shows it.")] bool Organise = true);
 
     public static int Ring(Settings s) => s.Sun + 2 * s.Planet;
 
@@ -204,6 +209,9 @@ public sealed class Planetary : Generator<Planetary.Settings>
 
         if (s.Pin + 2 * s.Fit > s.Module * (s.Planet - 2.5f) - 2) yield return "The planets are too small for their pins.";
         if (s.Bore > s.Module * (s.Sun - 2.5f) - 2) yield return "The sun's bore is wider than its roots allow.";
+        if (s.Demo && new Demo(printer, s.Bore).HoleRadius * 2 > s.Module * (s.Sun - 2.5f) - 2)
+            yield return "The sun is too small for a D-shaft: more teeth on the sun, or a larger module.";
+        if (s.Demo && s.Rim < 2.5f) yield return "A demo keys the ring into its cup by notches in its rim: a rim of 2.5 mm at least.";
     }
 
     protected override Generated Build(Settings s, Printer printer, CancellationToken token)
@@ -214,7 +222,7 @@ public sealed class Planetary : Generator<Planetary.Settings>
 
         var parts = new List<(string, string, Mesh, Matrix4x4?)>
         {
-            ("Sun", "sun", Spur.Gear(m, s.Sun, t, s.Bore), Matrix4x4.Identity)
+            ("Sun", "sun", Spur.Gear(m, s.Sun, t, s.Demo ? 0f : s.Bore), Matrix4x4.Identity)
         };
 
         for (int i = 0; i < s.Planets; i++)
@@ -240,7 +248,10 @@ public sealed class Planetary : Generator<Planetary.Settings>
         // The carrier: a disc over the planets, their pins hanging from it. Printed disc down.
         const float disc = 3f;
         float lift = t + s.Fit;
-        var carrierPieces = new List<Mesh> { Shapes.Tube(apart + s.Pin + 2f, s.Bore / 2f + 1f, 0, disc) };
+        // In a demo the sun's shaft runs up through the carrier to the crank, so the carrier's middle clears it.
+        var demo = s.Demo ? new Demo(printer, s.Bore) : null;
+        float middle = demo is null ? s.Bore / 2f + 1f : demo.HoleRadius;
+        var carrierPieces = new List<Mesh> { Shapes.Tube(apart + s.Pin + 2f, middle, 0, disc) };
         for (int i = 0; i < s.Planets; i++)
         {
             float angle = 2f * MathF.PI * i / s.Planets;
@@ -248,6 +259,10 @@ public sealed class Planetary : Generator<Planetary.Settings>
         }
 
         var carrier = Shapes.Union(carrierPieces);
+
+        // A pointer cut through the disc, to watch the carrier go round by.
+        if (demo is not null)
+            carrier = Shapes.Subtract(carrier, Shapes.Prism([new(apart + s.Pin / 2f + 0.5f, -1.5f), new(apart + s.Pin / 2f + 0.5f, 1.5f), new(apart + s.Pin + 1.5f, 0)], -1, disc + 1));
         parts.Add(("Carrier", "carrier", carrier, Matrix4x4.CreateRotationX(MathF.PI) * Matrix4x4.CreateTranslation(0, 0, lift + disc)));
 
         double reduction = 1.0 + (double)ring / s.Sun;
@@ -264,10 +279,63 @@ public sealed class Planetary : Generator<Planetary.Settings>
 
         moving.Add(new(1 + s.Planets, Geometry.Motion.Joint.Revolute, Vector2.Zero));
 
-        return new Generated(Shapes.InARow(parts),
-            [$"Ring {ring} teeth. Ring held, sun driving: the carrier turns once for every {reduction:0.##} turns of the sun."])
+        var said = $"Ring {ring} teeth. Ring held, sun driving: the carrier turns once for every {reduction:0.##} turns of the sun.";
+        if (demo is not null) return Demonstrate(s, demo, parts, said, token);
+
+        return new Generated(Shapes.InARow(parts), [said])
         {
-            Motion = new Mechanism(moving, 0, [t / 2f])
+            Motion = new Mechanism(moving, 0, [t / 2f]),
+            LaidOut = s.Organise
         };
+    }
+
+    /// <summary>
+    /// The set as a model to turn by hand: the ring keyed into a cup on the base by three notches
+    /// in its rim, the planets on a floor inside it, the sun keyed on a D-shaft through the base
+    /// with a crank on top, and the carrier turning over the planets on its pins, held down by the
+    /// crank above it. The ring stays put and the carrier goes round, which the motion check
+    /// cannot turn - so this one has no Turn it.
+    /// </summary>
+    private static Generated Demonstrate(Settings s, Demo demo, List<(string Name, string Role, Mesh Mesh, Matrix4x4? Together)> parts, string said, CancellationToken token)
+    {
+        float lift = Demo.Lift, t = s.Thickness, c = demo.Run;
+        var at = Matrix4x4.CreateTranslation(0, 0, lift);
+
+        var ringMesh = MeshTransform.Transformed(parts.First(p => p.Role == "ring").Mesh, at);
+        float outer = ringMesh.ComputeBounds().Size.X / 2f;
+        var notches = new List<Mesh>();
+        for (int k = 0; k < 3; k++)
+        {
+            float a = 2f * MathF.PI * k / 3f + MathF.PI / 6f;
+            var along = new Vector2(MathF.Cos(a), MathF.Sin(a));
+            var across = new Vector2(-along.Y, along.X);
+            List<Vector2> Slot(float from, float to, float half) =>
+                [along * from - across * half, along * to - across * half, along * to + across * half, along * from + across * half];
+
+            notches.Add(Shapes.Prism(Slot(outer - 1.5f, outer + 1f, 1.5f), lift - 1, lift + t + 1));
+            demo.AddToBase(Shapes.Prism(Slot(outer - 1.5f + c, outer + c + 0.5f, 1.5f - c), Demo.Plate - 0.01f, lift + t - 1f));
+        }
+
+        foreach (var (name, role, mesh, together) in parts)
+        {
+            var world = MeshTransform.Transformed(mesh, together!.Value * at);
+            if (role == "ring") world = Shapes.Subtract(world, notches);
+            Matrix4x4.Invert(together!.Value * at, out var back);
+            demo.Placed(name, role, world, back);
+        }
+
+        // The cup: a floor under the ring and the planets, a wall round the ring.
+        demo.AddToBase(Shapes.Cylinder(outer, Demo.Plate - 0.01f, Demo.Deck));
+        demo.AddToBase(Shapes.Tube(outer + c + 2.5f, outer + c, Demo.Plate - 0.01f, lift + t - 1f));
+        demo.Upright(Vector2.Zero, [0], handle: true);
+
+        token.ThrowIfCancellationRequested();
+        var built = demo.Finish(token);
+        return new Generated(built,
+        [
+            said,
+            $"The sun goes on a {demo.Size:0.#} mm D-shaft, in from under the base. Drop the ring into its cup, notches on the keys, the planets inside it, the carrier over them on its pins, and the crank on top holds it all down.",
+            "The pointer cut in the carrier shows it going round."
+        ]) { LaidOut = s.Organise };
     }
 }

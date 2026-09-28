@@ -24,4 +24,10 @@
     <InternalsVisibleTo Include="FastCraft3D.Tests" />
   </ItemGroup>
 
+  <ItemGroup>
+    <!-- The moon lamp's map: the Lunar Reconnaissance Orbiter's mosaic, from NASA's Scientific
+         Visualization Studio (CGI Moon Kit, 1024 x 512). Public domain. -->
+    <EmbeddedResource Include="Lithophanes\Moon.jpg" LogicalName="FastCraft3D.Generators.Moon.jpg" />
+  </ItemGroup>
+
 </Project>

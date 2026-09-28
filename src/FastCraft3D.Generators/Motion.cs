@@ -23,8 +23,20 @@ public sealed record MovingPart(int Part, Joint Joint, Vector2 Centre, Vector2 D
 /// <param name="Turns">How far the driver is turned, and which way: negative is clockwise.</param>
 /// <param name="Step">Degrees of the driver per step.</param>
 /// <param name="Reach">The most a pushed part moves in one step, where the part does not say.</param>
+/// <param name="Riders">
+/// Parts that move exactly as another does, by part number: a shaft and the crank on it, keyed to
+/// the gear. Left out of the check - a gear gripping its shaft is not two parts meeting - and
+/// turned with the part they ride on.
+/// </param>
+/// <param name="Script">
+/// For a set whose parts are worked out rather than pushed: where every part is with the driver
+/// turned so far, by part number - a turn about its moving part's centre and a shift after it -
+/// or null where the set cannot go. A linkage's coupler both swings and travels, which no part
+/// turning on a fixed centre or sliding along a line can be, and it has a closed form anyway.
+/// </param>
 public sealed record Mechanism(IReadOnlyList<MovingPart> Moving, int Driver, IReadOnlyList<float> Layers,
-    double Turns = 1, double Step = 1, double Reach = 0.3);
+    double Turns = 1, double Step = 1, double Reach = 0.3, IReadOnlyList<(int Part, int With)>? Riders = null,
+    Func<double, (double Turn, Vector2 Shift)[]?>? Script = null);
 
 /// <summary>A mechanism turned through, pose by pose.</summary>
 /// <param name="Frames">Where each part is at each step: an angle in radians or a slide in millimetres, nought for one that stands still.</param>
@@ -39,11 +51,42 @@ public sealed record MotionFilm(IReadOnlyList<double[]> Frames, Mechanism Mechan
 }
 
 /// <summary>One pose of a set turning: where each part is, and, if it jammed there, which two met and why.</summary>
-public sealed record FilmStep(double[] Pose, string? Jam, (int A, int B)? Jammed);
+/// <param name="Shifts">How far each part has moved besides, for a scripted set; null for the rest.</param>
+public sealed record FilmStep(double[] Pose, string? Jam, (int A, int B)? Jammed, Vector2[]? Shifts = null);
 
 /// <summary>Turns a generated set's mechanism through, from the parts themselves cut across.</summary>
 public static class Films
 {
+    /// <summary>A scripted set played through: where its script puts each part, step by step, until it cannot go on.</summary>
+    private static IEnumerable<FilmStep> Scripted(Generated made, Mechanism mechanism, Func<double, (double Turn, Vector2 Shift)[]?> script, CancellationToken token)
+    {
+        int steps = (int)Math.Round(360 * Math.Abs(mechanism.Turns) / mechanism.Step);
+        double way = Math.Sign(mechanism.Turns) * mechanism.Step * Math.PI / 180;
+        var last = new double[made.Parts.Count];
+
+        for (int k = 0; k <= steps; k++)
+        {
+            token.ThrowIfCancellationRequested();
+            var places = script(k * way);
+            if (places is null)
+            {
+                yield return new FilmStep(last, $"It locks {k * mechanism.Step:0} degrees into a turn: the linkage cannot go further round that way.", null);
+                yield break;
+            }
+
+            var pose = places.Select(p => p.Turn).ToArray();
+            var shifts = places.Select(p => p.Shift).ToArray();
+            foreach (var (rider, with) in mechanism.Riders ?? [])
+            {
+                pose[rider] = pose[with];
+                shifts[rider] = shifts[with];
+            }
+
+            last = pose;
+            yield return new FilmStep(pose, null, null, shifts);
+        }
+    }
+
     public static MotionFilm Shoot(Generated made, CancellationToken token = default)
     {
         var frames = new List<double[]>();
@@ -64,11 +107,18 @@ public static class Films
     public static IEnumerable<FilmStep> Roll(Generated made, CancellationToken token = default)
     {
         var mechanism = made.Motion ?? throw new ArgumentException("Nothing in this set moves.", nameof(made));
+        if (mechanism.Script is { } script)
+        {
+            foreach (var step in Scripted(made, mechanism, script, token)) yield return step;
+            yield break;
+        }
 
         var bodies = new List<PlanarBody>();
         var partOf = new List<int>();
+        var riders = mechanism.Riders ?? [];
         for (int i = 0; i < made.Parts.Count; i++)
         {
+            if (riders.Any(r => r.Part == i)) continue;
             var part = made.Parts[i];
             var mesh = part.Assembled is { } together ? MeshTransform.Transformed(part.Mesh, together) : part.Mesh;
             var loops = mechanism.Layers
@@ -98,6 +148,7 @@ public static class Films
 
             var pose = new double[made.Parts.Count];
             for (int b = 0; b < bodies.Count; b++) pose[partOf[b]] = step.At[b];
+            foreach (var (rider, with) in riders) pose[rider] = pose[with];
 
             if (step.Jam is { } a && step.Against is { } b2)
             {

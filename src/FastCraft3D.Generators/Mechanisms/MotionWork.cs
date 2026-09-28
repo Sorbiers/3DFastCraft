@@ -51,12 +51,13 @@ public sealed class MotionWork : Generator<MotionWork.Settings>
         [Length("Minute hand", 8, 150, Group = "Hands", Hint = "From the centre to the tip"), ShowWhen(nameof(Hands), true)] float MinuteHand = 30f,
         [Length("Hour hand", 6, 120, Group = "Hands"), ShowWhen(nameof(Hands), true)] float HourHand = 20f,
         [Length("Hand thickness", 0.6, 4, Group = "Hands"), ShowWhen(nameof(Hands), true)] float HandThickness = 1.2f,
-        [Toggle("Stand", Group = "Stand", Hint = "A plate with pins for the arbor and the stud, to turn it by hand")] bool Stand = true);
+        [Toggle("Demo", Group = "Demo", Hint = "A model to turn by hand: a stand with pins for the arbor and the stud, a cap pressed onto each over its wheels, and a knob on the minute hand to set it round by")] bool Demo = false,
+        [Toggle("Organize", Hint = "Laid out on the bed to print. Off: put on the plate as it goes together, as the preview shows it.")] bool Organise = true);
 
     protected override IEnumerable<(string Name, Settings Settings)> Shipped =>
     [
         ("Wall clock", Default),
-        ("Small, wheels only", Default with { Teeth = MotionTeeth.Small, Hands = false, Stand = false }),
+        ("Small, wheels only", Default with { Teeth = MotionTeeth.Small, Hands = false }),
         ("Large, for a big dial", Default with { Teeth = MotionTeeth.Large, Module = 1.25f, Thickness = 5, MinuteHand = 80, HourHand = 55, HandThickness = 1.6f })
     ];
 
@@ -84,7 +85,7 @@ public sealed class MotionWork : Generator<MotionWork.Settings>
 
         // Each flat halfway into its pipe's wall: well clear of the bore, and deep enough to drive a hand.
         return new Layout(s.Module * (cannon + minute) / 2f, bore, pipe, bore + s.Wall / 2f, hourBore, hourOuter, hourBore + s.Wall / 2f,
-            s.Stud / 2f + c, hourTop, hourTop + s.MinutePipe, s.Stand ? Plate + Gap : 0f);
+            s.Stud / 2f + c, hourTop, hourTop + s.MinutePipe, s.Demo ? Plate + Gap : 0f);
     }
 
     private static float Boss(float hole) => hole + 1.5f;
@@ -175,22 +176,40 @@ public sealed class MotionWork : Generator<MotionWork.Settings>
             var minuteHole = Flatted(l.Pipe + c, l.PipeFlat + c);
             var hourHole = Flatted(l.HourOuter + c, l.HourFlat + c);
 
-            parts.Add(("Minute hand", "minute hand",
-                Hand(s.MinuteHand, MathF.Max(1.8f, 0.1f * s.MinuteHand), minuteHole, Boss(l.Pipe + c), ht),
-                Matrix4x4.CreateTranslation(0, 0, lift + l.CannonTop - ht)));
+            var minuteHand = Hand(s.MinuteHand, MathF.Max(1.8f, 0.1f * s.MinuteHand), minuteHole, Boss(l.Pipe + c), ht);
+
+            // In a demo, a knob out on the minute hand, on a pad the blade is too narrow to be:
+            // the model is set round by it, as a clock is.
+            if (s.Demo)
+            {
+                // Out past the hand's boss, clear of the pipe it sits on.
+                var knob = new Vector2(0, MathF.Max(0.75f * s.MinuteHand, Boss(l.Pipe + c) + 4.5f));
+                minuteHand = Shapes.Union(minuteHand, Shapes.Cylinder(3.5f, 0, ht, knob), Shapes.Cylinder(2.5f, ht - 0.01f, ht + 8f, knob));
+            }
+
+            parts.Add(("Minute hand", "minute hand", minuteHand, Matrix4x4.CreateTranslation(0, 0, lift + l.CannonTop - ht)));
             parts.Add(("Hour hand", "hour hand",
                 Hand(s.HourHand, MathF.Max(2.4f, 0.2f * s.HourHand), hourHole, Boss(l.HourOuter + c), ht),
                 Matrix4x4.CreateTranslation(0, 0, lift + l.HourTop - ht)));
         }
 
-        if (s.Stand)
+        if (s.Demo)
         {
-            // Pins with the same facets as the bores they stand in, so they sit inside them all round.
+            // Pins with the same facets as the bores they stand in, so they sit inside them all
+            // round, each standing through its wheels to take a cap pressed on over them - the
+            // arbor's over the minute hand, the stud's over the minute wheel.
+            float grip = Math.Clamp(printer.XyClearance * 0.25f, 0.02f, 0.1f);
+            float arborCap = lift + l.CannonTop + Gap, studCap = lift + 2 * t + Gap + Gap;
             float end = MathF.Max(l.Bore, l.StudBore) + 4f;
             var plate = Shapes.Prism(Shapes.RoundedRect(l.Apart + 2 * end, 2 * end, end, new Vector2(l.Apart / 2f, 0)), 0, Plate);
-            var arbor = Shapes.Cylinder(s.Arbor / 2f, Plate - 0.01f, lift + l.CannonTop - 1, sides: Shapes.Sides(l.Bore));
-            var stud = Shapes.Cylinder(s.Stud / 2f, Plate - 0.01f, lift + 2 * t + Gap - 0.5f, new Vector2(l.Apart, 0), Shapes.Sides(l.StudBore));
+            var arbor = Shapes.Cylinder(s.Arbor / 2f, Plate - 0.01f, arborCap + 2.2f, sides: Shapes.Sides(l.Bore));
+            var stud = Shapes.Cylinder(s.Stud / 2f, Plate - 0.01f, studCap + 2.2f, new Vector2(l.Apart, 0), Shapes.Sides(l.StudBore));
             parts.Add(("Stand", "stand", Shapes.Union(plate, arbor, stud), Matrix4x4.Identity));
+
+            Mesh Cap(float pin, float at, Vector2 centre, int sides) => Shapes.Subtract(
+                Shapes.Cylinder(pin + 2f, at, at + 2.5f, centre), Shapes.Cylinder(pin + grip, at - 1, at + 3.5f, centre, sides));
+            parts.Add(("Arbor cap", "cap", Cap(s.Arbor / 2f, arborCap, Vector2.Zero, Shapes.Sides(l.Bore)), Matrix4x4.Identity));
+            parts.Add(("Stud cap", "stud cap", Cap(s.Stud / 2f, studCap, new Vector2(l.Apart, 0), Shapes.Sides(l.StudBore)), Matrix4x4.Identity));
         }
 
         var laid = Shapes.InARow(parts);
@@ -217,12 +236,17 @@ public sealed class MotionWork : Generator<MotionWork.Settings>
             "Turned clockwise from the cannon pinion, as the going train turns it. The cannon pinion should grip its arbor just enough to be turned by hand to set the time."
         };
         if (s.Hands) notes.Add("The hands sit on a flat on each pipe; press them on, pointing at twelve together.");
-        if (s.Stand) notes.Add("The stand's pins print standing up; a length of rod through the plate is stronger.");
+        if (s.Demo)
+        {
+            notes.Add("The stand's pins print standing up; a length of rod through the plate is stronger.");
+            notes.Add("Put the wheels on their pins, press the hands on, and press a cap onto each pin over them. Set it round by the knob on the minute hand.");
+        }
 
         return new Generated(laid, notes)
         {
             // Clockwise, a turn of the minute hand: the hour hand goes a twelfth of the way.
-            Motion = new Mechanism(moving, 0, layers, Turns: -1)
+            Motion = new Mechanism(moving, 0, layers, Turns: -1),
+            LaidOut = s.Organise
         };
     }
 

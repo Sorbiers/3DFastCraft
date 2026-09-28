@@ -1,4 +1,4 @@
-using System.Numerics;
+﻿using System.Numerics;
 using FastCraft3D.Geometry;
 using FastCraft3D.Model;
 using Xunit;
@@ -341,5 +341,13 @@ public class AlignToolsTests
         Assert.Equal(to.X, from.X + offset.X, 3);
         Assert.Equal(to.Y, from.Y + offset.Y, 3);
         Assert.Equal(from.Z, from.Z + offset.Z, 3); // Z was not asked to match
+    }
+
+    [Fact]
+    public void APointOfABoxIsItsLeastMiddleOrGreatestOnEachAxis()
+    {
+        var box = new Bounds(new Vector3(0, 10, 20), new Vector3(4, 30, 60));
+        Assert.Equal(new Vector3(0, 20, 60), AlignTools.PointOf(box, AlignMode.Minimum, null, AlignMode.Maximum));
+        Assert.Equal(new Vector3(2, 20, 40), AlignTools.PointOf(box, AlignMode.Centre, AlignMode.Centre, AlignMode.Centre));
     }
 }

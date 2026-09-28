@@ -87,6 +87,15 @@ public static class AlignTools
     /// given null keeps its position, and Distribute has no meaning for a single group, so it is
     /// treated the same way.
     /// </summary>
+    /// <summary>The point of a box a mode picks on each axis: its least, middle or greatest - the middle where none is given.</summary>
+    public static Vector3 PointOf(Bounds box, AlignMode? modeX, AlignMode? modeY, AlignMode? modeZ)
+    {
+        static float On(AlignMode? mode, float least, float most) =>
+            mode switch { AlignMode.Minimum => least, AlignMode.Maximum => most, _ => (least + most) / 2f };
+
+        return new Vector3(On(modeX, box.Min.X, box.Max.X), On(modeY, box.Min.Y, box.Max.Y), On(modeZ, box.Min.Z, box.Max.Z));
+    }
+
     public static Vector3 OffsetToPoint(Bounds group, Vector3 target, AlignMode? modeX, AlignMode? modeY, AlignMode? modeZ)
     {
         if (group.IsEmpty) return Vector3.Zero;

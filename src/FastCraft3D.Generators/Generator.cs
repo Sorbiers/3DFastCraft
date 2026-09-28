@@ -96,6 +96,13 @@ public sealed record Generated(IReadOnlyList<GeneratedPart> Parts, IReadOnlyList
     /// <summary>How the set moves, for a set that does: what the panel's Turn it plays.</summary>
     public Mechanism? Motion { get; init; }
 
+    /// <summary>
+    /// Put on the plate as it prints, each part laid out beside the next. False puts the set down
+    /// as it goes together, as the preview shows it - to look at, or to print a model whose parts
+    /// already stand where they go.
+    /// </summary>
+    public bool LaidOut { get; init; } = true;
+
     public bool IsRefused => Refusal is not null;
 }
 

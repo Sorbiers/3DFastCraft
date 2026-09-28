@@ -285,9 +285,9 @@ public class GizmoControllerTests
         });
     }
 
-    /// <summary>The box outline and corner dots are decoration - they must not be draggable.</summary>
+    /// <summary>The box outline is decoration and must not be draggable; the corner dots resize.</summary>
     [Fact]
-    public void TheBoundingBoxDecorationIsNotDraggable()
+    public void TheBoxOutlineIsNotDraggableButItsCornersAre()
     {
         RunSta(() =>
         {
@@ -298,7 +298,41 @@ public class GizmoControllerTests
 
             // In scale mode the outline is built first, then the eight corner dots.
             Assert.False(gizmo.TryBeginDrag(new Point(0, 0), HandleFor(canvas, 0)));
-            Assert.False(gizmo.TryBeginDrag(new Point(0, 0), HandleFor(canvas, 4)));
+            Assert.True(gizmo.TryBeginDrag(new Point(0, 0), HandleFor(canvas, 4)));
+        });
+    }
+
+    /// <summary>A corner pulled half as far out again grows the object half again, on every axis, whatever the lock says.</summary>
+    [Fact]
+    public void DraggingACornerResizesInProportionWithTheLockOff()
+    {
+        RunSta(() =>
+        {
+            var scene = new Scene();
+            var cube = new SceneObject("Cube", Primitives.Box(20, 20, 20)) { IsSelected = true };
+            scene.Objects.Add(cube);
+            var canvas = new Canvas();
+            var gizmo = Build(canvas, scene, new UndoStack(scene), GizmoMode.Scale);
+            gizmo.UniformScale = false;
+            gizmo.KeepOnBedScale = false;
+
+            Point At(int index)
+            {
+                var dot = HandleFor(canvas, index);
+                return new Point(Canvas.GetLeft(dot) + dot.Width / 2, Canvas.GetTop(dot) + dot.Height / 2);
+            }
+
+            // Corner 7 is the far top right, corner 0 its opposite; the middle is halfway between.
+            var corner = At(8);
+            var opposite = At(1);
+            var middle = new Point((corner.X + opposite.X) / 2, (corner.Y + opposite.Y) / 2);
+
+            Assert.True(gizmo.TryBeginDrag(corner, HandleFor(canvas, 8)));
+            gizmo.ContinueDrag(new Point(corner.X + (corner.X - middle.X) / 2, corner.Y + (corner.Y - middle.Y) / 2));
+
+            Assert.Equal(30f, cube.SizeX, 1);
+            Assert.Equal(30f, cube.SizeY, 1);
+            Assert.Equal(30f, cube.SizeZ, 1);
         });
     }
 

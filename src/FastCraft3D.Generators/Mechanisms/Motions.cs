@@ -25,9 +25,8 @@ public sealed class Geneva : Generator<Geneva.Settings>
         [Length("Thickness", 3, 15)] float Thickness = 5f,
         [Length("Bore", 0, 10, Hint = "For both shafts. Nought for none.")] float Bore = 4f,
         [Clearance("Clearance", 0.15, 1, Hint = "Round the pin in the slot, and round the locking disc. Under 0.15 a printed Geneva binds.")] float Clearance = 0.3f,
-        [Toggle("Base", Hint = "A plate with a pin standing in each bore, to turn it by hand")] bool Base = false);
-
-    protected override bool Shows(Settings s, string parameter) => parameter != nameof(Settings.Base) || s.Bore > 0;
+        [Toggle("Demo", Group = "Demo", Hint = "A model to turn by hand: the driver and the wheel keyed on D-shafts the bore's size through a base, a crank on the driver")] bool Demo = false,
+        [Toggle("Organize", Hint = "Laid out on the bed to print. Off: put on the plate as it goes together, as the preview shows it.")] bool Organise = true);
 
     private sealed record Layout(float Crank, float Wheel, float Lock, float SlotBottom, float Beta);
 
@@ -46,6 +45,16 @@ public sealed class Geneva : Generator<Geneva.Settings>
         if (s.Pin / 2f > 0.25f * p.Crank) yield return $"The pin is too big for the crank: at most {0.5f * p.Crank:0.#} mm.";
         if (s.Bore / 2f + 2f > p.SlotBottom) yield return "The wheel's bore runs into its slots. A smaller bore or a bigger drive.";
         if (s.Bore / 2f + 2f > p.Lock - p.Crank * 0.2f) yield return "The driver's bore is too big for its locking disc.";
+        if (s.Demo)
+        {
+            float hole = new Demo(printer, s.Bore).HoleRadius;
+            if (hole + 2f > p.SlotBottom || hole + 2f > p.Lock - p.Crank * 0.2f)
+                yield return "There is no room for D-shafts: a bigger centre distance, or a smaller bore.";
+
+            // The wheel's boss stands up past the driver's crank plate, which reaches under the wheel.
+            else if (p.Crank + s.Pin / 2f + 2f + hole + 2.5f + Demo.Gap > s.Distance)
+                yield return "The driver's plate would run into the wheel's shaft: a bigger centre distance, or a smaller pin or bore.";
+        }
     }
 
     protected override Generated Build(Settings s, Printer printer, CancellationToken token)
@@ -73,20 +82,36 @@ public sealed class Geneva : Generator<Geneva.Settings>
             Shapes.Cylinder(p.Crank + rp + 2f, 0, plate),
             Shapes.Subtract(Shapes.Cylinder(p.Lock, plate - 0.01f, plate + t), relief),
             Shapes.Cylinder(rp, plate - 0.01f, plate + t, new Vector2(p.Crank, 0)));
-        if (s.Bore > 0) driver = Shapes.Subtract(driver, Shapes.Cylinder(s.Bore / 2f, -1, plate + t + 1));
+        if (s.Bore > 0 && !s.Demo) driver = Shapes.Subtract(driver, Shapes.Cylinder(s.Bore / 2f, -1, plate + t + 1));
 
         // Put together: the driver turned to start with its pin on the far side, the wheel beside it.
-        bool based = s.Base && s.Bore > 0;
-        float lift = based ? Base.Lift : 0f;
+        float lift = s.Demo ? Demo.Lift : 0f;
         var driverTogether = Matrix4x4.CreateRotationZ(MathF.PI) * Matrix4x4.CreateTranslation(0, 0, lift);
         var wheelTogether = Matrix4x4.CreateTranslation(s.Distance, 0, lift + plate + gap);
 
         var set = new List<(string, string, Mesh, Matrix4x4?)> { ("Geneva driver", "driver", driver, driverTogether), ("Geneva wheel", "wheel", wheel, wheelTogether) };
-        if (based)
-            set.Add(("Base", "base", Base.Plate([(Vector2.Zero, s.Bore, lift + plate + t), (new Vector2(s.Distance, 0), s.Bore, lift + plate + gap + t)], printer), Matrix4x4.Identity));
+        List<GeneratedPart> laid;
+        List<(int, int)>? riders = null;
+        string? keyed = null;
+        if (s.Demo)
+        {
+            // Each on a D-shaft of its own through a base, a crank on the driver.
+            var demo = new Demo(printer, s.Bore);
+            foreach (var (name, role, mesh, together) in set) demo.Lying(name, role, MeshTransform.Transformed(mesh, together!.Value));
+            demo.Upright(Vector2.Zero, [0], handle: true);
+            demo.Upright(new Vector2(s.Distance, 0), [1]);
+            token.ThrowIfCancellationRequested();
+            laid = demo.Finish(token);
+            riders = demo.Riders;
+            keyed = $"Both go on {demo.Size:0.#} mm D-shafts, in from under the base; the crank goes on the driver's last.";
+        }
+        else
+        {
+            laid = Shapes.InARow(set);
+        }
 
         var made = new Generated(
-            Shapes.InARow(set),
+            laid,
             [$"Turned by the motion check: the wheel steps {360f / s.Slots:0.#} degrees for each turn of the driver, "
              + $"moving through {180f - 360f / s.Slots:0} degrees of it and held still for the rest."])
         {
@@ -95,7 +120,8 @@ public sealed class Geneva : Generator<Geneva.Settings>
             // other way too. Clockwise, which is the way the wheel's slots are laid to meet the pin.
             Motion = new Mechanism(
                 [new MovingPart(0, Joint.Revolute, Vector2.Zero), new MovingPart(1, Joint.Revolute, new Vector2(s.Distance, 0))],
-                Driver: 0, Layers: [lift + plate + gap + t / 2f], Turns: -1, Step: 1, Reach: 0.3)
+                Driver: 0, Layers: [lift + plate + gap + t / 2f], Turns: -1, Step: 1, Reach: 0.3, Riders: riders),
+            LaidOut = s.Organise
         };
 
         // The check is the same run the panel plays, so the two cannot disagree.
@@ -106,7 +132,7 @@ public sealed class Geneva : Generator<Geneva.Settings>
         if (Math.Abs(stepped - 360.0 / s.Slots) > 3)
             throw new Refusal($"The wheel turned {stepped:0} degrees in a turn of the driver, not {360.0 / s.Slots:0}.");
 
-        return made;
+        return keyed is null ? made : made with { Notes = [.. made.Notes, keyed] };
     }
 
     /// <summary>
@@ -151,7 +177,7 @@ public sealed class Geneva : Generator<Geneva.Settings>
             cuts.Add(Shapes.Cylinder(arcs, -1, height + 1, new Vector2(MathF.Cos(arc), MathF.Sin(arc)) * s.Distance));
         }
 
-        if (s.Bore > 0) cuts.Add(Shapes.Cylinder(s.Bore / 2f, -1, height + 1));
+        if (s.Bore > 0 && !s.Demo) cuts.Add(Shapes.Cylinder(s.Bore / 2f, -1, height + 1));
         return Shapes.Subtract(Shapes.Cylinder(outside, 0, height), cuts);
     }
 
@@ -195,9 +221,8 @@ public sealed class Cam : Generator<Cam.Settings>
         [Length("Roller radius", 2, 15, Group = "Follower"), ShowWhen(nameof(Follower), FollowerKind.Roller)] float Roller = 5f,
         [Length("Thickness", 3, 20)] float Thickness = 6f,
         [Length("Bore", 0, 12)] float Bore = 5f,
-        [Toggle("Base", Hint = "A plate with a pin for the cam and rails the follower slides between, to turn it by hand")] bool WithBase = false);
-
-    protected override bool Shows(Settings s, string parameter) => parameter != nameof(Settings.WithBase) || s.Bore > 0;
+        [Toggle("Demo", Group = "Demo", Hint = "A model to turn by hand: the cam keyed on a D-shaft through a base, a crank on it, the follower in a channel with pegs for a rubber band to bring it back")] bool Demo = false,
+        [Toggle("Organize", Hint = "Laid out on the bed to print. Off: put on the plate as it goes together, as the preview shows it.")] bool Organise = true);
 
     protected override IEnumerable<string> Check(Settings s, Printer printer)
     {
@@ -277,13 +302,13 @@ public sealed class Cam : Generator<Cam.Settings>
                 : "A flat follower cannot follow a motion this sharp: the profile would fold. A bigger base circle or a gentler motion.");
 
         token.ThrowIfCancellationRequested();
-        var cam = Shapes.Prism(profile, s.Bore > 0 ? [Shapes.Circle(s.Bore / 2f)] : [], 0, s.Thickness);
+        bool based = s.Demo;
+        var cam = Shapes.Prism(profile, s.Bore > 0 && !based ? [Shapes.Circle(s.Bore / 2f)] : [], 0, s.Thickness);
 
         // The follower: a rounded tip the size of the roller, or a flat foot, on a stem - long
-        // enough, on a base, to stay between its rails the whole way up and down.
-        bool based = s.WithBase && s.Bore > 0;
+        // enough, in a demonstration, to stay between its rails the whole way up and down.
         float tip = s.Follower == FollowerKind.Roller ? s.Roller : 3f;
-        float stem = based ? MathF.Max(30f, s.Rise + tip + 20f) : 30f;
+        float stem = based ? MathF.Max(40f, s.Rise + tip + 30f) : 30f;
         float width = s.Follower == FollowerKind.Roller ? 2 * s.Roller : 2 * (float)MaxRate(s) + 6f;
         var follower = s.Follower == FollowerKind.Roller
             ? Shapes.Union(Shapes.Cylinder(s.Roller, 0, s.Thickness), Shapes.Box(-s.Roller / 2f, 0, 0, s.Roller / 2f, stem, s.Thickness))
@@ -291,32 +316,13 @@ public sealed class Cam : Generator<Cam.Settings>
 
         // Resting on the cam at the start of the rise, with a hair between.
         float rest = s.Follower == FollowerKind.Roller ? s.Base + s.Roller + 0.1f : s.Base + 0.1f;
-        float raised = based ? Mechanisms.Base.Lift : 0f;
-        var set = new List<(string, string, Mesh, Matrix4x4?)>
-        {
-            ("Cam", "cam", cam, Matrix4x4.CreateRotationZ(MathF.PI / 2f) * Matrix4x4.CreateTranslation(0, 0, raised)),
-            ("Follower", "follower", follower, Matrix4x4.CreateTranslation(0, rest, raised))
-        };
+        if (based) return Demonstrate(s, printer, cam, follower, rest, stem, tip, worst, token);
 
-        if (based)
-        {
-            // A pin in the cam's bore, and two rails either side of the stem, above where the
-            // roller or the foot reaches at the top of the rise, so only the stem passes between.
-            float c = printer.XyClearance, half = s.Follower == FollowerKind.Roller ? s.Roller / 2f : 2.5f, rail = 2f;
-            float from = rest + s.Rise + tip + 1f, to = rest + stem - 1f, reach = s.Base + s.Rise + 3f;
-            float plate = Mechanisms.Base.Thickness, top = raised + s.Thickness;
-
-            var pieces = new List<Mesh>
-            {
-                Shapes.Prism(Shapes.RoundedRect(2 * reach, to + reach + 3f, 3f, new Vector2(0, (to - reach + 3f) / 2f)), 0, plate),
-                Shapes.Box(-half - c - rail, from, plate - 0.01f, -half - c, to, top),
-                Shapes.Box(half + c, from, plate - 0.01f, half + c + rail, to, top)
-            };
-            if (s.Bore / 2f - c >= 0.4f) pieces.Add(Shapes.Cylinder(s.Bore / 2f - c, plate - 0.01f, top - 0.5f));
-            set.Add(("Base", "base", Shapes.Union(pieces), Matrix4x4.Identity));
-        }
-
-        var parts = Shapes.InARow(set);
+        var parts = Shapes.InARow(
+        [
+            ("Cam", "cam", cam, Matrix4x4.CreateRotationZ(MathF.PI / 2f)),
+            ("Follower", "follower", follower, Matrix4x4.CreateTranslation(0, rest, 0))
+        ]);
 
         var notes = new List<string> { $"{s.Rise:0.#} mm of lift. The follower slides in a guide of your own, straight up the cam's middle." };
         if (s.Follower == FollowerKind.Roller)
@@ -329,10 +335,101 @@ public sealed class Cam : Generator<Cam.Settings>
         // rise, dwell, return. The follower rides up when pushed and back down on its spring.
         return new Generated(parts, notes)
         {
-            Motion = new Mechanism(
-                [new MovingPart(0, Joint.Revolute, Vector2.Zero), new MovingPart(1, Joint.Prismatic, default, Vector2.UnitY, Reach: 3, Returns: true)],
-                Driver: 0, Layers: [raised + s.Thickness / 2f], Turns: -1, Step: 1)
+            Motion = Moves(0f, s),
+            LaidOut = s.Organise
         };
+    }
+
+    private static Mechanism Moves(float lift, Settings s, IReadOnlyList<(int, int)>? riders = null) => new(
+        [new MovingPart(0, Joint.Revolute, Vector2.Zero), new MovingPart(1, Joint.Prismatic, default, Vector2.UnitY, Reach: 3, Returns: true)],
+        Driver: 0, Layers: [lift + s.Thickness / 2f], Turns: -1, Step: 1, Riders: riders);
+
+    /// <summary>
+    /// The cam as a model to turn by hand: keyed on a D-shaft through a base with a crank on
+    /// top; a peg on the follower's stem and two on the base for a rubber band, which is the spring
+    /// that brings the follower back down the cam. The follower is dropped between open rails and
+    /// held down by a cap pressed onto posts over them: a lip along each rail would print hanging
+    /// in the air, and a roof printed with the base left no way to get the follower in.
+    /// </summary>
+    private static Generated Demonstrate(Settings s, Printer printer, Mesh cam, Mesh follower, float rest, float stem, float tip, double worst, CancellationToken token)
+    {
+        var demo = new Demo(printer, s.Bore);
+        float lift = Demo.Lift, top = lift + s.Thickness, c = demo.Run, rail = 2f;
+        float half = s.Follower == FollowerKind.Roller ? s.Roller / 2f : 2.5f;
+
+        // Three pegs for the rubber band - one on the stem, two on the base - each with a hole in
+        // its top for a band holder: a pin with a flat head wider than the peg, pressed in once the
+        // band is on, so the band cannot ride up off the peg. Separate, and printed head down, so
+        // the head is a flat disc on the plate rather than a brim hanging off a peg.
+        float pegTop = top + 6f, pin = 1f;
+        Mesh Socket(Vector2 at) => Shapes.Cylinder(pin + demo.Grip, pegTop - 4f, pegTop + 1f, at, 24);
+        var stemPeg = new Vector2(0, stem - 4f);
+        var peg = Shapes.Subtract(Shapes.Cylinder(2.5f, s.Thickness - 0.01f, s.Thickness + 6f, stemPeg),
+            Shapes.Cylinder(pin + demo.Grip, s.Thickness + 2f, s.Thickness + 7f, stemPeg, 24));
+        demo.Lying("Cam", "cam", Shapes.Moved(Shapes.Turned(cam, MathF.PI / 2f), 0, 0, lift));
+        demo.Lying("Follower", "follower", Shapes.Moved(Shapes.Union(follower, peg), 0, rest, lift));
+        demo.Upright(Vector2.Zero, [0], handle: true);
+
+        // The channel above where the roller or the foot reaches at the top of the rise, so only
+        // the stem passes between its rails.
+        // It ends short of the peg on the stem's end, so the peg never runs under a lip.
+        float from = rest + s.Rise + tip + 1f, to = rest + stem - 8f;
+        demo.AddToBase(Shapes.Box(-half - c, from, Demo.Plate - 0.01f, half + c, to, lift - Demo.Gap));
+        // Open rails the follower is dropped between, and a cap pressed onto four posts over
+        // them to hold it down. A lip on each rail would print hanging in the air, and a roof
+        // printed with the base would leave no way to get the follower in.
+        float wide = half + c + rail, cap = top + Demo.Gap, post = 1.5f;
+        demo.AddToBase(Shapes.Box(-wide, from, Demo.Plate - 0.01f, -half - c, to, cap));
+        demo.AddToBase(Shapes.Box(half + c, from, Demo.Plate - 0.01f, wide, to, cap));
+
+        var holes = new List<Mesh>();
+        foreach (float side in new[] { -1f, 1f })
+        {
+            foreach (float y in new[] { from + 2.5f, to - 2.5f })
+            {
+                var at = new Vector2(side * (wide + post + 0.5f), y);
+                demo.AddToBase(Shapes.Cylinder(post, Demo.Plate - 0.01f, cap + 1.7f, at, 24));
+                holes.Add(Shapes.Cylinder(post + demo.Grip, cap - 1, cap + 3f, at, 24));
+            }
+
+            var spot = new Vector2(side * (wide + 9f), from + 3f);
+            demo.AddToBase(Shapes.Cylinder(2.5f, Demo.Plate - 0.01f, pegTop, spot));
+            demo.CutFromBase(Socket(spot));
+            Holder(spot, rides: false);
+        }
+
+        demo.Lying("Guide cap", "guide cap", Shapes.Subtract(Shapes.Box(-wide - 2 * post - 2f, from, cap, wide + 2 * post + 2f, to, cap + 2f), holes));
+        Holder(stemPeg + new Vector2(0, rest), rides: true);
+
+        void Holder(Vector2 at, bool rides)
+        {
+            // A neck between the peg's top and the head for the band to sit round, held between
+            // the two: on the head alone, it slid down the peg.
+            float neck = 4f;
+            var holder = Shapes.Union(
+                Shapes.Cylinder(pin, pegTop - 3.7f, pegTop + 0.06f, at, 24),
+                Shapes.Cylinder(1.6f, pegTop + 0.05f, pegTop + neck + 0.06f, at),
+                Shapes.Cylinder(4.5f, pegTop + neck + 0.05f, pegTop + neck + 1.25f, at));
+            int i = demo.Placed("Band holder", "band holder", holder,
+                Matrix4x4.CreateTranslation(-at.X, -at.Y, -(pegTop + neck + 1.25f)) * Matrix4x4.CreateRotationX(MathF.PI));
+
+            // The stem's holder moves with the follower.
+            if (rides) demo.Riders.Add((i, 1));
+        }
+
+        demo.Cover(-half - 12f, from, half + 12f, rest + stem + s.Rise);
+        token.ThrowIfCancellationRequested();
+        var parts = demo.Finish(token);
+
+        var notes = new List<string>
+        {
+            $"{s.Rise:0.#} mm of lift, on a {demo.Size:0.#} mm D-shaft the cam grips.",
+            "Drop the follower's stem between the rails and press the guide cap down onto the four posts over it; then the cam onto its shaft, and the crank. A rubber band round the peg on the stem and the two on the base brings the follower back down; press a band holder into the top of each peg, and hook the band round the holders' necks."
+        };
+        if (s.Follower == FollowerKind.Roller)
+            notes.Add($"The largest pressure angle is {worst * 180 / Math.PI:0} degrees.");
+
+        return new Generated(parts, notes) { Motion = Moves(lift, s, demo.Riders), LaidOut = s.Organise };
     }
 
     private static double MaxRate(Settings s) => Enumerable.Range(0, 360).Max(i => Math.Abs(Motion(s, i * Math.PI / 180).Rate));
