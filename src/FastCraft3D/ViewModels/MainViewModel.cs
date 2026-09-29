@@ -6093,7 +6093,7 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
             return;
         }
 
-        var dialog = new MouldDialog(source.Name, study, model);
+        var dialog = new MouldDialog(source.Name, study, model, CurrentPrinter.XyClearance);
         if (dialog.ShowDialog() != true) return;
 
         token = StartWork($"Molding {source.Name}");

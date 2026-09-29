@@ -32,7 +32,7 @@ public sealed class ScrewThread : Generator<ScrewThread.Settings>
          ShowWhen(nameof(Size), ThreadSize.Custom)] float Pitch = 1.25f,
         [Length("Length", ThreadOptions.MinimumLength, ThreadOptions.MaximumLength, Hint = "Along the thread; under the head, for a bolt"),
          ShowWhen(nameof(Kind), ThreadKind.Rod, ThreadKind.Bolt, ThreadKind.HoleCutter)] float Length = 20f,
-        [Length("Clearance", 0, ThreadOptions.MaximumClearance,
+        [Clearance("Clearance", 0, ThreadOptions.MaximumClearance, Fit = PrinterFit.Thread,
             Hint = "The gap on the diameter between a rod and a nut of the same size. Half comes off the rod and half goes on the nut, so either also fits a bought one.")]
         float Clearance = 0.2f,
         [Choice("Body", Hint = "The nut's body, or the bolt's head"), ShowWhen(nameof(Kind), ThreadKind.Nut, ThreadKind.Bolt)] NutBody Body = NutBody.Hexagon,

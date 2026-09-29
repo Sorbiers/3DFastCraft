@@ -802,6 +802,9 @@
                             Command="{Binding RecordCommand}" MinWidth="86"
                             ToolTip="While on, saves a screenshot after every action - and one just before each Apply - to a folder you choose." />
                     <Separator Margin="8,0" />
+                    <Button Style="{StaticResource ToolButton}" Content="Settings" Tag="{StaticResource IconSettings}"
+                            Command="{Binding OpenSettingsCommand}" MinWidth="70" AutomationProperties.AutomationId="Settings"
+                            ToolTip="Printer profiles: nozzle, layer and the fits the tools start from, with a test print for them" />
                     <Button Style="{StaticResource ToolButton}" Content="About" Tag="{StaticResource IconAbout}"
                             Click="OnAbout" ToolTip="Version, license and where the source lives" />
                     <ToggleButton Style="{StaticResource ToolToggle}" Content="Shortcuts" Tag="{StaticResource IconKeyboard}"

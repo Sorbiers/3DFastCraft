@@ -69,6 +69,9 @@ public sealed class WallAttribute(string label, double min, double max) : Length
 public sealed class ClearanceAttribute(string label, double min, double max) : LengthAttribute(label, min, max)
 {
     internal override ParameterKind Kind => ParameterKind.Clearance;
+
+    /// <summary>Which of the printer's fits it starts from: a sliding fit unless it says.</summary>
+    public PrinterFit Fit { get; set; } = PrinterFit.Sliding;
 }
 
 public sealed class AngleAttribute(string label, double min, double max) : FieldAttribute(label)
@@ -150,6 +153,9 @@ public sealed record GeneratorParameter(
 {
     public bool IsNumber => Kind is not (ParameterKind.Choice or ParameterKind.Toggle);
 
+    /// <summary>For a clearance, which of the printer's fits it starts from.</summary>
+    public PrinterFit Fit { get; init; }
+
     public bool IsLength => Kind is ParameterKind.Length or ParameterKind.Wall or ParameterKind.Clearance;
 
     /// <summary>For a choice, each value with what it is called.</summary>
@@ -178,7 +184,7 @@ public sealed record GeneratorParameter(
     /// </summary>
     public object DefaultFor(Printer printer) => Kind switch
     {
-        ParameterKind.Clearance => Clamp(printer.XyClearance),
+        ParameterKind.Clearance => Clamp(printer.FitFor(Fit)),
         ParameterKind.Wall => Clamp(MathF.Ceiling((float)Default / printer.Nozzle - 1e-3f) * printer.Nozzle),
         _ => Default
     };
@@ -274,7 +280,10 @@ public sealed class SettingsShape
 
             var parameter = new GeneratorParameter(
                 p.Name!, p.ParameterType, field.Kind, field.Label, field.Hint, field.Group,
-                field.Min, field.Max, field.Unit, value, show?.Parameter, show?.Values ?? []);
+                field.Min, field.Max, field.Unit, value, show?.Parameter, show?.Values ?? [])
+            {
+                Fit = (field as ClearanceAttribute)?.Fit ?? PrinterFit.Sliding
+            };
 
             if (parameter.IsNumber && !parameter.InRange(Convert.ToDouble(value, CultureInfo.InvariantCulture)))
                 throw new InvalidOperationException($"{where} defaults to {value}, outside {field.Min} to {field.Max}.");

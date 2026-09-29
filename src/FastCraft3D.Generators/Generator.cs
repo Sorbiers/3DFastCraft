@@ -10,19 +10,74 @@ namespace FastCraft3D.Generators;
 /// <param name="Nozzle">Line width, near enough, in millimetres.</param>
 /// <param name="Layer">Layer height.</param>
 /// <param name="XyClearance">The gap, per side, two printed surfaces need to slide past each other.</param>
+/// <remarks>
+/// One clearance was not enough. A print shows the gap a lid slides in, the extra a round hole
+/// wants to take a pin that was printed beside it, how hard brick studs grip and how loose a
+/// printed thread has to be - four different numbers, each found with a test print of its own.
+/// </remarks>
 public sealed record Printer(float Nozzle = 0.4f, float Layer = 0.2f, float XyClearance = 0.2f)
 {
     public const float LeastNozzle = 0.1f, MostNozzle = 2f;
     public const float LeastLayer = 0.02f, MostLayer = 1.2f;
     public const float LeastClearance = 0f, MostClearance = 1f;
+    public const float LeastBrickFit = -0.4f, MostBrickFit = 0.4f;
 
     public static Printer Default { get; } = new();
+
+    /// <summary>What the profile is called: "MK4, PLA".</summary>
+    public string Name { get; init; } = "My printer";
+
+    /// <summary>Added to a hole, per side, for a pin or a screw printed or bought to its size to go in.</summary>
+    public float HoleClearance { get; init; } = 0.2f;
+
+    /// <summary>How much larger brick studs and what grips them are made: negative is looser.</summary>
+    public float BrickFit { get; init; } = -0.1f;
+
+    /// <summary>The gap on the diameter between a printed thread and its nut.</summary>
+    public float ThreadClearance { get; init; } = 0.2f;
+
+    /// <summary>The printer's number for a kind of fit.</summary>
+    public float FitFor(PrinterFit fit) => fit switch
+    {
+        PrinterFit.Hole => HoleClearance,
+        PrinterFit.Brick => BrickFit,
+        PrinterFit.Thread => ThreadClearance,
+        _ => XyClearance
+    };
+
+    /// <summary>This printer with every number brought inside what a real one would be set to.</summary>
+    public Printer Saned() => Sane(Nozzle, Layer, XyClearance) with
+    {
+        Name = string.IsNullOrWhiteSpace(Name) ? Default.Name : Name.Trim(),
+        HoleClearance = Within(HoleClearance, LeastClearance, MostClearance, Default.HoleClearance),
+        BrickFit = Within(BrickFit, LeastBrickFit, MostBrickFit, Default.BrickFit),
+        ThreadClearance = Within(ThreadClearance, LeastClearance, MostClearance, Default.ThreadClearance)
+    };
+
+    private static float Within(float value, float least, float most, float otherwise) =>
+        float.IsFinite(value) ? Math.Clamp(value, least, most) : otherwise;
 
     /// <summary>A printer with each number brought inside what any real one would be set to.</summary>
     public static Printer Sane(float nozzle, float layer, float clearance) => new(
         float.IsFinite(nozzle) ? Math.Clamp(nozzle, LeastNozzle, MostNozzle) : Default.Nozzle,
         float.IsFinite(layer) ? Math.Clamp(layer, LeastLayer, MostLayer) : Default.Layer,
         float.IsFinite(clearance) ? Math.Clamp(clearance, LeastClearance, MostClearance) : Default.XyClearance);
+}
+
+/// <summary>Which of the printer's fits a clearance starts from.</summary>
+public enum PrinterFit
+{
+    /// <summary>Two surfaces sliding or turning past each other: a lid, a hinge, a shaft.</summary>
+    Sliding,
+
+    /// <summary>A round hole taking a pin or a screw of its nominal size.</summary>
+    Hole,
+
+    /// <summary>Brick studs and what grips them.</summary>
+    Brick,
+
+    /// <summary>A printed thread and its nut.</summary>
+    Thread
 }
 
 /// <summary>One part a generator made.</summary>

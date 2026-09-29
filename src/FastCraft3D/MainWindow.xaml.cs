@@ -112,6 +112,7 @@ public partial class MainWindow : Window
             if (remembered.SidePanelWidth >= 260f) SidePanel.Width = remembered.SidePanelWidth;
         }
         viewModel.SettingsChanged += () => LocalSettings.Save(viewModel.Remembered);
+        viewModel.UseSavedPrinter();
 
         ToolPanel.Host = viewModel.ShowPanel;
 

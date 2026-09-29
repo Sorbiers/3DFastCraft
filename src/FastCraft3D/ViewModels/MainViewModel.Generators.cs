@@ -429,7 +429,7 @@ public sealed partial class MainViewModel
 
         if (view.Printer != CurrentPrinter)
         {
-            printer = view.Printer;
+            UsePrinter(view.Printer);
             PrinterProfile.Save(view.Printer);
         }
 

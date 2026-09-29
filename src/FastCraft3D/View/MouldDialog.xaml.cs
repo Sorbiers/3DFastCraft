@@ -36,9 +36,11 @@ public partial class MouldDialog : ToolPanel
 
     public MouldOptions Options { get; private set; } = MouldOptions.Default;
 
-    public MouldDialog(string name, MouldStudy study, Mesh model)
+    /// <param name="keyClearance">The printer's sliding clearance, which the keys start from.</param>
+    public MouldDialog(string name, MouldStudy study, Mesh model, float keyClearance = 0.2f)
     {
         InitializeComponent();
+        ClearanceBox.Put(keyClearance);
 
         this.study = study;
         triangles = model.TriangleCount;
