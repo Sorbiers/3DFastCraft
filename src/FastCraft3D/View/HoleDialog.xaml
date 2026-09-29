@@ -85,7 +85,7 @@
             <Button x:Name="AddButton" Content="Add" Style="{DynamicResource PanelButton}" Click="OnAdd"
                     AutomationProperties.Name="HoleAdd"
                     ToolTip="Put the cutter on the plate where it stands, to Subtract later - from this part or another" />
-            <Button Content="Cancel" Style="{DynamicResource PanelButton}" IsCancel="True" />
+            <Button x:Name="CancelButton" Content="Cancel" Style="{DynamicResource PanelButton}" IsCancel="True" />
         </StackPanel>
 
         <Border Margin="0,8,0,0" Padding="8,6" CornerRadius="3"

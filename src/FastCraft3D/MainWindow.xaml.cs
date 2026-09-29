@@ -143,6 +143,11 @@ public partial class MainWindow : Window
             // Entering and leaving sketch mode comes through here as well.
             RefreshFocus();
         };
+        // Every tool picked up or put down says so through IsToolInHand.
+        viewModel.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(MainViewModel.IsToolInHand)) RefreshFocus();
+        };
         viewModel.LookFromTopRequested += top =>
         {
             if (top) OnViewTop(this, new RoutedEventArgs());
@@ -2145,6 +2150,11 @@ public partial class MainWindow : Window
         if (viewModel.IsSketchMode) working = [];
         else if (viewModel.PreviewOnly is { Count: > 0 } previewing) working = previewing;
         else if (viewModel.IsSplitMode || viewModel.ConnectorPlane is not null) working = viewModel.Scene.Selection;
+
+        // Any other tool that works on the selection has the plate to itself as well - Hole,
+        // Emboss, Voronoi and the rest - not the four that pick a face on anything. With nothing
+        // selected there is nothing to keep, and everything stays.
+        else if (viewModel.ToolKeepsToSelection && viewModel.Scene.Selection.Count > 0) working = viewModel.Scene.Selection.ToList();
 
         renderer.Focus(working);
     }

@@ -1804,6 +1804,14 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
     /// <summary>The same thing the other way up, for everything that has to grey out.</summary>
     public bool NothingInHand => !IsToolInHand;
 
+    /// <summary>
+    /// Whether the tool in hand works on the selection alone, so the rest of the plate stands
+    /// aside while it is open - drawn again when it is put down, or seen through with x-ray.
+    /// Everything but the four that pick a face on anything at all - align to a face, center
+    /// face to face, surface info and the tape - which need the rest there to pick from.
+    /// </summary>
+    public bool ToolKeepsToSelection => IsToolInHand && !isAlignFaceMode && !isCentreFaceMode && !isSurfaceInfoMode && !isMeasureMode;
+
     private ToolPanel? openPanel;
 
     /// <summary>The settings of the tool being used - Repeat, Smooth, Mould and the rest - or null.</summary>
@@ -6347,6 +6355,7 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
             {
                 if (shown is not null) Scene.Objects.Remove(shown);
                 shown = null;
+                PreviewOnly = null;
                 return;
             }
 
@@ -6355,6 +6364,7 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
             {
                 shown = new SceneObject("Custom shape", mesh) { Colour = colour, Position = new Vector3(0, 0, lift) };
                 Scene.Objects.Add(shown);
+                PreviewOnly = [shown];
             }
             else
             {
@@ -6366,6 +6376,7 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
         bool accepted = dialog.ShowDialog() == true && dialog.Result is not null;
 
         if (shown is not null) Scene.Objects.Remove(shown);
+        PreviewOnly = null;
         ShowWireframe = wireframeBefore;
 
         if (!accepted || dialog.Result is not { } shape) return;
@@ -6815,6 +6826,10 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
                 Scene.Objects.Add(shown);
                 HoldPreview(shown);
 
+                // The parts it goes into and the cutter, which holds the selection while the
+                // panel is open - so the selection alone would leave the parts out.
+                PreviewOnly = [.. targets, shown];
+
                 // Through a part, how long each hole has to be depends on where it is and which
                 // way it points, so a move or a turn builds the cutter again - once the drag has
                 // stopped asking, rather than on every step of it.
@@ -6842,6 +6857,7 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
             Scene.Objects.Remove(shown);
         }
 
+        PreviewOnly = null;
         ReleasePreview();
         Scene.SelectOnly(target);
         foreach (var t in targets) t.IsSelected = true;
@@ -7030,10 +7046,12 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
             shown = new SceneObject("Text", mesh) { Colour = colour }.Centred();
             shown.Position = shown.Position with { Z = shown.Position.Z - shown.WorldBounds.Min.Z };
             Scene.Objects.Add(shown);
+            PreviewOnly = [shown];
         });
 
         bool accepted = dialog.ShowDialog() == true;
         if (shown is not null) Scene.Objects.Remove(shown);
+        PreviewOnly = null;
 
         if (!accepted || dialog.Result is not { } chosen) return;
         lastText = chosen;

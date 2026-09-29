@@ -191,6 +191,28 @@ public class ToolFlowTests
     });
 
     [Fact]
+    public void WhileHoleIsOpenOnlyItsPartsAndTheCutterAreDrawn() => WithModel(model =>
+    {
+        var plate = new SceneObject("Plate", Primitives.Box(40, 40, 6)) { Position = new Vector3(0, 0, 3) };
+        var beside = new SceneObject("Beside", Primitives.Box(10, 10, 10)) { Position = new Vector3(60, 0, 5) };
+        model.Scene.Objects.Add(plate);
+        model.Scene.Objects.Add(beside);
+        plate.IsSelected = true;
+        model.RefreshSelection();
+
+        IReadOnlyList<SceneObject>? drawn = null;
+        AnswerPanel(model, "CancelButton", () => drawn = model.PreviewOnly?.ToList());
+        model.InsertHoleCommand.Execute(null);
+        PumpUntil(() => !model.HasOpenPanel);
+
+        Assert.NotNull(drawn);
+        Assert.Contains(plate, drawn!);
+        Assert.DoesNotContain(beside, drawn!);
+        Assert.Equal(2, drawn!.Count);
+        Assert.Null(model.PreviewOnly);
+    });
+
+    [Fact]
     public void DropDownLandsOnThePartUnderneathAndOverlapGoesALittleIntoIt() => WithModel(model =>
     {
         var plate = new SceneObject("Plate", Primitives.Box(40, 40, 6)) { Position = new Vector3(0, 0, 3) };

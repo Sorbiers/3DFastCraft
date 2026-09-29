@@ -653,6 +653,38 @@ public class ToolTakeoverTests
         });
     }
 
+    /// <summary>
+    /// A tool that works on the selection has the plate to itself; the ones that pick a face on
+    /// anything keep the rest there to pick from.
+    /// </summary>
+    [Theory]
+    [InlineData("BeginEmbossCommand", true)]
+    [InlineData("BeginEngraveCommand", true)]
+    [InlineData("BeginWallMountCommand", true)]
+    [InlineData("BeginExtrudeCommand", true)]
+    [InlineData("BeginLayCommand", true)]
+    [InlineData("SetPivotCommand", true)]
+    [InlineData("BeginAlignFaceCommand", false)]
+    [InlineData("BeginCentreFaceCommand", false)]
+    [InlineData("BeginSurfaceInfoCommand", false)]
+    [InlineData("BeginMeasureCommand", false)]
+    public void AToolOnTheSelectionHasThePlateToItselfAndAFacePickerDoesNot(string start, bool alone)
+    {
+        RunSta(() =>
+        {
+            var (model, cube) = WithACube();
+            model.InsertCommand.Execute("Cylinder");
+            model.Scene.SelectOnly(cube);
+            model.RefreshSelection();
+            Assert.False(model.ToolKeepsToSelection);
+
+            ((System.Windows.Input.ICommand)typeof(MainViewModel).GetProperty(start)!.GetValue(model)!).Execute(null);
+
+            Assert.True(model.IsToolInHand, start);
+            Assert.Equal(alone, model.ToolKeepsToSelection);
+        });
+    }
+
     /// <summary>Each of them means something different by a click, so only one can be listening.</summary>
     [Fact]
     public void StartingOneToolPutsTheOthersAway()
