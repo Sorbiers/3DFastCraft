@@ -41,6 +41,8 @@ Almost all of it is written by [Claude Code](https://claude.com/claude-code) fro
     and stops at a jam.
   - **Lay out for printing** - on: every part side by side, each its own object and color.
     Off: put down assembled, as one group (**Ungroup** takes it apart).
+  - **Resizing the preview** on the plate - the size boxes or the handles - changes the part's
+    own size settings and remakes it rather than stretching it: a roof made longer keeps its tiles.
 - **Lithophane** - a photo as a plate lit from behind; flat, curved, or a lamp of 3-12 sides on
   an E26/E27 socket base.
 
@@ -53,6 +55,10 @@ Almost all of it is written by [Claude Code](https://claude.com/claude-code) fro
 - **Split** - with a plane you drag or type; keep either half or both.
 - **Set pivot** - turn and measure about a point you click (a shaft hole, a hinge line).
 - **Round edges**, **Twist / Taper / Bend**, **Simplify**, **Smooth**, **Hollow**.
+- **Fill up** - fills what the part would hold if liquid were poured in from above, to a level:
+  the inside of a cup or a box, a recess, a sealed hollow; a pocket open to the side fills only up
+  to its opening, and with *The plate is a floor* a tube or walls standing on the plate fill too.
+  Solid, or as a part of its own that fits the inside exactly (a second filament, or a cavity's volume).
 - **Color and filament** - per object; 3MF carries both.
 
 ### Align
@@ -88,8 +94,11 @@ Almost all of it is written by [Claude Code](https://claude.com/claude-code) fro
   goes through the whole stack.
 - **Keyhole** - slots to hang a part on a wall, with printed studs and a drilling template.
 - **Emboss** - lettering, an SVG or a picture (PNG, JPEG) raised or cut into a face, flat or
-  wrapped. Drag the grip to move, the knob to turn, the **corner squares** to resize along the
-  surface. **Keep as its own part** prints it in a second filament.
+  wrapped, or a texture over it. On the face: the circle moves it freely, the **arrows** across or
+  up only, the knob turns it (15 degree steps; **Alt** turns freely, or type **Turn**), and the
+  **corner squares** resize it along the surface - a texture's corners resize the *area* it covers,
+  so a corner brick can meet the corner of the face. Raised work keeps off windows and doorways
+  already cut in the face. **Keep as its own part** prints it in a second filament.
 - **Engrave** - brick, tile, plank, grain and more, cut or raised, laid *around* openings.
 - **Repeat** - along a line, round a circle (with a rise, for spiral stairs) or in a grid.
 - **Measure**, **Fit check**, **Surface info** - distances, overlap or gap between parts, and a
@@ -97,6 +106,10 @@ Almost all of it is written by [Claude Code](https://claude.com/claude-code) fro
 
 ### File
 
+- **Settings** - printer profiles, one per printer and filament: nozzle, layer, and the fits the
+  tools start from - sliding clearance (lids, hinges), hole clearance (Hole), press fit (the pins of
+  Split and Connect), brick fit and thread clearance. **Printer profile test** in the Library prints
+  every fit at once, a few samples either side of the profile's number or up from nought.
 - **Projects** (`.3dfc`) with **versions** kept inside the file; restore is an undo step.
 - **Export** STL (binary or ASCII), OBJ or 3MF - everything or just the selection; reports
   triangles, volume and whether it is watertight before writing.
@@ -121,8 +134,8 @@ Almost all of it is written by [Claude Code](https://claude.com/claude-code) fro
   dragged, resize in proportion.
 - **Stop on contact** (**C**) - a dragged part stops where its *shape* meets another, not its
   box. Parts that already overlap move freely.
-- **Number boxes** take `+=5`, `-=5`, `*=1.5`, `/=2`; the wheel and arrows nudge (Shift ×10,
-  Ctrl ×0.1).
+- **Number boxes** - every one, in every panel - take `+=5`, `-=5`, `*=1.5`, `/=2`; the wheel and
+  arrows nudge (Shift ×10, Ctrl ×0.1), and a count stays whole.
 - **A tool in hand has the plate to itself** - only the selection is drawn until it is put down;
   **X-ray** shows the rest. Tools that pick a face on anything (align to face, center face to
   face, surface info, measure) keep everything.
