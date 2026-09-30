@@ -9,7 +9,6 @@ namespace FastCraft3D.Io;
 /// </summary>
 public enum SessionExportFormat
 {
-    Project,
-    Stl,
-    ThreeMf
+    Project, // a 3MF that reopens as a project, so a plain 3MF beside it would be the same file
+    Stl
 }

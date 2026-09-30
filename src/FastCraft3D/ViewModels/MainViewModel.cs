@@ -9404,6 +9404,8 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
 
         var dialog = new OpenFileDialog
         {
+            // A plain 3MF chosen here opens as a model on a new plate: nothing but its contents
+            // says which kind it is. A .3dfc is imported, from Import.
             Filter = $"3DFastCraft project (*{SceneSerializer.Extension})|*{SceneSerializer.Extension}",
             Title = "Open project"
         };
@@ -9414,6 +9416,12 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
 
     private void LoadProject(string path)
     {
+        if (!SceneSerializer.IsProject(path))
+        {
+            OpenModel(path);
+            return;
+        }
+
         try
         {
             var loaded = SceneSerializer.Load(path, out var settings);
@@ -9425,6 +9433,7 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
             foreach (var o in loaded) Scene.Objects.Add(o);
             Undo.Clear();
             projectPath = path;
+            openedFrom = null;
             IsDirty = false;
             recent.Add(path);
             RefreshSelection();
@@ -9435,6 +9444,23 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
         {
             MessageBox.Show(ex.Message, "Could not open project", MessageBoxButton.OK, MessageBoxImage.Error);
         }
+    }
+
+    /// <summary>
+    /// A model opened where a project was expected - a 3MF from a slicer, a project a slicer has
+    /// saved over, a .3dfc from before 4.3 - on a plate of its own. Not as the project: saving it back would put this app's
+    /// project over the slicer's, so it is saved under a name of its own.
+    /// </summary>
+    private void OpenModel(string path)
+    {
+        Scene.Objects.Clear();
+        Undo.Clear();
+        projectPath = null;
+        ImportFiles([path]);
+        Undo.Clear();
+        openedFrom = path;
+        IsDirty = false;
+        Raise(nameof(WindowTitle));
     }
 
     private void SaveProject(bool saveAs)
@@ -9455,7 +9481,7 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
 
         try
         {
-            SceneSerializer.Save(target, Scene, ViewSettings);
+            SceneSerializer.Save(target, Scene, ViewSettings, versionsFrom: projectPath);
             projectPath = target;
             IsDirty = false;
             recent.Add(target);
@@ -9550,8 +9576,8 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
         var dialog = new OpenFileDialog
         {
             Filter = "Models and drawings (*.stl;*.obj;*.3mf;*.svg;*.3dfc)|*.stl;*.obj;*.3mf;*.svg;*.3dfc"
-                   + "|STL (*.stl)|*.stl|Wavefront OBJ (*.obj)|*.obj|3MF (*.3mf)|*.3mf|SVG drawing (*.svg)|*.svg"
-                   + $"|3DFastCraft project (*{SceneSerializer.Extension})|*{SceneSerializer.Extension}",
+                   + "|STL (*.stl)|*.stl|Wavefront OBJ (*.obj)|*.obj|3MF, a project too (*.3mf)|*.3mf|SVG drawing (*.svg)|*.svg"
+                   + $"|3DFastCraft project, before 4.3 (*{SceneSerializer.LegacyExtension})|*{SceneSerializer.LegacyExtension}",
             Title = "Import model",
             Multiselect = true
         };
@@ -9580,16 +9606,18 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
             {
                 string extension = Path.GetExtension(path);
 
-                // A project imported rather than opened joins what is already on the plate: its
-                // objects keep their own names, colours and positions, and nothing here is
-                // replaced. Opening it would have thrown the current work away.
-                if (extension.Equals(SceneSerializer.Extension, StringComparison.OrdinalIgnoreCase))
+                // A project from before 4.3, the only way it still comes in: it joins what is on the
+                // plate, its objects as they were - placed, turned, colored, still remade by Edit
+                // settings. Only its versions stay behind. Taking the mesh and colour alone, as
+                // this did, put every part at the origin, unturned. A project saved as a 3MF comes
+                // in through the 3MF's own model below, as any 3MF.
+                if (extension.Equals(SceneSerializer.LegacyExtension, StringComparison.OrdinalIgnoreCase))
                 {
                     foreach (var loaded in SceneSerializer.Load(path))
-                        imported.Add(new SceneObject(naming(loaded.Name), loaded.Mesh)
-                        {
-                            Colour = loaded.Colour
-                        });
+                    {
+                        loaded.Name = naming(loaded.Name);
+                        imported.Add(loaded);
+                    }
                 }
                 else if (extension.Equals(".3mf", StringComparison.OrdinalIgnoreCase))
                 {
@@ -9798,13 +9826,7 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
 
         try
         {
-            if (chosen.Format == ExportFormat.ThreeMf)
-            {
-                // Composed exactly as OBJ is - separate, named and coloured - since 3MF keeps all three.
-                ThreeMf.Write(dialog.FileName, ExportComposer.ComposeForObj(subjects, chosen.DropToPlate));
-                Status = $"Exported {subjects.Count} object(s) to {Path.GetFileName(dialog.FileName)}";
-            }
-            else if (chosen.IsObj)
+            if (chosen.IsObj)
             {
                 ObjWriter.Write(dialog.FileName, ExportComposer.ComposeForObj(subjects, chosen.DropToPlate));
                 Status = $"Exported {subjects.Count} object(s) to {Path.GetFileName(dialog.FileName)}";
@@ -9894,10 +9916,6 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
         {
             case SessionExportFormat.Project:
                 SceneSerializer.SaveSnapshot(stem + SceneSerializer.Extension, Scene);
-                break;
-
-            case SessionExportFormat.ThreeMf:
-                ThreeMf.Write(stem + ".3mf", ExportComposer.ComposeForObj(Scene.Shown));
                 break;
 
             default:

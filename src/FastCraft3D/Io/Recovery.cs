@@ -116,7 +116,7 @@ public static class Recovery
 
             foreach (string note in Directory.EnumerateFiles(where, "*.json"))
             {
-                string scene = Path.ChangeExtension(note, SceneSerializer.Extension);
+                string scene = Path.ChangeExtension(note, SceneSerializer.LegacyExtension);
                 var kept = Read(note);
 
                 if (kept is null || !File.Exists(scene) || DateTime.UtcNow - kept.SavedUtc > KeepFor)
@@ -156,7 +156,7 @@ public static class Recovery
     }
 
     private static string ScenePath(string folder, int id) =>
-        Path.Combine(folder, id.ToString() + SceneSerializer.Extension);
+        Path.Combine(folder, id.ToString() + SceneSerializer.LegacyExtension);
 
     private static string NotePath(string folder, int id) =>
         Path.Combine(folder, id.ToString() + ".json");

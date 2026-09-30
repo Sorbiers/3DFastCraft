@@ -20,9 +20,7 @@ public partial class ExportSessionDialog : Window
 
     private void OnExport(object sender, RoutedEventArgs e)
     {
-        Result = FormatStl.IsChecked == true ? SessionExportFormat.Stl
-            : FormatThreeMf.IsChecked == true ? SessionExportFormat.ThreeMf
-            : SessionExportFormat.Project;
+        Result = FormatStl.IsChecked == true ? SessionExportFormat.Stl : SessionExportFormat.Project;
 
         DialogResult = true;
     }

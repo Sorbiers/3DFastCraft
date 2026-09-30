@@ -12,16 +12,20 @@ namespace FastCraft3D.Io;
 /// </summary>
 public static class IncomingFiles
 {
-    private static readonly string[] Known = [".stl", ".obj", ".3mf", ".svg", SceneSerializer.Extension];
+    private static readonly string[] Known = [".stl", ".obj", ".3mf", ".svg", SceneSerializer.LegacyExtension];
 
     /// <summary>Whether this app has anything to say about a file with this name.</summary>
     public static bool Understood(string path) =>
         Path.GetExtension(path) is { Length: > 0 } extension
         && Known.Contains(extension, StringComparer.OrdinalIgnoreCase);
 
-    /// <summary>Whether opening this one means replacing the plate rather than adding to it.</summary>
+    /// <summary>
+    /// Whether opening this one means replacing the plate rather than adding to it. A .3mf is a
+    /// project only when this app wrote it as one, which only its contents can say. A .3dfc from
+    /// before 4.3 is imported, as a model is.
+    /// </summary>
     public static bool IsProject(string path) =>
-        Path.GetExtension(path).Equals(SceneSerializer.Extension, StringComparison.OrdinalIgnoreCase);
+        Path.GetExtension(path).Equals(SceneSerializer.Extension, StringComparison.OrdinalIgnoreCase) && SceneSerializer.IsProject(path);
 
     /// <summary>
     /// The files among these that are worth opening, in the order they were given.

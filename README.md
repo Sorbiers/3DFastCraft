@@ -31,7 +31,7 @@ Almost all of it is written by [Claude Code](https://claude.com/claude-code) fro
 - **Custom shape** - a primitive with its segments and roundness chosen before it is made.
 - **Text** - lettering as an object: flat, round a circle or round a cylinder, any installed font.
 - **Sketch** - lines, arcs, curves, freehand or an SVG on the plate, extruded or revolved.
-- **Import** - STL, OBJ, 3MF, SVG as a solid; another `.3dfc` project *joins* the plate.
+- **Import** - STL, OBJ, 3MF, SVG as a solid; another project *joins* the plate.
 - **Library** (Ctrl+L) - parts made to your numbers, previewed as you type, remade later with
   **Edit settings**: boxes and Gridfinity, organizers, hinges, clips, threads, washers, knobs,
   gears and mechanisms, stairs, windows, doors, roofs with dormers, lithophanes and lamps,
@@ -110,9 +110,11 @@ Almost all of it is written by [Claude Code](https://claude.com/claude-code) fro
   tools start from - sliding clearance (lids, hinges), hole clearance (Hole), press fit (the pins of
   Split and Connect), brick fit and thread clearance. **Printer profile test** in the Library prints
   every fit at once, a few samples either side of the profile's number or up from nought.
-- **Projects** (`.3dfc`) with **versions** kept inside the file; restore is an undo step.
-- **Export** STL (binary or ASCII), OBJ or 3MF - everything or just the selection; reports
-  triangles, volume and whether it is watertight before writing.
+- **Projects** are `.3mf` files: the plate as any slicer and Explorer see it, with the editable
+  project and its **versions** inside; restore is an undo step. A `.3dfc` from before 4.3 is
+  imported, without its versions.
+- **Export** STL (binary or ASCII) or OBJ - everything or just the selection; reports
+  triangles, volume and whether it is watertight before writing. For 3MF, save the project.
 - **Blueprint** (Ctrl+P) - front, top, side and isometric views with dimensions and a title
   block; print, PDF or PNG, plus a parts list.
 - **Export session / Record** - every undo step as a file, or a screenshot after every action.
@@ -135,7 +137,8 @@ Almost all of it is written by [Claude Code](https://claude.com/claude-code) fro
 - **Stop on contact** (**C**) - a dragged part stops where its *shape* meets another, not its
   box. Parts that already overlap move freely.
 - **Number boxes** - every one, in every panel - take `+=5`, `-=5`, `*=1.5`, `/=2`; the wheel and
-  arrows nudge (Shift ×10, Ctrl ×0.1), and a count stays whole.
+  arrows nudge (Shift ×10, Ctrl ×0.1), and a count stays whole. **Enter** applies, **Esc** takes
+  back what was typed, and a box left holding something that is not a number goes back.
 - **A tool in hand has the plate to itself** - only the selection is drawn until it is put down;
   **X-ray** shows the rest. Tools that pick a face on anything (align to face, center face to
   face, surface info, measure) keep everything.
@@ -148,8 +151,8 @@ Almost all of it is written by [Claude Code](https://claude.com/claude-code) fro
 |---|---|
 | `.stl` | Binary (default) or ASCII. One triangle soup - no separate parts. |
 | `.obj` | Named, separate objects, colors in a `.mtl` sidecar. |
-| `.3mf` | Parts, names, colors, units and filaments in one file, with a thumbnail. |
-| `.3dfc` | The project: GZip JSON, everything editable, versions inside. |
+| `.3mf` | The project: parts, names, colors, units and filaments with a thumbnail, as any slicer reads them, and the editable project with its versions in `3DFastCraft/project.json`. Any 3MF imports. |
+| `.3dfc` | The project before 4.3. Import only: its parts come in as they were, its versions do not. |
 
 ## Requirements
 
@@ -222,7 +225,7 @@ src/FastCraft3D.Geometry/     meshes, primitives, transforms, repair, CSG, plane
 src/FastCraft3D.Generators/   the Library: contract, generators, their panel, motion
 src/FastCraft3D/
   Model/      scene, objects, bed placement, Commands/ (undo)
-  Io/         STL, OBJ, 3MF, SVG, pictures, .3dfc, recovery, settings
+  Io/         STL, OBJ, 3MF (projects too), SVG, pictures, recovery, settings
   Render/     the only Direct3D layer, and the on-screen handles
   View/       tool panels, dialogs, keys, object list
   ViewModels/ commands and state

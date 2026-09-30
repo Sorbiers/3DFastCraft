@@ -22,9 +22,7 @@ public partial class DropDialog : Window
 
         // Opening puts one plate up in place of another, so it only means anything for a single
         // project file. Everything else can still be imported.
-        bool project = files.Count == 1
-                       && Path.GetExtension(files[0])
-                           .Equals(Io.SceneSerializer.Extension, StringComparison.OrdinalIgnoreCase);
+        bool project = files.Count == 1 && Io.IncomingFiles.IsProject(files[0]);
 
         OpenButton.IsEnabled = project;
 

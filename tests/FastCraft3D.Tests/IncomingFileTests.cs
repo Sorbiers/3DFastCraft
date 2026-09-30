@@ -53,9 +53,10 @@ public class IncomingFileTests : IDisposable
     }
 
     [Fact]
-    public void OnlyAProjectReplacesThePlate()
+    public void AProjectFromBefore43IsImportedNotOpened()
     {
-        Assert.True(IncomingFiles.IsProject("house.3dfc"));
+        Assert.True(IncomingFiles.Understood("house.3dfc"));
+        Assert.False(IncomingFiles.IsProject("house.3dfc"));
         Assert.False(IncomingFiles.IsProject("house.stl"));
     }
 

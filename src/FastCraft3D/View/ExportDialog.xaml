@@ -29,8 +29,8 @@
                      Content="ASCII STL - readable text, roughly five times larger" Checked="OnOptionChanged" />
         <RadioButton x:Name="FormatObj" GroupName="Format"
                      Content="Wavefront OBJ - keeps objects named and separate" Checked="OnOptionChanged" />
-        <RadioButton x:Name="FormatThreeMf" GroupName="Format"
-                     Content="3MF - parts, names and colors in millimeters; what slicers prefer" Checked="OnOptionChanged" />
+        <TextBlock TextWrapping="Wrap" Margin="2,6,2,0" Foreground="#FF7A8088"
+                   Text="For a 3MF, save the project: it is one, and any slicer opens it with its parts, names, colors and filaments." />
 
         <CheckBox x:Name="DropToPlate" Margin="2,16,2,2" Foreground="#FF33383F"
                   Content="Drop to the build plate"

@@ -22,7 +22,19 @@ public readonly record struct SceneVersion(string Label, DateTime SavedUtc, int 
 public readonly record struct ProjectSettings(float PlateWidth, float PlateDepth, float PlateHeight, string Unit, float ModelScale);
 
 /// <summary>
-/// The project format (.3dfc): GZip-compressed JSON.
+/// The project format: a 3MF with the project inside it, beside the model.
+///
+/// The 3MF's own model is the plate as it shows, with a thumbnail, so a slicer opens a project as
+/// it stands and Explorer draws it. What only this app reads - the objects as they are edited,
+/// their recipes and anchors, the settings and the kept versions - goes in a part of its own,
+/// PartPath, which a slicer passes over. It was a file type of its own at first, .3dfc, for no
+/// better reason than that dumping the scene was quickest, and nothing else could open it or show
+/// it. A slicer that saves the project over itself drops that part: the file then opens as a model.
+///
+/// The project part is the old .3dfc JSON. A .3dfc is no longer a project - it opens by being
+/// imported onto the plate - but the form is still written for the crash file, which wants no
+/// thumbnail drawn every half minute, and read from it. Which one a file is, is read from its
+/// first bytes, not its name.
 ///
 /// Unlike an STL export, this keeps objects separate and their transforms live, so a scene can
 /// be reopened and kept editing. Meshes are stored as flat float arrays - readable enough to
@@ -36,7 +48,13 @@ public readonly record struct ProjectSettings(float PlateWidth, float PlateDepth
 /// </summary>
 public static class SceneSerializer
 {
-    public const string Extension = ".3dfc";
+    public const string Extension = ".3mf";
+
+    /// <summary>The project on its own, GZip JSON: the crash file, and projects from before 4.3, which are imported.</summary>
+    public const string LegacyExtension = ".3dfc";
+
+    /// <summary>Where a 3MF keeps the project.</summary>
+    private const string PartPath = "3DFastCraft/project.json";
 
     /// <summary>Version 1 held only a scene; version 2 added the kept versions beside it.</summary>
     private const int CurrentVersion = 2;
@@ -48,13 +66,40 @@ public static class SceneSerializer
     };
 
     /// <summary>Writes the scene as the current state, leaving any kept versions untouched.</summary>
-    public static void Save(string path, Scene scene, ProjectSettings? settings = null)
+    /// <param name="versionsFrom">The project this was opened from, when it is saved under another
+    /// name, so its versions go with it.</param>
+    public static void Save(string path, Scene scene, ProjectSettings? settings = null, string? versionsFrom = null)
     {
-        var dto = ReadIfPresent(path) ?? new SceneDto();
+        var dto = ReadIfPresent(versionsFrom ?? path) ?? new SceneDto();
         dto.Version = CurrentVersion;
         dto.Objects = scene.Objects.Select(ToDto).ToList();
         Keep(dto, settings);
-        Write(path, dto);
+        Write(path, dto, scene);
+    }
+
+    /// <summary>
+    /// Whether this opens as a project rather than a model: a 3MF from a slicer, or one of this
+    /// app's projects a slicer has saved over, is not, and nor is a .3dfc from before 4.3.
+    /// </summary>
+    public static bool IsProject(string path)
+    {
+        try
+        {
+            if (!File.Exists(path)) return false;
+            using var file = File.OpenRead(path);
+            switch (Kind(file))
+            {
+                case Packed.Zip:
+                    using (var zip = new ZipArchive(file, ZipArchiveMode.Read))
+                        return zip.GetEntry(PartPath) is not null;
+                default:
+                    return false;
+            }
+        }
+        catch
+        {
+            return false;
+        }
     }
 
     /// <summary>
@@ -69,7 +114,7 @@ public static class SceneSerializer
     {
         var dto = new SceneDto { Version = CurrentVersion, Objects = scene.Objects.Select(ToDto).ToList() };
         Keep(dto, settings);
-        Write(path, dto);
+        Write(path, dto, scene);
     }
 
     /// <summary>Keeps a labelled snapshot in the file, and saves the scene as current.</summary>
@@ -87,7 +132,7 @@ public static class SceneSerializer
             Objects = dto.Objects // the snapshot is the state being saved
         });
 
-        Write(path, dto);
+        Write(path, dto, scene);
     }
 
     public static List<SceneObject> Load(string path) => Load(path, out _);
@@ -149,7 +194,7 @@ public static class SceneSerializer
         if (dto.Versions is null || index < 0 || index >= dto.Versions.Count) return;
 
         dto.Versions.RemoveAt(index);
-        Write(path, dto);
+        Write(path, dto, scene: null);
     }
 
     /// <summary>
@@ -178,12 +223,47 @@ public static class SceneSerializer
 
     // --- Plumbing ---------------------------------------------------------------------
 
+    private enum Packed { Other, GZip, Zip }
+
+    // By the first bytes: a 3MF is a zip whatever it is called, and a .3dfc GZip.
+    private static Packed Kind(Stream file)
+    {
+        int first = file.ReadByte(), second = file.ReadByte();
+        file.Position = 0;
+        return (first, second) switch
+        {
+            (0x1F, 0x8B) => Packed.GZip,
+            ('P', 'K') => Packed.Zip,
+            _ => Packed.Other
+        };
+    }
+
     private static SceneDto Read(string path)
     {
         using var file = File.OpenRead(path);
-        using var gzip = new GZipStream(file, CompressionMode.Decompress);
-        var dto = JsonSerializer.Deserialize<SceneDto>(gzip, Options)
-                  ?? throw new InvalidDataException("The project file is empty or unreadable.");
+        SceneDto? dto;
+        switch (Kind(file))
+        {
+            case Packed.Zip:
+            {
+                using var zip = new ZipArchive(file, ZipArchiveMode.Read);
+                var part = zip.GetEntry(PartPath)
+                           ?? throw new InvalidDataException("This 3MF holds a model but no 3DFastCraft project. Import it to put it on the plate.");
+                using var stream = part.Open();
+                dto = JsonSerializer.Deserialize<SceneDto>(stream, Options);
+                break;
+            }
+            case Packed.GZip:
+            {
+                using var gzip = new GZipStream(file, CompressionMode.Decompress);
+                dto = JsonSerializer.Deserialize<SceneDto>(gzip, Options);
+                break;
+            }
+            default:
+                throw new InvalidDataException("This is not a 3DFastCraft project.");
+        }
+
+        if (dto is null) throw new InvalidDataException("The project file is empty or unreadable.");
 
         if (dto.Version > CurrentVersion)
             throw new InvalidDataException(
@@ -200,19 +280,46 @@ public static class SceneSerializer
         catch { return null; } // a corrupt or foreign file is replaced rather than blocking the save
     }
 
-    private static void Write(string path, SceneDto dto)
+    /// <param name="scene">What the 3MF's own model shows. Null keeps the model already in the
+    /// file, for a change to the versions alone.</param>
+    private static void Write(string path, SceneDto dto, Scene? scene)
     {
         // Written to a temporary file first: a save interrupted halfway would otherwise destroy
         // both the current scene and every version kept with it.
         string temporary = path + ".tmp";
 
-        using (var file = File.Create(temporary))
-        using (var gzip = new GZipStream(file, CompressionLevel.Optimal))
+        if (!Path.GetExtension(path).Equals(Extension, StringComparison.OrdinalIgnoreCase))
         {
+            using var file = File.Create(temporary);
+            using var gzip = new GZipStream(file, CompressionLevel.Optimal);
             JsonSerializer.Serialize(gzip, dto, Options);
+        }
+        else
+        {
+            byte[] project = JsonSerializer.SerializeToUtf8Bytes(dto, Options);
+            if (scene is not null) ThreeMf.Write(temporary, ExportComposer.ComposeForObj(scene.Shown), [(PartPath, project)]);
+            else Repack(path, temporary, project);
         }
 
         File.Move(temporary, path, overwrite: true);
+    }
+
+    // The package as it was, with the project part put back in its new form.
+    private static void Repack(string path, string temporary, byte[] project)
+    {
+        using var source = new ZipArchive(File.OpenRead(path), ZipArchiveMode.Read);
+        using var target = new ZipArchive(File.Create(temporary), ZipArchiveMode.Create);
+
+        foreach (var entry in source.Entries)
+        {
+            if (entry.FullName == PartPath) continue;
+            using var from = entry.Open();
+            using var to = target.CreateEntry(entry.FullName, CompressionLevel.Optimal).Open();
+            from.CopyTo(to);
+        }
+
+        using var part = target.CreateEntry(PartPath, CompressionLevel.Optimal).Open();
+        part.Write(project);
     }
 
     private static ObjectDto ToDto(SceneObject o) => new()

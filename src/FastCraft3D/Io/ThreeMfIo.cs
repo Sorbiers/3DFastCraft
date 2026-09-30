@@ -356,8 +356,12 @@ public static class ThreeMf
     /// One object per part, in millimetres, each with its own colour, all on the build plate
     /// where they stand.
     /// </summary>
-    public static void Write(string path, IReadOnlyList<ObjObject> parts)
+    /// <param name="extra">Parts of the package beside the model, such as a project's own data:
+    /// a slicer passes over what it does not know.</param>
+    public static void Write(string path, IReadOnlyList<ObjObject> parts, IReadOnlyList<(string Name, byte[] Data)>? extra = null)
     {
+        extra ??= [];
+
         using var file = File.Create(path);
         using var zip = new ZipArchive(file, ZipArchiveMode.Create);
 
@@ -396,6 +400,15 @@ public static class ThreeMf
                 w.WriteEndElement();
             }
 
+            // Every part of a package has to have a type, or a strict reader refuses the lot.
+            if (extra.Any(e => e.Name.EndsWith(".json", StringComparison.OrdinalIgnoreCase)))
+            {
+                w.WriteStartElement("Default");
+                w.WriteAttributeString("Extension", "json");
+                w.WriteAttributeString("ContentType", "application/json");
+                w.WriteEndElement();
+            }
+
             w.WriteEndElement();
         });
 
@@ -426,6 +439,12 @@ public static class ThreeMf
             var picture = zip.CreateEntry(ThumbnailPath, CompressionLevel.Optimal);
             using var stream = picture.Open();
             stream.Write(thumbnail, 0, thumbnail.Length);
+        }
+
+        foreach (var (name, data) in extra)
+        {
+            using var stream = zip.CreateEntry(name, CompressionLevel.Optimal).Open();
+            stream.Write(data, 0, data.Length);
         }
 
         WriteEntry(zip, DefaultModelPath, w =>

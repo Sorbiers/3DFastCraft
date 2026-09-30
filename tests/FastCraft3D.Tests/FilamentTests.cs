@@ -141,7 +141,7 @@ public class FilamentTests : IDisposable
         var scene = new Scene();
         scene.Objects.Add(new SceneObject("Body", Primitives.Box(20, 20, 4)));
 
-        string path = TempFile(SceneSerializer.Extension);
+        string path = TempFile(SceneSerializer.LegacyExtension);
         SceneSerializer.Save(path, scene);
 
         // Nothing is written for the first filament, so an old file and a new one are the same

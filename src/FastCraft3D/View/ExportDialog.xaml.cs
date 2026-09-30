@@ -37,8 +37,7 @@ public partial class ExportDialog : Window
     public ExportOptions? Result { get; private set; }
 
     private ExportOptions CurrentOptions() => new(
-        FormatThreeMf.IsChecked == true ? ExportFormat.ThreeMf
-            : FormatObj.IsChecked == true ? ExportFormat.Obj
+        FormatObj.IsChecked == true ? ExportFormat.Obj
             : FormatAscii.IsChecked == true ? ExportFormat.AsciiStl
             : ExportFormat.BinaryStl,
         SelectedOnly: ScopeSelected.IsChecked == true,

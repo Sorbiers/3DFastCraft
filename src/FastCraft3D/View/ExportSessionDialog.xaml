@@ -22,11 +22,9 @@
 
         <TextBlock Text="Format" Style="{StaticResource GroupHeader}" />
         <RadioButton x:Name="FormatProject" GroupName="Format" IsChecked="True"
-                     Content="3DFC - the project file, one per step, reopenable and still editable" />
+                     Content="Project - a 3MF per step that reopens as a project, still editable" />
         <RadioButton x:Name="FormatStl" GroupName="Format"
                      Content="STL - the model itself after each step, merged and watertight-checked" />
-        <RadioButton x:Name="FormatThreeMf" GroupName="Format"
-                     Content="3MF - parts, names and colors after each step" />
 
         <TextBlock TextWrapping="Wrap" Margin="0,14,0,0" Foreground="#FF7A8088"
                    Text="One file per undo step, oldest first, named for what that step did. The plate is left exactly as it is now when this finishes." />

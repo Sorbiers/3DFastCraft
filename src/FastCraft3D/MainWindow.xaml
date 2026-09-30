@@ -803,7 +803,7 @@
                     <Separator Margin="8,0" Visibility="{Binding IsExtendedMode, Converter={StaticResource BoolToVisibility}}" />
                     <Button Style="{StaticResource ToolButton}" Content="Export session" Visibility="{Binding IsExtendedMode, Converter={StaticResource BoolToVisibility}}" Tag="{StaticResource IconExportSession}"
                             Command="{Binding ExportSessionCommand}" MinWidth="96"
-                            ToolTip="Save every undo step since the plate was empty, one file each, as .3dfc, .3mf or .stl. For pictures, use Record." />
+                            ToolTip="Save every undo step since the plate was empty, one file each, as a project or an STL. For pictures, use Record." />
                     <Button Style="{StaticResource ToolButton}" Content="{Binding RecordButtonLabel}" Visibility="{Binding IsExtendedMode, Converter={StaticResource BoolToVisibility}}" Tag="{StaticResource IconRecord}"
                             Command="{Binding RecordCommand}" MinWidth="86"
                             ToolTip="While on, saves a screenshot after every action - and one just before each Apply - to a folder you choose." />
@@ -1974,7 +1974,7 @@
                         <CheckBox Content="Keep as its own part" IsChecked="{Binding EmbossSeparate, Mode=TwoWay}"
                                   AutomationProperties.AutomationId="EmbossSeparate"
                                   Margin="0,0,0,8"
-                                  ToolTip="For lettering in another filament: cut, the letters come back as a plug that fills the recess; raised, they stand on it. They go on the next filament and export together as 3MF." />
+                                  ToolTip="For lettering in another filament: cut, the letters come back as a plug that fills the recess; raised, they stand on it. They go on the next filament, saved with the project, which is a 3MF." />
 
                         <StackPanel Orientation="Horizontal">
                             <Button Content="Apply" Style="{StaticResource PanelButton}"
@@ -2343,7 +2343,7 @@
                                      model is looked at while it is being made. -->
                                 <StackPanel Orientation="Horizontal" Margin="0,10,0,0">
                                     <TextBlock Text="Filament" Style="{StaticResource FieldLabel}" Width="62"
-                                               ToolTip="Which filament prints the selection on a multi-material printer (an AMS slot, an MMU tool). Saved in 3MF; STL and OBJ can't carry it." />
+                                               ToolTip="Which filament prints the selection on a multi-material printer (an AMS slot, an MMU tool). Saved with the project, a 3MF slicers read; STL and OBJ can't carry it." />
                                     <TextBox AutomationProperties.AutomationId="ObjectFilament" Width="48"
                                              Style="{StaticResource NumberBox}" Tag="number"
                                              Text="{Binding ObjectFilament, UpdateSourceTrigger=LostFocus}" />
