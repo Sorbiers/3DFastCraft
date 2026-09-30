@@ -43,7 +43,7 @@ public static class Palette
         new("Indigo", FromHex("#5C6BD6")), new("Violet", FromHex("#8E63D6")),
         new("Orchid", Cycle[3]), new("Pink", FromHex("#E87BA8")),
 
-        new("White", FromHex("#F2F3F5")), new("Silver", FromHex("#C9CDD2")),
+        new("White", FromHex("#FFFFFF")), new("Silver", FromHex("#C9CDD2")),
         new("Gray", FromHex("#9AA0A8")), new("Slate", FromHex("#5F6A75")),
         new("Charcoal", FromHex("#3A3F45")), new("Black", FromHex("#23262A")),
         new("Sand", FromHex("#D9C39A")), new("Brown", FromHex("#8C6242"))

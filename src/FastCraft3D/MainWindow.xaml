@@ -2524,9 +2524,13 @@
                 <!-- The key follows the camera - see MainWindow.LightTheView. Both lights used
                      to be fixed in the world and both pointed downwards, so an upright wall got
                      almost no light at all and turning round to the far side of a model left you
-                     looking at the unlit half of it. -->
+                     looking at the unlit half of it.
+
+                     The key is bright enough that a face turned square to it shows the colour it
+                     was painted - with the ambient's third of a third, very nearly one. At 0.71 it
+                     showed four fifths of it, and white painted grey. -->
                 <hx:AmbientLight3D Color="#FF4E5259" />
-                <hx:DirectionalLight3D x:Name="KeyLight" Direction="-0.5,-0.8,-1.0" Color="#FFB4B4B4" />
+                <hx:DirectionalLight3D x:Name="KeyLight" Direction="-0.5,-0.8,-1.0" Color="#FFE6E6E6" />
                 <hx:DirectionalLight3D x:Name="FillLight" Direction="0.55,0.35,0.75" Color="#FF4E5258" />
 
                 <!-- Only costs anything while IsShadowMappingEnabled is on - see ShowShadows. -->
