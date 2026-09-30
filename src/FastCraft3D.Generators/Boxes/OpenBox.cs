@@ -23,9 +23,9 @@ public sealed class OpenBox : Generator<OpenBox.Settings>
     public override string Summary => "A box with no lid, sized from the outside, with walls and floor as one solid.";
 
     public sealed record Settings(
-        [Length("Width", 5, 200, Hint = "Outside, left to right", Group = "Size")] float Width = 60f,
-        [Length("Depth", 5, 200, Hint = "Outside, front to back", Group = "Size")] float Depth = 40f,
-        [Length("Height", 2, 200, Hint = "Outside, from the bottom to the rim", Group = "Size")] float Height = 30f,
+        [Length("Width", 5, 200, Hint = "Outside, left to right", Group = "Size", Size = SizeAxis.X)] float Width = 60f,
+        [Length("Depth", 5, 200, Hint = "Outside, front to back", Group = "Size", Size = SizeAxis.Y)] float Depth = 40f,
+        [Length("Height", 2, 200, Hint = "Outside, from the bottom to the rim", Group = "Size", Size = SizeAxis.Z)] float Height = 30f,
         [Wall("Wall", 0.4, 20, Hint = "How thick the sides are. Two or three nozzle widths prints cleanly.", Group = "Walls")] float Wall = 1.6f,
         [Length("Floor", 0.4, 20, Hint = "How thick the bottom is", Group = "Walls")] float Floor = 1.2f,
         [Length("Corner radius", 0, 100, Hint = "On the outside. The inside is rounded by this less the wall, so the wall stays even all the way round.", Group = "Walls")] float Radius = 3f);

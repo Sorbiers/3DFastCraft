@@ -39,7 +39,7 @@
         <StackPanel Orientation="Horizontal">
             <TextBlock Text="Segments" Style="{DynamicResource FieldLabel}" Width="70"
                        ToolTip="How many flat sides make up a curve: round the circumference, or round each rounded edge of a cube." />
-            <TextBox x:Name="SegmentsBox" Width="60" Style="{DynamicResource NumberBox}" TextChanged="OnChanged"
+            <TextBox x:Name="SegmentsBox" view:NumberField.Whole="True" Width="60" Style="{DynamicResource NumberBox}" TextChanged="OnChanged"
                      AutomationProperties.AutomationId="CustomSegments" />
             <TextBlock x:Name="SegmentsNote" Foreground="#FF9AA0A8" VerticalAlignment="Center" />
         </StackPanel>
@@ -47,7 +47,7 @@
         <StackPanel Orientation="Horizontal">
             <TextBlock x:Name="RingsLabel" Text="Rings" Style="{DynamicResource FieldLabel}" Width="70"
                        ToolTip="Pole to pole on a sphere, round the tube on a ring." />
-            <TextBox x:Name="RingsBox" Width="60" Style="{DynamicResource NumberBox}" TextChanged="OnChanged"
+            <TextBox x:Name="RingsBox" view:NumberField.Whole="True" Width="60" Style="{DynamicResource NumberBox}" TextChanged="OnChanged"
                      AutomationProperties.AutomationId="CustomRings" />
             <TextBlock x:Name="RingsNote" Foreground="#FF9AA0A8" VerticalAlignment="Center" />
         </StackPanel>

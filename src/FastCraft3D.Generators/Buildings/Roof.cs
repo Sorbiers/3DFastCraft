@@ -58,8 +58,8 @@ public sealed class Roof : Generator<Roof.Settings>
 
     public sealed record Settings(
         [Choice("Shape")] RoofShape Shape = RoofShape.Gable,
-        [Length("Across", 5, 400, Group = "Walls", Hint = "Outside the walls it sits on, the way the slopes fall")] float Width = 60f,
-        [Length("Along", 5, 400, Group = "Walls", Hint = "Outside the walls, along the ridge")] float Length = 80f,
+        [Length("Across", 5, 400, Group = "Walls", Hint = "Outside the walls it sits on, the way the slopes fall", Size = SizeAxis.X)] float Width = 60f,
+        [Length("Along", 5, 400, Group = "Walls", Hint = "Outside the walls, along the ridge", Size = SizeAxis.Y)] float Length = 80f,
         [Angle("Pitch", 5, 75, Group = "Slopes")] float Pitch = 40f,
         [Angle("Lower pitch", 30, 85, Group = "Slopes", Hint = "The steep slope from the eaves")] float LowerPitch = 65f,
         [Angle("Upper pitch", 5, 45, Group = "Slopes", Hint = "The shallow slope to the ridge")] float UpperPitch = 25f,

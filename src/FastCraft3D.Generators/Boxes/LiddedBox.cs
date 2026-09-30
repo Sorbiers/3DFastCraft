@@ -26,9 +26,9 @@ public sealed class LiddedBox : Generator<LiddedBox.Settings>
     public override string Summary => "A box and its lid, lift-off or sliding, printed side by side and fitted by the printer's clearance.";
 
     public sealed record Settings(
-        [Length("Width", 20, 200, Group = "Size", Hint = "Outside, left to right")] float Width = 80f,
-        [Length("Depth", 20, 200, Group = "Size", Hint = "Outside, front to back. A sliding lid goes in from the front.")] float Depth = 60f,
-        [Length("Height", 10, 200, Group = "Size", Hint = "The box alone, without its lid")] float Height = 40f,
+        [Length("Width", 20, 200, Group = "Size", Hint = "Outside, left to right", Size = SizeAxis.X)] float Width = 80f,
+        [Length("Depth", 20, 200, Group = "Size", Hint = "Outside, front to back. A sliding lid goes in from the front.", Size = SizeAxis.Y)] float Depth = 60f,
+        [Length("Height", 10, 200, Group = "Size", Hint = "The box alone, without its lid", Size = SizeAxis.Z)] float Height = 40f,
         [Wall("Wall", 0.8, 6, Group = "Walls")] float Wall = 1.6f,
         [Length("Floor", 0.6, 6, Group = "Walls")] float Floor = 1.2f,
         [Length("Corner radius", 0, 30, Group = "Walls", Hint = "On the outside. A sliding lid wants corners no rounder than the wall.")] float Radius = 3f,

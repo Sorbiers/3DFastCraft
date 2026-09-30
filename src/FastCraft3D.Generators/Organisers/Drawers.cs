@@ -14,9 +14,9 @@ public sealed class Drawers : Generator<Drawers.Settings>
     public override string Summary => "A cabinet and the drawers that slide into it, each with a pull.";
 
     public sealed record Settings(
-        [Length("Width", 30, 200, Group = "Cabinet")] float Width = 100f,
-        [Length("Depth", 30, 200, Group = "Cabinet")] float Depth = 100f,
-        [Length("Height", 20, 200, Group = "Cabinet")] float Height = 90f,
+        [Length("Width", 30, 200, Group = "Cabinet", Size = SizeAxis.X)] float Width = 100f,
+        [Length("Depth", 30, 200, Group = "Cabinet", Size = SizeAxis.Y)] float Depth = 100f,
+        [Length("Height", 20, 200, Group = "Cabinet", Size = SizeAxis.Z)] float Height = 90f,
         [Count("Drawers", 1, 8, Group = "Cabinet")] int Count = 3,
         [Wall("Wall", 0.8, 5, Group = "Cabinet")] float Wall = 1.6f,
         [Wall("Drawer wall", 0.8, 4, Group = "Drawers")] float DrawerWall = 1.2f,

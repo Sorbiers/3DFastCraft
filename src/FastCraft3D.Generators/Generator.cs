@@ -197,6 +197,12 @@ public abstract class Generator
     /// <summary>Still being proved out. A generator is until somebody has printed what it makes.</summary>
     public virtual bool IsBeta => true;
 
+    /// <summary>
+    /// Which way across the part a setting measures with these settings - usually what the setting
+    /// says, but a part that can be stood up or laid down turns its height with it.
+    /// </summary>
+    public virtual SizeAxis SizeAxisOf(object settings, GeneratorParameter parameter) => parameter.Size;
+
     /// <summary>Whether it is in the Library's catalogue, or only opened from a button of its own - the wall mount, beside Hole.</summary>
     public virtual bool Listed => true;
 

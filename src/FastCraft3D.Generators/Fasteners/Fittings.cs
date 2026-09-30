@@ -70,8 +70,8 @@ public sealed class Knob : Generator<Knob.Settings>
 
     public sealed record Settings(
         [Choice("Size")] KnobSize Size = KnobSize.M6,
-        [Length("Diameter", 10, 100)] float Diameter = 32f,
-        [Length("Height", 5, 40)] float Height = 12f,
+        [Length("Diameter", 10, 100, Size = SizeAxis.XY)] float Diameter = 32f,
+        [Length("Height", 5, 40, Size = SizeAxis.Z)] float Height = 12f,
         [Count("Lobes", 0, 12, Hint = "Nought for a round knob")] int Lobes = 6,
         [Clearance("Fit", 0.05, 1, Hint = "Round the nut, and round the bolt")] float Fit = 0.2f);
 

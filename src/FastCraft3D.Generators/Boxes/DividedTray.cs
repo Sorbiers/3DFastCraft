@@ -12,9 +12,9 @@ public sealed class DividedTray : Generator<DividedTray.Settings>
     public override string Summary => "An open tray split into a grid of compartments, for screws, beads or anything sorted.";
 
     public sealed record Settings(
-        [Length("Width", 20, 200, Group = "Size")] float Width = 120f,
-        [Length("Depth", 20, 200, Group = "Size")] float Depth = 80f,
-        [Length("Height", 5, 100, Group = "Size")] float Height = 25f,
+        [Length("Width", 20, 200, Group = "Size", Size = SizeAxis.X)] float Width = 120f,
+        [Length("Depth", 20, 200, Group = "Size", Size = SizeAxis.Y)] float Depth = 80f,
+        [Length("Height", 5, 100, Group = "Size", Size = SizeAxis.Z)] float Height = 25f,
         [Wall("Wall", 0.8, 6, Group = "Size")] float Wall = 1.6f,
         [Length("Floor", 0.6, 6, Group = "Size")] float Floor = 1.2f,
         [Length("Corner radius", 0, 30, Group = "Size")] float Radius = 3f,

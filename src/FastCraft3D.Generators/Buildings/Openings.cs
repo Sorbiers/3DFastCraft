@@ -166,9 +166,13 @@ public sealed class Window : Generator<Window.Settings>
     public override string Title => "Window";
     public override string Summary => "A window frame - square, arched, half round or round - with glazing bars, a sill, and glass to print in clear filament.";
 
+    /// <summary>Its height runs up it standing and front to back laid flat to print.</summary>
+    public override SizeAxis SizeAxisOf(object settings, GeneratorParameter parameter) =>
+        parameter.Name == nameof(Settings.Height) && settings is Settings { Flat: true } ? SizeAxis.Y : parameter.Size;
+
     public sealed record Settings(
-        [Length("Width", 3, 200, Group = "Size", Hint = "Outside the frame, as the model is drawn")] float Width = 14f,
-        [Length("Height", 3, 200, Group = "Size")] float Height = 16f,
+        [Length("Width", 3, 200, Group = "Size", Hint = "Outside the frame, as the model is drawn", Size = SizeAxis.X)] float Width = 14f,
+        [Length("Height", 3, 200, Group = "Size", Size = SizeAxis.Z)] float Height = 16f,
         [Length("Frame", 0.4, 10, Group = "Frame", Hint = "How wide the frame is, seen from the front")] float Frame = 0.8f,
         [Length("Depth", 0.4, 20, Group = "Frame", Hint = "How deep the frame is, into the wall")] float Depth = 1.6f,
         [Count("Panes across", 1, 8, Group = "Panes", Hint = "For a half round window, how many it is divided into round the arc")] int Columns = 2,
@@ -458,9 +462,13 @@ public sealed class Door : Generator<Door.Settings>
     public override bool IsBeta => false;
     public override string Summary => "A door in its frame - single, double, French or Dutch - plain, panelled or glazed, with glass to print in clear filament.";
 
+    /// <summary>Its height runs up it standing and front to back laid flat to print.</summary>
+    public override SizeAxis SizeAxisOf(object settings, GeneratorParameter parameter) =>
+        parameter.Name == nameof(Settings.Height) && settings is Settings { Flat: true } ? SizeAxis.Y : parameter.Size;
+
     public sealed record Settings(
-        [Length("Width", 3, 200, Group = "Size", Hint = "Outside the frame, as the model is drawn")] float Width = 11f,
-        [Length("Height", 5, 250, Group = "Size", Hint = "From the floor to the top of the frame")] float Height = 25f,
+        [Length("Width", 3, 200, Group = "Size", Hint = "Outside the frame, as the model is drawn", Size = SizeAxis.X)] float Width = 11f,
+        [Length("Height", 5, 250, Group = "Size", Hint = "From the floor to the top of the frame", Size = SizeAxis.Z)] float Height = 25f,
         [Length("Frame", 0.4, 10, Group = "Frame", Hint = "How wide the frame is, seen from the front")] float Frame = 0.8f,
         [Length("Depth", 0.6, 20, Group = "Frame", Hint = "How deep the frame is, into the wall")] float Depth = 1.6f,
         [Length("Leaf set back", 0, 5, Group = "Frame", Hint = "How far the door itself sits back from the frame's face")] float SetBack = 0.4f,

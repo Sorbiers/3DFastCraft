@@ -10,7 +10,7 @@
         <StackPanel x:Name="CountRow" Orientation="Horizontal" Margin="0,0,0,6">
             <TextBlock Text="Copies" Style="{DynamicResource FieldLabel}" Width="62"
                        ToolTip="How many, in addition to the original" />
-            <TextBox x:Name="CountBox" Width="56" Style="{DynamicResource NumberBox}" Text="5"
+            <TextBox x:Name="CountBox" view:NumberField.Whole="True" Width="56" Style="{DynamicResource NumberBox}" Text="5"
                      AutomationProperties.AutomationId="RepeatCount" TextChanged="OnChanged" />
         </StackPanel>
 
@@ -36,13 +36,13 @@
             <TextBlock Text="How many, the original counted" Foreground="#FF5A5F66" Margin="0,0,0,2" />
             <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
                 <TextBlock Text="X" VerticalAlignment="Center" Foreground="#FF5A5F66" Width="12" />
-                <TextBox x:Name="ColumnsBox" Width="54" Style="{DynamicResource NumberBox}" Text="3"
+                <TextBox x:Name="ColumnsBox" view:NumberField.Whole="True" Width="54" Style="{DynamicResource NumberBox}" Text="3"
                          AutomationProperties.AutomationId="GridColumns" TextChanged="OnChanged" ToolTip="Columns, along X" />
                 <TextBlock Text="Y" VerticalAlignment="Center" Foreground="#FF5A5F66" Width="12" Margin="4,0,0,0" />
-                <TextBox x:Name="RowsBox" Width="54" Style="{DynamicResource NumberBox}" Text="3"
+                <TextBox x:Name="RowsBox" view:NumberField.Whole="True" Width="54" Style="{DynamicResource NumberBox}" Text="3"
                          AutomationProperties.AutomationId="GridRows" TextChanged="OnChanged" ToolTip="Rows, along Y" />
                 <TextBlock Text="Z" VerticalAlignment="Center" Foreground="#FF5A5F66" Width="12" Margin="4,0,0,0" />
-                <TextBox x:Name="LayersBox" Width="54" Style="{DynamicResource NumberBox}" Text="1"
+                <TextBox x:Name="LayersBox" view:NumberField.Whole="True" Width="54" Style="{DynamicResource NumberBox}" Text="1"
                          AutomationProperties.AutomationId="GridLayers" TextChanged="OnChanged" ToolTip="Layers, stacked up Z" />
             </StackPanel>
 

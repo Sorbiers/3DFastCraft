@@ -202,7 +202,7 @@
         <StackPanel x:Name="SidesPanel" Margin="68,6,0,0" Visibility="Collapsed">
             <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
                 <TextBlock Text="Sides" Style="{DynamicResource FieldLabel}" Width="80" />
-                <TextBox x:Name="SidesBox" Width="48" Style="{DynamicResource NumberBox}" Tag="number" TextChanged="OnChanged"
+                <TextBox x:Name="SidesBox" view:NumberField.Whole="True" Width="48" Style="{DynamicResource NumberBox}" Tag="number" TextChanged="OnChanged"
                          AutomationProperties.AutomationId="LithophaneSides" ToolTip="Three to twelve panels round the lamp" />
             </StackPanel>
             <TextBlock x:Name="PicturesText" TextWrapping="Wrap" Foreground="#FF5A5F66" Margin="0,0,0,6"

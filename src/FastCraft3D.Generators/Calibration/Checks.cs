@@ -166,7 +166,7 @@ public sealed class CalibrationCube : Generator<CalibrationCube.Settings>
     public override string Summary => "The 20 mm cube with X, Y and Z on its faces, to measure the printer's scale each way.";
 
     public sealed record Settings(
-        [Length("Size", 10, 100)] float Size = 20f,
+        [Length("Size", 10, 100, Size = SizeAxis.XYZ)] float Size = 20f,
         [Length("Letter depth", 0.2, 2, Hint = "How deep X, Y and Z are cut")] float Depth = 0.6f);
 
     protected override Generated Build(Settings s, Printer printer, CancellationToken token)

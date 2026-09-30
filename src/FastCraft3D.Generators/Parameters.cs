@@ -33,6 +33,25 @@ public enum ParameterKind
 }
 
 /// <summary>
+/// Which way across the part a setting measures, so that resizing the preview on the plate - the
+/// size boxes, the handles - changes the setting rather than stretching what it made.
+/// </summary>
+[Flags]
+public enum SizeAxis
+{
+    None = 0,
+    X = 1,
+    Y = 2,
+    Z = 4,
+
+    /// <summary>A diameter, across and front to back.</summary>
+    XY = X | Y,
+
+    /// <summary>A sphere's or a cube's size, every way.</summary>
+    XYZ = X | Y | Z
+}
+
+/// <summary>
 /// How a generator's setting is shown: what it is called, what the tooltip says, and which heading
 /// it goes under. Every parameter of a settings record carries exactly one.
 /// </summary>
@@ -46,6 +65,9 @@ public abstract class FieldAttribute(string label) : Attribute
 
     /// <summary>The heading the field goes under. Fields with none go at the top.</summary>
     public string? Group { get; set; }
+
+    /// <summary>Which way across the part it measures, if it is one of the part's overall sizes.</summary>
+    public SizeAxis Size { get; set; }
 
     internal abstract ParameterKind Kind { get; }
     internal virtual double Min => 0;
@@ -155,6 +177,9 @@ public sealed record GeneratorParameter(
 
     /// <summary>For a clearance, which of the printer's fits it starts from.</summary>
     public PrinterFit Fit { get; init; }
+
+    /// <summary>Which way across the part it measures, if it is one of its overall sizes.</summary>
+    public SizeAxis Size { get; init; }
 
     public bool IsLength => Kind is ParameterKind.Length or ParameterKind.Wall or ParameterKind.Clearance;
 
@@ -282,7 +307,8 @@ public sealed class SettingsShape
                 p.Name!, p.ParameterType, field.Kind, field.Label, field.Hint, field.Group,
                 field.Min, field.Max, field.Unit, value, show?.Parameter, show?.Values ?? [])
             {
-                Fit = (field as ClearanceAttribute)?.Fit ?? PrinterFit.Sliding
+                Fit = (field as ClearanceAttribute)?.Fit ?? PrinterFit.Sliding,
+                Size = field.Size
             };
 
             if (parameter.IsNumber && !parameter.InRange(Convert.ToDouble(value, CultureInfo.InvariantCulture)))

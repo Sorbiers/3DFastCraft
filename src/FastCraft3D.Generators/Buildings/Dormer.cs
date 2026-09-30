@@ -18,8 +18,8 @@ public sealed class Dormer : Generator<Dormer.Settings>
     public override string Summary => "A gabled dormer with a window, its underside cut to the roof's pitch, to stand on a roof and Merge.";
 
     public sealed record Settings(
-        [Length("Width", 4, 100, Group = "Size", Hint = "Across the front")] float Width = 14f,
-        [Length("Front height", 3, 100, Group = "Size", Hint = "From the roof up to its eaves")] float Height = 12f,
+        [Length("Width", 4, 100, Group = "Size", Hint = "Across the front", Size = SizeAxis.X)] float Width = 14f,
+        [Length("Front height", 3, 100, Group = "Size", Hint = "From the roof up to its eaves", Size = SizeAxis.Z)] float Height = 12f,
         [Angle("Roof pitch", 15, 70, Group = "Size", Hint = "The pitch of the roof it stands on: the same as the Roof's")] float Pitch = 40f,
         [Angle("Its own pitch", 20, 70, Group = "Its roof")] float OwnPitch = 45f,
         [Length("Overhang", 0, 5, Group = "Its roof")] float Overhang = 1f,

@@ -1002,7 +1002,7 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
     public bool ShowManipulatorBar => HasAnySelection && (!IsToolRunning || panelHandles);
 
     /// <summary>Resize is offered except on a tool's preview, which is the size its numbers say.</summary>
-    public bool ResizeOffered => !panelHandles;
+    public bool ResizeOffered => !panelHandles || heldResizable;
 
     public string Status
     {
@@ -6963,14 +6963,25 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
     public bool PanelHandles => panelHandles;
 
     /// <summary>Selects a tool's preview and gives it the move and rotate handles.</summary>
-    private void HoldPreview(SceneObject preview)
+    private void HoldPreview(SceneObject preview, bool resizable = false)
     {
         Scene.SelectOnly(preview);
+
+        // A Library part whose sizes are settings can be resized as well: the stretch becomes the
+        // settings when it is let go. See SettleHeldSize.
+        if (resizable != heldResizable || preview != heldForSizing)
+        {
+            if (heldForSizing is not null) heldForSizing.PropertyChanged -= OnHeldResized;
+            heldResizable = resizable;
+            heldForSizing = resizable ? preview : null;
+            if (heldForSizing is not null) heldForSizing.PropertyChanged += OnHeldResized;
+            Raise(nameof(ResizeOffered));
+        }
 
         if (!panelHandles)
         {
             modeBeforeHandles = GizmoMode;
-            if (GizmoMode == GizmoMode.Scale) GizmoMode = GizmoMode.Move;
+            if (GizmoMode == GizmoMode.Scale && !resizable) GizmoMode = GizmoMode.Move;
             panelHandles = true;
             Raise(nameof(PanelHandles));
             Raise(nameof(ResizeOffered));
@@ -6980,8 +6991,26 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
         RefreshSelection();
     }
 
+    private bool heldResizable;
+    private SceneObject? heldForSizing;
+
+    /// <summary>
+    /// A size typed into the boxes is settled at once; a handle being dragged is left alone until
+    /// it is let go, when the window settles it - the stretch is the preview while it lasts.
+    /// </summary>
+    private void OnHeldResized(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName != nameof(SceneObject.Transform) || System.Windows.Input.Mouse.LeftButton == System.Windows.Input.MouseButtonState.Pressed) return;
+        System.Windows.Threading.Dispatcher.CurrentDispatcher.BeginInvoke(
+            System.Windows.Threading.DispatcherPriority.Background, new Action(SettleHeldSize));
+    }
+
     private void ReleasePreview()
     {
+        if (heldForSizing is not null) heldForSizing.PropertyChanged -= OnHeldResized;
+        heldForSizing = null;
+        heldResizable = false;
+
         if (!panelHandles) return;
 
         panelHandles = false;

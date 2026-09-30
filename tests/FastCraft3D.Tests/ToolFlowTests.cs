@@ -213,6 +213,34 @@ public class ToolFlowTests
     });
 
     [Fact]
+    public void ALibraryPreviewResizedOnThePlateIsMadeAgainAtThatSizeNotStretched() => WithModel(model =>
+    {
+        float before = 0f;
+        AnswerPanel(model, "GeneratorInsert", panel =>
+        {
+            PumpUntil(() => model.Scene.Selection.Count == 1);
+            var held = model.Scene.Selection[0];
+            before = held.WorldBounds.Size.X;
+            Assert.True(model.ResizeOffered);
+
+            held.Scale = new Vector3(2f, 1f, 1f);
+            model.SettleHeldSize();
+            Assert.Equal(Vector3.One, held.Scale);
+
+            PumpUntil(() => held.WorldBounds.Size.X > before * 1.5f, 60000);
+            PumpUntil(() => Named<Button>(panel, "GeneratorInsert").IsEnabled, 60000);
+        });
+        model.InsertGeneratedCommand.Execute(FastCraft3D.Generators.GeneratorRegistry.Find("building.roof"));
+        PumpUntil(() => model.Scene.Objects.Count == 1 && !model.HasOpenPanel, 60000);
+
+        var roof = Assert.Single(model.Scene.Objects);
+        Assert.Equal(Vector3.One, roof.Scale);
+        Assert.True(roof.WorldBounds.Size.X > before * 1.5f);
+        Assert.Equal(120f, ((FastCraft3D.Generators.Buildings.Roof.Settings)FastCraft3D.Generators.Recipes.Read(
+            FastCraft3D.Generators.GeneratorRegistry.Find("building.roof")!, roof.Recipe!.Settings)).Width, 1);
+    });
+
+    [Fact]
     public void DropDownLandsOnThePartUnderneathAndOverlapGoesALittleIntoIt() => WithModel(model =>
     {
         var plate = new SceneObject("Plate", Primitives.Box(40, 40, 6)) { Position = new Vector3(0, 0, 3) };

@@ -392,9 +392,10 @@ public sealed partial class MainViewModel
             }
 
             PreviewOnly = beside is null ? shown.ToList() : [.. shown, beside];
-            if (!alone && shown.Count == 1) HoldPreview(shown[0]);
+            if (!alone && shown.Count == 1) HoldPreview(shown[0], panelView is { Resizable: true } && action == "Insert");
         }, action, notice);
         panelView = view;
+        sizing = view;
 
         // Only while inserting: then the preview is the set put together, which is what turns.
         view.OffersTurning = action == "Insert";
@@ -422,6 +423,7 @@ public sealed partial class MainViewModel
         panel.Closed += (_, _) => view.Stop();
 
         bool done = panel.ShowDialog() == true;
+        sizing = null;
         turning.Stop(restore: true);
         view.Stop();
         Clear();
@@ -594,7 +596,26 @@ public sealed partial class MainViewModel
             return o.CentredOn(at is { } shown ? Vector3.Transform(part.Pivot, shown) : part.Pivot);
         }).ToList();
 
-    /// <summary>The role a set carries when all its parts went down as one object.</summary>
+    /// <summary>The Library's panel while one is open, for resizing its preview to change its settings.</summary>
+    private GeneratorView? sizing;
+
+    /// <summary>
+    /// The held preview resized on the plate, taken back off it and handed to the panel as its
+    /// sizes grown by as much, so the part is made again at that size rather than stretched: a
+    /// roof made longer keeps its tiles, a box made taller keeps its walls. Called once a handle
+    /// is let go - during the drag the stretch is the preview - and after a size box is set.
+    /// </summary>
+    public void SettleHeldSize()
+    {
+        if (sizing is null || heldForSizing is not { } held) return;
+
+        var factor = held.Scale;
+        if (Vector3.DistanceSquared(factor, Vector3.One) < 1e-8f) return;
+
+        held.Scale = Vector3.One;
+        if (!sizing.Resize(factor))
+            Status = $"None of {held.Name}'s settings is made that way - set its size in the panel";
+    }
     private const string WholeSet = "(set)";
 
     /// <summary>

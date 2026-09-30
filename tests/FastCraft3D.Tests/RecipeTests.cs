@@ -285,6 +285,44 @@ public class GeneratorPrinterTests
     });
 
     [Fact]
+    public void ResizingARoofOnThePlateChangesItsWallsNotItsTiles() => RunSta(() =>
+    {
+        var roof = new FastCraft3D.Generators.Buildings.Roof();
+        var view = new GeneratorView(roof, roof.Default, GeneratorContext.Default, (_, _) => { }, live: false);
+
+        Assert.True(view.Resizable);
+        Assert.True(view.Resize(new System.Numerics.Vector3(2f, 1f, 1.5f)));
+
+        var s = (FastCraft3D.Generators.Buildings.Roof.Settings)view.Current;
+        Assert.Equal(roof.Default.Width * 2f, s.Width, 3);
+        Assert.Equal(roof.Default.Length, s.Length, 3);
+        Assert.Equal(roof.Default.TileWidth, s.TileWidth, 3);
+
+        // Nothing it makes is measured up and down, so a taller stretch changes nothing more.
+        Assert.False(view.Resize(new System.Numerics.Vector3(1f, 1f, 2f)));
+    });
+
+    [Fact]
+    public void AWindowsHeightIsUpItStandingAndFrontToBackLyingFlat() => RunSta(() =>
+    {
+        var window = new FastCraft3D.Generators.Buildings.Window();
+        var standing = new GeneratorView(window, window.Default with { Flat = false }, GeneratorContext.Default, (_, _) => { }, live: false);
+        standing.Resize(new System.Numerics.Vector3(1f, 1f, 1.5f));
+        Assert.Equal(window.Default.Height * 1.5f, ((FastCraft3D.Generators.Buildings.Window.Settings)standing.Current).Height, 3);
+
+        var flat = new GeneratorView(window, window.Default with { Flat = true }, GeneratorContext.Default, (_, _) => { }, live: false);
+        flat.Resize(new System.Numerics.Vector3(1f, 1.5f, 1f));
+        Assert.Equal(window.Default.Height * 1.5f, ((FastCraft3D.Generators.Buildings.Window.Settings)flat.Current).Height, 3);
+    });
+
+    [Fact]
+    public void APartWithNoSizeSettingIsNotOfferedResizing() => RunSta(() =>
+    {
+        var stair = new FastCraft3D.Generators.Buildings.Stair();
+        Assert.False(new GeneratorView(stair, stair.Default, GeneratorContext.Default, (_, _) => { }, live: false).Resizable);
+    });
+
+    [Fact]
     public void GoingBackToTheDefaultPutsAWallOnThePrinterAgain() => RunSta(() =>
     {
         var view = new GeneratorView(Box, Box.Default with { Wall = 3 }, GeneratorContext.Default with { Printer = new Printer(Nozzle: 0.5f) }, (_, _) => { }, live: false);

@@ -272,6 +272,47 @@ public sealed class GeneratorView : UserControl
 
     internal void Choose(string name, object value) => rows.Single(r => r.Parameter.Name == name).Set(value);
 
+    /// <summary>Whether any setting is one of the part's overall sizes, for resizing on the plate to change.</summary>
+    public bool Resizable => rows.Any(r => generator.SizeAxisOf(Current, r.Parameter) != SizeAxis.None);
+
+    /// <summary>
+    /// The part resized on the plate - by the size boxes or the handles - taken as its settings
+    /// grown by as much, so it is made again at that size rather than stretched: a roof twice as
+    /// long keeps its tiles the size they were. A setting that measures several ways - a diameter -
+    /// takes whichever of them was changed most. Returns whether anything was changed.
+    /// </summary>
+    public bool Resize(System.Numerics.Vector3 factor)
+    {
+        var current = Current;
+        bool any = false;
+
+        reading = true;
+        foreach (var row in rows)
+        {
+            var axis = generator.SizeAxisOf(current, row.Parameter);
+            if (axis == SizeAxis.None || values[row.Index] is not float was) continue;
+
+            float by = new[] { (SizeAxis.X, factor.X), (SizeAxis.Y, factor.Y), (SizeAxis.Z, factor.Z) }
+                .Where(a => axis.HasFlag(a.Item1)).Select(a => a.Item2)
+                .OrderByDescending(f => MathF.Abs(f - 1f)).FirstOrDefault(1f);
+            if (MathF.Abs(by - 1f) < 1e-4f || !float.IsFinite(by) || by <= 0f) continue;
+
+            var value = row.Parameter.Clamp(was * by);
+            row.Set(value);
+            values[row.Index] = value;
+            faults[row.Index] = null;
+            fromPrinter[row.Index] = false;
+            any = true;
+        }
+
+        reading = false;
+        if (!any) return false;
+
+        MarkPrinterSettings();
+        Changed();
+        return true;
+    }
+
     /// <summary>What the unit after a setting's box says, for the tests.</summary>
     internal string UnitText(string name) => rows.Single(r => r.Parameter.Name == name).Unit?.Text ?? "";
 
@@ -685,6 +726,10 @@ public sealed class GeneratorView : UserControl
             {
                 var box = new TextBox { Width = 64, Text = Show(p, values[index]) };
                 box.SetResourceReference(StyleProperty, "NumberBox");
+
+                // A count is whole when "*=1.5" is worked out or it is nudged - the app's number
+                // boxes read this, by name, since this library knows nothing of the app.
+                if (p.Kind == ParameterKind.Count) box.Tag = "whole";
                 AutomationProperties.SetAutomationId(box, id);
                 var normalBorder = box.BorderBrush;
 

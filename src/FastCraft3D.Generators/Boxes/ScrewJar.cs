@@ -16,8 +16,8 @@ public sealed class ScrewJar : Generator<ScrewJar.Settings>
     public override string Summary => "A round jar and a lid that screws onto its neck.";
 
     public sealed record Settings(
-        [Length("Diameter", 30, 140, Hint = "Outside, the jar and the lid alike")] float Diameter = 60f,
-        [Length("Height", 20, 150, Hint = "The jar, with its neck, without the lid")] float Height = 60f,
+        [Length("Diameter", 30, 140, Hint = "Outside, the jar and the lid alike", Size = SizeAxis.XY)] float Diameter = 60f,
+        [Length("Height", 20, 150, Hint = "The jar, with its neck, without the lid", Size = SizeAxis.Z)] float Height = 60f,
         [Wall("Wall", 1.2, 5)] float Wall = 2f,
         [Length("Floor", 1, 5, Hint = "The jar's floor, and the lid's top")] float Floor = 2f,
         [Length("Pitch", 1.5, 5, Group = "Thread", Hint = "From one crest to the next. Coarse prints well: 3 mm is a good start.")] float Pitch = 3f,

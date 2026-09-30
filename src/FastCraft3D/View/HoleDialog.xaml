@@ -56,7 +56,7 @@
         <StackPanel Orientation="Horizontal" Margin="0,2,0,4">
             <TextBlock Text="Holes" Style="{DynamicResource FieldLabel}" Width="62"
                        ToolTip="How many, set out round the handles: moving or turning the cutter moves them all" />
-            <TextBox x:Name="CountBox" Width="44" Style="{DynamicResource NumberBox}" Tag="number" TextChanged="OnChanged"
+            <TextBox x:Name="CountBox" view:NumberField.Whole="True" Width="44" Style="{DynamicResource NumberBox}" Tag="number" TextChanged="OnChanged"
                      AutomationProperties.AutomationId="HoleCount" />
             <RadioButton x:Name="RowBox" GroupName="HolePattern" Content="Row" Margin="10,0,10,0" VerticalAlignment="Center" Checked="OnChoice"
                          AutomationProperties.AutomationId="HoleRow"

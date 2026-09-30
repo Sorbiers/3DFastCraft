@@ -35,7 +35,7 @@ public sealed class Moon : Generator<Moon.Settings>
 
     public sealed record Settings(
         [Choice("Surface", Hint = "Craters made up from a seed, or the real moon from NASA's photographs")] MoonSurface Surface = MoonSurface.MadeUp,
-        [Length("Diameter", 30, 200)] float Diameter = 100f,
+        [Length("Diameter", 30, 200, Size = SizeAxis.XYZ)] float Diameter = 100f,
         [Wall("Wall", 0.6, 3, Hint = "The thinnest the shell goes, where it is brightest")] float Wall = 0.8f,
         [Length("Relief", 0.4, 5, Hint = "How much thicker the darkest parts are than the brightest")] float Relief = 2f,
         [Count("Craters", 0, 600), ShowWhen(nameof(Surface), MoonSurface.MadeUp)] int Craters = 160,

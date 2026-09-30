@@ -271,7 +271,9 @@ public partial class MainWindow : Window
         AddHandler(PreviewKeyDownEvent, new KeyEventHandler(OnDragModifier), true);
         AddHandler(PreviewKeyUpEvent, new KeyEventHandler(OnDragModifier), true);
 
-        // Arrow keys and the wheel nudge the numeric fields.
+        // Arrow keys and the wheel nudge the numeric fields: the transform boxes here, every other
+        // number box by itself, by the same step.
+        NumberField.Step = () => viewModel.UnitStep;
         AddHandler(PreviewKeyDownEvent, new KeyEventHandler(OnFieldKey), true);
         AddHandler(PreviewMouseWheelEvent, new MouseWheelEventHandler(OnFieldWheel), true);
 
@@ -481,7 +483,11 @@ public partial class MainWindow : Window
             && (Keyboard.Modifiers is ModifierKeys.Control
                 || (Keyboard.Modifiers is ModifierKeys.None && Keyboard.FocusedElement is not (TextBox or ButtonBase or ComboBox))))
         {
-            if (Keyboard.FocusedElement is TextBox box) box.GetBindingExpression(TextBox.TextProperty)?.UpdateSource();
+            if (Keyboard.FocusedElement is TextBox box)
+            {
+                if (NumberField.GetIsOn(box)) NumberField.Resolve(box);
+                box.GetBindingExpression(TextBox.TextProperty)?.UpdateSource();
+            }
             if (viewModel.ApplyActiveTool())
             {
                 e.Handled = true;
@@ -682,6 +688,9 @@ public partial class MainWindow : Window
 
         GizmoLayer.ReleaseMouseCapture();
         gizmo.EndDrag();
+
+        // A Library part resized by its handles is made again at that size, now it is let go.
+        viewModel.SettleHeldSize();
         viewModel.RefreshSelection();
         e.Handled = true;
     }
@@ -1661,7 +1670,7 @@ public partial class MainWindow : Window
     /// </summary>
     private void OnFieldFocused(object sender, KeyboardFocusChangedEventArgs e)
     {
-        if (e.NewFocus is TextBox { Tag: "transform" or "number" } box) box.SelectAll();
+        if (e.NewFocus is TextBox { Tag: "transform" } box) box.SelectAll();
     }
 
     /// <summary>
@@ -1690,7 +1699,7 @@ public partial class MainWindow : Window
     private static TextBox? FindTextBox(DependencyObject from)
     {
         for (var at = from; at is not null; at = VisualTreeHelper.GetParent(at))
-            if (at is TextBox { Tag: "transform" or "number" } box)
+            if (at is TextBox { Tag: "transform" } box)
                 return box;
 
         return null;
@@ -1784,11 +1793,13 @@ public partial class MainWindow : Window
         if (e.Key == Key.Enter && e.OriginalSource is TextBox typed)
         {
             if (ChangeFieldBy(typed)) typed.SelectAll();
-            else typed.GetBindingExpression(TextBox.TextProperty)?.UpdateSource();
+
+            // A number box works its own "+=5" out first, then puts it into effect itself.
+            else if (!NumberField.GetIsOn(typed)) typed.GetBindingExpression(TextBox.TextProperty)?.UpdateSource();
             return;
         }
 
-        if (e.OriginalSource is not TextBox { Tag: "transform" or "number" } box) return;
+        if (e.OriginalSource is not TextBox { Tag: "transform" } box) return;
 
         double direction = e.Key switch { Key.Up => 1, Key.Down => -1, _ => 0 };
         if (direction == 0) return;
@@ -1800,7 +1811,7 @@ public partial class MainWindow : Window
     private void OnFieldWheel(object sender, MouseWheelEventArgs e)
     {
         // Only while the field has focus, so scrolling the properties panel still scrolls it.
-        if (e.OriginalSource is not TextBox { Tag: "transform" or "number" } box
+        if (e.OriginalSource is not TextBox { Tag: "transform" } box
             || !box.IsKeyboardFocusWithin) return;
 
         Nudge(box, Math.Sign(e.Delta) * NudgeStep());
