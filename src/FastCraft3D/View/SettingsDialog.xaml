@@ -53,6 +53,7 @@
                 <RowDefinition Height="Auto" /><RowDefinition Height="Auto" />
                 <RowDefinition Height="Auto" /><RowDefinition Height="Auto" />
                 <RowDefinition Height="Auto" /><RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" /><RowDefinition Height="Auto" />
             </Grid.RowDefinitions>
 
             <TextBlock Grid.Row="0" Text="Name" Style="{StaticResource Label}" />
@@ -81,18 +82,24 @@
             <TextBox Grid.Row="7" Grid.Column="1" x:Name="HoleBox" Style="{StaticResource Box}" AutomationProperties.AutomationId="Hole" />
             <TextBlock Grid.Row="7" Grid.Column="2" Text="mm per side" Style="{StaticResource Label}" Margin="6,0,0,0" />
             <TextBlock Grid.Row="8" Grid.Column="1" Grid.ColumnSpan="2" Style="{StaticResource Hint}"
-                       Text="Added to a round hole so a pin or screw of its size goes in: Hole, and the pins and pegs of Split and Connect." />
+                       Text="Added to a round hole so a screw or pin of its size goes in freely: Hole." />
 
-            <TextBlock Grid.Row="9" Text="Brick fit" Style="{StaticResource Label}" />
-            <TextBox Grid.Row="9" Grid.Column="1" x:Name="BrickBox" Style="{StaticResource Box}" AutomationProperties.AutomationId="Brick" />
-            <TextBlock Grid.Row="9" Grid.Column="2" Text="mm" Style="{StaticResource Label}" Margin="6,0,0,0" />
+            <TextBlock Grid.Row="9" Text="Press fit" Style="{StaticResource Label}" />
+            <TextBox Grid.Row="9" Grid.Column="1" x:Name="PressBox" Style="{StaticResource Box}" AutomationProperties.AutomationId="Press" />
+            <TextBlock Grid.Row="9" Grid.Column="2" Text="mm per side" Style="{StaticResource Label}" Margin="6,0,0,0" />
             <TextBlock Grid.Row="10" Grid.Column="1" Grid.ColumnSpan="2" Style="{StaticResource Hint}"
+                       Text="Added to a hole so a pin pushed in grips and stays: the pins and pegs of Split and Connect. Less than the hole clearance." />
+
+            <TextBlock Grid.Row="11" Text="Brick fit" Style="{StaticResource Label}" />
+            <TextBox Grid.Row="11" Grid.Column="1" x:Name="BrickBox" Style="{StaticResource Box}" AutomationProperties.AutomationId="Brick" />
+            <TextBlock Grid.Row="11" Grid.Column="2" Text="mm" Style="{StaticResource Label}" Margin="6,0,0,0" />
+            <TextBlock Grid.Row="12" Grid.Column="1" Grid.ColumnSpan="2" Style="{StaticResource Hint}"
                        Text="How much larger brick studs and what grips them are made. Negative is looser: -0.1 suits most PLA." />
 
-            <TextBlock Grid.Row="11" Text="Thread clearance" Style="{StaticResource Label}" />
-            <TextBox Grid.Row="11" Grid.Column="1" x:Name="ThreadBox" Style="{StaticResource Box}" AutomationProperties.AutomationId="Thread" />
-            <TextBlock Grid.Row="11" Grid.Column="2" Text="mm on the diameter" Style="{StaticResource Label}" Margin="6,0,0,0" />
-            <TextBlock Grid.Row="12" Grid.Column="1" Grid.ColumnSpan="2" Style="{StaticResource Hint}"
+            <TextBlock Grid.Row="13" Text="Thread clearance" Style="{StaticResource Label}" />
+            <TextBox Grid.Row="13" Grid.Column="1" x:Name="ThreadBox" Style="{StaticResource Box}" AutomationProperties.AutomationId="Thread" />
+            <TextBlock Grid.Row="13" Grid.Column="2" Text="mm on the diameter" Style="{StaticResource Label}" Margin="6,0,0,0" />
+            <TextBlock Grid.Row="14" Grid.Column="1" Grid.ColumnSpan="2" Style="{StaticResource Hint}"
                        Text="Between a printed thread and its nut: Thread, bolts and nuts in the Library." />
         </Grid>
 

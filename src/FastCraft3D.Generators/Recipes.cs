@@ -113,6 +113,7 @@ public static class PrinterProfile
     {
         public string? Name { get; init; }
         public float? HoleClearance { get; init; }
+        public float? PressFit { get; init; }
         public float? BrickFit { get; init; }
         public float? ThreadClearance { get; init; }
 
@@ -120,13 +121,14 @@ public static class PrinterProfile
         {
             Name = Name ?? Generators.Printer.Default.Name,
             HoleClearance = HoleClearance ?? Generators.Printer.Default.HoleClearance,
+            PressFit = PressFit ?? Generators.Printer.Default.PressFit,
             BrickFit = BrickFit ?? Generators.Printer.Default.BrickFit,
             ThreadClearance = ThreadClearance ?? Generators.Printer.Default.ThreadClearance
         }.Saned();
 
         public static Stored Of(Printer p) => new(p.Nozzle, p.Layer, p.XyClearance)
         {
-            Name = p.Name, HoleClearance = p.HoleClearance, BrickFit = p.BrickFit, ThreadClearance = p.ThreadClearance
+            Name = p.Name, HoleClearance = p.HoleClearance, PressFit = p.PressFit, BrickFit = p.BrickFit, ThreadClearance = p.ThreadClearance
         };
     }
 

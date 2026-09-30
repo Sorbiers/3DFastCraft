@@ -49,6 +49,7 @@ public partial class SettingsDialog : Window
         LayerBox.Text = Say(p.Layer);
         SlidingBox.Text = Say(p.XyClearance);
         HoleBox.Text = Say(p.HoleClearance);
+        PressBox.Text = Say(p.PressFit);
         BrickBox.Text = Say(p.BrickFit);
         ThreadBox.Text = Say(p.ThreadClearance);
         DeleteButton.IsEnabled = printers.Count > 1;
@@ -76,6 +77,7 @@ public partial class SettingsDialog : Window
             || Number(LayerBox, Printer.LeastLayer, Printer.MostLayer, "Layer height") is not { } layer
             || Number(SlidingBox, Printer.LeastClearance, Printer.MostClearance, "Sliding clearance") is not { } sliding
             || Number(HoleBox, Printer.LeastClearance, Printer.MostClearance, "Hole clearance") is not { } hole
+            || Number(PressBox, Printer.LeastClearance, Printer.MostClearance, "Press fit") is not { } press
             || Number(BrickBox, Printer.LeastBrickFit, Printer.MostBrickFit, "Brick fit") is not { } brick
             || Number(ThreadBox, Printer.LeastClearance, Printer.MostClearance, "Thread clearance") is not { } thread)
             return null;
@@ -91,7 +93,7 @@ public partial class SettingsDialog : Window
 
         return new Printer(nozzle, layer, sliding)
         {
-            Name = name, HoleClearance = hole, BrickFit = brick, ThreadClearance = thread
+            Name = name, HoleClearance = hole, PressFit = press, BrickFit = brick, ThreadClearance = thread
         }.Saned();
     }
 

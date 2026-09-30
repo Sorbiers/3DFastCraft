@@ -25,10 +25,12 @@ public sealed class ProfileTest : Generator<ProfileTest.Settings>
     public sealed record Settings(
         [Toggle("Sliding clearance", Group = "Tests", Hint = "Pins printed in place in their holes: the first that turns free")] bool Sliding = true,
         [Toggle("Hole clearance", Group = "Tests", Hint = "Holes a loose peg of the same size is tried in: the one it slides into snugly")] bool Holes = true,
+        [Toggle("Press fit", Group = "Tests", Hint = "Holes the peg is pushed into: the widest it still grips in")] bool Press = true,
         [Toggle("Brick fit", Group = "Tests", Hint = "Brick plates at a run of fits: the one that grips its twin")] bool Bricks = true,
         [Toggle("Thread clearance", Group = "Tests", Hint = "Bolt and nut pairs: the pair that screws together cleanly")] bool Threads = true,
         [Count("Samples", 3, 7, Hint = "Of each fit, the profile's own number in the middle")] int Samples = 5,
-        [Number("Step", 0.02, 0.2, UnitText = "mm", Hint = "Between one sample and the next")] float Step = 0.05f);
+        [Number("Step", 0.02, 0.2, UnitText = "mm", Hint = "Between one sample and the next")] float Step = 0.05f,
+        [Toggle("Start from nought", Hint = "Each clearance from nothing up, rather than either side of the profile's number - for a first print, or a printer that wants less than the profile has. Brick fit stays round its number, which is either side of nought.")] bool FromNought = false);
 
     protected override IEnumerable<(string Name, Settings Settings)> Shipped =>
     [
@@ -42,11 +44,12 @@ public sealed class ProfileTest : Generator<ProfileTest.Settings>
 
     protected override IEnumerable<string> Check(Settings s, Printer printer)
     {
-        if (!s.Sliding && !s.Holes && !s.Bricks && !s.Threads) yield return "Pick at least one test.";
+        if (!s.Sliding && !s.Holes && !s.Press && !s.Bricks && !s.Threads) yield return "Pick at least one test.";
     }
 
-    /// <summary>The samples either side of a number, as low as they may go.</summary>
-    private static float First(Settings s, float middle, float least) => MathF.Max(least, middle - (s.Samples - 1) / 2 * s.Step);
+    /// <summary>The first sample: either side of a number, or from as low as it may go.</summary>
+    private static float First(Settings s, float middle, float least, bool fromNought = true) =>
+        s.FromNought && fromNought ? least : MathF.Max(least, middle - (s.Samples - 1) / 2 * s.Step);
 
     protected override Generated Build(Settings s, Printer printer, CancellationToken token)
     {
@@ -64,15 +67,22 @@ public sealed class ProfileTest : Generator<ProfileTest.Settings>
         if (s.Holes)
         {
             token.ThrowIfCancellationRequested();
-            rows.Add(("Holes", HoleRow(s, printer)));
+            rows.Add(("Holes", HoleRow(s, printer.HoleClearance)));
             notes.Add($"Hole clearance: try the loose {Peg:0} mm peg in each hole; the smallest it slides into without forcing is the profile's Hole clearance.");
+        }
+
+        if (s.Press)
+        {
+            token.ThrowIfCancellationRequested();
+            rows.Add(("Press", HoleRow(s, printer.PressFit)));
+            notes.Add($"Press fit: push the {Peg:0} mm peg into each hole; the widest it still grips in and stays is the profile's Press fit.");
         }
 
         if (s.Bricks)
         {
             token.ThrowIfCancellationRequested();
             var made = new FitTest().Make(new FitTest.Settings(
-                From: First(s, printer.BrickFit, -0.5f), Step: s.Step, Plates: s.Samples), printer, token);
+                From: First(s, printer.BrickFit, -0.5f, fromNought: false), Step: s.Step, Plates: s.Samples), printer, token);
             rows.Add(("Bricks", made.Parts));
             notes.Add("Brick fit: print the row twice and press each plate onto its twin; the one that grips and still comes apart is the profile's Brick fit.");
         }
@@ -119,9 +129,9 @@ public sealed class ProfileTest : Generator<ProfileTest.Settings>
     /// A plate of holes, each the peg's size opened by a clearance of its own written in front of
     /// it, and the loose peg to try in them.
     /// </summary>
-    private static List<GeneratedPart> HoleRow(Settings s, Printer printer)
+    private static List<GeneratedPart> HoleRow(Settings s, float middle)
     {
-        float first = First(s, printer.HoleClearance, 0f);
+        float first = First(s, middle, 0f);
         float[] gaps = Enumerable.Range(0, s.Samples).Select(i => MathF.Round(first + i * s.Step, 3)).ToArray();
 
         float pitch = Peg + 2 * gaps[^1] + 5f, t = 4f;

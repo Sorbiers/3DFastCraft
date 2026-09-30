@@ -37,8 +37,8 @@ public sealed partial class MainViewModel
 
     /// <summary>
     /// A printer taken up: the tools that keep a fit of their own start from its numbers - Hole
-    /// from its hole clearance, the connectors of Split and Connect from the hole clearance and
-    /// the brick fit, brick studs from the brick fit. Mold's keys and Keyhole read it as they
+    /// from its hole clearance, which lets a screw go in; the connectors of Split and Connect from
+    /// the press fit, which holds a pin, and the brick fit; brick studs from the brick fit. Mold's keys and Keyhole read it as they
     /// open. A number typed into a tool since is replaced: the profile is what was asked for.
     /// </summary>
     public void UsePrinter(Printer chosen)
@@ -46,7 +46,7 @@ public sealed partial class MainViewModel
         printer = chosen;
 
         lastHole = lastHole with { ExtraClearance = chosen.HoleClearance };
-        connectors = connectors with { Clearance = chosen.HoleClearance, BrickFit = chosen.BrickFit };
+        connectors = connectors with { Clearance = chosen.PressFit, BrickFit = chosen.BrickFit };
         Raise(nameof(ConnectorClearance));
         Raise(nameof(ConnectorBrickFit));
         EngraveStudFit = chosen.BrickFit;

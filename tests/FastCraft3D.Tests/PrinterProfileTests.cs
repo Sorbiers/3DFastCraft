@@ -16,7 +16,7 @@ public class PrinterProfileTests
     public void SeveralProfilesAreKeptByNameWithTheOneInUse()
     {
         string path = TempFile();
-        var pla = new Printer(0.4f, 0.2f, 0.2f) { Name = "MK4 PLA", HoleClearance = 0.15f, BrickFit = -0.1f, ThreadClearance = 0.25f };
+        var pla = new Printer(0.4f, 0.2f, 0.2f) { Name = "MK4 PLA", HoleClearance = 0.15f, PressFit = 0.07f, BrickFit = -0.1f, ThreadClearance = 0.25f };
         var petg = pla with { Name = "MK4 PETG", XyClearance = 0.3f, BrickFit = -0.15f };
 
         PrinterProfile.SaveAll(new PrinterProfiles([pla, petg], "MK4 PETG"), path);
@@ -80,21 +80,36 @@ public class PrinterProfileTests
         var made = test.Make(test.Default, printer);
 
         Assert.False(made.IsRefused);
-        foreach (var row in new[] { "sliding.", "holes.", "bricks.", "threads." })
+        foreach (var row in new[] { "sliding.", "holes.", "press.", "bricks.", "threads." })
             Assert.Contains(made.Parts, p => p.Role!.StartsWith(row, StringComparison.Ordinal));
         Assert.All(made.Parts, p => Assert.True(p.Mesh.CheckHealth().IsWatertight, p.Name));
 
         // Nothing left to test is refused rather than made empty.
-        Assert.True(test.Make(test.Default with { Sliding = false, Holes = false, Bricks = false, Threads = false }, printer).IsRefused);
+        Assert.True(test.Make(test.Default with { Sliding = false, Holes = false, Press = false, Bricks = false, Threads = false }, printer).IsRefused);
+    }
+
+    [Fact]
+    public void StartingFromNoughtRunsTheClearancesUpFromNothing()
+    {
+        // Press fit 0.3: either side of it, five samples 0.05 apart run 0.2 to 0.4; from nought, 0 to 0.2.
+        var printer = new Printer { PressFit = 0.3f };
+        var test = new ProfileTest();
+        var only = test.Default with { Sliding = false, Holes = false, Bricks = false, Threads = false };
+
+        float Width(ProfileTest.Settings s) =>
+            test.Make(s, printer).Parts.Single(p => p.Role == "press.plate").Mesh.ComputeBounds().Size.X;
+
+        // The holes are spaced by the widest of them, so the plate is narrower by twice the difference.
+        Assert.Equal(Width(only) - 5 * 2 * 0.2f, Width(only with { FromNought = true }), 3);
     }
 
     [Fact]
     public void TakingUpAPrinterMovesTheToolsFitsToIt()
     {
         var model = new MainViewModel();
-        model.UsePrinter(new Printer { HoleClearance = 0.3f, BrickFit = -0.2f });
+        model.UsePrinter(new Printer { HoleClearance = 0.3f, PressFit = 0.08f, BrickFit = -0.2f });
 
-        Assert.Equal(0.3f, model.ConnectorClearance, 3);
+        Assert.Equal(0.08f, model.ConnectorClearance, 3);
         Assert.Equal(-0.2f, model.ConnectorBrickFit, 3);
         Assert.Equal(-0.2f, model.EngraveStudFit, 3);
     }

@@ -30,6 +30,12 @@ public sealed record Printer(float Nozzle = 0.4f, float Layer = 0.2f, float XyCl
     /// <summary>Added to a hole, per side, for a pin or a screw printed or bought to its size to go in.</summary>
     public float HoleClearance { get; init; } = 0.2f;
 
+    /// <summary>
+    /// Added to a hole, per side, for a pin pushed into it to grip and stay: the connectors that hold
+    /// two halves together. Less than the hole clearance - that one lets a pin go in freely.
+    /// </summary>
+    public float PressFit { get; init; } = 0.1f;
+
     /// <summary>How much larger brick studs and what grips them are made: negative is looser.</summary>
     public float BrickFit { get; init; } = -0.1f;
 
@@ -40,6 +46,7 @@ public sealed record Printer(float Nozzle = 0.4f, float Layer = 0.2f, float XyCl
     public float FitFor(PrinterFit fit) => fit switch
     {
         PrinterFit.Hole => HoleClearance,
+        PrinterFit.Press => PressFit,
         PrinterFit.Brick => BrickFit,
         PrinterFit.Thread => ThreadClearance,
         _ => XyClearance
@@ -50,6 +57,7 @@ public sealed record Printer(float Nozzle = 0.4f, float Layer = 0.2f, float XyCl
     {
         Name = string.IsNullOrWhiteSpace(Name) ? Default.Name : Name.Trim(),
         HoleClearance = Within(HoleClearance, LeastClearance, MostClearance, Default.HoleClearance),
+        PressFit = Within(PressFit, LeastClearance, MostClearance, Default.PressFit),
         BrickFit = Within(BrickFit, LeastBrickFit, MostBrickFit, Default.BrickFit),
         ThreadClearance = Within(ThreadClearance, LeastClearance, MostClearance, Default.ThreadClearance)
     };
@@ -72,6 +80,9 @@ public enum PrinterFit
 
     /// <summary>A round hole taking a pin or a screw of its nominal size.</summary>
     Hole,
+
+    /// <summary>A pin pushed into a hole to grip and stay.</summary>
+    Press,
 
     /// <summary>Brick studs and what grips them.</summary>
     Brick,
