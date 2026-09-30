@@ -240,6 +240,49 @@ public class ToolFlowTests
             FastCraft3D.Generators.GeneratorRegistry.Find("building.roof")!, roof.Recipe!.Settings)).Width, 1);
     });
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void FillUpFillsACupSolidOrAsAPartOfItsOwn(bool apart) => WithModel(model =>
+    {
+        var outer = Primitives.Box(40, 40, 30);
+        var inner = MeshTransform.Transformed(Primitives.Box(30, 30, 30), System.Numerics.Matrix4x4.CreateTranslation(0, 0, 20));
+        var cupMesh = FastCraft3D.Geometry.Csg.ManifoldCsg.Subtract(
+            MeshTransform.Transformed(outer, System.Numerics.Matrix4x4.CreateTranslation(0, 0, 15)), inner)!;
+        var cup = new SceneObject("Cup", cupMesh).Centred();
+        model.Scene.Objects.Add(cup);
+        cup.IsSelected = true;
+        model.RefreshSelection();
+        double before = cup.ToWorldMesh().ComputeSignedVolume();
+
+        AnswerPanel(model, "AcceptButton", panel =>
+        {
+            if (apart)
+            {
+                var box = (CheckBox)panel.FindName("ApartBox")!;
+                box.IsChecked = true;
+                box.RaiseEvent(new RoutedEventArgs(ButtonBase.ClickEvent));
+            }
+
+            // The part is worked out off the UI thread as the panel opens; Fill waits for it.
+            PumpUntil(() => ((Button)panel.FindName("AcceptButton")!).IsEnabled, 60000);
+        });
+        model.FillUpCommand.Execute(null);
+        PumpUntil(() => !model.HasOpenPanel && !model.IsBusy && (apart ? model.Scene.Objects.Count == 2 : !model.Scene.Objects.Contains(cup)), 60000);
+
+        if (apart)
+        {
+            var fill = model.Scene.Objects.Single(o => o != cup);
+            Assert.Equal(30 * 30 * 25, fill.ToWorldMesh().ComputeSignedVolume(), 30 * 30 * 25 * 0.02);
+        }
+        else
+        {
+            var filled = Assert.Single(model.Scene.Objects);
+            Assert.Equal(40 * 40 * 30, filled.ToWorldMesh().ComputeSignedVolume(), 40 * 40 * 30 * 0.02);
+            Assert.True(filled.ToWorldMesh().ComputeSignedVolume() > before);
+        }
+    });
+
     [Fact]
     public void DropDownLandsOnThePartUnderneathAndOverlapGoesALittleIntoIt() => WithModel(model =>
     {

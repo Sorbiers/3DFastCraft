@@ -53,6 +53,17 @@ public sealed class SurfacePlacementGizmo
 
     public const string TurnTag = "lettering-turn";
 
+    /// <summary>The arrows that move it along one way only: across the surface, and up it.</summary>
+    public const string MoveAcrossTag = "lettering-move-across";
+
+    public const string MoveUpTag = "lettering-move-up";
+
+    // How far each arrow reaches either side of the middle, and how big its heads are, in pixels.
+    private const double ArrowReach = 30.0, ArrowHead = 10.0, ArrowWide = 7.0, ArrowShaft = 2.2;
+
+    private static readonly Color AcrossColour = Color.FromRgb(0xE0, 0x58, 0x4F);
+    private static readonly Color UpColour = Color.FromRgb(0x3F, 0xA3, 0x4D);
+
     /// <summary>A corner's tag is this and its number, 0 to 3, going round from lower left.</summary>
     public const string ScaleTag = "placement-scale-";
 
@@ -62,7 +73,7 @@ public sealed class SurfacePlacementGizmo
     private const double KnobRadius = 7.0;
 
     /// <summary>How far the knob sits from the grip at the very least, so both stay grabbable.</summary>
-    private const double MinimumKnobPixels = 34.0;
+    private const double MinimumKnobPixels = ArrowReach + 22.0;
     private const double RotationSnapDegrees = 15.0;
 
     private static readonly Color GripColour = Color.FromRgb(0x3B, 0x9C, 0xF0);
@@ -90,7 +101,28 @@ public sealed class SurfacePlacementGizmo
         StrokeThickness = 1.6,
         Cursor = Cursors.SizeAll,
         Tag = MoveTag,
-        ToolTip = "Drag to move the lettering over the object"
+        ToolTip = "Drag to move it freely; the arrows move it one way only"
+    };
+
+    // Filled rather than stroked, so the whole arrow can be grabbed and not only its outline.
+    private readonly Path acrossArrow = new()
+    {
+        Fill = new SolidColorBrush(AcrossColour),
+        Stroke = Brushes.White,
+        StrokeThickness = 1,
+        Cursor = Cursors.SizeWE,
+        Tag = MoveAcrossTag,
+        ToolTip = "Drag to move it across, and only across"
+    };
+
+    private readonly Path upArrow = new()
+    {
+        Fill = new SolidColorBrush(UpColour),
+        Stroke = Brushes.White,
+        StrokeThickness = 1,
+        Cursor = Cursors.SizeNS,
+        Tag = MoveUpTag,
+        ToolTip = "Drag to move it up and down, and only that"
     };
 
     private readonly Ellipse knob = new()
@@ -124,10 +156,11 @@ public sealed class SurfacePlacementGizmo
     private bool active;
 
     private bool movingDrag;
+    private int movingAxis; // 0 either way, 1 across only, 2 up only
     private bool turningDrag;
     private int scalingCorner = -1;
     private Vector2 dragStartExtent;
-    private float scale = 1f;
+    private Vector2 scale = Vector2.One;
     private Point dragStart;
     private SurfacePlacement dragStartPlacement;
 
@@ -138,6 +171,8 @@ public sealed class SurfacePlacementGizmo
 
         layer.Children.Add(box);
         layer.Children.Add(stem);
+        layer.Children.Add(acrossArrow);
+        layer.Children.Add(upArrow);
         layer.Children.Add(grip);
         layer.Children.Add(knob);
 
@@ -165,7 +200,14 @@ public sealed class SurfacePlacementGizmo
     /// middle comes with <see cref="Changed"/> straight after. Not while dragging: resizing
     /// rebuilds what is being placed, and a traced picture takes too long to do that every step.
     /// </summary>
-    public event Action<float>? Resized;
+    public event Action<Vector2>? Resized;
+
+    /// <summary>
+    /// Whether a corner resizes the width and the height each on its own - the area a texture is
+    /// laid over - rather than the whole in proportion, as lettering is. Either way the opposite
+    /// corner stays put. Raised with <see cref="Resized"/> as the two factors, equal in proportion.
+    /// </summary>
+    public bool ScalesFreely { get; set; }
 
     /// <summary>Raised while dragging, with where the lettering has got to.</summary>
     public event Action<SurfacePlacement>? Changed;
@@ -215,10 +257,23 @@ public sealed class SurfacePlacementGizmo
         layer.Visibility = Visibility.Visible;
 
         grip.Visibility = Show(PlacementHandles.Move);
+        acrossArrow.Visibility = grip.Visibility;
+        upArrow.Visibility = grip.Visibility;
         knob.Visibility = Show(PlacementHandles.Turn);
         stem.Visibility = knob.Visibility;
 
         Place(grip, centre, GripRadius);
+
+        if (wanted.HasFlag(PlacementHandles.Move))
+        {
+            acrossArrow.Data = Arrow(centre, Along(centre, new Vector2(1, 0), new Vector(1, 0)));
+            upArrow.Data = Arrow(centre, Along(centre, new Vector2(0, 1), new Vector(0, -1)));
+        }
+
+        foreach (var corner in corners)
+            corner.ToolTip = ScalesFreely
+                ? "Drag to resize the area the pattern covers, the opposite corner staying put"
+                : "Drag to resize it in proportion, the opposite corner staying put";
 
         for (int i = 0; i < corners.Length; i++)
         {
@@ -242,6 +297,36 @@ public sealed class SurfacePlacementGizmo
 
         Visibility Show(PlacementHandles handle) =>
             wanted.HasFlag(handle) ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    /// <summary>
+    /// Which way on screen one of the layout's own directions runs from the middle, turned with
+    /// it - or <paramref name="otherwise"/> where the surface is seen edge-on.
+    /// </summary>
+    private Vector Along(Point centre, Vector2 direction, Vector otherwise)
+    {
+        var towards = Screen(centre, placement.Apply(direction * MathF.Max(MathF.Max(extent.X, extent.Y), 1f)));
+        return towards.Length < 1e-3 ? otherwise : towards / towards.Length;
+    }
+
+    /// <summary>A double-headed arrow through the middle, as one filled outline.</summary>
+    private static System.Windows.Media.Geometry Arrow(Point c, Vector d)
+    {
+        var p = new Vector(-d.Y, d.X);
+        double neck = ArrowReach - ArrowHead;
+        var points = new[]
+        {
+            c + d * ArrowReach,
+            c + d * neck + p * ArrowWide, c + d * neck + p * ArrowShaft,
+            c - d * neck + p * ArrowShaft, c - d * neck + p * ArrowWide,
+            c - d * ArrowReach,
+            c - d * neck - p * ArrowWide, c - d * neck - p * ArrowShaft,
+            c + d * neck - p * ArrowShaft, c + d * neck - p * ArrowWide
+        };
+
+        var figure = new PathFigure { StartPoint = points[0], IsClosed = true, IsFilled = true };
+        for (int i = 1; i < points.Length; i++) figure.Segments.Add(new LineSegment(points[i], true));
+        return new PathGeometry { Figures = { figure } };
     }
 
     private static void Place(FrameworkElement element, Point at, double radius)
@@ -325,7 +410,8 @@ public sealed class SurfacePlacementGizmo
 
         string? tag = (hitElement as FrameworkElement)?.Tag as string;
 
-        movingDrag = tag == MoveTag && wanted.HasFlag(PlacementHandles.Move);
+        movingAxis = tag switch { MoveAcrossTag => 1, MoveUpTag => 2, _ => 0 };
+        movingDrag = tag is MoveTag or MoveAcrossTag or MoveUpTag && wanted.HasFlag(PlacementHandles.Move);
         turningDrag = tag == TurnTag && wanted.HasFlag(PlacementHandles.Turn);
         scalingCorner = tag is not null && tag.StartsWith(ScaleTag, StringComparison.Ordinal) && wanted.HasFlag(PlacementHandles.Scale)
             ? int.Parse(tag[ScaleTag.Length..], System.Globalization.CultureInfo.InvariantCulture)
@@ -335,7 +421,7 @@ public sealed class SurfacePlacementGizmo
         dragStart = screen;
         dragStartPlacement = placement;
         dragStartExtent = extent;
-        scale = 1f;
+        scale = Vector2.One;
         return true;
     }
 
@@ -360,7 +446,7 @@ public sealed class SurfacePlacementGizmo
 
     public void EndDrag()
     {
-        bool scaled = scalingCorner >= 0 && MathF.Abs(scale - 1f) > 1e-4f;
+        bool scaled = scalingCorner >= 0 && Vector2.Distance(scale, Vector2.One) > 1e-4f;
         movingDrag = false;
         turningDrag = false;
         scalingCorner = -1;
@@ -395,11 +481,34 @@ public sealed class SurfacePlacementGizmo
         var diagonal = corner - opposite;
         var reached = corner + new Vector2((float)moved.X, (float)moved.Y);
 
-        scale = Math.Clamp(Vector2.Dot(reached - opposite, diagonal) / diagonal.LengthSquared(), 0.05f, 20f);
-        extent = dragStartExtent * scale;
-        placement = dragStartPlacement with { OffsetMm = opposite + diagonal * scale * 0.5f };
+        if (ScalesFreely)
+        {
+            // In the layout's own terms, so a turned pattern still resizes along its own sides.
+            Vector2 Local(Vector2 uv)
+            {
+                float a = -dragStartPlacement.AngleDegrees * MathF.PI / 180f;
+                var v = uv - dragStartPlacement.OffsetMm;
+                return new Vector2(v.X * MathF.Cos(a) - v.Y * MathF.Sin(a), v.X * MathF.Sin(a) + v.Y * MathF.Cos(a));
+            }
 
-        Feedback?.Invoke($"{Noun} {extent.X * 2:0.#} x {extent.Y * 2:0.#} mm ({scale * 100:0}%) - let go to apply");
+            var far = -CornerSigns[scalingCorner] * dragStartExtent;
+            var near = Local(reached);
+            var half = Vector2.Max(Vector2.Abs(near - far) / 2f, new Vector2(0.5f));
+
+            scale = new Vector2(half.X / dragStartExtent.X, half.Y / dragStartExtent.Y);
+            extent = half;
+            placement = dragStartPlacement with { OffsetMm = dragStartPlacement.Apply((near + far) / 2f) };
+
+            Feedback?.Invoke($"{Noun} area {extent.X * 2:0.#} x {extent.Y * 2:0.#} mm - let go to apply");
+            return;
+        }
+
+        float by = Math.Clamp(Vector2.Dot(reached - opposite, diagonal) / diagonal.LengthSquared(), 0.05f, 20f);
+        scale = new Vector2(by);
+        extent = dragStartExtent * by;
+        placement = dragStartPlacement with { OffsetMm = opposite + diagonal * by * 0.5f };
+
+        Feedback?.Invoke($"{Noun} {extent.X * 2:0.#} x {extent.Y * 2:0.#} mm ({by * 100:0}%) - let go to apply");
     }
 
     private void DragMove(Point screen)
@@ -417,10 +526,20 @@ public sealed class SurfacePlacementGizmo
             return;
         }
 
-        placement = dragStartPlacement with
+        var by = new Vector2((float)moved.X, (float)moved.Y);
+
+        // One arrow moves along its own direction only, turned with the lettering.
+        if (movingAxis != 0)
         {
-            OffsetMm = origin + new Vector2((float)moved.X, (float)moved.Y)
-        };
+            var way = dragStartPlacement.Apply(movingAxis == 1 ? Vector2.UnitX : Vector2.UnitY) - origin;
+            if (way.LengthSquared() > 1e-8f)
+            {
+                way = Vector2.Normalize(way);
+                by = way * Vector2.Dot(by, way);
+            }
+        }
+
+        placement = dragStartPlacement with { OffsetMm = origin + by };
 
         Feedback?.Invoke(
             $"{Noun} {placement.OffsetMm.X:0.#}, {placement.OffsetMm.Y:0.#} mm from the middle");

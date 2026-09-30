@@ -3045,8 +3045,12 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
         var token = StartWork(raised ? "Laying the texture on" : "Cutting the texture in");
         try
         {
-            var built = await Task.Run(
-                () => ProfiledSolid(surface, coarse: false, sunk: !raised), token);
+            // Raised, kept off any window or doorway already cut in the face. See TextCutter.OnTheFace.
+            var built = await Task.Run(() =>
+            {
+                var solid = ProfiledSolid(surface, coarse: false, sunk: !raised);
+                return raised && solid is not null ? TextCutter.OnTheFace(solid, surface, token) : solid;
+            }, token);
 
             if (built is null || built.TriangleCount == 0)
             {
@@ -3192,7 +3196,11 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
 
         // Clicking the same face again is how the wrapping is re-anchored, and it would be
         // maddening if it also threw away a placement that had just been dragged into position.
-        if (!SameFace(embossFace, face)) embossPlacement = SurfacePlacement.Middle;
+        if (!SameFace(embossFace, face))
+        {
+            embossPlacement = SurfacePlacement.Middle;
+            embossTextureArea = null;
+        }
 
         embossMesh = world;
         embossProfile = null;
@@ -3338,6 +3346,11 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
         var (across, up) = FaceRoom();
         bool wrapped = embossProjection != TextProjection.Planar;
 
+        // An area set by dragging the corners of its box, which can run past the face's edges:
+        // raised, what is past them is trimmed off; cut, it runs off the edge as a groove should.
+        if (!wrapped && embossTextureArea is { } set && across > 0.01f)
+            return SurfaceTexture.Over(set.X, set.Y, embossTexture, wrapped);
+
         if (across <= 0.01f || up <= 0.01f)
         {
             (across, up) = (PatchMm, PatchMm);
@@ -3352,6 +3365,29 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
         }
 
         return SurfaceTexture.Over(across, up, embossTexture, wrapped);
+    }
+
+    /// <summary>The area a flat texture covers, when its corners have been dragged; null is the whole face.</summary>
+    private Vector2? embossTextureArea;
+
+    /// <summary>
+    /// A corner of the box on the face dragged and let go. Lettering, a drawing or a picture grows
+    /// in proportion; a texture keeps its cells the size they are and covers a different area, as
+    /// wide and as tall as the box was made, so a corner brick can be brought to the corner of the face.
+    /// </summary>
+    public void ResizeEmbossBy(Vector2 factor)
+    {
+        if (!embossTexture.IsOn)
+        {
+            EmbossHeight *= factor.X;
+            return;
+        }
+
+        if (embossProjection != TextProjection.Planar) return;
+
+        var size = EmbossExtent * 2f;
+        embossTextureArea = new Vector2(MathF.Max(size.X * factor.X, 1f), MathF.Max(size.Y * factor.Y, 1f));
+        RefreshLettering();
     }
 
     /// <summary>
@@ -3810,8 +3846,10 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
         // Raised lettering is shown as it will print, at its full height and bevel: it is only
         // added to the object, so the solid alone is the whole of it. Cut lettering stays a thin
         // slab - seeing it sunk in would take the boolean itself on every change.
+        // Raised, kept to the face as it will be made, so a doorway already cut in it shows clear.
+        // Cut is shown whole, as it is applied: a groove runs off the face's edge.
         return embossRaised
-            ? TextSolid.Build(shapes, surface, clear, Math.Max(embossDepth, clear + 0.03f), embossBevel)
+            ? TextCutter.OnTheFace(TextSolid.Build(shapes, surface, clear, Math.Max(embossDepth, clear + 0.03f), embossBevel), surface)
             : TextSolid.Build(shapes, surface, clear, clear + 0.03f);
     }
 

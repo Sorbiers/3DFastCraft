@@ -59,6 +59,66 @@ public static class TextCutter
         return laid is not null && laid.CheckHealth().IsWatertight ? laid : null;
     }
 
+    /// <summary>
+    /// Raised lettering, a raised texture or a plug trimmed to the face it is on, so none of it
+    /// stands over a window or a doorway already cut in the face, or past the face's edge.
+    /// </summary>
+    /// <remarks>
+    /// A texture is laid over the face's whole rectangle, and so is lettering placed anywhere on
+    /// it. Cut, what falls over an opening cuts only air; raised, it bridged the opening with
+    /// bricks. So the solid is kept to the face's own region - its triangles stood up off it -
+    /// which leaves any opening out exactly, whatever its shape, and wherever it is: a hole in the
+    /// face, or a notch in its edge. Only a flat face: a wrapped one has no single region to stand up.
+    /// </remarks>
+    public static Mesh OnTheFace(Mesh solid, IPlacementSurface surface, CancellationToken token = default)
+    {
+        if (surface is not PlanarSurface flat || solid.TriangleCount == 0) return solid;
+
+        var bounds = solid.ComputeBounds();
+        float reach = bounds.Diagonal + 1f;
+        var region = Region(flat.Face, reach, reach);
+
+        return ManifoldCsg.Intersect(solid, region, token) is { TriangleCount: > 0 } kept && kept.CheckHealth().IsWatertight
+            ? kept
+            : solid;
+    }
+
+    /// <summary>The face stood up off itself, <paramref name="below"/> into the part and <paramref name="above"/> out of it.</summary>
+    private static Mesh Region(FacePatch face, float below, float above)
+    {
+        var mesh = face.Mesh;
+        var positions = new List<Vector3>();
+        var indices = new List<int>();
+        var low = new Dictionary<int, int>();
+        var high = new Dictionary<int, int>();
+
+        // Onto the face's plane first: a face found as "flat enough" is not always flat to the
+        // last digit, and the region's floor and roof have to be.
+        int At(Dictionary<int, int> map, int v, float height)
+        {
+            if (map.TryGetValue(v, out int at)) return at;
+            at = positions.Count;
+            positions.Add(face.ToLocal(face.ToUv(mesh.Positions[v]), height));
+            map[v] = at;
+            return at;
+        }
+
+        foreach (int t in face.Triangles)
+        {
+            int a = mesh.Indices[t], b = mesh.Indices[t + 1], c = mesh.Indices[t + 2];
+            indices.AddRange([At(high, a, above), At(high, b, above), At(high, c, above)]);
+            indices.AddRange([At(low, a, -below), At(low, c, -below), At(low, b, -below)]);
+        }
+
+        foreach (var (a, b) in face.Boundary)
+        {
+            int ab = At(low, a, -below), bb = At(low, b, -below), bt = At(high, b, above), at = At(high, a, above);
+            indices.AddRange([ab, bb, bt, ab, bt, at]);
+        }
+
+        return new Mesh(positions, indices);
+    }
+
     /// <param name="Body">The object with the lettering in it.</param>
     /// <param name="Lettering">
     /// The solid that put it there: raised, the letters themselves; cut, the plug that exactly
@@ -138,9 +198,14 @@ public static class TextCutter
     {
         token.ThrowIfCancellationRequested();
 
-        if (!raised) return Worked(world, shapes, surface, false, depthMm, bevelMm, token);
+        if (!raised)
+        {
+            // The plug is the cut's own cutter, kept to the face so it does not stand over an opening.
+            var cut = Worked(world, shapes, surface, false, depthMm, bevelMm, token);
+            return cut is { } made ? made with { Lettering = OnTheFace(made.Lettering, surface, token) } : null;
+        }
 
-        var letters = Solid(shapes, surface, true, depthMm, bevelMm, surface.ClearanceMm).Welded();
+        var letters = OnTheFace(Solid(shapes, surface, true, depthMm, bevelMm, surface.ClearanceMm), surface, token).Welded();
         return letters.TriangleCount == 0 ? null : new Lettered(world, letters);
     }
 
@@ -153,6 +218,10 @@ public static class TextCutter
     {
         var first = Solid(shapes, surface, raised, depthMm, bevelMm, surface.ClearanceMm);
         if (first.TriangleCount == 0) return null;
+
+        // Raised, kept off any opening in the face. Cut is left whole: over an opening it cuts
+        // only air, and a groove is meant to run off the face's edge.
+        if (raised) first = OnTheFace(first, surface, token);
 
         var robust = raised
             ? ManifoldCsg.Union(world, first, token)
@@ -171,6 +240,7 @@ public static class TextCutter
             var solid = Solid(moved, surface, raised, depthMm, bevelMm, surface.ClearanceMm * factor);
 
             if (solid.TriangleCount == 0) return null;
+            if (raised) solid = OnTheFace(solid, surface, token);
 
             var cut = raised
                 ? CsgSolid.Union(world, solid, token: token)

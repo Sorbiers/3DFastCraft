@@ -597,6 +597,9 @@
                     <Button Style="{StaticResource ToolButton}" Content="Hollow" Visibility="{Binding IsAdvancedMode, Converter={StaticResource BoolToVisibility}}" Tag="{StaticResource IconHollow}"
                             Command="{Binding HollowCommand}" MinWidth="78"
                             ToolTip="Turn a solid into a shell of a chosen wall thickness, to save material" />
+                    <Button Style="{StaticResource ToolButton}" Content="Fill up" Visibility="{Binding IsAdvancedMode, Converter={StaticResource BoolToVisibility}}" Tag="{StaticResource IconFillUp}"
+                            Command="{Binding FillUpCommand}" MinWidth="70" AutomationProperties.AutomationId="FillUp"
+                            ToolTip="Fill whatever the part would hold if liquid were poured in, up to a level - solid, or as a part of its own. Select one object." />
                     <Separator Margin="8,0" />
                     <Button Style="{StaticResource ToolButton}" Content="Color" Tag="{StaticResource IconColour}"
                             Command="{Binding PickColourCommand}" MinWidth="78"

@@ -223,7 +223,7 @@ public partial class MainWindow : Window
         };
         placeGizmo.Resized += factor =>
         {
-            if (viewModel.IsEmbossMode) viewModel.EmbossHeight *= factor;
+            if (viewModel.IsEmbossMode) viewModel.ResizeEmbossBy(factor);
         };
         PlacementGizmoLayer.PreviewMouseLeftButtonDown += OnTextGizmoDown;
         PlacementGizmoLayer.PreviewMouseMove += OnTextGizmoMove;
@@ -829,7 +829,8 @@ public partial class MainWindow : Window
         {
             bool laid = viewModel.TextureTilts;
 
-            placeGizmo.Noun = laid ? "Texture" : "Lettering";
+            placeGizmo.Noun = laid ? "Texture" : viewModel.UsesTexture ? "Pattern" : "Lettering";
+            placeGizmo.ScalesFreely = viewModel.UsesTexture;
             placeGizmo.Show(
                 viewModel.HasEmbossFace, viewModel.EmbossSurface(),
                 viewModel.EmbossPlacement, viewModel.EmbossExtent,
@@ -838,6 +839,7 @@ public partial class MainWindow : Window
         else if (viewModel.IsWallMountMode)
         {
             placeGizmo.Noun = "Keyholes";
+            placeGizmo.ScalesFreely = false;
             placeGizmo.Show(
                 viewModel.HasWallMountFace, viewModel.WallMountSurface(),
                 viewModel.WallMountPlacement, viewModel.WallMountExtent, PlacementHandles.All);

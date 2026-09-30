@@ -142,7 +142,7 @@ public class SurfacePlacementGizmoTests
 
             float? factor = null;
             SurfacePlacement? moved = null;
-            gizmo.Resized += f => factor = f;
+            gizmo.Resized += f => factor = f.X;
             gizmo.Changed += p => moved = p;
 
             // The upper right corner, dragged out along its diagonal to half as big again.
@@ -160,6 +160,60 @@ public class SurfacePlacementGizmoTests
             // The lower left corner, at -12, -5, is where it was; the middle has moved half the drag.
             Assert.Equal(6f, moved!.Value.OffsetMm.X, 3);
             Assert.Equal(2.5f, moved.Value.OffsetMm.Y, 3);
+        });
+    }
+
+    [Theory]
+    [InlineData(SurfacePlacementGizmo.MoveAcrossTag, 5f, 0f)]
+    [InlineData(SurfacePlacementGizmo.MoveUpTag, 0f, 5f)]
+    [InlineData(SurfacePlacementGizmo.MoveTag, 5f, 5f)]
+    public void AnArrowMovesOneWayOnlyAndTheCircleEither(string handle, float x, float y)
+    {
+        RunSta(() =>
+        {
+            var layer = new Canvas();
+            var gizmo = new SurfacePlacementGizmo(layer, new TopProjector());
+            gizmo.Show(true, TopOfAPlate(), SurfacePlacement.Middle, new Vector2(12, 5));
+
+            SurfacePlacement? moved = null;
+            gizmo.Changed += p => moved = p;
+
+            // Dragged diagonally, 5 mm across and 5 mm up the screen.
+            var grabbed = layer.Children.OfType<Shape>().First(s => (s.Tag as string) == handle);
+            Assert.True(gizmo.TryBeginDrag(new Point(500, 400), grabbed));
+            gizmo.ContinueDrag(new Point(500 + 5 * TopProjector.PixelsPerMm, 400 - 5 * TopProjector.PixelsPerMm));
+            gizmo.EndDrag();
+
+            Assert.Equal(x, moved!.Value.OffsetMm.X, 3);
+            Assert.Equal(y, moved.Value.OffsetMm.Y, 3);
+        });
+    }
+
+    [Fact]
+    public void ACornerOfATextureResizesItsWidthAndHeightEachOnItsOwn()
+    {
+        RunSta(() =>
+        {
+            var layer = new Canvas();
+            var gizmo = new SurfacePlacementGizmo(layer, new TopProjector()) { ScalesFreely = true };
+            gizmo.Show(true, TopOfAPlate(), SurfacePlacement.Middle, new Vector2(12, 5), PlacementHandles.All | PlacementHandles.Scale);
+
+            Vector2? factor = null;
+            SurfacePlacement? moved = null;
+            gizmo.Resized += f => factor = f;
+            gizmo.Changed += p => moved = p;
+
+            // The upper right corner dragged 12 mm to the right and nowhere else.
+            var corner = layer.Children.OfType<Shape>().First(s => (s.Tag as string) == SurfacePlacementGizmo.ScaleTag + 2);
+            var from = Middle(layer, SurfacePlacementGizmo.ScaleTag + 2);
+            Assert.True(gizmo.TryBeginDrag(from, corner));
+            gizmo.ContinueDrag(new Point(from.X + 12 * TopProjector.PixelsPerMm, from.Y));
+            gizmo.EndDrag();
+
+            Assert.Equal(1.5f, factor!.Value.X, 3);
+            Assert.Equal(1f, factor.Value.Y, 3);
+            Assert.Equal(6f, moved!.Value.OffsetMm.X, 3);
+            Assert.Equal(0f, moved.Value.OffsetMm.Y, 3);
         });
     }
 
