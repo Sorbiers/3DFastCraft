@@ -1933,9 +1933,9 @@
                             <TextBlock Text="{Binding DataContext.UnitLabel, RelativeSource={RelativeSource AncestorType=Window}}" Foreground="#FF9AA0A8" VerticalAlignment="Center" />
                         </StackPanel>
 
-                        <StackPanel Orientation="Horizontal" Margin="0,0,0,6" Visibility="{Binding UsesStamp, Converter={StaticResource BoolToVisibility}}">
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,6" Visibility="{Binding EmbossTurns, Converter={StaticResource BoolToVisibility}}">
                             <TextBlock Text="Turn" Style="{StaticResource FieldLabel}" Width="62"
-                                       ToolTip="Which way up the lettering runs" />
+                                       ToolTip="Which way it runs on the face, in degrees - any angle. The orange knob turns it in 15 degree steps; hold Alt while dragging to turn it freely." />
                             <TextBox AutomationProperties.AutomationId="EmbossAngle" Width="64" Style="{StaticResource NumberBox}" Tag="number"
                                      Text="{Binding EmbossAngle, StringFormat=N1, UpdateSourceTrigger=LostFocus}" />
                             <TextBlock Text="deg" Foreground="#FF9AA0A8" VerticalAlignment="Center" />

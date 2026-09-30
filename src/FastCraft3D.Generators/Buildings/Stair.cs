@@ -123,34 +123,51 @@ public sealed class Stair : Generator<Stair.Settings>
             side.Add(new(x0 + drop * going / riser, 0));
         }
 
-        var pieces = new List<Mesh> { Across(side, -half, half) };
-        if (s.Handrail == Handrail.None) return pieces[0];
+        var sides = s.Handrail == Handrail.None ? []
+            : s.Side switch { RailSide.Left => new[] { 1f }, RailSide.Right => [-1f], _ => [1f, -1f] };
+
+        // A solid balustrade is the edge of the stair itself, inside its width and down to its
+        // base. It stood outside the flight once, which widened the stair by its own thickness and
+        // left its sloped foot hanging over the floor at the top. The steps stop short of it by its
+        // thickness, less a hair so the two overlap and no face of one lies on a face of the other.
+        float t = BalustradeThickness(s);
+        bool plus = s.Handrail == Handrail.Solid && sides.Contains(1f), minus = s.Handrail == Handrail.Solid && sides.Contains(-1f);
+        float yHigh = plus ? half - t + Overlap : half, yLow = minus ? -(half - t + Overlap) : -half;
+
+        var pieces = new List<Mesh> { Across(side, yLow, yHigh) };
+        if (sides.Length == 0) return pieces[0];
 
         token.ThrowIfCancellationRequested();
-        foreach (float sign in s.Side switch { RailSide.Left => new[] { 1f }, RailSide.Right => [-1f], _ => [1f, -1f] })
+        foreach (float sign in sides)
             pieces.AddRange(Rail(s, sign, riser, going, x0, half));
 
         return Shapes.Union(pieces);
     }
+
+    /// <summary>How far the steps run into a solid balustrade beside them.</summary>
+    private const float Overlap = 0.05f;
+
+    private static float BalustradeThickness(Settings s) => s.RailWidth > 0 ? s.RailWidth : MathF.Max(0.6f, s.Width * 0.06f);
 
     /// <summary>A balustrade, or posts and a rail, along one side of a straight flight.</summary>
     private static IEnumerable<Mesh> Rail(Settings s, float sign, float riser, float going, float x0, float half)
     {
         float h = s.RailHeight, x1 = x0 + s.Run;
 
-        // Kept off the stair's own side faces, so nothing meets in one plane: a solid balustrade
-        // stands just outside the flight and runs a hair into it, posts stand a hair inside it.
+        // A solid balustrade: the stair's own edge, from its front to its back and down to its
+        // base - the floor, solid underneath; open, the soffit the flight has under it.
         if (s.Handrail == Handrail.Solid)
         {
-            float t = s.RailWidth > 0 ? s.RailWidth : MathF.Max(0.6f, s.Width * 0.06f);
-            float inner = half - 0.05f, outer = half + t;
-            yield return Across(
-            [
-                // Its foot slopes a little less than the flight, clear of the steps' corners.
-                new(x0, 0), new(x1, s.Rise - 0.5f * riser), new(x1, s.Rise + h), new(x0, h)
-            ], sign > 0 ? inner : -outer, sign > 0 ? outer : -inner);
+            float t = BalustradeThickness(s);
+            List<Vector2> outline = s.Solid
+                ? [new(x0, 0), new(x1, 0), new(x1, s.Rise + h), new(x0, h)]
+                : [new(x0, 0), new(x0 + Drop(s) * going / riser, 0), new(x1, s.Rise - Drop(s)), new(x1, s.Rise + h), new(x0, h)];
+
+            yield return Across(outline, sign > 0 ? half - t : -half, sign > 0 ? half : -(half - t));
             yield break;
         }
+
+        // Posts stand a hair inside the flight, so nothing meets in one plane.
 
         float post = s.RailWidth > 0 ? s.RailWidth : MathF.Max(0.5f, MathF.Min(going * 0.4f, s.Width * 0.08f));
         float a = half - 0.1f - post, b = half - 0.1f;

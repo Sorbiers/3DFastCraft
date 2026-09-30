@@ -3428,7 +3428,7 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
             Raise(nameof(TextureLeans));
             Raise(nameof(TextureRuns));
             Raise(nameof(TextureHasCourses));
-            Raise(nameof(TextureTilts));
+            Raise(nameof(TextureTilts)); Raise(nameof(EmbossTurns));
             Raise(nameof(EmbossTextureAspect));
             Raise(nameof(EmbossProjections));
             RefreshDrawing();
@@ -3581,6 +3581,12 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
     /// </summary>
     public bool TextureTilts => embossTexture.IsLaid;
 
+    /// <summary>
+    /// Whether what is on the face turns - lettering, a drawing, a picture, a flat texture; not a
+    /// laid one, whose courses run with the face.
+    /// </summary>
+    public bool EmbossTurns => !embossTexture.IsLaid;
+
     /// <summary>How far each piece is tilted, in degrees. Nought lays them flat.</summary>
     public float EmbossTextureSlope
     {
@@ -3620,7 +3626,7 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
         Raise(nameof(TextureLeans));
         Raise(nameof(TextureRuns));
         Raise(nameof(TextureHasCourses));
-        Raise(nameof(TextureTilts));
+        Raise(nameof(TextureTilts)); Raise(nameof(EmbossTurns));
         Raise(nameof(EmbossTextureAspect));
         Raise(nameof(EmbossTextureSlope));
         Raise(nameof(EmbossTextureSlopeWay));

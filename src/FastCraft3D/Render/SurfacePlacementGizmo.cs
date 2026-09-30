@@ -134,7 +134,7 @@ public sealed class SurfacePlacementGizmo
         StrokeThickness = 1.6,
         Cursor = Cursors.Hand,
         Tag = TurnTag,
-        ToolTip = "Drag to turn the lettering"
+        ToolTip = "Drag to turn it, in 15 degree steps; hold Alt to turn it freely"
     };
 
     private readonly Line stem = new()
@@ -560,15 +560,17 @@ public sealed class SurfacePlacementGizmo
         var origin = dragStartPlacement.OffsetMm;
         if (!projector.TryProject(WorldAt(origin), out Point pivot)) return;
 
+        // Alt turns it freely for the drag, as the box beside the handles takes any angle.
+        bool snap = SnapRotation && !Keyboard.Modifiers.HasFlag(ModifierKeys.Alt);
         double degrees = GizmoMath.RotationDegrees(
-            pivot, dragStart, screen, Facing(origin, pivot), SnapRotation, RotationSnapDegrees);
+            pivot, dragStart, screen, Facing(origin, pivot), snap, RotationSnapDegrees);
 
         placement = dragStartPlacement with
         {
             AngleDegrees = GizmoMath.NormaliseDegrees(dragStartPlacement.AngleDegrees + (float)degrees)
         };
 
-        Feedback?.Invoke($"{Noun} turned to {placement.AngleDegrees:0.#} deg");
+        Feedback?.Invoke($"{Noun} turned to {placement.AngleDegrees:0.#} deg" + (snap ? " - hold Alt to turn freely" : ""));
     }
 
     /// <summary>
