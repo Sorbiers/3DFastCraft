@@ -619,12 +619,19 @@ public sealed class GeneratorView : UserControl
         AutomationProperties.SetAutomationId(box, id);
         var normalBorder = box.BorderBrush;
 
+        string taken = box.Text;
         box.TextChanged += (_, _) =>
         {
             bool good = Number(box.Text, out double typed) && typed >= least && typed <= most;
             box.BorderBrush = good ? normalBorder : Brush(0xFFD04A3A);
             box.ToolTip = good ? null : $"From {least:0.##} to {most:0.##} mm";
-            if (good) SetPrinter(changed((float)typed));
+            if (!good) return;
+            taken = box.Text;
+            SetPrinter(changed((float)typed));
+        };
+        box.LostKeyboardFocus += (_, _) =>
+        {
+            if (box.Text != taken) box.Text = taken;
         };
 
         row.Children.Add(box);
@@ -746,6 +753,14 @@ public sealed class GeneratorView : UserControl
                     box.BorderBrush = faults[index] is null ? normalBorder : Brush(0xFFD04A3A);
                     if (value is not null) Follow(before, p.Name);
                     Changed();
+                };
+
+                // Left out of range, the box goes back to the last value it took, as the app's
+                // number boxes do with anything that is not a number: a red box left behind holds
+                // up the part for a number nobody is still looking at.
+                box.LostKeyboardFocus += (_, _) =>
+                {
+                    if (faults[index] is not null) box.Text = Show(p, values[index]);
                 };
 
                 set = v =>

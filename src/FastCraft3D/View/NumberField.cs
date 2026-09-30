@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Data;
 using System.Windows.Input;
 using FastCraft3D.ViewModels;
 
@@ -9,7 +10,9 @@ namespace FastCraft3D.View;
 /// <summary>
 /// What every number box in the app does, wherever it is: the whole value selected when it is
 /// reached; "+=5", "-=5", "*=1.5" and "/=2" worked out against what was there; the arrow keys and
-/// the wheel nudging it, Shift ten times as far and Ctrl a tenth; Enter putting it into effect.
+/// the wheel nudging it, Shift ten times as far and Ctrl a tenth; Enter putting it into effect;
+/// Escape taking back what was typed, and a box left holding something that is not a number going
+/// back to what it held.
 /// </summary>
 /// <remarks>
 /// Switched on by the NumberBox and GizmoBox styles, so a box gets it by looking like one - the
@@ -45,6 +48,10 @@ public static class NumberField
     private static readonly DependencyProperty WasProperty = DependencyProperty.RegisterAttached(
         "Was", typeof(string), typeof(NumberField), new PropertyMetadata(null));
 
+    // What the box held when it was reached, or last put into effect: what Escape goes back to.
+    private static readonly DependencyProperty KeptProperty = DependencyProperty.RegisterAttached(
+        "Kept", typeof(string), typeof(NumberField), new PropertyMetadata(null));
+
     private static void OnIsOn(DependencyObject d, DependencyPropertyChangedEventArgs e)
     {
         if (d is not TextBox box || e.NewValue is not true) return;
@@ -56,6 +63,8 @@ public static class NumberField
         };
         box.GotKeyboardFocus += (_, _) =>
         {
+            // The transform boxes too: taking back a typo is the same wherever it was typed.
+            if (!box.IsReadOnly) Keep(box);
             if (Skip(box)) return;
             if (IsPlain(box.Text)) box.SetValue(WasProperty, box.Text);
             box.SelectAll();
@@ -70,12 +79,22 @@ public static class NumberField
         };
         box.PreviewKeyDown += (_, e) =>
         {
+            // Only a box with something to take back keeps Escape: an untouched one lets it
+            // through, so a second press still closes the dialog or puts the tool down.
+            if (e.Key == Key.Escape && Keyboard.Modifiers == ModifierKeys.None && Revert(box))
+            {
+                e.Handled = true;
+                return;
+            }
+            // A transform box has been put into effect by the window, which sees Enter first.
+            if (e.Key == Key.Enter && box.Tag is "transform" && IsNumber(box.Text)) Keep(box);
             if (Skip(box)) return;
             switch (e.Key)
             {
                 case Key.Enter:
                     if (Resolve(box)) box.SelectAll();
                     box.GetBindingExpression(TextBox.TextProperty)?.UpdateSource();
+                    if (IsNumber(box.Text)) Keep(box);
                     break;
                 case Key.Up:
                 case Key.Down:
@@ -95,13 +114,50 @@ public static class NumberField
         {
             // Before the binding reads the box on its way out.
             if (!Skip(box)) Resolve(box);
+
+            // Something that is not a number, left behind: what the box held comes back rather
+            // than a red box whose value quietly stays the old one anyway. "+=5" is still a number
+            // to the transform boxes, which work it out as they lose focus.
+            if (!box.IsReadOnly && box.IsEnabled && !IsNumber(box.Text) && !IsChange(box.Text)) Revert(box);
         };
+    }
+
+    private static void Keep(TextBox box) => box.SetValue(KeptProperty, box.Text);
+
+    /// <summary>
+    /// Puts back what the box held when it was reached, or last put into effect. False when there
+    /// was nothing to take back, or the box is not a number box.
+    /// </summary>
+    /// <remarks>
+    /// A bound box that writes back on leaving is read again from its value rather than given its
+    /// old text: that text, written back, would round the value to what the box shows.
+    /// </remarks>
+    public static bool Revert(TextBox box)
+    {
+        if (!GetIsOn(box) || box.IsReadOnly || box.GetValue(KeptProperty) is not string kept || box.Text == kept)
+            return false;
+
+        var binding = box.GetBindingExpression(TextBox.TextProperty);
+        if (binding is not null && binding.ParentBinding.UpdateSourceTrigger != UpdateSourceTrigger.PropertyChanged)
+            binding.UpdateTarget();
+        else
+            box.Text = kept;
+
+        box.SelectAll();
+        return true;
     }
 
     private static bool Skip(TextBox box) => box.Tag is "transform" || box.IsReadOnly || !box.IsEnabled;
 
     // Marked in the layout, or tagged "whole" by the Library's panel, which cannot see this class.
     private static bool IsCount(TextBox box) => GetWhole(box) || box.Tag is "whole";
+
+    // Blank is not an error: a box reading off several objects that differ is blank.
+    private static bool IsNumber(string text) =>
+        string.IsNullOrWhiteSpace(text) || double.TryParse(text, NumberStyles.Float, CultureInfo.CurrentCulture, out double v) && double.IsFinite(v);
+
+    private static bool IsChange(string text) =>
+        FieldInput.TryParseRelative(text, out _) || FieldInput.TryParseFactor(text, out _);
 
     private static bool IsPlain(string text) =>
         !text.TrimStart().StartsWith('+') && double.TryParse(text, NumberStyles.Float, CultureInfo.CurrentCulture, out double v) && double.IsFinite(v);
@@ -150,5 +206,6 @@ public static class NumberField
         box.Text = updated.ToString("0.####", CultureInfo.CurrentCulture);
         box.CaretIndex = box.Text.Length;
         box.GetBindingExpression(TextBox.TextProperty)?.UpdateSource();
+        Keep(box);
     }
 }

@@ -538,6 +538,15 @@ public partial class MainWindow : Window
     /// </summary>
     private void OnWindowKeyDown(object sender, KeyEventArgs e)
     {
+        // A number typed and not yet taken is taken back first; the next Escape puts the tool down.
+        // Here, since this sees the key before the box does.
+        if (e.Key is Key.Escape && Keyboard.Modifiers is ModifierKeys.None
+            && Keyboard.FocusedElement is TextBox typed && NumberField.Revert(typed))
+        {
+            e.Handled = true;
+            return;
+        }
+
         // Escape first, and before the checks below: it has to work while the caret is sitting
         // in one of the tool's own boxes, which is exactly where it usually is.
         if (e.Key is Key.Escape && Keyboard.Modifiers is ModifierKeys.None
@@ -1796,8 +1805,10 @@ public partial class MainWindow : Window
         {
             if (ChangeFieldBy(typed)) typed.SelectAll();
 
-            // A number box works its own "+=5" out first, then puts it into effect itself.
-            else if (!NumberField.GetIsOn(typed)) typed.GetBindingExpression(TextBox.TextProperty)?.UpdateSource();
+            // A number box works its own "+=5" out first, then puts it into effect itself - all but
+            // the transform boxes, which it leaves to this window, a plain number included.
+            else if (!NumberField.GetIsOn(typed) || typed.Tag is "transform")
+                typed.GetBindingExpression(TextBox.TextProperty)?.UpdateSource();
             return;
         }
 
