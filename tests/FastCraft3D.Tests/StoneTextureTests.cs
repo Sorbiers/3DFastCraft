@@ -289,6 +289,66 @@ public class StoneTextureTests(ITestOutputHelper log)
     }
 
     /// <summary>
+    /// On a face a field is a patch, and the handles place it as they place a flat texture: slid,
+    /// turned, and where it is pushed past the edge, kept to the face and still put on closed.
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(EachKind))]
+    public void APatchGoesWhereTheHandlesPutIt(TextureKind kind)
+    {
+        var box = MeshTransform.Transformed(Primitives.Box(60f, 60f, 60f), Matrix4x4.CreateTranslation(0, 0, 30f));
+        var face = new PlanarSurface(FacePatch.Find(box, new Vector3(0, -30f, 30f), -Vector3.UnitY)!);
+        var placement = new SurfacePlacement(new Vector2(20f, -5f), 30f);
+
+        var relief = Profile(kind, kind == TextureKind.Grain ? 2.5f : 6f, 0.8f, 1f);
+        var field = ReliefField.Build(new PlacedSurface(face, placement), relief, 30f, 20f);
+
+        // Measured back in the face's own layout, along the patch and across it.
+        var along = new Vector2(MathF.Cos(MathF.PI / 6f), MathF.Sin(MathF.PI / 6f));
+        var across = new Vector2(-along.Y, along.X);
+        var laid = field.Positions.Select(p => face.Face.ToUv(p) - face.Middle - placement.OffsetMm).ToList();
+
+        float halfLong = laid.Max(p => MathF.Abs(Vector2.Dot(p, along)));
+        float halfTall = laid.Max(p => MathF.Abs(Vector2.Dot(p, across)));
+        log.WriteLine($"{kind}: {halfLong:0.###} x {halfTall:0.###} either side of where it was put");
+
+        Assert.InRange(halfLong, 15f - 1e-2f, 15f + 1e-2f);
+        Assert.InRange(halfTall, 10f - 1e-2f, 10f + 1e-2f);
+
+        // Turned and slid that far it runs off the side of the face, and is cut back to it.
+        var kept = TextCutter.OnTheFace(field, face);
+        var joined = LocalCsg.Union(box, kept);
+
+        Assert.True(kept.ComputeBounds().Max.X <= 30f + 1e-3f, "it was not kept to the face");
+        Assert.True(joined.CheckHealth().IsWatertight, joined.CheckHealth().Describe());
+    }
+
+    /// <summary>
+    /// A ring cannot move - it is the whole way round - but its stones slide round it and up it,
+    /// and slid the whole way round they are back where they started.
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(EachKind))]
+    public void ARingSlidesRoundAndUpTheBarrel(TextureKind kind)
+    {
+        float around = MathF.Tau * 12f;
+        var relief = Profile(kind, kind == TextureKind.Grain ? 2.5f : 9f, 0.8f, 1.2f, around: around);
+        var surface = new CylinderSurface(new Vector3(0, 0, 12f), 12f);
+
+        var still = ReliefField.Build(surface, relief, around, 20f, round: true);
+        var slid = ReliefField.Build(surface, new SlidRelief(relief, new Vector2(7.3f, 2.1f)), around, 20f, round: true);
+        var roundAgain = ReliefField.Build(surface, new SlidRelief(relief, new Vector2(around, 0f)), around, 20f, round: true);
+
+        float moved = still.Positions.Zip(slid.Positions, Vector3.Distance).Max();
+        float back = still.Positions.Zip(roundAgain.Positions, Vector3.Distance).Max();
+        log.WriteLine($"{kind}: slid moves the surface up to {moved:0.###} mm; once round, {back:0.######} mm");
+
+        Assert.True(slid.CheckHealth().IsWatertight, slid.CheckHealth().Describe());
+        Assert.True(moved > 0.3f, "sliding it changed nothing");
+        Assert.True(back < 1e-3f, $"slid the whole way round it is {back:0.###} mm out");
+    }
+
+    /// <summary>
     /// A rubble wall is stones of every size, not a pavement of equal ones: measured as the
     /// stones themselves, found by flooding each one out to its joints.
     /// </summary>
@@ -373,7 +433,21 @@ public class StoneTextureTests(ITestOutputHelper log)
             Assert.Equal(kind != TextureKind.Grain, model.TextureHasCourses);
             Assert.Equal(kind is TextureKind.Grain or TextureKind.Bark, model.TextureRuns);
             Assert.DoesNotContain(TextProjection.Spherical, model.EmbossProjections);
+
+            // On a face it is a patch that turns; round a barrel a ring that only slides.
+            model.EmbossProjection = TextProjection.Planar;
+            Assert.False(model.TextureSlides);
+            Assert.True(model.EmbossTurns);
+
+            model.EmbossProjection = TextProjection.Cylindrical;
+            Assert.True(model.TextureSlides);
+            Assert.False(model.EmbossTurns);
         }
+
+        // Boarding is not a ring, so wrapped it is still a patch that turns.
+        model.EmbossTexture = TextureKind.Planks;
+        Assert.False(model.TextureSlides);
+        Assert.True(model.EmbossTurns);
     });
 
     private static void WithModel(Action<MainViewModel> body)

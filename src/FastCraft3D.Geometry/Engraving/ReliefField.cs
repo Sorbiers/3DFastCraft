@@ -29,6 +29,22 @@ public interface IRelief
 }
 
 /// <summary>
+/// A profile with its pattern slid along under a field that stays where it is - a ring round a
+/// barrel, which fills the barrel and cannot move, but whose stones can be slid round it.
+///
+/// The sample lines stay where they were. The fields that go round a barrel are sampled evenly,
+/// so their lines owe nothing to where the pattern is.
+/// </summary>
+public sealed class SlidRelief(IRelief relief, Vector2 offsetMm) : IRelief
+{
+    public float[] Across(float acrossMm) => relief.Across(acrossMm);
+
+    public float[] Up(float upMm) => relief.Up(upMm);
+
+    public float Height(Vector2 at) => relief.Height(at - offsetMm);
+}
+
+/// <summary>
 /// Builds the solid a profile describes: a sheet at its own height over the face, a flat sheet
 /// sunk into it, and walls joining the two round the edge.
 ///

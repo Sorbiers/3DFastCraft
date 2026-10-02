@@ -145,6 +145,26 @@ public sealed class CylinderSurface(
 }
 
 /// <summary>
+/// Another surface with a placement put on first: the layout slid and turned before it is laid.
+///
+/// Outlines can be moved before they are laid, and lettering and the flat textures are. A field
+/// has no outlines - it is a grid of heights laid point by point - so it is the surface that moves
+/// under it instead, which comes to the same thing.
+/// </summary>
+public sealed class PlacedSurface(IPlacementSurface surface, SurfacePlacement placement) : IPlacementSurface
+{
+    public Vector3 At(Vector2 uv, float height) => surface.At(placement.Apply(uv), height);
+
+    public float Sag(Vector2 from, Vector2 to) => surface.Sag(placement.Apply(from), placement.Apply(to));
+
+    public float ClearanceMm => surface.ClearanceMm;
+
+    public float ProudMm => surface.ProudMm;
+
+    public float ShortMm => surface.ShortMm;
+}
+
+/// <summary>
 /// Wrapped over a ball. Across is arc length around the equator, up is arc length towards the
 /// pole, so lettering keeps its shape near the middle and gathers as it climbs - which is what
 /// happens to anything wrapped over a sphere.

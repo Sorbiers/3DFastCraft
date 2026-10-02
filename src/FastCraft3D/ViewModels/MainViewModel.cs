@@ -2555,6 +2555,7 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
 
             Set(ref embossProjection, value);
             Raise(nameof(IsEmbossWrapped));
+            Raise(nameof(EmbossTurns));
 
             // A texture is laid out to the room it has, and wrapping changes that room from one
             // facet to the whole way round. A word does not care, so this used only to refresh.
@@ -2642,10 +2643,21 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
     {
         get
         {
-            if (!embossTexture.IsLaid) return SurfacePlacement.Extent(Lettering());
+            if (embossTexture.IsLaid)
+            {
+                var (across, up) = FaceRoom();
+                return new Vector2(across, up) * 0.5f;
+            }
 
-            var (across, up) = FaceRoom();
-            return new Vector2(across, up) * 0.5f;
+            // A field has no outlines to measure, so it is the patch it is built over - which is
+            // what the box round it then stands for, and what dragging its corners resizes.
+            if (embossTexture.IsProfiled)
+            {
+                var (wide, tall, _) = FieldExtent();
+                return new Vector2(wide, tall) * 0.5f;
+            }
+
+            return SurfacePlacement.Extent(Lettering());
         }
     }
 
@@ -3486,8 +3498,24 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
         var (wide, tall) = FieldRoom();
         float ring = RingMm();
 
-        return ring > 0f && tall > 0.01f ? (ring, tall, true) : (wide, tall, false);
+        if (ring > 0f && tall > 0.01f) return (ring, tall, true);
+
+        // An area set by dragging the corners of its box, as a flat texture's is. It may run past
+        // the face: raised, what is past it is trimmed off.
+        if (embossProjection == TextProjection.Planar && embossTextureArea is { } set && wide > 0.01f)
+            return (set.X, set.Y, false);
+
+        return (wide, tall, false);
     }
+
+    /// <summary>
+    /// Whether the texture covers the whole of what it is laid on and can only slide: a laid one,
+    /// and a field wrapped round a barrel as a ring. Neither turns - a turned ring would not close
+    /// on itself, and that seam is what the ring is for - and neither has corners to drag.
+    /// </summary>
+    public bool TextureSlides =>
+        embossTexture.IsLaid
+        || (embossTexture.Rings && embossProjection == TextProjection.Cylindrical);
 
     /// <summary>Whether the texture in hand is one with a shape rather than an outline.</summary>
     public bool UsesProfile => embossTexture.IsProfiled;
@@ -3516,11 +3544,13 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
         }
 
         var (wide, tall, round) = FieldExtent();
-        if (wide <= 0.01f || tall <= 0.01f) return null;
+        if (wide <= 0.01f || tall <= 0.01f || Profile(coarse) is not { } relief) return null;
 
-        return Profile(coarse) is { } relief
-            ? ReliefField.Build(surface, relief, wide, tall, sunk, round)
-            : null;
+        // A ring fills the barrel and stays put; Across and Up slide its pattern round and up it.
+        // Anything else is a patch, placed where the handles put it as a flat texture is.
+        return round
+            ? ReliefField.Build(surface, new SlidRelief(relief, embossPlacement.OffsetMm), wide, tall, sunk, round)
+            : ReliefField.Build(new PlacedSurface(surface, embossPlacement), relief, wide, tall, sunk);
     }
 
     /// <summary>
@@ -3610,10 +3640,10 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
     public bool TextureTilts => embossTexture.IsLaid;
 
     /// <summary>
-    /// Whether what is on the face turns - lettering, a drawing, a picture, a flat texture; not a
-    /// laid one, whose courses run with the face.
+    /// Whether what is on the face turns - lettering, a drawing, a picture, a flat texture, a
+    /// field on a face; not a laid one, whose courses run with the face, nor a ring round a barrel.
     /// </summary>
-    public bool EmbossTurns => !embossTexture.IsLaid;
+    public bool EmbossTurns => !TextureSlides;
 
     /// <summary>How far each piece is tilted, in degrees. Nought lays them flat.</summary>
     public float EmbossTextureSlope
@@ -3867,8 +3897,15 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
         if (EmbossSurface() is not { } surface) return null;
 
         // A shaped texture is its own preview: what is drawn is the very solid that will be
-        // added, only sampled more coarsely so it can be rebuilt as the numbers move.
-        if (embossTexture.IsProfiled) return ProfiledSolid(surface, coarse: true);
+        // added, only sampled more coarsely so it can be rebuilt as the numbers move. Raised, it
+        // is kept to the face as it will be, so a patch slid or turned past the edge shows cut off.
+        if (embossTexture.IsProfiled)
+        {
+            var field = ProfiledSolid(surface, coarse: true);
+            return embossRaised && field is not null && !embossTexture.IsLaid
+                ? TextCutter.OnTheFace(field, surface)
+                : field;
+        }
 
         var shapes = EmbossShapes();
 
