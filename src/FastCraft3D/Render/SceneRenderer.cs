@@ -42,6 +42,13 @@ public sealed class SceneRenderer : IDisposable
     private static readonly Color DamagedOutlineColour = Color.FromRgb(0xD6, 0x45, 0x45);
 
     /// <summary>
+    /// The parts of an assembly picked by its name. A colour rather than a dotted line: the line
+    /// renderer has no dashes, and cutting the edges into pieces would stretch them with the part.
+    /// Amber, since white is selected and red is broken, and it carries on the default blue.
+    /// </summary>
+    private static readonly Color AssemblyOutlineColour = Color.FromRgb(0xFF, 0xB3, 0x1A);
+
+    /// <summary>
     /// Above this, tracing the outline would cost more than it is worth on a selection click.
     /// Dense imports fall back to the brightened material alone.
     /// </summary>
@@ -674,9 +681,9 @@ public sealed class SceneRenderer : IDisposable
     /// <summary>A dimmer, part-see-through version of the object's own colour.</summary>
     private static PhongMaterial MirrorMaterial(SceneObject o) => new()
     {
-        DiffuseColor = new SharpDX.Color4(o.Colour.X, o.Colour.Y, o.Colour.Z, 0.22f),
+        DiffuseColor = new SharpDX.Color4(o.ShownColour.X, o.ShownColour.Y, o.ShownColour.Z, 0.22f),
         SpecularColor = new SharpDX.Color4(0, 0, 0, 1),
-        AmbientColor = new SharpDX.Color4(o.Colour.X * 0.3f, o.Colour.Y * 0.3f, o.Colour.Z * 0.3f, 1f)
+        AmbientColor = new SharpDX.Color4(o.ShownColour.X * 0.3f, o.ShownColour.Y * 0.3f, o.ShownColour.Z * 0.3f, 1f)
     };
 
     /// <summary>
@@ -961,9 +968,9 @@ public sealed class SceneRenderer : IDisposable
     /// <summary>The half on its way out: the object's own colour, drawn through.</summary>
     private static PhongMaterial GhostMaterial(SceneObject o) => new()
     {
-        DiffuseColor = new SharpDX.Color4(o.Colour.X, o.Colour.Y, o.Colour.Z, 0.26f),
+        DiffuseColor = new SharpDX.Color4(o.ShownColour.X, o.ShownColour.Y, o.ShownColour.Z, 0.26f),
         SpecularColor = new SharpDX.Color4(0, 0, 0, 1),
-        AmbientColor = new SharpDX.Color4(o.Colour.X * 0.35f, o.Colour.Y * 0.35f, o.Colour.Z * 0.35f, 1f)
+        AmbientColor = new SharpDX.Color4(o.ShownColour.X * 0.35f, o.ShownColour.Y * 0.35f, o.ShownColour.Z * 0.35f, 1f)
     };
 
     /// <summary>Takes the stand-ins away without putting the object itself back.</summary>
@@ -1158,11 +1165,15 @@ public sealed class SceneRenderer : IDisposable
                 ShowOrHide(o, visual);
                 break;
 
+            case nameof(SceneObject.InPickedAssembly):
+                UpdateOutline(o);
+                break;
+
             case nameof(SceneObject.IsSelected):
-            case nameof(SceneObject.Colour):
+            case nameof(SceneObject.ShownColour):
                 ApplyLook(o, visual);
                 UpdateOutline(o);
-                if (e.PropertyName == nameof(SceneObject.Colour) && mirrors.TryGetValue(o, out var tinted))
+                if (e.PropertyName == nameof(SceneObject.ShownColour) && mirrors.TryGetValue(o, out var tinted))
                     tinted.Material = MirrorMaterial(o);
                 break;
         }
@@ -1203,7 +1214,17 @@ public sealed class SceneRenderer : IDisposable
             return;
         }
 
-        if (outlines.ContainsKey(o)) return;
+        // Broken wins: that is the one that needs doing something about.
+        var colour = damaged ? DamagedOutlineColour : o.InPickedAssembly ? AssemblyOutlineColour : OutlineColour;
+
+        // Already traced: the edges are the same, and only what it says may have changed - a part
+        // whose assembly was picked or let go of keeps its outline and changes its colour.
+        if (outlines.TryGetValue(o, out var traced))
+        {
+            traced.Color = colour;
+            return;
+        }
+
         if (o.Mesh.TriangleCount > OutlineTriangleLimit) return;
 
         var edges = FeatureEdges.Build(o.Mesh);
@@ -1220,7 +1241,7 @@ public sealed class SceneRenderer : IDisposable
         var outline = new LineGeometryModel3D
         {
             Geometry = builder.ToLineGeometry3D(),
-            Color = damaged ? DamagedOutlineColour : OutlineColour,
+            Color = colour,
             Thickness = damaged ? 2.2 : 1.4,
             Transform = MeshConverter.ToTransform(o.Transform),
             IsHitTestVisible = false // picking must still hit the solid underneath
@@ -1245,7 +1266,7 @@ public sealed class SceneRenderer : IDisposable
     /// </summary>
     private PhongMaterial MaterialFor(SceneObject o)
     {
-        var colour = new SharpDX.Color4(o.Colour.X, o.Colour.Y, o.Colour.Z, 1f);
+        var colour = new SharpDX.Color4(o.ShownColour.X, o.ShownColour.Y, o.ShownColour.Z, 1f);
 
         float lift = o.IsSelected ? 0.22f : 0f;
         var diffuse = new SharpDX.Color4(

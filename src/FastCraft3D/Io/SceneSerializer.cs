@@ -72,9 +72,20 @@ public static class SceneSerializer
     {
         var dto = ReadIfPresent(versionsFrom ?? path) ?? new SceneDto();
         dto.Version = CurrentVersion;
-        dto.Objects = scene.Objects.Select(ToDto).ToList();
+        (dto.Objects, dto.Assemblies) = Contents(scene);
         Keep(dto, settings);
         Write(path, dto, scene);
+    }
+
+    /// <summary>
+    /// The objects and the assemblies they are in. Each object names its assembly by where it
+    /// stands in the list beside them, since that is where membership is kept in the scene too.
+    /// </summary>
+    private static (List<ObjectDto> Objects, List<AssemblyDto>? Assemblies) Contents(Scene scene)
+    {
+        var assemblies = scene.Assemblies;
+        var objects = scene.Objects.Select(o => ToDto(o, assemblies)).ToList();
+        return (objects, assemblies.Count > 0 ? assemblies.Select(ToDto).ToList() : null);
     }
 
     /// <summary>
@@ -112,7 +123,8 @@ public static class SceneSerializer
     /// </summary>
     public static void SaveSnapshot(string path, Scene scene, ProjectSettings? settings = null)
     {
-        var dto = new SceneDto { Version = CurrentVersion, Objects = scene.Objects.Select(ToDto).ToList() };
+        var dto = new SceneDto { Version = CurrentVersion };
+        (dto.Objects, dto.Assemblies) = Contents(scene);
         Keep(dto, settings);
         Write(path, dto, scene);
     }
@@ -122,14 +134,15 @@ public static class SceneSerializer
     {
         var dto = ReadIfPresent(path) ?? new SceneDto();
         dto.Version = CurrentVersion;
-        dto.Objects = scene.Objects.Select(ToDto).ToList();
+        (dto.Objects, dto.Assemblies) = Contents(scene);
         Keep(dto, settings);
 
         (dto.Versions ??= []).Add(new VersionDto
         {
             Label = string.IsNullOrWhiteSpace(label) ? "Version" : label.Trim(),
             SavedUtc = DateTime.UtcNow,
-            Objects = dto.Objects // the snapshot is the state being saved
+            Objects = dto.Objects, // the snapshot is the state being saved
+            Assemblies = dto.Assemblies
         });
 
         Write(path, dto, scene);
@@ -151,7 +164,14 @@ public static class SceneSerializer
         settings = width is { } w && depth is { } d && dto.Unit is { } unit && dto.ModelScale is { } scale
             ? new ProjectSettings(w, d, dto.PlateHeight ?? Scene.PrintHeight, unit, scale)
             : null;
-        return dto.Objects?.Select(FromDto).ToList() ?? [];
+        return Objects(dto.Objects, dto.Assemblies);
+    }
+
+    /// <summary>The objects back, each in the assembly it names.</summary>
+    private static List<SceneObject> Objects(List<ObjectDto>? objects, List<AssemblyDto>? assemblies)
+    {
+        var made = assemblies?.Select(FromDto).ToList() ?? [];
+        return objects?.Select(o => FromDto(o, made)).ToList() ?? [];
     }
 
     /// <summary>Settings given are written; none given leaves what the file already held.</summary>
@@ -184,7 +204,7 @@ public static class SceneSerializer
         if (dto.Versions is null || index < 0 || index >= dto.Versions.Count)
             throw new ArgumentOutOfRangeException(nameof(index), "That version is not in this file.");
 
-        return dto.Versions[index].Objects?.Select(FromDto).ToList() ?? [];
+        return Objects(dto.Versions[index].Objects, dto.Versions[index].Assemblies);
     }
 
     /// <summary>Forgets a kept version. The current scene is never touched.</summary>
@@ -203,7 +223,8 @@ public static class SceneSerializer
     /// </summary>
     public static byte[] ToBytes(IEnumerable<SceneObject> objects)
     {
-        var dto = new SceneDto { Version = CurrentVersion, Objects = objects.Select(ToDto).ToList() };
+        // Without their assemblies: a pasted part is a part of its own, as a duplicate is.
+        var dto = new SceneDto { Version = CurrentVersion, Objects = objects.Select(o => ToDto(o, null)).ToList() };
         using var memory = new MemoryStream();
         using (var gzip = new GZipStream(memory, CompressionLevel.Fastest, leaveOpen: true))
             JsonSerializer.Serialize(gzip, dto, Options);
@@ -218,7 +239,7 @@ public static class SceneSerializer
                   ?? throw new InvalidDataException("There is nothing readable on the clipboard.");
         if (dto.Version > CurrentVersion)
             throw new InvalidDataException("These were copied from a newer version of 3DFastCraft.");
-        return dto.Objects?.Select(FromDto).ToList() ?? [];
+        return Objects(dto.Objects, null);
     }
 
     // --- Plumbing ---------------------------------------------------------------------
@@ -320,6 +341,51 @@ public static class SceneSerializer
 
         using var part = target.CreateEntry(PartPath, CompressionLevel.Optimal).Open();
         part.Write(project);
+    }
+
+    private static ObjectDto ToDto(SceneObject o, IReadOnlyList<Assembly>? assemblies)
+    {
+        var dto = ToDto(o);
+        int index = o.Assembly is { } a && assemblies is not null ? IndexOf(assemblies, a) : -1;
+        if (index < 0) return dto;
+
+        dto.Assembly = index;
+        dto.Home = ToArray(o.HomePosition);
+        dto.HomeRotation = ToArray(o.HomeRotation);
+        return dto;
+    }
+
+    private static int IndexOf(IReadOnlyList<Assembly> assemblies, Assembly assembly)
+    {
+        for (int i = 0; i < assemblies.Count; i++)
+            if (ReferenceEquals(assemblies[i], assembly)) return i;
+        return -1;
+    }
+
+    private static AssemblyDto ToDto(Assembly a) => new()
+    {
+        Name = a.Name,
+        Colour = a.Colour is { } c ? ToArray(c) : null,
+        Collapsed = a.IsExpanded ? null : true
+    };
+
+    private static Assembly FromDto(AssemblyDto a) => new(a.Name ?? "Assembly")
+    {
+        Colour = a.Colour is { Length: 3 } ? ToVector(a.Colour) : null,
+        IsExpanded = a.Collapsed != true
+    };
+
+    private static SceneObject FromDto(ObjectDto o, IReadOnlyList<Assembly> assemblies)
+    {
+        var made = FromDto(o);
+        if (o.Assembly is { } index && index >= 0 && index < assemblies.Count)
+        {
+            made.Assembly = assemblies[index];
+            made.HomePosition = o.Home is { Length: 3 } ? ToVector(o.Home) : made.Position;
+            made.HomeRotation = o.HomeRotation is { Length: 3 } ? ToVector(o.HomeRotation) : made.Rotation;
+        }
+
+        return made;
     }
 
     private static ObjectDto ToDto(SceneObject o) => new()
@@ -433,6 +499,9 @@ public static class SceneSerializer
         public List<ObjectDto>? Objects { get; set; }
         public List<VersionDto>? Versions { get; set; }
 
+        /// <summary>Null when there are none, so a file without them reads as it did, and the other way round.</summary>
+        public List<AssemblyDto>? Assemblies { get; set; }
+
         // Added without a format bump: a file without them still reads, and an older copy of
         // the app skips names it does not know.
         public float? PlateSize { get; set; }
@@ -448,6 +517,18 @@ public static class SceneSerializer
         public string? Label { get; set; }
         public DateTime SavedUtc { get; set; }
         public List<ObjectDto>? Objects { get; set; }
+        public List<AssemblyDto>? Assemblies { get; set; }
+    }
+
+    private sealed class AssemblyDto
+    {
+        public string? Name { get; set; }
+
+        /// <summary>Null for one that leaves its parts their own colours while selected.</summary>
+        public float[]? Colour { get; set; }
+
+        /// <summary>Folded up in the list. Written only when it is.</summary>
+        public bool? Collapsed { get; set; }
     }
 
     private sealed class ObjectDto
@@ -482,6 +563,14 @@ public static class SceneSerializer
 
         /// <summary>How a generator made it. Null for everything else, so older files read as they did.</summary>
         public RecipeDto? Recipe { get; set; }
+
+        /// <summary>Which of the file's assemblies it is in, by position. Null for a part on its own.</summary>
+        public int? Assembly { get; set; }
+
+        /// <summary>Where Reassemble puts it, with <see cref="HomeRotation"/>. Written only with an assembly.</summary>
+        public float[]? Home { get; set; }
+
+        public float[]? HomeRotation { get; set; }
 
         public float[]? Vertices { get; set; }
         public int[]? Triangles { get; set; }

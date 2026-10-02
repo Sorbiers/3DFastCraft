@@ -45,13 +45,27 @@ public static class AlignTools
     /// With one object there is nothing else to line it up against except the bed it stands on,
     /// given as <paramref name="bed"/>; without one, a single object is left where it is.
     /// </summary>
-    public static IReadOnlyList<Vector3> Offsets(IReadOnlyList<SceneObject> objects, Axis axis, AlignMode mode, Bounds? bed = null)
+    public static IReadOnlyList<Vector3> Offsets(IReadOnlyList<SceneObject> objects, Axis axis, AlignMode mode, Bounds? bed = null) =>
+        BlockOffsets(objects.Select(o => (IReadOnlyList<SceneObject>)[o]).ToList(), axis, mode, bed);
+
+    /// <summary>
+    /// The same, for blocks of objects that move as one - an assembly picked by its name, given in
+    /// <see cref="Scene.SelectionInPicks"/>. One offset per block: every object in it moves by
+    /// that, so the parts keep their places inside the block's box, whichever side of the
+    /// alignment the block is on. A block of one is an object on its own, exactly as before.
+    ///
+    /// A block is lined up by the box round all of it, and centred on the middle of that box. One
+    /// object is still centred by its own <see cref="SceneObject.WorldCentre"/>, the axis a tool
+    /// marked on it: an assembly has no shaft of its own to go by.
+    /// </summary>
+    public static IReadOnlyList<Vector3> BlockOffsets(
+        IReadOnlyList<IReadOnlyList<SceneObject>> blocks, Axis axis, AlignMode mode, Bounds? bed = null)
     {
-        var offsets = new Vector3[objects.Count];
-        if (objects.Count == 0) return offsets;
+        var offsets = new Vector3[blocks.Count];
+        if (blocks.Count == 0) return offsets;
 
         var direction = AxisVector(axis);
-        var boxes = objects.Select(o => o.WorldBounds).ToList();
+        var boxes = blocks.Select(b => b.Aggregate(Bounds.Empty, (box, o) => box.Union(o.WorldBounds))).ToList();
 
         if (mode == AlignMode.Distribute)
         {
@@ -63,7 +77,7 @@ public static class AlignTools
         {
             AlignMode.Minimum => Component(boxes[i].Min, axis),
             AlignMode.Maximum => Component(boxes[i].Max, axis),
-            _ => Component(objects[i].WorldCentre, axis)
+            _ => Component(blocks[i].Count == 1 ? blocks[i][0].WorldCentre : boxes[i].Center, axis)
         };
 
         if (boxes.Count == 1)

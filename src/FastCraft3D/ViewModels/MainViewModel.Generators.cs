@@ -51,7 +51,16 @@ public sealed partial class MainViewModel
 
     /// <summary>Opens the generator that made the selected part, filled in as it was made.</summary>
     public System.Windows.Input.ICommand EditGeneratedCommand =>
-        editGenerated ??= RelayCommand.Simple(EditGenerated, () => Selected?.Recipe is not null);
+        editGenerated ??= RelayCommand.Simple(EditGenerated, () => EditablePart is not null);
+
+    /// <summary>
+    /// The part whose settings Edit settings opens: the one selected, or a part of the assembly
+    /// picked by its name - a set goes down as an assembly, and its heading is how it is picked.
+    /// </summary>
+    private SceneObject? EditablePart =>
+        Selected?.Recipe is not null ? Selected
+        : SelectedAssembly is { } assembly ? Scene.MembersOf(assembly).FirstOrDefault(o => o.Recipe is not null)
+        : null;
 
     private Printer CurrentPrinter => printer ??= PrinterProfile.Load();
 
@@ -221,9 +230,7 @@ public sealed partial class MainViewModel
         LibraryMemory.Shared.Used(generator.Id);
 
         string? set = result.Parts.Count > 1 ? Guid.NewGuid().ToString("N") : null;
-        var parts = InOne(result)
-            ? [Together(generator, result, ColourOf(0), Recipes.For(generator, settings, WholeSet))]
-            : Objects(result, assembled: !result.LaidOut, ColourOf, part => Recipes.For(generator, settings, part.Role, set));
+        var parts = Objects(result, assembled: !result.LaidOut, ColourOf, part => Recipes.For(generator, settings, part.Role, set));
         foreach (var o in parts) o.Name = Scene.UniqueName(o.Name);
 
         var beside = new List<SceneObject>();
@@ -259,9 +266,21 @@ public sealed partial class MainViewModel
             return;
         }
 
+        // Put down as it goes together, the set is an assembly, at home where it stands. Its parts
+        // are joined to it before they reach the plate, so undoing the insert takes the lot.
+        Assembly? assembly = null;
+        if (InOne(result))
+        {
+            assembly = new Assembly(Scene.UniqueAssemblyName(generator.Title));
+            foreach (var o in parts) Membership.AtHome(assembly, o).ApplyTo(o);
+        }
+
         Undo.Execute(new AddObjectsCommand($"Insert {generator.Title.ToLowerInvariant()}", parts));
+        if (assembly is not null) Scene.SelectAssembly(assembly);
         RefreshSelection();
-        Status = parts.Count == 1 ? $"Inserted {parts[0].Name}" : $"Inserted {parts.Count} parts: {string.Join(", ", parts.Select(o => o.Name))}";
+        Status = assembly is not null ? $"Inserted {assembly.Name}: {parts.Count} parts in an assembly - click its name in the list to select them all"
+               : parts.Count == 1 ? $"Inserted {parts[0].Name}"
+               : $"Inserted {parts.Count} parts: {string.Join(", ", parts.Select(o => o.Name))}";
     }
 
     /// <summary>
@@ -312,7 +331,7 @@ public sealed partial class MainViewModel
     /// </summary>
     private void EditGenerated()
     {
-        if (Selected is not { Recipe: { } recipe } picked) return;
+        if (EditablePart is not { Recipe: { } recipe } picked) return;
 
         if (GeneratorRegistry.Find(recipe.Generator) is not { } generator)
         {
@@ -619,17 +638,22 @@ public sealed partial class MainViewModel
     private const string WholeSet = "(set)";
 
     /// <summary>
-    /// Whether a set goes down as one object: one put down assembled, with more than one part.
-    /// Laid out for printing, each part is its own object in its own colour, to be printed or
-    /// moved about singly. A set cut into a part - a thread's cutter, a wall mount's keyholes -
-    /// always goes its own ways.
+    /// Whether a set goes down as an assembly: one put down assembled, with more than one part.
+    /// Laid out for printing, each part is its own object on its own, to be printed or moved about
+    /// singly. A set cut into a part - a thread's cutter, a wall mount's keyholes - always goes its
+    /// own ways.
+    ///
+    /// An assembly rather than one grouped object, as it was before there were assemblies. Put down in loose parts, a
+    /// working model came apart the first time anything in it was moved; grouped, no part of it
+    /// could be moved, painted or cut on its own without taking it apart for good. An assembly is
+    /// picked whole by its name, keeps each part separate, and Reassemble puts it back together.
     /// </summary>
     private static bool InOne(Generated made) => !made.LaidOut && made.Parts.Count > 1 && !made.Parts.Any(p => p.Cutter || p.CutOnly);
 
     /// <summary>
     /// Every part of an assembled set as one object, as Group makes one: not fused, so Ungroup
-    /// takes them apart again. Put down in loose parts, an assembled working model came apart the
-    /// first time anything in it was moved.
+    /// takes them apart again. Only for a set saved grouped before sets went down as assemblies,
+    /// made again with new settings the way it was made.
     /// </summary>
     private static SceneObject Together(Generator generator, Generated made, Vector3 colour, Recipe recipe)
     {

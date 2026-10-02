@@ -212,12 +212,87 @@ public sealed class SceneObject : INotifyPropertyChanged
 
     private static long picks;
 
+    /// <summary>
+    /// Selects every one of these as one pick: they share the moment they were picked, so the
+    /// tools that care which was picked last - Align, Subtract - see them as one thing picked at
+    /// once. An assembly picked by its name is picked this way.
+    /// </summary>
+    public static void PickTogether(IEnumerable<SceneObject> objects)
+    {
+        var picked = objects.ToList();
+        foreach (var o in picked) o.IsSelected = true;
+
+        long at = ++picks;
+        foreach (var o in picked)
+            if (o.IsSelected) o.PickedAt = at;
+    }
+
     /// <summary>Diffuse colour, components in 0..1.</summary>
     public Vector3 Colour
     {
         get => colour;
-        set => Set(ref colour, value);
+        set
+        {
+            Set(ref colour, value);
+            Raise(nameof(ShownColour));
+        }
     }
+
+    /// <summary>
+    /// A colour to draw this in for now instead of its own: its assembly's, while the assembly is
+    /// selected. Never saved and never copied - the colour the part really is stays in
+    /// <see cref="Colour"/>, so saving or undoing in the middle of it cannot keep the stand-in.
+    /// </summary>
+    public Vector3? Tint
+    {
+        get => tint;
+        set
+        {
+            Set(ref tint, value);
+            Raise(nameof(ShownColour));
+        }
+    }
+
+    /// <summary>What the viewport draws.</summary>
+    public Vector3 ShownColour => tint ?? colour;
+
+    /// <summary>
+    /// Selected as part of an assembly picked by its name, which the viewport outlines in a colour
+    /// of its own. Kept up by whatever keeps the selection, as <see cref="Tint"/> is; never saved.
+    /// </summary>
+    public bool InPickedAssembly
+    {
+        get => inPickedAssembly;
+        set => Set(ref inPickedAssembly, value);
+    }
+
+    private bool inPickedAssembly;
+
+    private Vector3? tint;
+
+    /// <summary>
+    /// The assembly this part is in, if any. See <see cref="Model.Assembly"/> for why it is kept
+    /// here rather than there. Not copied by <see cref="Clone"/>: a copy is a part of its own.
+    /// </summary>
+    public Assembly? Assembly
+    {
+        get => assembly;
+        set
+        {
+            Set(ref assembly, value);
+            Raise(nameof(InAssembly));
+        }
+    }
+
+    public bool InAssembly => assembly is not null;
+
+    private Assembly? assembly;
+
+    /// <summary>Where Reassemble puts the pivot back to.</summary>
+    public Vector3 HomePosition { get; set; }
+
+    /// <summary>The turn Reassemble puts back.</summary>
+    public Vector3 HomeRotation { get; set; }
 
     /// <summary>
     /// Which filament prints this part, counted from one, on a printer that has more than one.
@@ -550,6 +625,12 @@ public sealed class SceneObject : INotifyPropertyChanged
         // was, whatever turn and scale sit between the two.
         Position += Vector3.TransformNormal(
             origin, Matrix4x4.CreateScale(scale) * MeshTransform.Rotation(rotation));
+
+        // Home moves with it, turned as home is turned, so Reassemble still lands the part where
+        // it would have. Without this, a pivot set on an assembled part sent it off by the shift.
+        if (assembly is not null)
+            HomePosition += Vector3.TransformNormal(
+                origin, Matrix4x4.CreateScale(scale) * MeshTransform.Rotation(HomeRotation));
 
         return this;
     }

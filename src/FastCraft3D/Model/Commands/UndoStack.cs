@@ -211,11 +211,18 @@ public sealed class DeleteObjectsCommand(IReadOnlyList<SceneObject> objects) : I
 /// <summary>
 /// Swaps one set of objects for another. Booleans and cuts consume their inputs and produce
 /// new geometry, so expressing them as a replacement makes undo a single reversible step.
+///
+/// What it makes takes the place of what it consumed in their assembly, so a part does not drop
+/// out of one for having a hole cut in it - see <see cref="AssemblyTools.Carry"/>. A caller that
+/// knows which made part replaces which says so in <paramref name="successors"/>; one bringing in
+/// parts that already know their assemblies, a restored version, turns it off.
 /// </summary>
 public sealed class ReplaceObjectsCommand(
     string label,
     IReadOnlyList<SceneObject> removed,
-    IReadOnlyList<SceneObject> added) : IUndoableCommand
+    IReadOnlyList<SceneObject> added,
+    IReadOnlyList<(SceneObject From, SceneObject To)>? successors = null,
+    bool carryAssemblies = true) : IUndoableCommand
 {
     private readonly List<int> removedIndices = new();
 
@@ -239,6 +246,9 @@ public sealed class ReplaceObjectsCommand(
             scene.Objects.Remove(o);
 
         removedIndices.AddRange(located.Select(r => r.Index));
+
+        // Before they join the plate, so the list is built with them already in place.
+        if (carryAssemblies) AssemblyTools.Carry(removed, added, successors);
 
         scene.ClearSelection();
         foreach (var o in added)

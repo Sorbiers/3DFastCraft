@@ -3,6 +3,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:hx="http://helix-toolkit.org/wpf/SharpDX"
         xmlns:view="clr-namespace:FastCraft3D.View"
+        xmlns:model="clr-namespace:FastCraft3D.Model"
         Title="{Binding WindowTitle}" Height="900" Width="1500"
         Background="#FFF3F3F3" WindowStartupLocation="CenterScreen"
         AllowDrop="True" DragOver="OnFilesDraggedOver" Drop="OnFilesDropped">
@@ -348,78 +349,16 @@
             <Setter Property="FontSize" Value="11" />
         </Style>
 
-        <!-- Selection menu. Disabled entries stay visible but greyed, as in 3D Builder, so the
-             menu never changes shape and you can see what an action needs. -->
-        <Style x:Key="MenuIcon" TargetType="Path">
-            <Setter Property="Width" Value="16" />
-            <Setter Property="Height" Value="16" />
-            <Setter Property="Stretch" Value="Uniform" />
-            <Setter Property="Stroke" Value="#FF44494F" />
-            <Setter Property="StrokeThickness" Value="1.3" />
-            <Setter Property="Fill" Value="{x:Null}" />
-            <Setter Property="VerticalAlignment" Value="Center" />
-            <Setter Property="Margin" Value="2,0,9,0" />
+        <!-- The selection tools beside the objects list: the ribbon's buttons, close together,
+             so a group of four goes across the side panel. Disabled ones stay visible but greyed,
+             as in 3D Builder, so the rows never change shape and you can see what an action needs. -->
+        <Style x:Key="SideToolButton" TargetType="Button" BasedOn="{StaticResource ToolButton}">
+            <Setter Property="Margin" Value="0" />
         </Style>
 
-        <Style x:Key="MenuLabel" TargetType="TextBlock">
-            <Setter Property="VerticalAlignment" Value="Center" />
-            <Setter Property="Foreground" Value="#FF33383F" />
-            <Setter Property="FontSize" Value="12.5" />
+        <Style x:Key="SideToolToggle" TargetType="ToggleButton" BasedOn="{StaticResource ToolToggle}">
+            <Setter Property="Margin" Value="0" />
         </Style>
-
-        <Style x:Key="SelectionMenuItem" TargetType="ButtonBase">
-            <Setter Property="ToolTipService.ShowOnDisabled" Value="True" />
-            <Setter Property="HorizontalContentAlignment" Value="Left" />
-            <Setter Property="Padding" Value="10,7" />
-            <Setter Property="Background" Value="Transparent" />
-            <Setter Property="BorderThickness" Value="0" />
-            <Setter Property="Cursor" Value="Hand" />
-            <Setter Property="Template">
-                <Setter.Value>
-                    <ControlTemplate TargetType="ButtonBase">
-                        <Border x:Name="Chrome" Background="{TemplateBinding Background}"
-                                Padding="{TemplateBinding Padding}" CornerRadius="3" Margin="3,1">
-                            <ContentPresenter HorizontalAlignment="Left" VerticalAlignment="Center" />
-                        </Border>
-                        <ControlTemplate.Triggers>
-                            <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="Chrome" Property="Background" Value="#FFE4E9F0" />
-                            </Trigger>
-                            <Trigger Property="IsEnabled" Value="False">
-                                <Setter Property="Opacity" Value="0.38" />
-                                <Setter Property="Cursor" Value="Arrow" />
-                            </Trigger>
-                        </ControlTemplate.Triggers>
-                    </ControlTemplate>
-                </Setter.Value>
-            </Setter>
-        </Style>
-
-        <Style x:Key="SelectionMenuToggle" TargetType="ToggleButton" BasedOn="{StaticResource SelectionMenuItem}">
-            <Style.Triggers>
-                <Trigger Property="IsChecked" Value="True">
-                    <Setter Property="Background" Value="#FFD8E2F0" />
-                </Trigger>
-            </Style.Triggers>
-        </Style>
-
-        <Style x:Key="MenuChevron" TargetType="ToggleButton">
-            <Setter Property="Height" Value="26" />
-            <Setter Property="Background" Value="Transparent" />
-            <Setter Property="BorderThickness" Value="0" />
-            <Setter Property="Cursor" Value="Hand" />
-            <Setter Property="HorizontalContentAlignment" Value="Left" />
-            <Setter Property="Template">
-                <Setter.Value>
-                    <ControlTemplate TargetType="ToggleButton">
-                        <Border Background="Transparent" Padding="12,4">
-                            <ContentPresenter HorizontalAlignment="Left" VerticalAlignment="Center" />
-                        </Border>
-                    </ControlTemplate>
-                </Setter.Value>
-            </Setter>
-        </Style>
-
         <Style x:Key="GizmoBox" TargetType="TextBox">
             <Setter Property="view:NumberField.IsOn" Value="True" />
             <Setter Property="Width" Value="50" />
@@ -920,105 +859,38 @@
                     <RowDefinition Height="*" />
                 </Grid.RowDefinitions>
 
-                <!-- Selection, on the right as the old app had it. Collapsible, and it keeps
-                     the state it was left in. -->
+                <!-- Selection tools, on the right as the old app had them: ribbon buttons in two
+                     groups, side by side with a divider when the panel is wide enough and the
+                     second group under the first when it is not. Rather than the menu they were,
+                     whose seven rows took the height the objects list wants. -->
                 <StackPanel IsEnabled="{Binding NothingInHand}">
-                    <ToggleButton Style="{StaticResource MenuChevron}" HorizontalAlignment="Left"
-                                  IsChecked="{Binding IsSelectionMenuOpen, Mode=TwoWay}"
-                                  ToolTip="Show or hide the selection tools">
-                        <StackPanel Orientation="Horizontal">
-                            <Path Data="M 0,0 L 5,5 L 0,10" Stroke="#FF44494F" StrokeThickness="1.6"
-                                  Fill="{x:Null}" Width="8" Height="10" Stretch="Uniform"
-                                  VerticalAlignment="Center" RenderTransformOrigin="0.5,0.5">
-                                <Path.Style>
-                                    <Style TargetType="Path">
-                                        <!-- Points right when collapsed, down when expanded. -->
-                                        <Setter Property="RenderTransform">
-                                            <Setter.Value><RotateTransform Angle="0" /></Setter.Value>
-                                        </Setter>
-                                        <Style.Triggers>
-                                            <DataTrigger Binding="{Binding IsSelectionMenuOpen}" Value="True">
-                                                <Setter Property="RenderTransform">
-                                                    <Setter.Value><RotateTransform Angle="90" /></Setter.Value>
-                                                </Setter>
-                                            </DataTrigger>
-                                        </Style.Triggers>
-                                    </Style>
-                                </Path.Style>
-                            </Path>
-                            <TextBlock Text="Selection" FontWeight="SemiBold" Foreground="#FF33373D"
-                                       Margin="8,0,0,0" VerticalAlignment="Center" />
-                        </StackPanel>
-                    </ToggleButton>
-
-                <StackPanel Visibility="{Binding IsSelectionMenuOpen,
-                                         Converter={StaticResource BoolToVisibility}}">
-                    <Button Style="{StaticResource SelectionMenuItem}" Command="{Binding GroupCommand}"
-                            AutomationProperties.Name="Group"
-                            ToolTip="Combine the selected objects into one (Ctrl+G). Needs two or more objects selected.">
-                        <StackPanel Orientation="Horizontal">
-                            <Path Style="{StaticResource MenuIcon}"
-                                  Data="M 1,1 L 11,1 L 11,11 L 1,11 Z M 5,5 L 15,5 L 15,15 L 5,15 Z" />
-                            <TextBlock Text="Group" Style="{StaticResource MenuLabel}" />
-                        </StackPanel>
-                    </Button>
-
-                    <Button Style="{StaticResource SelectionMenuItem}" Command="{Binding UngroupCommand}"
-                            AutomationProperties.Name="Ungroup"
-                            ToolTip="Split the selection into its separate pieces (Ctrl+Shift+G)">
-                        <StackPanel Orientation="Horizontal">
-                            <Path Style="{StaticResource MenuIcon}"
-                                  Data="M 0,0 L 7,0 L 7,7 L 0,7 Z M 10,10 L 17,10 L 17,17 L 10,17 Z" />
-                            <TextBlock Text="Ungroup" Style="{StaticResource MenuLabel}" />
-                        </StackPanel>
-                    </Button>
-
-                    <Rectangle Height="1" Margin="8,4" Fill="#FFDDE0E4" />
-
-                    <Button Style="{StaticResource SelectionMenuItem}" Command="{Binding SelectAllCommand}"
-                            AutomationProperties.Name="Select all"
-                            ToolTip="Select every object (Ctrl+A)">
-                        <StackPanel Orientation="Horizontal">
-                            <Path Style="{StaticResource MenuIcon}"
-                                  Data="M 1,1 L 17,1 L 17,17 L 1,17 Z M 5,5 L 13,5 L 13,13 L 5,13 Z" />
-                            <TextBlock Text="Select all" Style="{StaticResource MenuLabel}" />
-                        </StackPanel>
-                    </Button>
-
-                    <Button Style="{StaticResource SelectionMenuItem}" Command="{Binding DeselectAllCommand}"
-                            AutomationProperties.Name="Deselect all"
-                            ToolTip="Clear the selection (Ctrl+Shift+A)">
-                        <StackPanel Orientation="Horizontal">
-                            <Path Style="{StaticResource MenuIcon}"
-                                  Data="M 9,1 A 8,8 0 1 1 8.9,1 Z" />
-                            <TextBlock Text="Deselect all" Style="{StaticResource MenuLabel}" />
-                        </StackPanel>
-                    </Button>
-
-                    <Button Style="{StaticResource SelectionMenuItem}" Command="{Binding InvertSelectionCommand}"
-                            AutomationProperties.Name="Invert selection"
-                            ToolTip="Select everything that is not selected, and vice versa">
-                        <StackPanel Orientation="Horizontal">
-                            <Path Style="{StaticResource MenuIcon}"
-                                  Data="M 9,1 A 8,8 0 1 1 8.9,1 Z M 9,1 L 9,17 A 8,8 0 0 0 9,1 Z" />
-                            <TextBlock Text="Invert selection" Style="{StaticResource MenuLabel}" />
-                        </StackPanel>
-                    </Button>
-
-                    <Rectangle Height="1" Margin="8,4" Fill="#FFDDE0E4" />
-
-                    <ToggleButton Style="{StaticResource SelectionMenuToggle}"
-                                  AutomationProperties.Name="Sticky selection"
-                                  IsChecked="{Binding StickySelection, Mode=TwoWay}"
-                                  ToolTip="On: clicking an object adds or removes just that object, leaving the rest selected">
-                        <StackPanel Orientation="Horizontal">
-                            <Path Style="{StaticResource MenuIcon}"
-                                  Data="M 9,1 A 8,8 0 1 1 8.9,1 Z M 9,5 L 14,14 L 4,14 Z" />
-                            <TextBlock Text="Sticky selection" Style="{StaticResource MenuLabel}" />
-                        </StackPanel>
-                    </ToggleButton>
-                </StackPanel>
-
+                    <view:GroupWrap>
+                        <WrapPanel>
+                            <Button Style="{StaticResource SideToolButton}" Content="Assembly" Tag="{StaticResource IconAssembly}"
+                                    Command="{Binding AssembleCommand}" AutomationProperties.Name="Assembly"
+                                    ToolTip="Keep the selected objects together in the objects list. They stay separate objects: click the assembly's name to select them all, and Reassemble puts them back where they are now. With an assembly picked by its name, the other selected objects are added to it. Needs at least one object selected." />
+                            <Button Style="{StaticResource SideToolButton}" Content="Group" Tag="{StaticResource IconGroup}"
+                                    Command="{Binding GroupCommand}" AutomationProperties.Name="Group"
+                                    ToolTip="Combine the selected objects into one (Ctrl+G). Needs two or more objects selected." />
+                            <Button Style="{StaticResource SideToolButton}" Content="Ungroup" Tag="{StaticResource IconUngroup}"
+                                    Command="{Binding UngroupCommand}" AutomationProperties.Name="Ungroup"
+                                    ToolTip="Split the selection into its separate pieces (Ctrl+Shift+G). With an assembly picked by its name, remove the assembly instead: its parts stay where they are, as they are." />
+                        </WrapPanel>
+                        <WrapPanel>
+                            <Button Style="{StaticResource SideToolButton}" Content="Select all" Tag="{StaticResource IconSelectAll}"
+                                    Command="{Binding SelectAllCommand}" AutomationProperties.Name="Select all"
+                                    ToolTip="Select every object (Ctrl+A)" />
+                            <Button Style="{StaticResource SideToolButton}" Content="Deselect" Tag="{StaticResource IconDeselectAll}"
+                                    Command="{Binding DeselectAllCommand}" AutomationProperties.Name="Deselect all"
+                                    ToolTip="Clear the selection (Ctrl+Shift+A)" />
+                            <Button Style="{StaticResource SideToolButton}" Content="Invert" Tag="{StaticResource IconInvertSelection}"
+                                    Command="{Binding InvertSelectionCommand}" AutomationProperties.Name="Invert selection"
+                                    ToolTip="Select everything that is not selected, and the other way round" />
+                            <ToggleButton Style="{StaticResource SideToolToggle}" Content="Sticky" Tag="{StaticResource IconSticky}"
+                                          IsChecked="{Binding StickySelection, Mode=TwoWay}" AutomationProperties.Name="Sticky selection"
+                                          ToolTip="Sticky selection - on: clicking an object adds or removes just that object, leaving the rest selected" />
+                        </WrapPanel>
+                    </view:GroupWrap>
                     <DockPanel Margin="0,6,0,4">
                         <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Bottom">
                             <Button Content="Show all" Style="{StaticResource LinkButton}" Margin="0,0,10,0"
@@ -1029,6 +901,23 @@
                                     Command="{Binding UnlockAllCommand}"
                                     Visibility="{Binding AnyLocked, Converter={StaticResource BoolToVisibility}}"
                                     ToolTip="Unlock every locked object (Alt+L)" />
+
+                            <!-- Every assembly opened or folded at once, while there are any. -->
+                            <StackPanel Orientation="Horizontal" Margin="8,0,0,0"
+                                        Visibility="{Binding HasAssemblies, Converter={StaticResource BoolToVisibility}}">
+                                <Button Style="{StaticResource RowIconButton}" Command="{Binding FoldAllAssembliesCommand}"
+                                        CommandParameter="Open" AutomationProperties.Name="Open all assemblies"
+                                        ToolTip="Show the parts of every assembly">
+                                    <Path Data="M 0,0 L 4,4 L 8,0 M 0,5 L 4,9 L 8,5" Stroke="#FF44494F" StrokeThickness="1.3"
+                                          Fill="{x:Null}" Width="9" Height="10" Stretch="Uniform" />
+                                </Button>
+                                <Button Style="{StaticResource RowIconButton}" Command="{Binding FoldAllAssembliesCommand}"
+                                        CommandParameter="Close" AutomationProperties.Name="Fold all assemblies"
+                                        ToolTip="Fold every assembly up to its name">
+                                    <Path Data="M 0,0 L 4,4 L 0,8 M 5,0 L 9,4 L 5,8" Stroke="#FF44494F" StrokeThickness="1.3"
+                                          Fill="{x:Null}" Width="10" Height="9" Stretch="Uniform" />
+                                </Button>
+                            </StackPanel>
                         </StackPanel>
                         <TextBlock Text="Objects" Style="{StaticResource SectionHeader}" Margin="0" />
                     </DockPanel>
@@ -1036,13 +925,85 @@
 
                 <!-- Selection is mirrored by SelectionListSync, not by an IsSelected binding:
                      a container generated later would push its initial false into the model. -->
-                <view:ObjectListBox x:Name="ObjectList" Grid.Row="1" ItemsSource="{Binding Scene.Objects}"
+                <!-- The rows are objects and assembly headings, each assembly's parts indented
+                     under it: see MainViewModel.ListRows. -->
+                <view:ObjectListBox x:Name="ObjectList" Grid.Row="1" ItemsSource="{Binding ListRows}"
                                     IsEnabled="{Binding NothingInHand}"
                                     HorizontalContentAlignment="Stretch"
                                     SelectionMode="Extended">
-                    <ListBox.ItemTemplate>
-                        <DataTemplate>
+                    <ListBox.Resources>
+                        <!-- An assembly's heading: the arrow folds it, a click on the rest selects
+                             every part. Its dot is the colour the parts show while it is selected,
+                             and an empty ring when it leaves them their own. -->
+                        <DataTemplate DataType="{x:Type model:Assembly}">
                             <DockPanel Background="Transparent">
+                                <Button DockPanel.Dock="Left" Style="{StaticResource RowIconButton}" Margin="0"
+                                        Command="{Binding DataContext.FoldAssemblyCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                        CommandParameter="{Binding}" AutomationProperties.Name="Fold"
+                                        ToolTip="Show or hide the parts of this assembly">
+                                    <Path x:Name="Chevron" Data="M 0,0 L 4,4 L 0,8" Stroke="#FF44494F" StrokeThickness="1.4"
+                                          Fill="{x:Null}" Width="6" Height="9" Stretch="Uniform" RenderTransformOrigin="0.5,0.5">
+                                        <Path.RenderTransform>
+                                            <RotateTransform Angle="0" />
+                                        </Path.RenderTransform>
+                                    </Path>
+                                </Button>
+                                <Ellipse x:Name="AssemblyBubble" DockPanel.Dock="Left" Width="11" Height="11" Margin="4,0,4,0"
+                                         Stroke="#40000000" StrokeThickness="1"
+                                         Fill="{Binding Colour, Converter={StaticResource ColourToBrush}}" />
+                                <!-- Lined up with the parts' own: the whole assembly at once. Dark
+                                     while any part is hidden or locked; showing hidden or locked
+                                     only when every part is. -->
+                                <Button DockPanel.Dock="Right" Style="{StaticResource RowIconButton}"
+                                        Command="{Binding DataContext.ToggleAssemblyLockedCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                        CommandParameter="{Binding}" AutomationProperties.Name="Lock"
+                                        ToolTip="Lock every part: they stay in view but cannot be selected, so nothing can move or change them">
+                                    <Path x:Name="AssemblyLockIcon" Data="{StaticResource RowUnlocked}" Stroke="#FF33383F" StrokeThickness="1.3"
+                                          Fill="{x:Null}" Stretch="Uniform" Width="11" Height="11" Opacity="0.3" />
+                                </Button>
+                                <Button DockPanel.Dock="Right" Style="{StaticResource RowIconButton}"
+                                        Command="{Binding DataContext.ToggleAssemblyHiddenCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                        CommandParameter="{Binding}" AutomationProperties.Name="Hide"
+                                        ToolTip="Hide every part: not drawn, not picked, and left out of Export and Drawing">
+                                    <Path x:Name="AssemblyEyeIcon" Data="{StaticResource RowShown}" Stroke="#FF33383F" StrokeThickness="1.3"
+                                          Fill="{x:Null}" Stretch="Uniform" Width="13" Height="11" Opacity="0.3" />
+                                </Button>
+                                <TextBlock DockPanel.Dock="Right" Text="{Binding MemberCount}" Foreground="#FF9AA0A8"
+                                           Margin="4,0,4,0" VerticalAlignment="Center" />
+                                <TextBlock x:Name="AssemblyName" Text="{Binding Name}" FontWeight="SemiBold" Padding="2" TextTrimming="CharacterEllipsis" />
+                            </DockPanel>
+                            <DataTemplate.Triggers>
+                                <DataTrigger Binding="{Binding IsExpanded}" Value="True">
+                                    <Setter TargetName="Chevron" Property="RenderTransform">
+                                        <Setter.Value>
+                                            <RotateTransform Angle="90" />
+                                        </Setter.Value>
+                                    </Setter>
+                                </DataTrigger>
+                                <DataTrigger Binding="{Binding HasColour}" Value="False">
+                                    <Setter TargetName="AssemblyBubble" Property="Stroke" Value="#FF9AA0A8" />
+                                    <Setter TargetName="AssemblyBubble" Property="StrokeDashArray" Value="2 1.5" />
+                                </DataTrigger>
+                                <DataTrigger Binding="{Binding AnyHidden}" Value="True">
+                                    <Setter TargetName="AssemblyEyeIcon" Property="Opacity" Value="1" />
+                                </DataTrigger>
+                                <DataTrigger Binding="{Binding AllHidden}" Value="True">
+                                    <Setter TargetName="AssemblyEyeIcon" Property="Data" Value="{StaticResource RowHidden}" />
+                                    <Setter TargetName="AssemblyName" Property="Foreground" Value="#FF9AA0A8" />
+                                    <Setter TargetName="AssemblyName" Property="FontStyle" Value="Italic" />
+                                </DataTrigger>
+                                <DataTrigger Binding="{Binding AnyLocked}" Value="True">
+                                    <Setter TargetName="AssemblyLockIcon" Property="Opacity" Value="1" />
+                                </DataTrigger>
+                                <DataTrigger Binding="{Binding AllLocked}" Value="True">
+                                    <Setter TargetName="AssemblyLockIcon" Property="Data" Value="{StaticResource RowLocked}" />
+                                    <Setter TargetName="AssemblyName" Property="Foreground" Value="#FF9AA0A8" />
+                                </DataTrigger>
+                            </DataTemplate.Triggers>
+                        </DataTemplate>
+
+                        <DataTemplate DataType="{x:Type model:SceneObject}">
+                            <DockPanel x:Name="Row" Background="Transparent">
                                 <Button DockPanel.Dock="Right" Style="{StaticResource RowIconButton}"
                                         Command="{Binding DataContext.ToggleLockedCommand, RelativeSource={RelativeSource AncestorType=Window}}"
                                         CommandParameter="{Binding}" AutomationProperties.Name="Lock"
@@ -1082,9 +1043,13 @@
                                     <Setter TargetName="ColourDot" Property="Cursor" Value="Arrow" />
                                     <Setter TargetName="ColourBubble" Property="Opacity" Value="0.45" />
                                 </DataTrigger>
+                                <!-- A part of an assembly, under its heading. -->
+                                <DataTrigger Binding="{Binding InAssembly}" Value="True">
+                                    <Setter TargetName="Row" Property="Margin" Value="18,0,0,0" />
+                                </DataTrigger>
                             </DataTemplate.Triggers>
                         </DataTemplate>
-                    </ListBox.ItemTemplate>
+                    </ListBox.Resources>
                 </view:ObjectListBox>
 
                 <!-- Split panel, shown only while a split is being set up. Blue like every other
@@ -2306,6 +2271,67 @@
                               Visibility="{Binding PropertiesVisible, Converter={StaticResource BoolToVisibility}}"
                               IsEnabled="{Binding NothingInHand}">
                     <StackPanel Visibility="{Binding HasAnySelection, Converter={StaticResource BoolToVisibility}}">
+                        <!-- An assembly picked by its name: what it is called, what its parts show
+                             in while it is selected, and where they go back to. -->
+                        <StackPanel DataContext="{Binding SelectedAssembly}" Style="{StaticResource OneObjectOnly}" Margin="0,0,0,8">
+                            <TextBlock Text="Assembly" Style="{StaticResource SectionHeader}" />
+                            <TextBox AutomationProperties.AutomationId="AssemblyName" Padding="4,3"
+                                     Text="{Binding DataContext.AssemblyName, RelativeSource={RelativeSource AncestorType=Window}, UpdateSourceTrigger=LostFocus}" />
+
+                            <DockPanel Margin="0,8,0,4">
+                                <Button DockPanel.Dock="Right" Content="None" Style="{StaticResource LinkButton}"
+                                        Command="{Binding DataContext.SetAssemblyColourCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                        ToolTip="Leave the parts their own colors while the assembly is selected" />
+                                <TextBlock Text="Color while selected" Foreground="#FF5A5F66"
+                                           ToolTip="The parts are drawn in this while the assembly is selected. Their own colors are not changed." />
+                            </DockPanel>
+                            <ItemsControl ItemsSource="{Binding DataContext.Swatches, RelativeSource={RelativeSource AncestorType=Window}}">
+                                <ItemsControl.ItemsPanel>
+                                    <ItemsPanelTemplate>
+                                        <UniformGrid Columns="8" />
+                                    </ItemsPanelTemplate>
+                                </ItemsControl.ItemsPanel>
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <Button Style="{StaticResource SwatchButton}" Height="16"
+                                                Background="{Binding Colour, Converter={StaticResource ColourToBrush}}"
+                                                ToolTip="{Binding Name}"
+                                                CommandParameter="{Binding Colour}"
+                                                Command="{Binding DataContext.SetAssemblyColourCommand,
+                                                                  RelativeSource={RelativeSource AncestorType=Window}}" />
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                            <Button Content="Custom..." HorizontalAlignment="Left" Padding="10,3" Margin="1,6,0,0"
+                                    Command="{Binding DataContext.PickAssemblyColourCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                    ToolTip="Pick any color for the parts to show while the assembly is selected" />
+
+                            <!-- A set a generator put down: made again with new settings, where it
+                                 stands and still in this assembly. -->
+                            <StackPanel DataContext="{Binding DataContext.AssemblyRecipe, RelativeSource={RelativeSource AncestorType=Window}}"
+                                        Style="{StaticResource OneObjectOnly}" Margin="0,10,0,0">
+                                <Button Content="Edit settings" Style="{StaticResource PanelButton}" HorizontalAlignment="Left"
+                                        Command="{Binding DataContext.EditGeneratedCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                        AutomationProperties.AutomationId="EditGeneratedAssembly"
+                                        ToolTip="Open the settings these parts were made with, change them, and make them again where they stand, still in this assembly" />
+                            </StackPanel>
+
+                            <WrapPanel Margin="0,10,0,0">
+                                <Button Content="Reassemble" Style="{StaticResource PanelButton}"
+                                        Command="{Binding DataContext.ReassembleCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                        AutomationProperties.AutomationId="Reassemble"
+                                        ToolTip="Move every part back to where it was when the assembly was made or last updated. Only position and rotation, at each part's pivot: shape, size and color are left as they are, and a locked part stays put." />
+                                <Button Content="Update" Style="{StaticResource PanelButton}"
+                                        Command="{Binding DataContext.UpdateAssemblyCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                        AutomationProperties.AutomationId="UpdateAssembly"
+                                        ToolTip="Make where the parts are now the place Reassemble puts them back to" />
+                                <Button Content="Ungroup" Style="{StaticResource PanelButton}"
+                                        Command="{Binding DataContext.UngroupAssemblyCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                        AutomationProperties.AutomationId="UngroupAssembly"
+                                        ToolTip="Remove the assembly. Its parts stay where they are, as objects on their own." />
+                            </WrapPanel>
+                        </StackPanel>
+
                         <StackPanel DataContext="{Binding Selected}" Style="{StaticResource OneObjectOnly}">
                             <TextBlock Text="Name" Style="{StaticResource SectionHeader}" />
                             <TextBox AutomationProperties.AutomationId="ObjectName" Text="{Binding Name, UpdateSourceTrigger=LostFocus}" Padding="4,3" />

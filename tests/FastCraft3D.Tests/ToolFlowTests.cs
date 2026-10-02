@@ -394,7 +394,7 @@ public class ToolFlowTests
     [Theory]
     [InlineData("mechanism.gear-train", 3)]
     [InlineData("mechanism.planetary", 4)]
-    public void AnAssembledSetGoesDownGroupedIsRemadeGroupedWhereItStandsAndUngroupsIntoItsParts(string id, int atLeast) => WithModel(model =>
+    public void AnAssembledSetGoesDownAsAnAssemblyAndIsRemadeInItWhereItStands(string id, int atLeast) => WithModel(model =>
     {
         var generator = FastCraft3D.Generators.GeneratorRegistry.Find(id)!;
         AnswerPanel(model, "GeneratorInsert", panel =>
@@ -408,28 +408,37 @@ public class ToolFlowTests
             PumpUntil(() => Named<Button>(panel, "GeneratorInsert").IsEnabled);
         });
         model.InsertGeneratedCommand.Execute(generator);
-        PumpUntil(() => model.Scene.Objects.Count == 1 && !model.HasOpenPanel);
+        PumpUntil(() => model.Scene.Objects.Count >= atLeast && !model.HasOpenPanel);
 
-        var set = Assert.Single(model.Scene.Objects);
-        Assert.Equal("(set)", set.Recipe?.Role);
-        set.Position += new Vector3(20, -15, 0);
-        var at = set.Position;
+        // Its parts on their own, in one assembly named for the generator and picked by it.
+        var parts = model.Scene.Objects.ToList();
+        var assembly = parts[0].Assembly;
+        Assert.NotNull(assembly);
+        Assert.All(parts, o => Assert.Same(assembly, o.Assembly));
+        Assert.Equal(generator.Title, assembly!.Name);
+        Assert.DoesNotContain(parts, o => o.Recipe?.Role == "(set)");
+        Assert.Same(assembly, model.SelectedAssembly);
 
-        set.IsSelected = true;
-        model.RefreshSelection();
-        AnswerPanel(model, "GeneratorInsert", () => PumpUntil(() => model.Scene.Objects.Count >= 2));
+        var home = parts[0].Position;
+        foreach (var o in parts) o.Position += new Vector3(20, -15, 0);
+
+        // Made again from the heading, where it stands now, and still in the assembly.
+        AnswerPanel(model, "GeneratorInsert", () => PumpUntil(() => model.Scene.Objects.Count > parts.Count));
         model.EditGeneratedCommand.Execute(null);
-        PumpUntil(() => model.Scene.Objects.Count == 1 && !model.HasOpenPanel);
+        PumpUntil(() => model.Scene.Objects.Count == parts.Count && !model.HasOpenPanel);
 
-        var again = Assert.Single(model.Scene.Objects);
-        Assert.Equal("(set)", again.Recipe?.Role);
-        Assert.Equal(at.X, again.Position.X, 2);
-        Assert.Equal(at.Y, again.Position.Y, 2);
+        var again = model.Scene.Objects.ToList();
+        Assert.DoesNotContain(again, parts.Contains);
+        Assert.All(again, o => Assert.Same(assembly, o.Assembly));
+        Assert.Equal(home.X + 20, again[0].Position.X, 2);
+        Assert.Equal(home.Y - 15, again[0].Position.Y, 2);
 
-        again.IsSelected = true;
+        // And it still goes back to where it was put down.
+        model.Scene.SelectAssembly(assembly);
         model.RefreshSelection();
-        model.UngroupCommand.Execute(null);
-        Assert.True(model.Scene.Objects.Count >= atLeast);
+        model.ReassembleCommand.Execute(null);
+        Assert.Equal(home.X, again[0].Position.X, 2);
+        Assert.Equal(home.Y, again[0].Position.Y, 2);
     });
 
     [Fact]

@@ -99,6 +99,15 @@
     <StreamGeometry x:Key="IconUndo">M9,7 L4,12 L9,17 M4,12 L15,12 A5,5 0 0 1 15,22</StreamGeometry>
     <StreamGeometry x:Key="IconRedo">M15,7 L20,12 L15,17 M20,12 L9,12 A5,5 0 0 0 9,22</StreamGeometry>
 
+    <!-- Selection, beside the objects list -->
+    <StreamGeometry x:Key="IconAssembly">M3,3 L21,3 L21,21 L3,21 Z M6,6 L11,6 L11,11 L6,11 Z M13,6 L18,6 L18,11 L13,11 Z M6,13 L18,13 L18,18 L6,18 Z</StreamGeometry>
+    <StreamGeometry x:Key="IconGroup">M3,3 L15,3 L15,15 L3,15 Z M9,9 L21,9 L21,21 L9,21 Z</StreamGeometry>
+    <StreamGeometry x:Key="IconUngroup">M2,2 L10,2 L10,10 L2,10 Z M14,14 L22,14 L22,22 L14,22 Z</StreamGeometry>
+    <StreamGeometry x:Key="IconSelectAll">M3,3 L21,3 L21,21 L3,21 Z M8,8 L16,8 L16,16 L8,16 Z</StreamGeometry>
+    <StreamGeometry x:Key="IconDeselectAll">M12,3 A9,9 0 1 1 11.9,3 Z</StreamGeometry>
+    <StreamGeometry x:Key="IconInvertSelection">M12,3 A9,9 0 1 1 11.9,3 Z M12,3 L12,21 M12,7 L17,4.5 M12,11 L20.2,6.9 M12,15 L21,10.5 M12,19 L19.5,15.2</StreamGeometry>
+    <StreamGeometry x:Key="IconSticky">M12,3 A9,9 0 1 1 11.9,3 Z M12,7.5 L17,16 L7,16 Z</StreamGeometry>
+
     <!-- Alignment -->
     <StreamGeometry x:Key="IconAlignMin">M3,3 L3,21 M6,6 L18,6 L18,10 L6,10 Z M6,14 L13,14 L13,18 L6,18 Z</StreamGeometry>
     <StreamGeometry x:Key="IconAlignCentre">M12,2 L12,22 M5,6 L19,6 L19,10 L5,10 Z M8,14 L16,14 L16,18 L8,18 Z</StreamGeometry>

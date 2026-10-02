@@ -181,6 +181,8 @@ public partial class MainWindow : Window
         listSync = new SelectionListSync(ObjectList, viewModel.Scene);
         listSync.ChangedFromList += viewModel.RefreshSelection;
         viewModel.SelectionChanged += () => listSync.PushToList();
+        viewModel.RowsRebuilding += listSync.Hold;
+        viewModel.RowsRebuilt += listSync.Release;
 
         gizmo = new GizmoController(GizmoLayer, new Viewport3DXProjector(View), viewModel.Scene, viewModel.Undo);
         gizmo.Feedback += text => viewModel.Status = text;

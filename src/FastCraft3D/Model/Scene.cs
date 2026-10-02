@@ -13,6 +13,87 @@ public sealed class Scene
 
     public ObservableCollection<SceneObject> Objects { get; } = new();
 
+    /// <summary>
+    /// Raised when parts join or leave an assembly. Adding and removing objects is already
+    /// announced by <see cref="Objects"/>; this is for the changes that leave the list as it was.
+    /// </summary>
+    public event Action? AssembliesChanged;
+
+    public void NotifyAssembliesChanged() => AssembliesChanged?.Invoke();
+
+    /// <summary>
+    /// The assemblies with a part on the plate, in the order their first parts are listed. Worked
+    /// out from the parts each time, because that is where membership is kept - an assembly whose
+    /// parts have all been deleted is simply not here, and is back when the delete is undone.
+    /// </summary>
+    public IReadOnlyList<Assembly> Assemblies =>
+        Objects.Select(o => o.Assembly).OfType<Assembly>().Distinct().ToList();
+
+    /// <summary>The parts of an assembly that are on the plate, in list order.</summary>
+    public IReadOnlyList<SceneObject> MembersOf(Assembly assembly) =>
+        Objects.Where(o => o.Assembly == assembly).ToList();
+
+    /// <summary>
+    /// Selects every part of an assembly as one pick, and marks the assembly itself selected.
+    /// Hidden and locked parts stay out of it, as they stay out of every selection.
+    /// </summary>
+    public void SelectAssembly(Assembly assembly)
+    {
+        var members = MembersOf(assembly);
+        SceneObject.PickTogether(members);
+        assembly.IsSelected = members.Any(o => o.IsSelected);
+    }
+
+    /// <summary>Whether every part of it that can be selected is, which an assembly needs to stay selected.</summary>
+    public bool IsWhollySelected(Assembly assembly)
+    {
+        var reachable = MembersOf(assembly).Where(o => o.CanBeSelected).ToList();
+        return reachable.Count > 0 && reachable.All(o => o.IsSelected);
+    }
+
+    /// <summary>
+    /// The selection as the picks that made it, oldest first: one object each, except an assembly
+    /// picked by its name, which is all its parts at once.
+    ///
+    /// For Align, which moves an assembly as one block so its parts keep their places relative to
+    /// each other, and for Subtract, which cuts with every part of an assembly picked last. Parts
+    /// that shared a pick but have since left the assembly count one by one again.
+    /// </summary>
+    public IReadOnlyList<IReadOnlyList<SceneObject>> SelectionInPicks =>
+        Objects.Where(o => o.IsSelected)
+            .GroupBy(o => o.Assembly is null ? (object)o : (o.PickedAt, o.Assembly))
+            .OrderBy(g => g.First().PickedAt)
+            .Select(g => (IReadOnlyList<SceneObject>)g.ToList())
+            .ToList();
+
+    /// <summary>
+    /// The last pick, and what was picked before it: the cutter and what it cuts. With the whole
+    /// selection one pick - an assembly on its own - the last object is the last pick, as it is
+    /// without assemblies.
+    /// </summary>
+    public (IReadOnlyList<SceneObject> Earlier, IReadOnlyList<SceneObject> Last) SplitLastPick()
+    {
+        var picks = SelectionInPicks;
+        if (picks.Count >= 2) return (picks.Take(picks.Count - 1).SelectMany(p => p).ToList(), picks[^1]);
+
+        var picked = SelectionInPickOrder;
+        if (picked.Count == 0) return ([], []);
+        return (picked.Take(picked.Count - 1).ToList(), [picked[^1]]);
+    }
+
+    /// <summary>An assembly name nothing else on the plate has.</summary>
+    public string UniqueAssemblyName(string baseName)
+    {
+        var taken = new HashSet<string>(Assemblies.Select(a => a.Name), StringComparer.OrdinalIgnoreCase);
+        if (!taken.Contains(baseName)) return baseName;
+
+        for (int i = 2; ; i++)
+        {
+            string candidate = $"{baseName} {i}";
+            if (!taken.Contains(candidate)) return candidate;
+        }
+    }
+
     public IReadOnlyList<SceneObject> Selection =>
         Objects.Where(o => o.IsSelected).ToList();
 

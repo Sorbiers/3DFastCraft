@@ -164,7 +164,6 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
     private double snapStep;
     private readonly RecentFiles recent = new();
     private bool stickySelection = true;
-    private bool isSelectionMenuOpen = true;
 
     /// <summary>The last tool-launching command run, and what it was given, for RepeatLastCommand.</summary>
     private System.Windows.Input.ICommand? lastRepeatable;
@@ -196,6 +195,7 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
             Raise(nameof(UndoLabel));
             IsDirty = true;
         };
+        WireAssemblies();
         Scene.Objects.CollectionChanged += (_, _) => RefreshSelection();
         Scene.Objects.CollectionChanged += (_, _) => RaiseHiddenAndLocked();
 
@@ -1460,7 +1460,10 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
         {
             var selection = Scene.Selection;
             if (selection.Count == 0) return $"{Scene.Objects.Count} object(s) on the plate";
-            if (selection.Count > 1) return $"{selection.Count} objects selected";
+            if (selection.Count > 1)
+                return SelectedAssembly is { } assembly && Scene.IsWhollySelected(assembly) && selection.All(o => o.Assembly == assembly)
+                    ? $"{assembly.Name} - {selection.Count} objects selected"
+                    : $"{selection.Count} objects selected";
 
             var o = selection[0];
 
@@ -1504,12 +1507,6 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
         }
     }
 
-    /// <summary>Whether the selection menu on the right of the viewport is expanded.</summary>
-    public bool IsSelectionMenuOpen
-    {
-        get => isSelectionMenuOpen;
-        set => Set(ref isSelectionMenuOpen, value);
-    }
 
     // --- Manipulator state -----------------------------------------------------------
 
@@ -5420,15 +5417,21 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
     {
         get
         {
-            var picked = Scene.SelectionInPickOrder;
-            if (picked.Count < 2)
+            var (targets, cutters) = Scene.SplitLastPick();
+            if (targets.Count == 0)
                 return "Click the parts to cut first, then the cutter last.";
 
-            var targets = string.Join(", ", picked.Take(picked.Count - 1).Select(o => o.Name));
-            return $"Take {picked[^1].Name} away from {targets}. "
-                 + $"{picked.Count - 1} object(s) cut, each kept separate.";
+            var cut = string.Join(", ", targets.Select(o => o.Name));
+            return $"Take {NameOfPick(cutters)} away from {cut}. "
+                 + $"{targets.Count} object(s) cut, each kept separate.";
         }
     }
+
+    /// <summary>One object by its own name; an assembly picked by its name, by that.</summary>
+    private static string NameOfPick(IReadOnlyList<SceneObject> pick) =>
+        pick.Count > 1 && pick[0].Assembly is { } assembly ? $"{assembly.Name} ({pick.Count} parts)"
+        : pick.Count > 0 ? pick[^1].Name
+        : "";
 
     /// <summary>
     /// Stand the pattern off the face rather than cutting it in.
@@ -7476,7 +7479,8 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
     /// <summary>Whether the Align button for this axis and mode has anything to do.</summary>
     private bool CanAlign(object? parameter)
     {
-        int count = Scene.Selection.Count;
+        // By picks: an assembly picked by its name is one thing to line up, however many parts.
+        int count = Scene.SelectionInPicks.Count;
         bool distribute = parameter is string text && text.EndsWith(":Distribute", StringComparison.Ordinal);
         return distribute ? count >= 3 : count >= 1;
     }
@@ -7492,6 +7496,10 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
     /// towards and Subtract cuts with, so which one stays put follows the same rule everywhere in
     /// the app rather than happening to be whichever already sits furthest along the axis. With
     /// one object selected there is nothing else to match, so it lines up on the bed instead.
+    ///
+    /// An assembly picked by its name is one block, on either side: lined up against, it stays
+    /// put and the rest line up with its box; lined up itself, every part moves by the same amount
+    /// and the assembly keeps its shape.
     /// </summary>
     private void Align(object? parameter)
     {
@@ -7501,24 +7509,25 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
         if (!Enum.TryParse<Axis>(parts[0], out var axis)) return;
         if (!Enum.TryParse<AlignMode>(parts[1], out var mode)) return;
 
-        var selection = Scene.SelectionInPickOrder;
-        if (selection.Count == 0) return;
-        if (mode == AlignMode.Distribute && selection.Count < 3) return;
+        var picks = Scene.SelectionInPicks;
+        if (picks.Count == 0) return;
+        if (mode == AlignMode.Distribute && picks.Count < 3) return;
 
+        var selection = picks.SelectMany(p => p).ToList();
         var before = selection.Select(TransformState.Capture).ToList();
-        var offsets = AlignTools.Offsets(selection, axis, mode, PlateBounds);
+        var offsets = AlignTools.BlockOffsets(picks, axis, mode, PlateBounds);
 
-        for (int i = 0; i < selection.Count; i++)
-            selection[i].Position += offsets[i];
+        for (int i = 0; i < picks.Count; i++)
+            foreach (var o in picks[i]) o.Position += offsets[i];
 
         if (TransformCommand.CreateIfChanged($"Align {axis} {mode}", selection, before) is { } command)
         {
             Undo.Execute(command);
             Status = mode switch
             {
-                AlignMode.Distribute => $"Spread {selection.Count} objects evenly along {axis}",
-                _ when selection.Count == 1 => $"Aligned {selection[0].Name} to {mode} on the plate's {axis}",
-                _ => $"Aligned {selection.Count - 1} object(s) to {mode} on {axis}, against {selection[^1].Name}"
+                AlignMode.Distribute => $"Spread {picks.Count} objects evenly along {axis}",
+                _ when picks.Count == 1 => $"Aligned {NameOfPick(picks[0])} to {mode} on the plate's {axis}",
+                _ => $"Aligned {picks.Count - 1} object(s) to {mode} on {axis}, against {NameOfPick(picks[^1])}"
             };
         }
         else
@@ -7866,6 +7875,15 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
     /// </summary>
     private void Ungroup()
     {
+        // With an assembly picked by its name, it is the assembly that comes apart, and its parts
+        // keep their shapes: splitting every part into its pieces as well would be two things at
+        // once, and the assembly's own Ungroup and this one would do different things.
+        if (Scene.Assemblies.Any(a => a.IsSelected))
+        {
+            UngroupAssemblies();
+            return;
+        }
+
         var consumed = new List<SceneObject>();
         var produced = new List<SceneObject>();
 
@@ -7918,9 +7936,12 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
             // by the clearance on the way, so the hole is bigger than the thing that cut it.
             float clearance = op == BooleanOp.Subtract ? subtractTolerance : 0f;
 
-            if (clearance > 0f)
+            // The last pick cuts: one object, or every part of an assembly picked by its name.
+            var (targets, cutters) = Scene.SplitLastPick();
+
+            if (clearance > 0f && op == BooleanOp.Subtract)
             {
-                var awkward = selection[^1].CanTakeClearance ? null : selection[^1];
+                var awkward = cutters.FirstOrDefault(c => !c.CanTakeClearance);
                 if (awkward is not null)
                 {
                     // Not refused outright: growing by axis is only exact on a cube, a cylinder
@@ -7950,7 +7971,7 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
 
             if (op == BooleanOp.Subtract)
             {
-                await SubtractFromEach(selection, clearance, token);
+                await SubtractFromEach(targets, cutters, clearance, token);
                 return;
             }
 
@@ -8020,16 +8041,17 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
     /// Each target comes back as itself. It used to be one boolean folded over the whole
     /// selection, which turned two cubes and a pin into a single object called "Subtract": two
     /// halves of an assembly fused into one thing, and the second cube gone as a part.
+    ///
+    /// An assembly picked last cuts with every one of its parts, one after another. Not as one
+    /// mesh: parts of an assembly touch and overlap, and overlapping pieces handed to the boolean
+    /// as one solid is exactly what tears it.
     /// </summary>
     private async Task SubtractFromEach(
-        IReadOnlyList<SceneObject> selection, float clearance, CancellationToken token)
+        IReadOnlyList<SceneObject> targets, IReadOnlyList<SceneObject> cutters, float clearance, CancellationToken token)
     {
-        var cutter = selection[^1];
-        var targets = selection.Take(selection.Count - 1).ToList();
-
-        // Grown once. Every target is cut by the same tool, and growing it per target would be
-        // the same arithmetic on the same mesh as many times as there are parts.
-        var tool = cutter.ToWorldMeshGrown(clearance);
+        // Grown once. Every target is cut by the same tools, and growing them per target would be
+        // the same arithmetic on the same meshes as many times as there are parts.
+        var tools = cutters.Select(c => c.ToWorldMeshGrown(clearance)).ToList();
         var subjects = targets.Select(o => o.ToWorldMesh()).ToList();
 
         var results = await Task.Run(() =>
@@ -8037,16 +8059,25 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
             var cut = new List<Mesh>(subjects.Count);
             foreach (var subject in subjects)
             {
-                token.ThrowIfCancellationRequested();
+                var worked = subject;
+                foreach (var tool in tools)
+                {
+                    token.ThrowIfCancellationRequested();
+                    if (worked.TriangleCount == 0) break;
 
-                // Locally where the cutter is small: a pin against a scan is a thousandth of it,
-                // and the whole engine would build a tree over the other nine hundred and ninety.
-                var worked = LocalCsg.Apply(subject, tool, BooleanOp.Subtract, token);
+                    // Locally where the cutter is small: a pin against a scan is a thousandth of
+                    // it, and the whole engine would build a tree over the other nine hundred and
+                    // ninety.
+                    worked = LocalCsg.Apply(worked, tool, BooleanOp.Subtract, token);
 
-                // Mended before it is handed over. A boolean splits one polygon without always
-                // splitting the one beside it, which leaves the two sides of an edge disagreeing
-                // about where their corners are - closed to look at, torn as a list of triangles.
-                cut.Add(MeshHealer.Heal(worked, token: token).Mesh);
+                    // Mended before it is handed on. A boolean splits one polygon without always
+                    // splitting the one beside it, which leaves the two sides of an edge
+                    // disagreeing about where their corners are - closed to look at, torn as a
+                    // list of triangles - and the next cut is the one that would trip on it.
+                    worked = MeshHealer.Heal(worked, token: token).Mesh;
+                }
+
+                cut.Add(worked);
             }
 
             return cut;
@@ -8054,6 +8085,7 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
 
         var kept = new List<SceneObject>();
         var swallowed = new List<string>();
+        var successors = new List<(SceneObject From, SceneObject To)>();
 
         for (int i = 0; i < targets.Count; i++)
         {
@@ -8065,12 +8097,15 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
                 continue;
             }
 
-            kept.Add(new SceneObject(targets[i].Name, results[i])
+            var made = new SceneObject(targets[i].Name, results[i])
             {
                 Colour = targets[i].Colour,
                 Origin = targets[i].Origin,
                 PiecesTakeClearance = targets[i].PiecesTakeClearance
-            }.Centred());
+            }.Centred();
+
+            kept.Add(made);
+            successors.Add((targets[i], made));
         }
 
         if (kept.Count == 0)
@@ -8086,10 +8121,12 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
 
         // The cutter is taken off and put back after the results, so it ends up below them in the
         // list. Putting it back without taking it off first listed the same object twice.
-        List<SceneObject> added = subtractKeepsCutter ? [.. kept, cutter] : [.. kept];
-        List<SceneObject> removed = [.. targets, cutter];
+        List<SceneObject> added = subtractKeepsCutter ? [.. kept, .. cutters] : [.. kept];
+        List<SceneObject> removed = [.. targets, .. cutters];
 
-        Undo.Execute(new ReplaceObjectsCommand("Subtract", removed, added));
+        // Each cut part in the place of the one it was cut from: the cutter can be in another
+        // assembly, or in none, and a guess from the whole lot would then put nothing anywhere.
+        Undo.Execute(new ReplaceObjectsCommand("Subtract", removed, added, successors));
         RefreshSelection();
 
         int torn = kept.Count(o => !o.Mesh.CheckHealth().IsWatertight);
@@ -8102,7 +8139,7 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
             ? "all watertight"
             : $"{torn} of {kept.Count} not watertight - Repair may mend them";
 
-        Status = $"Subtract {cutter.Name} from {kept.Count} object(s)"
+        Status = $"Subtract {NameOfPick(cutters)} from {kept.Count} object(s)"
                + $"{tolerance}{keeping}{gone}: {health}";
     }
 
@@ -9560,7 +9597,8 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
             var restored = SceneSerializer.LoadVersion(projectPath, index);
 
             // Routed through undo, so restoring a version is as reversible as anything else.
-            Undo.Execute(new ReplaceObjectsCommand("Restore version", Scene.Objects.ToList(), restored));
+            // The version's parts arrive in its own assemblies, which are not to be guessed at.
+            Undo.Execute(new ReplaceObjectsCommand("Restore version", Scene.Objects.ToList(), restored, carryAssemblies: false));
             RefreshSelection();
             ZoomExtentsRequested?.Invoke();
             Status = $"Restored a version with {restored.Count} object(s) - Ctrl+Z to go back";
@@ -10031,6 +10069,9 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
         // the first one's position. Two objects a plate apart both read the same, and typing a
         // value into a stale box then moved the new object by the old one's numbers.
         RaiseTransformFields();
+
+        // Before the list hears of it, so a heading whose part was just let go of goes dark with it.
+        RefreshAssemblies();
 
         SelectionChanged?.Invoke();
         Raise(nameof(HasAnySelection));
