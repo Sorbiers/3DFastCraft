@@ -87,12 +87,13 @@ public sealed class Hinge : Generator<Hinge.Settings>
             a = Shapes.Union(a, Shapes.RodAlongX(pin, -s.Width / 2f, s.Width / 2f, 0, r));
             b = Shapes.Subtract(b, Shapes.RodAlongX(pin + c, -s.Width / 2f - 1, s.Width / 2f + 1, 0, r));
 
-            // One print, two parts: both stay where they are, already joined.
+            // One print, two parts: both stay where they are, already joined - so put down as an
+            // assembly, picked and moved as the one hinge they print as.
             return new Generated(
             [
                 new GeneratedPart("Hinge leaf A", a, Role: "leaf a", Pivot: new Vector3(0, 0, 0)),
                 new GeneratedPart("Hinge leaf B", b, Role: "leaf b", Pivot: new Vector3(0, 0, 0))
-            ], ["Print both leaves together as they lie. If they come off fused, raise the clearance."]);
+            ], ["Print both leaves together as they lie. If they come off fused, raise the clearance."]) { LaidOut = false };
         }
 
         var bore = Shapes.RodAlongX(pin, -s.Width / 2f - 1, s.Width / 2f + 1, 0, r);

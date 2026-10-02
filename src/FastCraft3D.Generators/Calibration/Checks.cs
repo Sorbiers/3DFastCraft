@@ -66,6 +66,8 @@ public sealed class ClearanceTest : Generator<ClearanceTest.Settings>
         var plate = Shapes.Box(-wide / 2f, -r - 2.5f - label, 0, wide / 2f, r + 2.5f, s.Thickness);
         plate = Shapes.Subtract(plate, [.. holes, .. cuts]);
 
+        // Printed as it stands, the pins in their holes, so put down as an assembly: moved apart
+        // on the plate, the pins would print beside the plate rather than in it.
         return new Generated(
         [
             new GeneratedPart("Clearance plate", plate, Role: "plate"),
@@ -75,7 +77,7 @@ public sealed class ClearanceTest : Generator<ClearanceTest.Settings>
             "Print it as it stands, the pins in their holes. Then push each pin out from below.",
             $"The first that comes free by hand is your clearance: set it as the Printer's clearance in any Library panel (now {printer.XyClearance:0.##} mm).",
             "Pins that turn but will not push out are a gap on the edge: try that one again with a looser step."
-        ]);
+        ]) { LaidOut = false };
     }
 }
 

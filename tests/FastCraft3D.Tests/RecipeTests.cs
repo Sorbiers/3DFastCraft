@@ -216,6 +216,36 @@ public class RecipeTests
         Assert.True(produced[2].WorldBounds.Min.X > produced[1].WorldBounds.Max.X, "the new part is beside the set, not inside it");
         Assert.All(produced, o => Assert.Equal("set", o.Recipe!.Set));
     }
+
+    /// <summary>
+    /// A door made before its glass was a part of its own - one object, turned into its wall -
+    /// made again with glass: the glass goes in the door rather than beside it, both stand turned
+    /// as the door stood, and they are one set from now on.
+    /// </summary>
+    [Fact]
+    public void ADoorThatGainsItsGlassOnAnEditHasItInTheDoorTurnedAsTheDoorWas()
+    {
+        var door = new FastCraft3D.Generators.Buildings.Door();
+        var glazed = door.Default with { Leaf = FastCraft3D.Generators.Buildings.DoorLeaf.Glazed, Panels = 2 };
+        var lone = Assert.Single(door.Make(glazed with { Glass = false }, Printer.Default).Parts);
+
+        var old = new SceneObject("Front door", lone.Mesh) { Recipe = Recipes.For(door, glazed with { Glass = false }, lone.Role) }.CentredOn(lone.Pivot);
+        old.Position = new Vector3(40, -30, 0);
+        old.Rotation = new Vector3(0, 0, 90);
+        var origin = Vector3.Transform(old.Recipe!.Origin, old.Transform);
+
+        var produced = MainViewModel.Remade([old], door, glazed, door.Make(glazed, Printer.Default), () => Vector3.One);
+
+        Assert.Equal(2, produced.Count);
+        var frame = produced[0].WorldBounds;
+        var glass = produced[1].WorldBounds;
+        Assert.All(produced, o => Assert.Equal(new Vector3(0, 0, 90), o.Rotation));
+        Assert.All(produced, o => Assert.Equal(origin, Vector3.Transform(o.Recipe!.Origin, o.Transform)));
+        Assert.True(glass.Min.X >= frame.Min.X - 1e-3f && glass.Max.X <= frame.Max.X + 1e-3f
+                    && glass.Min.Y >= frame.Min.Y - 1e-3f && glass.Max.Y <= frame.Max.Y + 1e-3f, "the glass is not in the door");
+        Assert.NotNull(produced[0].Recipe!.Set);
+        Assert.Equal(produced[0].Recipe!.Set, produced[1].Recipe!.Set);
+    }
 }
 
 /// <summary>The panel's printer section, and the settings that follow it.</summary>

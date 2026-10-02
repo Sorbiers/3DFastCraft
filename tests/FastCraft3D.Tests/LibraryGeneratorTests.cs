@@ -161,23 +161,56 @@ public class LibraryGeneratorTests
         Assert.True(Apart(FastCraft3D.Model.BedPlacement.Clear(size, [big], 200, 200), big));
     }
 
+    /// <summary>The whole of a set as one mesh: a door or a window with its glass in it.</summary>
+    private static Mesh Whole(Generated made) => Mesh.Combine(made.Parts.Select(p => p.Mesh));
+
     [Fact]
-    public void AWindowsGlassComesGroupedWithItsFrameFillingEveryPaneAndUngroupsApart()
+    public void AWindowsGlassIsAPartOfItsOwnInTheFrameFillingEveryPane()
     {
         var window = new FastCraft3D.Generators.Buildings.Window();
         var s = window.Default with { Columns = 3, Rows = 2, GlassThickness = 0.4f, Flat = true };
-        var glazed = Assert.Single(window.Make(s, Printer.Default).Parts);
+        var made = window.Make(s, Printer.Default);
         var bare = Assert.Single(window.Make(s with { Glass = false }, Printer.Default).Parts);
+
+        Assert.Equal(["frame", "glass"], made.Parts.Select(p => p.Role));
+        var glass = made.Parts[1];
+        Assert.Equal(FastCraft3D.Generators.Buildings.Glazing.Filament, glass.Filament);
 
         double panes = FastCraft3D.Generators.Buildings.Window.Panes(s).Sum(p => (p.X1 - p.X0) * (p.Y1 - p.Y0));
         // Within the hair each pane is drawn in by, so as not to share the frame's corners.
-        Assert.InRange(glazed.Mesh.ComputeSignedVolume() - bare.Mesh.ComputeSignedVolume(), panes * 0.4 * 0.97, panes * 0.4);
-        Assert.True(glazed.Mesh.CheckHealth().IsWatertight);
+        Assert.InRange(glass.Mesh.ComputeSignedVolume(), panes * 0.4 * 0.97, panes * 0.4);
+        Assert.Equal(bare.Mesh.ComputeSignedVolume(), made.Parts[0].Mesh.ComputeSignedVolume(), 3);
+        Assert.True(glass.Mesh.CheckHealth().IsWatertight);
 
-        // Ungroup reads the pieces off the mesh: the frame, and one pane of glass in each opening.
-        var pieces = MeshComponents.Split(glazed.Mesh);
-        Assert.Equal(1 + 3 * 2, pieces.Count);
-        Assert.All(pieces.Where(p => p.ComputeBounds().Max.Z < 0.5f), p => Assert.Equal(0f, p.ComputeBounds().Min.Z, 4));
+        // One pane of glass in each opening, lying on the plate at the back of the frame.
+        var pieces = MeshComponents.Split(glass.Mesh);
+        Assert.Equal(3 * 2, pieces.Count);
+        Assert.All(pieces, p => Assert.Equal(0f, p.ComputeBounds().Min.Z, 4));
+    }
+
+    /// <summary>
+    /// The sets whose parts print where they go together - a window or a door and its glass, a
+    /// dormer and its glass, a hinge printed in one, the clearance plate with its pins in it - go
+    /// down as an assembly, not as loose parts nor grouped into one object.
+    /// </summary>
+    [Theory]
+    [InlineData("building.window")]
+    [InlineData("building.door")]
+    [InlineData("building.dormer")]
+    [InlineData("hinge.knuckle")]
+    [InlineData("calibration.clearance")]
+    public void ASetThatPrintsWhereItGoesTogetherGoesDownAsAnAssembly(string id)
+    {
+        var generator = GeneratorRegistry.Find(id)!;
+        var settings = generator.Defaults();
+        if (settings is FastCraft3D.Generators.Buildings.Door.Settings door)
+            settings = door with { Leaf = FastCraft3D.Generators.Buildings.DoorLeaf.Glazed };
+
+        var made = generator.Make(settings, Printer.Default);
+
+        Assert.True(made.Parts.Count > 1, $"{id} made {made.Parts.Count} part");
+        Assert.False(made.LaidOut, $"{id} is laid out as loose parts");
+        Assert.All(made.Parts, p => Assert.True(p.Mesh.CheckHealth().IsWatertight, $"{p.Name} is not closed"));
     }
 
     [Theory]
@@ -254,16 +287,132 @@ public class LibraryGeneratorTests
     {
         var door = new FastCraft3D.Generators.Buildings.Door();
         var s = door.Default with { Leaf = FastCraft3D.Generators.Buildings.DoorLeaf.Glazed, Panels = 3, Glazed = 1, Flat = true };
-        var made = Assert.Single(door.Make(s, Printer.Default).Parts);
+        var made = door.Make(s, Printer.Default);
 
-        // The glass is grouped in with the door, the pieces that lie within its thickness.
-        var glass = Assert.Single(MeshComponents.Split(made.Mesh), p => p.ComputeBounds().Max.Z <= s.GlassThickness + 1e-3f);
+        // The glass is a part of its own, one pane in the top panel.
+        var glass = Assert.Single(MeshComponents.Split(Assert.Single(made.Parts, p => p.Role == "glass").Mesh));
         var top = FastCraft3D.Generators.Buildings.Door.Panels(s)[0];
         var bounds = glass.ComputeBounds();
         Assert.Equal(top.Y0, bounds.Min.Y, 1);
         Assert.Equal(top.Y1, bounds.Max.Y, 1);
 
         Assert.Single(MeshComponents.Split(Assert.Single(door.Make(door.Default, Printer.Default).Parts).Mesh));
+    }
+
+    [Fact]
+    public void ADoorsGlassIsOptionalAndWithoutItTheGlazedPanelsAreOpen()
+    {
+        var door = new FastCraft3D.Generators.Buildings.Door();
+        var s = door.Default with { Leaf = FastCraft3D.Generators.Buildings.DoorLeaf.Glazed, Panels = 3, Glazed = 2, PaneColumns = 2, Flat = true };
+
+        var glazed = Whole(door.Make(s, Printer.Default));
+        var open = Assert.Single(door.Make(s with { Glass = false }, Printer.Default).Parts).Mesh;
+
+        // The door alone, one piece, with the openings where the glass was: the glass is all
+        // that went.
+        Assert.Single(MeshComponents.Split(open));
+        Assert.True(open.CheckHealth().IsWatertight);
+        var panes = MeshComponents.Split(glazed).Where(p => p.ComputeBounds().Max.Z <= s.GlassThickness + 1e-3f).ToList();
+        Assert.Equal(2 * 2, panes.Count);
+        Assert.Equal(glazed.ComputeSignedVolume() - panes.Sum(p => p.ComputeSignedVolume()), open.ComputeSignedVolume(), 2);
+    }
+
+    /// <summary>
+    /// The glass can be as thick as the leaf is deep and no thicker - the old limit of 2 mm had
+    /// nothing to do with the door it was in.
+    /// </summary>
+    [Fact]
+    public void ADoorsGlassIsLimitedByTheLeafNotByTwoMillimetres()
+    {
+        var door = new FastCraft3D.Generators.Buildings.Door();
+        var s = door.Default with { Depth = 6f, SetBack = 0.5f, Leaf = FastCraft3D.Generators.Buildings.DoorLeaf.Glazed, Panels = 2, Flat = true };
+
+        var thick = door.Make(s with { GlassThickness = 5.5f }, Printer.Default);
+        Assert.False(thick.IsRefused, thick.Refusal);
+        var pane = Assert.Single(MeshComponents.Split(Assert.Single(thick.Parts, p => p.Role == "glass").Mesh));
+        Assert.Equal(5.5f, pane.ComputeBounds().Max.Z, 3);
+
+        Assert.True(door.Make(s with { GlassThickness = 5.6f }, Printer.Default).IsRefused);
+    }
+
+    /// <summary>
+    /// The back is flat: panes lie in their openings flush with the back of the door, or as one
+    /// clear sheet across the whole back with the door standing on it - which closes the gap
+    /// between two leaves as well.
+    /// </summary>
+    [Theory]
+    [InlineData(FastCraft3D.Generators.Buildings.DoorGlass.Panes)]
+    [InlineData(FastCraft3D.Generators.Buildings.DoorGlass.Sheet)]
+    public void ADoorsBackIsFlatWithItsGlassOnIt(FastCraft3D.Generators.Buildings.DoorGlass glassAs)
+    {
+        var door = new FastCraft3D.Generators.Buildings.Door();
+        var s = door.Default with
+        {
+            Type = FastCraft3D.Generators.Buildings.DoorType.French, Width = 18, Leaves = 2,
+            Leaf = FastCraft3D.Generators.Buildings.DoorLeaf.Glazed, Panels = 1, Glazed = 1, PaneColumns = 2, PaneRows = 3,
+            GlassAs = glassAs, GlassThickness = 0.6f, Flat = true
+        };
+        var made = Whole(door.Make(s, Printer.Default));
+        Assert.True(made.CheckHealth().IsWatertight, made.CheckHealth().Describe());
+
+        var pieces = MeshComponents.Split(made);
+        var glass = pieces.Where(p => p.ComputeBounds().Max.Z <= 0.6f + 1e-3f).ToList();
+        Assert.All(glass, p => Assert.Equal(0f, p.ComputeBounds().Min.Z, 4));
+
+        if (glassAs == FastCraft3D.Generators.Buildings.DoorGlass.Panes)
+        {
+            // Two leaves of six panes each, and the door on the plate beside them.
+            Assert.Equal(2 * 2 * 3, glass.Count);
+            Assert.Equal(0f, pieces.Except(glass).Min(p => p.ComputeBounds().Min.Z), 4);
+            return;
+        }
+
+        // One sheet the size of the door, and the door standing on it a hair clear.
+        var sheet = Assert.Single(glass);
+        var body = Assert.Single(pieces.Except(glass));
+        Assert.Equal(18f, sheet.ComputeBounds().Size.X, 1);
+        Assert.Equal(s.Height, sheet.ComputeBounds().Size.Y, 1);
+        Assert.InRange(body.ComputeBounds().Min.Z, 0.6f, 0.6f + 0.02f);
+        Assert.Equal(s.Depth, body.ComputeBounds().Max.Z, 3);
+    }
+
+    [Theory]
+    [InlineData(0f)]
+    [InlineData(2.5f)]
+    public void AnArchedDoorIsTheSquareOneWithItsTopCornersRoundedOff(float rise)
+    {
+        var door = new FastCraft3D.Generators.Buildings.Door();
+        var square = door.Default with { Leaf = FastCraft3D.Generators.Buildings.DoorLeaf.Glazed, Panels = 3, Glazed = 1, PaneColumns = 2, PaneRows = 2, Flat = true };
+        var arched = square with { Shape = FastCraft3D.Generators.Buildings.DoorShape.Arched, Rise = rise };
+
+        var made = door.Make(arched, Printer.Default);
+        Assert.False(made.IsRefused, made.Refusal);
+        var mesh = Whole(made);
+        Assert.True(mesh.CheckHealth().IsWatertight, mesh.CheckHealth().Describe());
+
+        // As tall as asked at its crown, and nothing standing at its top corners.
+        var bounds = mesh.ComputeBounds();
+        Assert.Equal(square.Height, bounds.Size.Y, 2);
+        Assert.DoesNotContain(mesh.Positions, p => MathF.Abs(p.X) > square.Width / 2f - 0.5f && p.Y > square.Height - 0.5f);
+
+        // A round arch takes more off than a shallow one, and both less than the whole top.
+        double cut = Whole(door.Make(square, Printer.Default)).ComputeSignedVolume() - mesh.ComputeSignedVolume();
+        float w = square.Width / 2f;
+        Assert.True(cut > 0.05 * w * w * square.Depth, $"only {cut:0.0} mm3 came off");
+
+        // The top panel follows the arch round, inside the frame and the rail.
+        var top = FastCraft3D.Generators.Buildings.Door.Panels(arched)[0];
+        Assert.True(top.Y1 < square.Height - square.Frame - 0.5f);
+    }
+
+    [Fact]
+    public void AnArchRisingPastHalfTheWidthIsRefused()
+    {
+        var door = new FastCraft3D.Generators.Buildings.Door();
+        var made = door.Make(door.Default with { Shape = FastCraft3D.Generators.Buildings.DoorShape.Arched, Width = 11, Rise = 6 }, Printer.Default);
+
+        Assert.True(made.IsRefused);
+        Assert.Contains("half the door's width", made.Refusal);
     }
 
     [Fact]

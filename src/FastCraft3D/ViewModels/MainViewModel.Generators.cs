@@ -360,6 +360,14 @@ public sealed partial class MainViewModel
             : Remade(members, generator, settings, result, NextAutomaticColour);
         foreach (var o in produced.Where(o => members.All(m => m.Name != o.Name))) o.Name = Scene.UniqueName(o.Name);
 
+        // One part on its own that comes back as a set put down together - a door from before its
+        // glass was a part of its own - is an assembly from now on, as it would be inserted.
+        if (!grouped && members is [{ Assembly: null }] && produced.Count > 1 && InOne(result))
+        {
+            var assembly = new Assembly(Scene.UniqueAssemblyName(generator.Title));
+            foreach (var o in produced) Membership.AtHome(assembly, o).ApplyTo(o);
+        }
+
         Undo.Execute(new ReplaceObjectsCommand($"Edit {generator.Title.ToLowerInvariant()}", members, produced));
         RefreshSelection();
         Status = produced.Count == 1 ? $"Made {produced[0].Name} again with the new settings" : $"Made the {produced.Count} parts of the set again";
@@ -720,7 +728,9 @@ public sealed partial class MainViewModel
         var unused = members.ToList();
         var produced = new List<SceneObject>();
         var loose = new List<SceneObject>();
-        string? set = members.Select(m => m.Recipe?.Set).FirstOrDefault(s => s is not null);
+        // A part that was alone and comes back as several is a set from now on.
+        string? set = members.Select(m => m.Recipe?.Set).FirstOrDefault(s => s is not null)
+                      ?? (made.Parts.Count > 1 ? Guid.NewGuid().ToString("N") : null);
 
         // A set put down as it goes together is made again the same way, and moved as one: every
         // part's origin is the set's, so one place for it keeps the lot together. Each put where
@@ -734,7 +744,10 @@ public sealed partial class MainViewModel
             var part = made.Parts[i];
             var old = unused.FirstOrDefault(m => m.Recipe?.Role == part.Role)
                       ?? (part.Role is null && unused.Count > 0 ? unused[0] : null);
-            var at = made.LaidOut ? null : part.Assembled;
+            // Put down together, a part with nowhere else to go goes where it prints: a window's
+            // glass, in its frame. Taken as laid out instead, a part the set gained went beside
+            // the rest - the glass of a door made before it was a part of its own, on its edit.
+            Matrix4x4? at = made.LaidOut ? null : part.Assembled ?? Matrix4x4.Identity;
 
             var o = new SceneObject(old?.Name ?? part.Name, at is { } m ? MeshTransform.Transformed(part.Mesh, m) : part.Mesh)
             {
@@ -758,7 +771,14 @@ public sealed partial class MainViewModel
                     o.IsLocked = old.IsLocked;
                 }
 
-                if (together is { } origin) Keep(o, o.Recipe!.Origin, origin);
+                if (together is { } origin)
+                {
+                    // Turned and sized as the set stood, every part alike, so it comes back
+                    // together and facing the way it faced - a door turned into its wall.
+                    o.Rotation = first!.Rotation;
+                    o.Scale = first.Scale;
+                    Keep(o, o.Recipe!.Origin, origin);
+                }
                 else loose.Add(o);
             }
             else if (old is not null)

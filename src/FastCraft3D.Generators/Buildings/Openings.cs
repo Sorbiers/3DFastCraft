@@ -65,33 +65,26 @@ internal static class Glazing
         : "Shown standing, as it goes in the wall. Tick Lay flat to print it on its back, which prints it best.";
 
     /// <summary>
-    /// The glass put in with what it glazes as one object, as Group does: the shells side by side
-    /// and not fused, so Ungroup takes the glass out again. Grouped because a window whose glass
-    /// was a loose object ended up scattered across the plate, and a window printed flat gets its
-    /// clear glass from one filament change after the glass's layers anyway.
+    /// What it glazes and its glass, put down as an assembly: each a part of its own, the glass on
+    /// its clear filament, standing where it goes and picked and moved with the frame by the
+    /// assembly's name.
+    ///
+    /// Grouped into the frame's one object, as they were first, the glass could not be given a
+    /// filament of its own without taking the group apart for good; and before that, put down
+    /// loose, a window's glass ended up scattered across the plate.
     /// </summary>
-    public static List<GeneratedPart> Grouped(List<GeneratedPart> parts)
-    {
-        if (parts.FirstOrDefault(p => p.Role == "glass") is not { } glass || parts.Count < 2) return parts;
+    public static Generated Assembled(List<GeneratedPart> parts, List<string> notes) => new(parts, notes) { LaidOut = false };
 
-        var glazed = parts[0];
-        return [glazed with { Mesh = Mesh.Combine([glazed.Mesh, glass.Mesh]) }, .. parts.Skip(1).Where(p => !ReferenceEquals(p, glass))];
-    }
-
-    /// <param name="grouped">The glass is in the frame's object (see <see cref="Grouped"/>), not a part of its own.</param>
     /// <param name="flat">Printed lying down, so the glass is the bottom layers.</param>
-    public static List<string> Notes(float thickness, Printer printer, bool grouped = false, bool flat = true)
+    public static List<string> Notes(float thickness, Printer printer, bool flat = false)
     {
         int layers = Math.Max(1, (int)MathF.Round(thickness / printer.Layer));
         var notes = new List<string>
         {
-            !grouped
-                ? $"The glass is its own part on filament {Filament}: print it in a clear filament, "
-                  + $"or pause after its {layers} layers to change to one."
-                : flat
-                    ? $"The glass is grouped with the frame and is its first {layers} layers: print those in a clear "
-                      + "filament and change to the frame's after them, or Ungroup to give the glass a filament of its own."
-                    : "The glass is grouped with the frame. Ungroup to give it a clear filament of its own."
+            flat
+                ? $"The glass is a part of its own, on filament {Filament}, and the first {layers} layers: print it in a "
+                  + "clear filament on a printer with two, or print those layers in one and change to the frame's after them."
+                : $"The glass is a part of its own, on filament {Filament}: print it in a clear filament."
         };
 
         if (thickness < 2 * printer.Layer)
@@ -130,6 +123,28 @@ internal static class Glazing
     }
 
     public static float Area(List<Vector2> outline) => outline.Count < 3 ? 0 : MathF.Abs(Polygon2.SignedArea(outline));
+
+    /// <summary>
+    /// A convex outline drawn in by <paramref name="by"/> all round, every side moved in square to
+    /// itself: the frame inside a frame. Empty when there is nothing left.
+    /// </summary>
+    public static List<Vector2> Inset(List<Vector2> outline, float by)
+    {
+        float turn = Polygon2.SignedArea(outline) >= 0 ? 1f : -1f;
+        var kept = outline;
+
+        for (int i = 0; i < outline.Count && kept.Count >= 3; i++)
+        {
+            var p = outline[i];
+            var along = outline[(i + 1) % outline.Count] - p;
+            if (along.LengthSquared() < 1e-12f) continue;
+
+            var outward = Vector2.Normalize(new Vector2(along.Y, -along.X)) * turn;
+            kept = Clip(kept, outward, by - Vector2.Dot(outward, p));
+        }
+
+        return kept.Count >= 3 ? kept : [];
+    }
 
     /// <summary>An arc about <paramref name="centre"/>, from one angle to another, anticlockwise.</summary>
     public static IEnumerable<Vector2> Arc(Vector2 centre, float radius, float from, float to)
@@ -370,11 +385,11 @@ public sealed class Window : Generator<Window.Settings>
         if (s.Glass)
         {
             parts.Add(new GeneratedPart("Glass", Mesh.Combine(glass), Role: "glass") { Filament = Glazing.Filament, Colour = Glazing.Colour });
-            notes.AddRange(Glazing.Notes(s.GlassThickness, printer, grouped: true, flat: false));
+            notes.AddRange(Glazing.Notes(s.GlassThickness, printer));
         }
 
         notes.Add($"Stands {reach:0.#} mm out from the wall, open at the back: set it against the wall and Merge.");
-        return new Generated(Glazing.Grouped(parts), notes);
+        return Glazing.Assembled(parts, notes);
     }
 
     protected override Generated Build(Settings s, Printer printer, CancellationToken token)
@@ -400,11 +415,11 @@ public sealed class Window : Generator<Window.Settings>
         if (s.Glass)
         {
             parts.Add(Glazing.Panes(panes, s.GlassThickness));
-            notes.AddRange(Glazing.Notes(s.GlassThickness, printer, grouped: true, s.Flat));
+            notes.AddRange(Glazing.Notes(s.GlassThickness, printer, s.Flat));
         }
 
         notes.Add(Glazing.Printing(s.Flat));
-        return new Generated(Glazing.Stood(Glazing.Grouped(parts), s.Flat), notes);
+        return Glazing.Assembled(Glazing.Stood(parts, s.Flat), notes);
     }
 
     protected override IEnumerable<string> Describe(Settings s, float modelScale)
@@ -447,11 +462,23 @@ public enum DoorLeaf
     [ShownAs("Glazed at the top")] Glazed
 }
 
+public enum DoorShape
+{
+    Rectangular,
+    [ShownAs("Arched top")] Arched
+}
+
+public enum DoorGlass
+{
+    [ShownAs("Panes in the openings")] Panes,
+    [ShownAs("One sheet across the back")] Sheet
+}
+
 /// <summary>
-/// A door for a model house: a frame round the top and sides, the leaf in it - or two, for a
-/// double or French door - plain or with panels sunk in its face, glass in its top panels if
-/// wanted, divided by glazing bars, and split across the middle for a Dutch door. One part with
-/// the glass apart, printed lying on its back as the window is.
+/// A door for a model house: a frame round the top and sides, square or arched, the leaf in it -
+/// or two, for a double or French door - plain or with panels sunk in its face, glass in its top
+/// panels if wanted, divided by glazing bars, and split across the middle for a Dutch door. The
+/// door and its glass an assembly, printed lying on its back as the window is.
 /// </summary>
 public sealed class Door : Generator<Door.Settings>
 {
@@ -460,7 +487,7 @@ public sealed class Door : Generator<Door.Settings>
     public override string Category => "Buildings";
     public override string Title => "Door";
     public override bool IsBeta => false;
-    public override string Summary => "A door in its frame - single, double, French or Dutch - plain, panelled or glazed, with glass to print in clear filament.";
+    public override string Summary => "A door in its frame - single, double, French or Dutch, square or arched - plain, panelled or glazed, with glass to print in clear filament.";
 
     /// <summary>Its height runs up it standing and front to back laid flat to print.</summary>
     public override SizeAxis SizeAxisOf(object settings, GeneratorParameter parameter) =>
@@ -469,6 +496,8 @@ public sealed class Door : Generator<Door.Settings>
     public sealed record Settings(
         [Length("Width", 3, 200, Group = "Size", Hint = "Outside the frame, as the model is drawn", Size = SizeAxis.X)] float Width = 11f,
         [Length("Height", 5, 250, Group = "Size", Hint = "From the floor to the top of the frame", Size = SizeAxis.Z)] float Height = 25f,
+        [Choice("Shape", Group = "Size")] DoorShape Shape = DoorShape.Rectangular,
+        [Length("Arch rise", 0, 100, Group = "Size", Hint = "How far the arch rises above its sides: nought or half the width for a round arch, less for a shallow one"), ShowWhen(nameof(Shape), DoorShape.Arched)] float Rise = 0f,
         [Length("Frame", 0.4, 10, Group = "Frame", Hint = "How wide the frame is, seen from the front")] float Frame = 0.8f,
         [Length("Depth", 0.6, 20, Group = "Frame", Hint = "How deep the frame is, into the wall")] float Depth = 1.6f,
         [Length("Leaf set back", 0, 5, Group = "Frame", Hint = "How far the door itself sits back from the frame's face")] float SetBack = 0.4f,
@@ -476,7 +505,6 @@ public sealed class Door : Generator<Door.Settings>
         [Count("Panels", 1, 6, Group = "Leaf", Hint = "One above another"), ShowWhen(nameof(Leaf), DoorLeaf.Panelled, DoorLeaf.Glazed)] int Panels = 4,
         [Count("Glazed panels", 1, 6, Group = "Leaf", Hint = "Counted from the top"), ShowWhen(nameof(Leaf), DoorLeaf.Glazed)] int Glazed = 1,
         [Length("Panel recess", 0.1, 2, Group = "Leaf", Hint = "How deep the panels are sunk into the leaf's face"), ShowWhen(nameof(Leaf), DoorLeaf.Panelled, DoorLeaf.Glazed)] float Recess = 0.3f,
-        [Length("Glass thickness", 0.1, 2, Group = "Leaf", Hint = "Two or three layers"), ShowWhen(nameof(Leaf), DoorLeaf.Glazed)] float GlassThickness = 0.4f,
         [Count("Leaves", 1, 2, Group = "Leaf", Hint = "Two for a double or a French door")] int Leaves = 1,
         [Toggle("Split", Group = "Leaf", Hint = "A Dutch door: the top half opens on its own")] bool Split = false,
         [Count("Panes across", 1, 4, Group = "Leaf", Hint = "Glazing bars in each glazed panel"), ShowWhen(nameof(Leaf), DoorLeaf.Glazed)] int PaneColumns = 1,
@@ -485,18 +513,103 @@ public sealed class Door : Generator<Door.Settings>
         [Toggle("Lay flat to print", Hint = "On its back, the glass on the plate: how it prints best")] bool Flat = false,
         [Count("Sidelights", 0, 2, Group = "Surround", Hint = "Fixed glazed panels beside the door: one on the left, or one each side")] int Sidelights = 0,
         [Length("Sidelight width", 1, 100, Group = "Surround")] float SidelightWidth = 4f,
-        [Length("Transom", 0, 100, Group = "Surround", Hint = "A fixed glazed panel over the door, this tall. Nought for none.")] float Transom = 0f);
+        [Length("Transom", 0, 100, Group = "Surround", Hint = "A fixed glazed panel over the door, this tall - under an arch, the fanlight. Nought for none.")] float Transom = 0f,
+        [Toggle("Glass", Group = "Glass", Hint = "Off for the openings alone: the glazed panels, sidelights and transom left open")] bool Glass = true,
+        [Choice("Glass as", Group = "Glass", Hint = "Panes in the openings, flush with the back of the door; or one clear sheet the whole back of the door, the door standing on it")] DoorGlass GlassAs = DoorGlass.Panes,
+        [Length("Glass thickness", 0.1, 20, Group = "Glass", Hint = "Two or three layers is usual; as deep as the leaf at the most")] float GlassThickness = 0.4f);
 
-    protected override bool Shows(Settings s, string parameter) => parameter != nameof(Settings.SidelightWidth) || s.Sidelights > 0;
+    protected override bool Shows(Settings s, string parameter) => parameter switch
+    {
+        nameof(Settings.SidelightWidth) => s.Sidelights > 0,
+        nameof(Settings.Glass) => Glazes(s),
+        nameof(Settings.GlassAs) or nameof(Settings.GlassThickness) => Glazes(s) && s.Glass,
+        _ => true
+    };
+
+    /// <summary>Whether there is anything to glaze: glazed panels, a sidelight or a transom.</summary>
+    private static bool Glazes(Settings s) => s.Leaf == DoorLeaf.Glazed || s.Sidelights > 0 || s.Transom > 0;
+
+    /// <summary>Whether the glass is one sheet across the back rather than a pane in each opening.</summary>
+    private static bool Sheet(Settings s) => Glazes(s) && s.Glass && s.GlassAs == DoorGlass.Sheet;
 
     /// <summary>
     /// Where the door itself is, inside the frame, the sidelights and the transom: its left and
-    /// right, and the top of the leaf.
+    /// right, and the top of the leaf - its crown, under an arch.
     /// </summary>
     private static (float Left, float Right, float Top) Opening(Settings s)
     {
         float w = s.Width / 2f, f = s.Frame, side = s.Sidelights > 0 ? s.SidelightWidth + f : 0f;
         return (-w + f + side, w - f - (s.Sidelights == 2 ? side : 0f), s.Height - f - (s.Transom > 0 ? s.Transom + f : 0f));
+    }
+
+    /// <summary>How far the arch rises above its sides: as asked, or half the width for a round one.</summary>
+    private static float RiseOf(Settings s) => s.Rise <= 0f ? s.Width / 2f : MathF.Min(s.Rise, s.Width / 2f);
+
+    /// <summary>The circle the outside of the arch is on: the height of its centre, and its radius.</summary>
+    private static (float Centre, float Radius) ArchCircle(Settings s)
+    {
+        float w = s.Width / 2f, rise = RiseOf(s);
+        float radius = (w * w + rise * rise) / (2f * rise);
+        return (s.Height - radius, radius);
+    }
+
+    /// <summary>The outside of the frame, convex.</summary>
+    private static List<Vector2> Outside(Settings s)
+    {
+        float w = s.Width / 2f;
+        if (s.Shape != DoorShape.Arched) return Shapes.Rect(-w, 0, w, s.Height);
+
+        var (centre, radius) = ArchCircle(s);
+        float side = MathF.Atan2(s.Height - RiseOf(s) - centre, w);
+        return [new(-w, 0), new(w, 0), .. Crowned(centre, radius, side)];
+    }
+
+    /// <summary>
+    /// The arch from one side over to the other, with a corner at its crown. Drawn in one sweep,
+    /// an odd number of sides put a flat across the top and the door came out short of its height.
+    /// </summary>
+    private static IEnumerable<Vector2> Crowned(float centre, float radius, float side) =>
+        Glazing.Arc(new Vector2(0, centre), radius, side, MathF.PI / 2f)
+            .Concat(Glazing.Arc(new Vector2(0, centre), radius, MathF.PI / 2f, MathF.PI - side).Skip(1));
+
+    /// <summary>
+    /// The inside of the frame, run on below the floor so that whatever is cut out of it opens at
+    /// the bottom. Convex, and under an arch concentric with the outside, so the frame is as wide
+    /// round the arch as up the sides. Everything inside the frame - the leaves, their panels and
+    /// panes, the sidelights, the transom - is a rectangle cut down to this, which is all an arch
+    /// asks of any of them.
+    /// </summary>
+    private static List<Vector2> Inside(Settings s)
+    {
+        float w = s.Width / 2f - s.Frame;
+        if (s.Shape != DoorShape.Arched) return Shapes.Rect(-w, -1f, w, s.Height - s.Frame);
+
+        var (centre, radius) = ArchCircle(s);
+        float inner = radius - s.Frame;
+        float side = MathF.Atan2(MathF.Sqrt(MathF.Max(inner * inner - w * w, 0f)), w);
+        return [new(-w, -1f), new(w, -1f), .. Crowned(centre, inner, side)];
+    }
+
+    /// <summary>Where the leaves go: between the sidelights, up to the transom or into the arch.</summary>
+    private static List<Vector2> Doorway(Settings s)
+    {
+        var (left, right, top) = Opening(s);
+        return Glazing.Within(Inside(s), left, -1f, right, s.Transom > 0 ? top : float.MaxValue);
+    }
+
+    /// <summary>One leaf, from the floor up.</summary>
+    private static List<Vector2> LeafOf(Settings s, int leaf)
+    {
+        var (left, right, _) = Opening(s);
+        float each = (right - left) / s.Leaves, from = left + leaf * each;
+        return Glazing.Within(Doorway(s), from, 0f, from + each, float.MaxValue);
+    }
+
+    /// <summary>Stiles and rails a little wider than the frame, as a real door's are.</summary>
+    private static float Stile(Settings s)
+    {
+        var (left, right, _) = Opening(s);
+        return MathF.Max(s.Frame, 0.14f * (right - left) / s.Leaves);
     }
 
     /// <summary>What each type of door is, filled in when it is chosen.</summary>
@@ -524,132 +637,187 @@ public sealed class Door : Generator<Door.Settings>
         ("Double width, glazed", Default with { Width = 18, Leaf = DoorLeaf.Glazed, Panels = 3, Glazed = 2 }),
         ("French doors", Default with { Type = DoorType.French, Width = 18, Leaves = 2, Leaf = DoorLeaf.Glazed, Panels = 1, Glazed = 1, PaneColumns = 2, PaneRows = 4 }),
         ("Dutch door", Default with { Type = DoorType.Dutch, Leaf = DoorLeaf.Glazed, Panels = 2, Glazed = 1, Split = true, PaneColumns = 2, PaneRows = 3, SetBack = 0.8f }),
-        ("Entrance, sidelights and transom", Default with { Width = 22, Height = 30, Sidelights = 2, SidelightWidth = 3.5f, Transom = 3.5f, Leaf = DoorLeaf.Glazed, Panels = 1, Glazed = 1, PaneColumns = 2, PaneRows = 4 })
+        ("Entrance, sidelights and transom", Default with { Width = 22, Height = 30, Sidelights = 2, SidelightWidth = 3.5f, Transom = 3.5f, Leaf = DoorLeaf.Glazed, Panels = 1, Glazed = 1, PaneColumns = 2, PaneRows = 4 }),
+        ("Arched, three panels", Default with { Shape = DoorShape.Arched, Panels = 3 }),
+        ("Arched, fanlight over", Default with { Shape = DoorShape.Arched, Width = 16, Height = 30, Transom = 6.4f, Leaf = DoorLeaf.Panelled, Panels = 3 }),
+        ("Shallow arch, glazed", Default with { Shape = DoorShape.Arched, Rise = 2.5f, Width = 14, Leaf = DoorLeaf.Glazed, Panels = 2, Glazed = 1, PaneColumns = 2, PaneRows = 2 })
     ];
 
-    /// <summary>The first leaf's panels, top first: X from left to right, Y from the floor up.</summary>
-    internal static List<(float X0, float Y0, float X1, float Y1)> Panels(Settings s) => PanelsOf(s, 0);
+    /// <summary>The first leaf's panels, top first, each as the box round it: X from left to right, Y from the floor up.</summary>
+    internal static List<(float X0, float Y0, float X1, float Y1)> Panels(Settings s) => PanelOutlines(s, 0).Select(Box).ToList();
 
-    private static List<(float X0, float Y0, float X1, float Y1)> PanelsOf(Settings s, int leaf)
+    private static (float X0, float Y0, float X1, float Y1) Box(List<Vector2> outline) =>
+        (outline.Min(p => p.X), outline.Min(p => p.Y), outline.Max(p => p.X), outline.Max(p => p.Y));
+
+    /// <summary>
+    /// A leaf's panels, top first: its face inside the stiles and rails, in bands one above
+    /// another with a rail between each. Under an arch the top one follows it round.
+    /// </summary>
+    private static List<List<Vector2>> PanelOutlines(Settings s, int leaf)
     {
-        var (left, right, leafTop) = Opening(s);
-        float each = (right - left) / s.Leaves;
-        float leafLeft = left + leaf * each, leafRight = leafLeft + each;
+        float stile = Stile(s);
+        var face = Glazing.Inset(LeafOf(s, leaf), stile);
+        if (face.Count < 3) return [];
 
-        // Stiles and rails a little wider than the frame, as a real door's are.
-        float stile = MathF.Max(s.Frame, 0.14f * each);
-        float tall = (leafTop - (s.Panels + 1) * stile) / s.Panels;
+        var (x0, y0, x1, y1) = Box(face);
+        float tall = (y1 - y0 - (s.Panels - 1) * stile) / s.Panels;
+        if (tall <= 0) return [];
 
         return Enumerable.Range(0, s.Panels)
-            .Select(i => (leafLeft + stile, leafTop - stile - (i + 1) * tall - i * stile, leafRight - stile, leafTop - stile - i * tall - i * stile))
+            .Select(i => Glazing.Within(face, x0, y1 - (i + 1) * tall - i * stile, x1, y1 - i * tall - i * stile))
             .ToList();
     }
 
-    /// <summary>A glazed panel cut into its panes by glazing bars.</summary>
-    private static List<(float X0, float Y0, float X1, float Y1)> PanesOf(Settings s, (float X0, float Y0, float X1, float Y1) p)
+    private static float Bar(Settings s) => MathF.Max(0.3f, s.Frame * 0.4f);
+
+    /// <summary>
+    /// A glazed panel cut into its panes by glazing bars. Under an arch a pane in the corner can be
+    /// cut down to a sliver; one too small to print is left as bar instead.
+    /// </summary>
+    private static List<List<Vector2>> PanesOf(Settings s, List<Vector2> panel)
     {
-        float bar = MathF.Max(0.3f, s.Frame * 0.4f);
-        float wide = (p.X1 - p.X0 - (s.PaneColumns - 1) * bar) / s.PaneColumns;
-        float tall = (p.Y1 - p.Y0 - (s.PaneRows - 1) * bar) / s.PaneRows;
-        var panes = new List<(float, float, float, float)>();
+        var (x0, y0, x1, y1) = Box(panel);
+        float bar = Bar(s);
+        float wide = (x1 - x0 - (s.PaneColumns - 1) * bar) / s.PaneColumns;
+        float tall = (y1 - y0 - (s.PaneRows - 1) * bar) / s.PaneRows;
+
+        var panes = new List<List<Vector2>>();
         for (int c = 0; c < s.PaneColumns; c++)
             for (int r = 0; r < s.PaneRows; r++)
             {
-                float x = p.X0 + c * (wide + bar), y = p.Y0 + r * (tall + bar);
-                panes.Add((x, y, x + wide, y + tall));
+                float x = x0 + c * (wide + bar), y = y0 + r * (tall + bar);
+                var pane = Glazing.Within(panel, x, y, x + wide, y + tall);
+                if (Glazing.Area(pane) >= LeastPane) panes.Add(pane);
             }
 
         return panes;
     }
 
+    /// <summary>A quarter of a square millimeter: smaller, a pane is a pinhole with a hair of glass in it.</summary>
+    private const float LeastPane = 0.25f;
+
     protected override IEnumerable<string> Check(Settings s, Printer printer)
     {
+        if (s.Shape == DoorShape.Arched)
+        {
+            if (s.Rise > s.Width / 2f + 1e-3f)
+                yield return "An arch rises at most half the door's width - that is a round arch.";
+            else if (s.Height - RiseOf(s) < 2 * s.Frame + 2)
+                yield return "Too low for its arch: the arch would come down to the floor.";
+        }
+
         var (openLeft, openRight, openTop) = Opening(s);
         if (openRight - openLeft < 1.5f * s.Leaves) yield return "The frame and sidelights leave no room for the door.";
         if (openTop < 5f) yield return "The transom leaves no room for the door under it.";
         if (s.SetBack >= s.Depth - 0.3f) yield return "The leaf is set back as far as the frame is deep.";
 
+        float leaf = s.Depth - s.SetBack;
+        bool sheet = Sheet(s);
+
+        // A sheet of glass under the whole door takes its thickness off the back of the leaf.
+        float under = sheet ? s.GlassThickness + Glazing.Hair : 0f;
+
         if (s.Leaf != DoorLeaf.Plain)
         {
-            var panel = Panels(s)[0];
-            if (panel.X1 - panel.X0 < 0.5f || panel.Y1 - panel.Y0 < 0.5f)
+            var panels = PanelOutlines(s, 0);
+            if (panels.Count < s.Panels || panels.Select(Box).Any(p => p.X1 - p.X0 < 0.5f || p.Y1 - p.Y0 < 0.5f))
                 yield return "The panels would be under half a millimeter. Fewer of them, or a bigger door.";
-            if (s.Recess >= s.Depth - s.SetBack - 0.2f) yield return "The panels are sunk through the leaf.";
+            else if (s.Leaf == DoorLeaf.Glazed && s.Glazed <= s.Panels)
+            {
+                var (x0, y0, x1, y1) = Box(panels[0]);
+                if ((x1 - x0 - (s.PaneColumns - 1) * Bar(s)) / s.PaneColumns < 0.5f || (y1 - y0 - (s.PaneRows - 1) * Bar(s)) / s.PaneRows < 0.5f)
+                    yield return "The glazing bars leave panes under half a millimeter. Fewer panes, or a bigger door.";
+            }
+
+            if (s.Recess >= leaf - under - 0.2f)
+                yield return sheet ? "The panels are sunk through to the glass behind them." : "The panels are sunk through the leaf.";
         }
 
-        if (s.Leaf == DoorLeaf.Glazed)
+        if (s.Leaf == DoorLeaf.Glazed && s.Glazed > s.Panels) yield return $"Only {s.Panels} panels to glaze.";
+
+        // As thick as the leaf is deep at the most - a pane standing proud of the leaf's face is
+        // not glass in a door - and a sheet has to leave the leaf something to stand on it with.
+        if (Glazes(s) && s.Glass)
         {
-            if (s.Glazed > s.Panels) yield return $"Only {s.Panels} panels to glaze.";
-            else if (PanesOf(s, Panels(s)[0]).Any(p => p.X1 - p.X0 < 0.5f || p.Y1 - p.Y0 < 0.5f))
-                yield return "The glazing bars leave panes under half a millimeter. Fewer panes, or a bigger door.";
-            if (s.GlassThickness >= s.Depth - s.SetBack) yield return "The glass is as thick as the leaf.";
+            if (sheet && s.GlassThickness > leaf - 0.2f)
+                yield return $"The glass sheet leaves the leaf nothing to stand on: it is {leaf:0.##} mm deep.";
+            else if (!sheet && s.GlassThickness > (s.Leaf == DoorLeaf.Glazed ? leaf : s.Depth) + 1e-3f)
+                yield return $"The glass is thicker than the {(s.Leaf == DoorLeaf.Glazed ? "leaf" : "frame")} is deep.";
         }
     }
 
     protected override Generated Build(Settings s, Printer printer, CancellationToken token)
     {
-        float w = s.Width / 2f, f = s.Frame, h = s.Height;
+        float w = s.Width / 2f, f = s.Frame;
         var (left, right, top) = Opening(s);
         float leafDepth = s.Depth - s.SetBack;
+        var inside = Inside(s);
+        var doorway = Doorway(s);
 
         // One block, cut: the door's opening down to the leaf, set back in it; the sidelights and
         // the transom right through, with the frame round them - so the fixed parts stand flush
         // with the frame and the leaf that opens stands back behind them.
-        var cuts = new List<Mesh> { Shapes.Box(left, -1, leafDepth, right, top, s.Depth + 1) };
-        var glass = new List<(float X0, float Y0, float X1, float Y1)>();
+        var cuts = new List<Mesh> { Shapes.Prism(doorway, leafDepth, s.Depth + 1) };
+        var lights = new List<List<Vector2>>();
 
-        void Fixed(float x0, float y0, float x1, float y1)
+        void Through(List<Vector2> outline, float to)
         {
-            cuts.Add(Shapes.Box(x0, y0, -1, x1, y1, s.Depth + 1));
-            glass.Add((x0, y0, x1, y1));
+            if (outline.Count < 3) return;
+            cuts.Add(Shapes.Prism(outline, -1, to));
+            lights.Add(outline);
         }
 
-        if (s.Sidelights > 0) Fixed(-w + f, f, -w + f + s.SidelightWidth, top);
-        if (s.Sidelights == 2) Fixed(w - f - s.SidelightWidth, f, w - f, top);
-        if (s.Transom > 0) Fixed(-w + f, top + f, w - f, h - f);
+        // Without a transom, up into the arch; with one, up to it.
+        float besideTop = s.Transom > 0 ? top : float.MaxValue;
+        if (s.Sidelights > 0) Through(Glazing.Within(inside, -w + f, f, -w + f + s.SidelightWidth, besideTop), s.Depth + 1);
+        if (s.Sidelights == 2) Through(Glazing.Within(inside, w - f - s.SidelightWidth, f, w - f, besideTop), s.Depth + 1);
+        if (s.Transom > 0) Through(Glazing.Within(inside, -w + f, top + f, w - f, float.MaxValue), s.Depth + 1);
 
         for (int l = 0; l < s.Leaves; l++)
         {
-            var panels = s.Leaf == DoorLeaf.Plain ? [] : PanelsOf(s, l);
-            var glazed = s.Leaf == DoorLeaf.Glazed ? panels.Take(s.Glazed).ToList() : [];
+            var panels = s.Leaf == DoorLeaf.Plain ? [] : PanelOutlines(s, l);
+            int glazed = s.Leaf == DoorLeaf.Glazed ? Math.Min(s.Glazed, panels.Count) : 0;
 
-            foreach (var p in panels.Skip(glazed.Count))
-                cuts.Add(Shapes.Box(p.X0, p.Y0, leafDepth - s.Recess, p.X1, p.Y1, leafDepth + 1));
-            foreach (var pane in glazed.SelectMany(p => PanesOf(s, p)))
-            {
-                cuts.Add(Shapes.Box(pane.X0, pane.Y0, -1, pane.X1, pane.Y1, leafDepth + 1));
-                glass.Add(pane);
-            }
+            foreach (var p in panels.Skip(glazed))
+                cuts.Add(Shapes.Prism(p, leafDepth - s.Recess, leafDepth + 1));
+            foreach (var pane in panels.Take(glazed).SelectMany(p => PanesOf(s, p)))
+                Through(pane, leafDepth + 1);
         }
 
         // Where two leaves meet, and where a Dutch door's halves do: a gap right through, as a
         // real door has, each part held by the frame. A groove in the face was tried first and
         // could not be seen - it was no deeper than the panels, and ran through them.
         float gap = MathF.Max(0.4f, f * 0.4f), middle = (left + right) / 2f;
-        if (s.Leaves == 2) cuts.Add(Shapes.Box(middle - gap / 2f, -1, -1, middle + gap / 2f, top, leafDepth + 1));
+        if (s.Leaves == 2)
+            cuts.Add(Shapes.Prism(Glazing.Within(doorway, middle - gap / 2f, -1, middle + gap / 2f, float.MaxValue), -1, leafDepth + 1));
         if (s.Split)
         {
             // On the rail between two panels nearest the middle, so it does not cut across a panel.
             float mid = top / 2f;
-            var panels = s.Leaf == DoorLeaf.Plain ? [] : PanelsOf(s, 0);
+            var panels = s.Leaf == DoorLeaf.Plain ? [] : PanelOutlines(s, 0).Select(Box).ToList();
             if (panels.Count > 1)
                 mid = Enumerable.Range(0, panels.Count - 1).Select(i => (panels[i].Y0 + panels[i + 1].Y1) / 2f).MinBy(y => MathF.Abs(y - mid));
-            cuts.Add(Shapes.Box(left, mid - gap / 2f, -1, right, mid + gap / 2f, leafDepth + 1));
+            cuts.Add(Shapes.Prism(Glazing.Within(doorway, left, mid - gap / 2f, right, mid + gap / 2f), -1, leafDepth + 1));
         }
 
         token.ThrowIfCancellationRequested();
-        var door = Shapes.Subtract(Shapes.Box(-w, 0, 0, w, h, s.Depth), cuts);
+
+        // On a sheet of glass the door stands a hair clear of it, for the reason a pane stands a
+        // hair in from its frame: touching, the two would share a face, and in one file or one
+        // group that is not a solid. See Glazing.Hair.
+        bool glass = Glazes(s) && s.Glass && lights.Count > 0, sheet = glass && Sheet(s);
+        var door = Shapes.Subtract(Shapes.Prism(Outside(s), sheet ? s.GlassThickness + Glazing.Hair : 0f, s.Depth), cuts);
 
         var parts = new List<GeneratedPart> { new("Door", door, Role: "door") };
         var notes = new List<string>();
-        if (glass.Count > 0)
+        if (glass)
         {
-            parts.Add(Glazing.Panes(glass.Select(Glazing.Rect), s.GlassThickness));
-            notes.AddRange(Glazing.Notes(s.GlassThickness, printer, grouped: true, s.Flat));
+            parts.Add(Glazing.Panes(sheet ? [Outside(s)] : lights, s.GlassThickness));
+            notes.AddRange(Glazing.Notes(s.GlassThickness, printer, s.Flat));
         }
 
         notes.Add(Glazing.Printing(s.Flat));
-        return new Generated(Glazing.Stood(Glazing.Grouped(parts), s.Flat), notes);
+        return Glazing.Assembled(Glazing.Stood(parts, s.Flat), notes);
     }
 
     protected override IEnumerable<string> Describe(Settings s, float modelScale)
