@@ -1784,7 +1784,7 @@
                              that size a stamp and lay it out have nothing to say about one. -->
                         <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
                             <TextBlock Text="Texture" Style="{StaticResource FieldLabel}" Width="62"
-                                       ToolTip="Cover the whole face with a pattern. Flat patterns - knurling, ribs, honeycomb, pips, checker plate, brick, tile - wrap around with no seam. Shaped ones - roof tiles, boards, lap siding - stand proud by Depth." />
+                                       ToolTip="Cover the whole face with a pattern. Flat patterns - knurling, ribs, honeycomb, pips, checker plate, brick, tile - wrap around with no seam. Shaped ones - roof tiles, boards, lap siding, rubble and castle walling, bark, wood grain - stand proud by Depth. Wrapped round a barrel, the stone, bark and grain go the whole way round with no seam." />
                             <ComboBox Width="130" ItemsSource="{Binding EmbossTextures}"
                                       SelectedItem="{Binding EmbossTexture, Mode=TwoWay}"
                                       AutomationProperties.AutomationId="EmbossTexture" />
@@ -1793,7 +1793,7 @@
                         <StackPanel Visibility="{Binding UsesTexture, Converter={StaticResource BoolToVisibility}}">
                             <StackPanel Orientation="Horizontal" Margin="0,0,0,2">
                                 <TextBlock Text="Pitch" Style="{StaticResource FieldLabel}" Width="62"
-                                           ToolTip="Center to center of one cell and the next, or the length of a brick, tile or board. Knurling on a knob: 1-2 mm; a grip for gloved hands: 3 mm or more." />
+                                           ToolTip="Center to center of one cell and the next, or the length of a brick, tile or board. For rubble the width of a stone, for castle walling its length, for bark the width of a plate, for wood grain the gap between the lines. Knurling on a knob: 1-2 mm; a grip for gloved hands: 3 mm or more." />
                                 <TextBox AutomationProperties.AutomationId="EmbossTexturePitch" Width="64" Style="{StaticResource NumberBox}" Tag="number"
                                          Text="{Binding EmbossTexturePitch, StringFormat=N2, UpdateSourceTrigger=LostFocus, Converter={StaticResource Length}}" />
                                 <TextBlock Text="{Binding DataContext.UnitLabel, RelativeSource={RelativeSource AncestorType=Window}}" Foreground="#FF9AA0A8" VerticalAlignment="Center" />
@@ -1801,7 +1801,7 @@
 
                             <StackPanel Orientation="Horizontal" Margin="0,0,0,2">
                                 <TextBlock Text="Groove" Style="{StaticResource FieldLabel}" Width="62"
-                                           ToolTip="The gap left between one cell and the next, or the joint between two bricks. Under a nozzle width it closes up as it prints." />
+                                           ToolTip="The gap left between one cell and the next, or the joint between two bricks - or two stones, the fissures in bark, the grooves of a wood grain. Under a nozzle width it closes up as it prints." />
                                 <TextBox AutomationProperties.AutomationId="EmbossTextureLine" Width="64" Style="{StaticResource NumberBox}" Tag="number"
                                          Text="{Binding EmbossTextureLine, StringFormat=N2, UpdateSourceTrigger=LostFocus, Converter={StaticResource Length}}" />
                                 <TextBlock Text="{Binding DataContext.UnitLabel, RelativeSource={RelativeSource AncestorType=Window}}" Foreground="#FF9AA0A8" VerticalAlignment="Center" />
@@ -1819,7 +1819,7 @@
                             <StackPanel Orientation="Horizontal" Margin="0,0,0,2"
                                         Visibility="{Binding TextureHasCourses, Converter={StaticResource BoolToVisibility}}">
                                 <TextBlock Text="Courses" Style="{StaticResource FieldLabel}" Width="62"
-                                           ToolTip="How many times longer each piece is than it is deep. A brick is about three, a wall tile one, a roof tile one and a half, a floorboard eight or more." />
+                                           ToolTip="How many times longer each piece is than it is deep. A brick is about three, a wall tile one, a roof tile one and a half, a floorboard eight or more; rubble about 1.3, castle walling 2.2, a plate of bark 6." />
                                 <TextBox AutomationProperties.AutomationId="EmbossTextureAspect" Width="64" Style="{StaticResource NumberBox}" Tag="number"
                                          Text="{Binding EmbossTextureAspect, StringFormat=N1, UpdateSourceTrigger=LostFocus}" />
                                 <TextBlock Text="to 1" Foreground="#FF9AA0A8" VerticalAlignment="Center" />
@@ -1846,7 +1846,7 @@
                             <CheckBox Content="Run the other way" IsChecked="{Binding EmbossTextureAcross, Mode=TwoWay}"
                                       AutomationProperties.AutomationId="EmbossTextureAcross" Margin="0,2,0,6"
                                       Visibility="{Binding TextureRuns, Converter={StaticResource BoolToVisibility}}"
-                                      ToolTip="Turn ribs and boards the other way. Brick and tile courses always stay level." />
+                                      ToolTip="Turn ribs, bark and wood grain the other way. Brick, tile and stone courses always stay level." />
                         </StackPanel>
 
                         <StackPanel Orientation="Horizontal" Margin="0,0,0,2"

@@ -2730,8 +2730,8 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
 
             if (Profile(coarse: false) is { } relief)
             {
-                var (wide, tall) = FaceRoom();
-                var cost = ReliefField.Cost(relief, MathF.Max(wide, 0.01f), MathF.Max(tall, 0.01f));
+                var (wide, tall, round) = FieldExtent();
+                var cost = ReliefField.Cost(relief, MathF.Max(wide, 0.01f), MathF.Max(tall, 0.01f), round);
 
                 if (cost.Refusal is { } why) return why;
 
@@ -3053,9 +3053,9 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
             {
                 // Whatever the panel would have said, said here too, so the reason lands in the one
                 // place somebody looks after pressing a button that appeared to do nothing.
-                var (wide, tall) = FaceRoom();
+                var (wide, tall, round) = FieldExtent();
                 var cost = !embossTexture.IsLaid && Profile(coarse: false) is { } relief
-                    ? ReliefField.Cost(relief, MathF.Max(wide, 0.01f), MathF.Max(tall, 0.01f))
+                    ? ReliefField.Cost(relief, MathF.Max(wide, 0.01f), MathF.Max(tall, 0.01f), round)
                     : default;
 
                 Status = cost.Refusal
@@ -3437,7 +3437,7 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
         TextureKind.None, TextureKind.Knurl, TextureKind.Ribs,
         TextureKind.Hex, TextureKind.Dots, TextureKind.Tread,
         TextureKind.Brick, TextureKind.RoofTiles, TextureKind.Tiles, TextureKind.Planks,
-        TextureKind.Siding
+        TextureKind.Siding, TextureKind.Rubble, TextureKind.Castle, TextureKind.Bark, TextureKind.Grain
     ];
 
     /// <summary>
@@ -3455,8 +3455,39 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
     /// </param>
     private IRelief? Profile(bool coarse) =>
         embossTexture.IsProfiled
-            ? SurfaceTexture.ProfileOf(embossTexture, embossDepth, coarse ? 1.2f : 0.4f)
+            ? SurfaceTexture.ProfileOf(embossTexture, embossDepth, coarse ? 1.2f : 0.4f, RingMm())
             : null;
+
+    /// <summary>
+    /// The way round the part, when a shaped texture is wrapped round it as a ring; nought
+    /// otherwise. The field is then told it, so it repeats exactly on it and closes on itself
+    /// with no seam - the stones, bark and grain only, which are the fields that know how.
+    /// </summary>
+    private float RingMm()
+    {
+        if (embossFace is null || embossProjection != TextProjection.Cylindrical || !embossTexture.Rings)
+            return 0f;
+
+        var axis = new Vector2(embossBounds.Center.X, embossBounds.Center.Y);
+        float radius = (new Vector2(embossPick.X, embossPick.Y) - axis).Length();
+
+        // The same test EmbossSurface makes before it gives up on the barrel for the face.
+        return radius < 0.05f ? 0f : MathF.Tau * radius;
+    }
+
+    /// <summary>
+    /// The rectangle a shaped texture is laid over, and whether it is a ring: the whole way round
+    /// the part, rather than the way round less the strip a flat face keeps clear at its edges.
+    /// That strip is what the seam was - a field a whole circumference wide less a margin leaves
+    /// the margin as a slot down the barrel where the two ends stop short of each other.
+    /// </summary>
+    private (float Wide, float Tall, bool Round) FieldExtent()
+    {
+        var (wide, tall) = FieldRoom();
+        float ring = RingMm();
+
+        return ring > 0f && tall > 0.01f ? (ring, tall, true) : (wide, tall, false);
+    }
 
     /// <summary>Whether the texture in hand is one with a shape rather than an outline.</summary>
     public bool UsesProfile => embossTexture.IsProfiled;
@@ -3469,8 +3500,8 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
     /// </param>
     private Mesh? ProfiledSolid(IPlacementSurface surface, bool coarse, bool sunk = false)
     {
-        // Tiles and siding are built as the slabs they are. Only boarding is still a sampled
-        // field, because only its grain is genuinely a height that changes everywhere.
+        // Tiles and siding are built as the slabs they are. Boarding, stone, bark and grain are
+        // sampled fields, because each of them is genuinely a height that changes everywhere.
         if (SurfaceTexture.CoursesOf(embossTexture, embossDepth) is { } courses)
         {
             var (across, up, room) = TileField(surface, sunk);
@@ -3484,11 +3515,11 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
                     surface, courses, across, up, sunk, room, embossPlacement.OffsetMm);
         }
 
-        var (wide, tall) = FieldRoom();
+        var (wide, tall, round) = FieldExtent();
         if (wide <= 0.01f || tall <= 0.01f) return null;
 
         return Profile(coarse) is { } relief
-            ? ReliefField.Build(surface, relief, wide, tall, sunk)
+            ? ReliefField.Build(surface, relief, wide, tall, sunk, round)
             : null;
     }
 

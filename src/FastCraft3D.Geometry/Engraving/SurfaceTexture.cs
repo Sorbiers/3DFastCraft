@@ -42,7 +42,25 @@ public enum TextureKind
     Planks,
 
     /// <summary>Lap siding: strips the whole way across, each sloping out and stepping back.</summary>
-    Siding
+    Siding,
+
+    /// <summary>
+    /// Rubble walling: rounded stones of every size and shape set in mortar, as a field wall or a
+    /// cottage is built.
+    /// </summary>
+    Rubble,
+
+    /// <summary>
+    /// Castle walling: squared, rock-faced stones in courses of uneven height, each stone its own
+    /// length, some split into two thin ones.
+    /// </summary>
+    Castle,
+
+    /// <summary>Tree bark: long plates split by deep wandering fissures, streaked and pitted.</summary>
+    Bark,
+
+    /// <summary>Wood grain: rounded bands between fine grooves, swirling round knots.</summary>
+    Grain
 }
 
 /// <param name="Kind">Which texture.</param>
@@ -99,8 +117,13 @@ public readonly record struct TextureOptions(
 
     public bool IsOn => Kind != TextureKind.None;
 
-    /// <summary>Patterns made of pieces with joints between them, rather than of lines on a surface.</summary>
-    public bool IsMasonry => Kind is TextureKind.Brick or TextureKind.Tiles;
+    /// <summary>
+    /// Patterns made of pieces with joints between them, rather than of lines on a surface. They
+    /// arrive raised, and their pieces have proportions to argue about. Bark is one: its plates
+    /// are pieces as much as a wall's stones are, and sunk it is a mould of bark.
+    /// </summary>
+    public bool IsMasonry => Kind is TextureKind.Brick or TextureKind.Tiles
+        or TextureKind.Rubble or TextureKind.Castle or TextureKind.Bark;
 
     /// <summary>
     /// Patterns with a shape to them rather than an outline: a lap, a slope, a grain. They are
@@ -108,7 +131,16 @@ public readonly record struct TextureOptions(
     /// flat pads, which is the only way any of those three can be said at all.
     /// </summary>
     public bool IsProfiled =>
-        Kind is TextureKind.RoofTiles or TextureKind.Planks or TextureKind.Siding;
+        Kind is TextureKind.RoofTiles or TextureKind.Planks or TextureKind.Siding
+            or TextureKind.Rubble or TextureKind.Castle or TextureKind.Bark or TextureKind.Grain;
+
+    /// <summary>
+    /// The fields that can be built as a ring round a barrel, with no seam at all. They are told
+    /// the way round and repeat exactly on it. Boarding is not one of them yet: its board ends and
+    /// its grain are not fitted to the way round, so it is still laid as a sheet with two ends.
+    /// </summary>
+    public bool Rings =>
+        Kind is TextureKind.Rubble or TextureKind.Castle or TextureKind.Bark or TextureKind.Grain;
 
     /// <summary>
     /// The ones built as slabs rather than sampled as a field.
@@ -123,7 +155,7 @@ public readonly record struct TextureOptions(
     /// Whether running it the other way means anything. Vertical boarding is real; a roof laid in
     /// vertical columns is not a roof.
     /// </summary>
-    public bool Turns => Kind is TextureKind.Ribs;
+    public bool Turns => Kind is TextureKind.Ribs or TextureKind.Bark or TextureKind.Grain;
 
     /// <summary>The proportions to use, with zero meaning whatever the pattern normally is.</summary>
     public float Courses => Aspect <= 0 ? Usual(Kind) : Math.Clamp(Aspect, LeastAspect, MostAspect);
@@ -139,6 +171,9 @@ public readonly record struct TextureOptions(
         TextureKind.RoofTiles => 1.5f,
         TextureKind.Tiles => 1f,
         TextureKind.Planks => 8f,
+        TextureKind.Rubble => 1.3f,
+        TextureKind.Castle => 2.2f,
+        TextureKind.Bark => 6f,
         _ => 3f
     };
 
@@ -217,17 +252,33 @@ public static class SurfaceTexture
                               Stagger: true, Ends: true);
     }
 
-    public static IRelief? ProfileOf(TextureOptions options, float depthMm, float nozzleMm = 0.4f)
+    /// <param name="aroundMm">
+    /// The way round a barrel, for a field built as a ring: it repeats exactly on it, so the ring
+    /// closes with no seam. Nought on a flat face. Only <see cref="TextureOptions.Rings"/> take
+    /// any notice of it.
+    /// </param>
+    public static IRelief? ProfileOf(
+        TextureOptions options, float depthMm, float nozzleMm = 0.4f, float aroundMm = 0f)
     {
         var o = options.Sane();
         float depth = MathF.Max(depthMm, 0.1f);
         float course = MathF.Max(o.PitchMm / MathF.Max(o.Courses, 0.2f), TextureOptions.LeastPadMm);
+        float around = o.Rings ? MathF.Max(aroundMm, 0f) : 0f;
 
         return o.Kind switch
         {
             // Tiles and siding are not here: they are slabs, built by TileSolid.
             TextureKind.Planks =>
                 new SurfaceProfiles.Boarding(course, depth, o.LineMm, nozzleMm, o.PitchMm),
+            TextureKind.Rubble =>
+                new SurfaceProfiles.Rubble(o.PitchMm, o.Courses, depth, o.LineMm, nozzleMm, around),
+            TextureKind.Castle =>
+                new SurfaceProfiles.Castle(o.PitchMm, o.Courses, depth, o.LineMm, nozzleMm, around),
+            TextureKind.Bark =>
+                new SurfaceProfiles.Bark(o.PitchMm, o.PitchMm * o.Courses, depth, o.LineMm, nozzleMm,
+                                         o.Across, around),
+            TextureKind.Grain =>
+                new SurfaceProfiles.Grain(o.PitchMm, depth, o.LineMm, nozzleMm, o.Across, around),
             _ => null
         };
     }

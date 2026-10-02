@@ -51,6 +51,21 @@ public interface IPlacementSurface
     /// lettering was refused rather than applied.
     /// </summary>
     float ClearanceMm { get; }
+
+    /// <summary>
+    /// How far the object's own surface stands proud of where <see cref="At"/> puts height
+    /// nought, and how far it falls short of it - the corners and the flats of a many-sided barrel
+    /// laid on as a smooth one. Nought for a face, which is exactly where it says it is.
+    ///
+    /// A texture field has to clear the one and stay inside the other. Laid a hair off the smooth
+    /// barrel, grain round a 60 mm barrel of 32 sides had the bottoms of its grooves crossing the
+    /// barrel's corners, which stand a tenth of a millimetre proud of it, and the union fell
+    /// back to the slow engine and came back torn after nearly three minutes.
+    /// </summary>
+    float ProudMm => 0f;
+
+    /// <inheritdoc cref="ProudMm"/>
+    float ShortMm => 0f;
 }
 
 /// <summary>The gap measured for any surface, from nothing but where it puts three points.</summary>
@@ -123,6 +138,10 @@ public sealed class CylinderSurface(
     public float Sag(Vector2 from, Vector2 to) => SurfaceSag.Of(this, from, to);
 
     public float ClearanceMm => SurfaceSag.ClearanceFor(radius);
+
+    public float ProudMm => profile?.ProudMm ?? 0f;
+
+    public float ShortMm => profile?.ShortMm ?? 0f;
 }
 
 /// <summary>

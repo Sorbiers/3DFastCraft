@@ -48,6 +48,14 @@ public static class ReliefField
     /// </summary>
     public const float SinkMm = 0.3f;
 
+    /// <summary>
+    /// The most a field is lifted clear of an object that strays from the smooth surface it is
+    /// laid on. A barrel of a few dozen sides strays by a few hundredths of a millimetre, a tenth on
+    /// a big one; a figure much past this is a handle or a box, and clearing it would float the
+    /// whole field.
+    /// </summary>
+    public const float MostStrayMm = 0.4f;
+
     /// <summary>Past this the result is more triangles than the rest of the model put together.</summary>
     public const long HeavyTriangles = 400_000;
 
@@ -69,16 +77,19 @@ public static class ReliefField
     }
 
     /// <summary>The samples a profile comes to over this face, and what it costs in triangles.</summary>
-    public static ReliefCost Cost(IRelief relief, float acrossMm, float upMm)
+    /// <param name="round">Whether it is built as a ring - see <see cref="Build"/>.</param>
+    public static ReliefCost Cost(IRelief relief, float acrossMm, float upMm, bool round = false)
     {
-        var us = Trimmed(relief.Across(acrossMm), acrossMm);
+        var us = Columns(relief, acrossMm, round);
         var vs = Trimmed(relief.Up(upMm), upMm);
 
-        long quads = (long)(us.Length - 1) * (vs.Length - 1);
-        long triangles = 2 * (2 * quads + 2 * (us.Length - 1) + 2 * (vs.Length - 1));
+        // A ring has a quad more in every row, joining the last column to the first, and no ends.
+        long spans = round ? us.Length : us.Length - 1;
+        long quads = spans * (vs.Length - 1);
+        long triangles = 2 * (2 * quads + 2 * spans + (round ? 0 : 2 * (vs.Length - 1)));
 
         string? refusal =
-            us.Length < 2 || vs.Length < 2
+            us.Length < Fewest(round) || vs.Length < 2
                 ? "The face is smaller than one course of this - try a finer pitch."
             : us.Length > MostSamples || vs.Length > MostSamples
                 ? $"This is too fine for a face of that size: it wants "
@@ -110,20 +121,47 @@ public static class ReliefField
     /// third of a millimetre deep with no pattern in it whatsoever. From the outside: a Cut that
     /// left the object looking untouched.
     /// </param>
+    /// <param name="round">
+    /// Whether the field goes the whole way round a barrel and meets itself. The last column is
+    /// then joined to the first instead of being closed off with a wall, so there is no seam at
+    /// all: no join to line up, no pair of end walls standing face to face where the two ends
+    /// meet. The profile has to repeat exactly every <paramref name="acrossMm"/> for that to be a
+    /// smooth join, which the stone, bark and grain fields do when they are told the way round.
+    ///
+    /// A wrapped field used to be a flat one laid over the way round less the strip a face keeps
+    /// clear at its edges, so it stopped short of itself by that strip and ended in two walls
+    /// facing each other across it: a slot down the barrel, with a field either side of it that
+    /// did not match.
+    /// </param>
     public static Mesh Build(
-        IPlacementSurface surface, IRelief relief, float acrossMm, float upMm, bool sunk = false)
+        IPlacementSurface surface, IRelief relief, float acrossMm, float upMm, bool sunk = false,
+        bool round = false)
     {
-        var us = Trimmed(relief.Across(acrossMm), acrossMm);
+        var us = Columns(relief, acrossMm, round);
         var vs = Trimmed(relief.Up(upMm), upMm);
 
         // Refused rather than quietly empty. The caller asks Cost first and shows the reason; this
         // is only the backstop for anything that did not.
-        if (us.Length < 2 || vs.Length < 2) return new Mesh();
+        if (us.Length < Fewest(round) || vs.Length < 2) return new Mesh();
         if (us.Length > MostSamples || vs.Length > MostSamples) return new Mesh();
 
         int w = us.Length, h = vs.Length;
+        int spans = round ? w : w - 1;
         var positions = new List<Vector3>(2 * w * h);
         var indices = new List<int>();
+
+        // Clear of the object's own surface either side, wherever it strays from the smooth one
+        // the field is laid on - see IPlacementSurface.ProudMm. Held to a sensible figure: past
+        // it the object is not a barrel, and nothing laid round it will clear it anyway.
+        float proud = Math.Clamp(surface.ProudMm, 0f, MostStrayMm);
+        float short_ = Math.Clamp(surface.ShortMm, 0f, MostStrayMm);
+        float face = sunk ? -BiteMm - short_ : BiteMm + proud;
+        float back = sunk ? SinkMm + proud : -SinkMm - short_;
+
+        var stands = new float[w * h];
+        for (int j = 0; j < h; j++)
+            for (int i = 0; i < w; i++)
+                stands[j * w + i] = MathF.Max(relief.Height(new Vector2(us[i], vs[j])), 0f);
 
         // The face first and the back second, so the two are a fixed distance apart in the list and
         // an index into one is an index into the other.
@@ -131,14 +169,16 @@ public static class ReliefField
             for (int j = 0; j < h; j++)
                 for (int i = 0; i < w; i++)
                 {
-                    var at = new Vector2(us[i], vs[j]);
-                    float stands = MathF.Max(relief.Height(at), 0f);
-
+                    // Raised, lifted the same hair a cut is sunk. A profile comes down to nothing
+                    // at every joint of a wall and every groove of a grain, and laid there flush
+                    // with the face, castle walling and bark on a 60 mm cube fell off Manifold onto
+                    // the slow engine - ten and seventeen seconds, half a million triangles, and
+                    // not closed at the end of it.
                     float out_ = pass == 0
-                        ? (sunk ? -stands - BiteMm : stands)
-                        : (sunk ? SinkMm : -SinkMm);
+                        ? face + (sunk ? -stands[j * w + i] : stands[j * w + i])
+                        : back;
 
-                    positions.Add(surface.At(at, out_));
+                    positions.Add(surface.At(new Vector2(us[i], vs[j]), out_));
                 }
 
         int Face(int i, int j) => j * w + i;
@@ -157,25 +197,41 @@ public static class ReliefField
             Triangle(a, c, d);
         }
 
+        // A quad of the face is split along whichever diagonal runs with the relief - the one whose
+        // two ends are nearer the same height. Split the same way every time, a joint or a groove
+        // running across the grid the other way was cut into a saw edge, every quad it crossed
+        // folded against it: a wall of rubble came back with half its joints serrated.
+        void Facet(int a, int b, int c, int d)
+        {
+            if (MathF.Abs(stands[a] - stands[c]) <= MathF.Abs(stands[b] - stands[d]))
+                Quad(a, b, c, d);
+            else
+                Quad(b, c, d, a);
+        }
+
+        // The column after the last is the first, round a barrel.
+        int Next(int i) => (i + 1) % w;
+
         for (int j = 0; j + 1 < h; j++)
-            for (int i = 0; i + 1 < w; i++)
+            for (int i = 0; i < spans; i++)
             {
                 // The back wound the other way round from the face, so the two look outwards.
-                Quad(Face(i, j), Face(i + 1, j), Face(i + 1, j + 1), Face(i, j + 1));
-                Quad(Back(i, j), Back(i, j + 1), Back(i + 1, j + 1), Back(i + 1, j));
+                Facet(Face(i, j), Face(Next(i), j), Face(Next(i), j + 1), Face(i, j + 1));
+                Quad(Back(i, j), Back(i, j + 1), Back(Next(i), j + 1), Back(Next(i), j));
             }
 
-        for (int i = 0; i + 1 < w; i++)
+        for (int i = 0; i < spans; i++)
         {
-            Quad(Face(i, 0), Back(i, 0), Back(i + 1, 0), Face(i + 1, 0));
-            Quad(Face(i, h - 1), Face(i + 1, h - 1), Back(i + 1, h - 1), Back(i, h - 1));
+            Quad(Face(i, 0), Back(i, 0), Back(Next(i), 0), Face(Next(i), 0));
+            Quad(Face(i, h - 1), Face(Next(i), h - 1), Back(Next(i), h - 1), Back(i, h - 1));
         }
 
-        for (int j = 0; j + 1 < h; j++)
-        {
-            Quad(Face(0, j), Face(0, j + 1), Back(0, j + 1), Back(0, j));
-            Quad(Face(w - 1, j), Back(w - 1, j), Back(w - 1, j + 1), Face(w - 1, j + 1));
-        }
+        if (!round)
+            for (int j = 0; j + 1 < h; j++)
+            {
+                Quad(Face(0, j), Face(0, j + 1), Back(0, j + 1), Back(0, j));
+                Quad(Face(w - 1, j), Back(w - 1, j), Back(w - 1, j + 1), Face(w - 1, j + 1));
+            }
 
         // Sunk, the field is the mirror of the raised one about the face, and a mirrored solid is
         // inside out - which a boolean reads as the whole of space except the cutter. Turning every
@@ -185,6 +241,19 @@ public static class ReliefField
                 (indices[t + 1], indices[t + 2]) = (indices[t + 2], indices[t + 1]);
 
         return new Mesh(positions, indices);
+    }
+
+    /// <summary>A ring of two columns is the same two columns twice, back to back.</summary>
+    private static int Fewest(bool round) => round ? 3 : 2;
+
+    /// <summary>
+    /// The lines across. Round a barrel the far edge is the near edge come round again, so it is
+    /// dropped and the ring closes on the first column instead.
+    /// </summary>
+    private static float[] Columns(IRelief relief, float acrossMm, bool round)
+    {
+        var us = Trimmed(relief.Across(acrossMm), acrossMm);
+        return round && us.Length > 1 ? us[..^1] : us;
     }
 
     /// <summary>

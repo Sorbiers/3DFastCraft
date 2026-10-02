@@ -31,13 +31,28 @@ public sealed class SurfaceProfile
     private readonly float bottom;
     private readonly float step;
 
-    private SurfaceProfile(float[] reach, int sections, float bottom, float step)
+    private SurfaceProfile(float[] reach, int sections, float bottom, float step, float proud, float short_)
     {
         this.reach = reach;
         this.sections = sections;
         this.bottom = bottom;
         this.step = step;
+        ProudMm = proud;
+        ShortMm = short_;
     }
+
+    /// <summary>
+    /// How far the object's own surface stands proud of the smooth one this describes - the
+    /// corners of a many-sided barrel, which the smoothing rounds off.
+    ///
+    /// The typical corner rather than the worst one: the middle of the corners in each section,
+    /// and the middle of those up the height. The worst would be a handle or a boss on the side,
+    /// which stands proud of the circle by its whole size and is not what anybody is asking about.
+    /// </summary>
+    public float ProudMm { get; }
+
+    /// <summary>And how far it falls short of it, in the middle of each flat.</summary>
+    public float ShortMm { get; }
 
     /// <param name="world">The object, in world space.</param>
     /// <param name="axis">Where the upright axis crosses the plate, in world X and Y.</param>
@@ -109,17 +124,62 @@ public sealed class SurfaceProfile
         // circle. Blurred over about a flat's width it is smooth, as the circle was, and off the real
         // surface by no more than a flat's sag, which the cutter's clearance already covers.
         var smoothed = new float[Directions];
+        var raw = new float[Directions];
+        var proud = new List<float>();
+        var short_ = new List<float>();
+
         for (int s = 0; s < sections; s++)
         {
             var row = reach.AsSpan(s * Directions, Directions);
+            row.CopyTo(raw);
+
             for (int pass = 0; pass < 2; pass++)
             {
                 Blur(row, smoothed, BlurHalfWidth);
                 smoothed.CopyTo(row);
             }
+
+            if (Strays(raw, row) is var (over, under))
+            {
+                proud.Add(over);
+                short_.Add(under);
+            }
         }
 
-        return new SurfaceProfile(reach, sections, bounds.Min.Z, step);
+        return new SurfaceProfile(reach, sections, bounds.Min.Z, step, Middle(proud), Middle(short_));
+    }
+
+    /// <summary>
+    /// How far one section's own surface strays out past the smoothed one at its corners, and in
+    /// short of it on its flats - the middle of each, over every corner and every flat in the
+    /// section. Null for a section with no corners to speak of.
+    /// </summary>
+    private static (float Over, float Under)? Strays(ReadOnlySpan<float> raw, ReadOnlySpan<float> smooth)
+    {
+        var over = new List<float>();
+        var under = new List<float>();
+
+        for (int j = 0; j < Directions; j++)
+        {
+            int before = (j + Directions - 1) % Directions, after = (j + 1) % Directions;
+            if (float.IsNaN(raw[before]) || float.IsNaN(raw[j]) || float.IsNaN(raw[after])) continue;
+
+            float here = raw[j] - smooth[j];
+            float left = raw[before] - smooth[before], right = raw[after] - smooth[after];
+
+            if (here > left && here >= right) over.Add(MathF.Max(here, 0f));
+            else if (here < left && here <= right) under.Add(MathF.Max(-here, 0f));
+        }
+
+        return over.Count == 0 || under.Count == 0 ? null : (Middle(over), Middle(under));
+    }
+
+    private static float Middle(List<float> values)
+    {
+        if (values.Count == 0) return 0f;
+
+        values.Sort();
+        return values[values.Count / 2];
     }
 
     /// <summary>

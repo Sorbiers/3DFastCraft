@@ -3,7 +3,8 @@
 namespace FastCraft3D.Geometry.Engraving;
 
 /// <summary>
-/// Sawn boarding: the one texture that really is a height rather than a shape.
+/// The textures that really are a height rather than a shape: sawn boarding here, and stone,
+/// bark and grain beside it.
 ///
 /// Roof tiles and lap siding used to live here too, sampled as fields. They are flat plates laid
 /// at an angle, which is a thing with corners rather than a function to read off a grid, and both
@@ -11,7 +12,7 @@ namespace FastCraft3D.Geometry.Engraving;
 /// which builds them as the slabs they are. A grain is the case the grid was right for: it has no
 /// lines of its own and has to be sampled evenly, which is why it is the one that costs anything.
 /// </summary>
-public static class SurfaceProfiles
+public static partial class SurfaceProfiles
 {
     /// <summary>
     /// How far apart the two rows of a step are put. Well under a printed layer, so the wall it
