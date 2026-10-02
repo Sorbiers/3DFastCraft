@@ -305,6 +305,20 @@ public sealed class GeneratorView : UserControl
             any = true;
         }
 
+        // And what no one setting measures, said by the generator itself.
+        if (generator.Stretched(current, Current, factor) is { } wanted)
+            foreach (var row in rows)
+            {
+                var value = generator.Shape.Read(wanted, row.Parameter.Name);
+                if (Equals(value, values[row.Index])) continue;
+
+                row.Set(value);
+                values[row.Index] = value;
+                faults[row.Index] = null;
+                fromPrinter[row.Index] = false;
+                any = true;
+            }
+
         reading = false;
         if (!any) return false;
 

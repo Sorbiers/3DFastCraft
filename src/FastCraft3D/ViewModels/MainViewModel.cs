@@ -1519,7 +1519,9 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
         get => gizmoMode;
         set
         {
-            if (gizmoMode == value || (value == GizmoMode.Scale && panelHandles)) return;
+            // A held preview scales only when its sizes are settings - a Library part; refusing it
+            // for every held preview left the Scale button on the bar for one and doing nothing.
+            if (gizmoMode == value || (value == GizmoMode.Scale && panelHandles && !heldResizable)) return;
             gizmoMode = value;
             Raise(nameof(GizmoMode));
             Raise(nameof(IsMoveMode));

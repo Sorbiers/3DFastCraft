@@ -50,6 +50,37 @@ public sealed class Roof : Generator<Roof.Settings>
     public override string Title => "Roof";
     public override string Summary => "A roof to sit on the walls - gable, hip, gambrel, mansard and more - tiled, slated or sheeted in relief.";
 
+    /// <summary>
+    /// Stretched up or down, the ridge goes to that height and the pitch follows: a roof's height
+    /// is no setting of its own, so the Scale arrows up it did nothing. Every pitch is steepened or
+    /// flattened by the same share of its slope, found by halving, so a gambrel keeps its break.
+    /// A flat roof has no ridge to move.
+    /// </summary>
+    public override object? Stretched(object before, object after, Vector3 factor)
+    {
+        if (before is not Settings old || after is not Settings s || !Sloped(s) || MathF.Abs(factor.Z - 1f) < 1e-4f) return null;
+
+        float wanted = Top(old) * factor.Z;
+        float Steep(float degrees, float by, float least, float most) =>
+            Math.Clamp(MathF.Atan(MathF.Tan(Radians(degrees)) * by) * 180f / MathF.PI, least, most);
+        Settings At(float by) => s with
+        {
+            Pitch = Steep(s.Pitch, by, 5, 75),
+            LowerPitch = Steep(s.LowerPitch, by, 30, 85),
+            UpperPitch = Steep(s.UpperPitch, by, 5, 45)
+        };
+
+        float low = 0.01f, high = 100f;
+        for (int i = 0; i < 40; i++)
+        {
+            float mid = MathF.Sqrt(low * high);
+            if (Top(At(mid)) < wanted) low = mid;
+            else high = mid;
+        }
+
+        return At(MathF.Sqrt(low * high));
+    }
+
     /// <summary>More tiles than this and a roof takes seconds to cut; nobody sees them singly at that size.</summary>
     private const int MostTiles = 6000;
 

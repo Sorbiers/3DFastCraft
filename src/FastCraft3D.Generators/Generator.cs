@@ -214,6 +214,13 @@ public abstract class Generator
     /// </summary>
     public virtual SizeAxis SizeAxisOf(object settings, GeneratorParameter parameter) => parameter.Size;
 
+    /// <summary>
+    /// The settings a stretch by <paramref name=factor/> comes to, for a size no one setting
+    /// measures - a roof's height, which is its pitch - or null when there is none. Given the
+    /// settings before the stretch and after the settings that do measure a size were multiplied.
+    /// </summary>
+    public virtual object? Stretched(object before, object after, System.Numerics.Vector3 factor) => null;
+
     /// <summary>Whether it is in the Library's catalogue, or only opened from a button of its own - the wall mount, beside Hole.</summary>
     public virtual bool Listed => true;
 

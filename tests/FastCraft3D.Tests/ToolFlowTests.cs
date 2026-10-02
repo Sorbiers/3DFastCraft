@@ -240,6 +240,58 @@ public class ToolFlowTests
             FastCraft3D.Generators.GeneratorRegistry.Find("building.roof")!, roof.Recipe!.Settings)).Width, 1);
     });
 
+    /// <summary>
+    /// A window and its glass are held as one while the panel is open: the frame takes the handles
+    /// and the bar under the view, the glass follows it wherever it is moved and turned, a stretch
+    /// becomes the settings, and the two go down where the preview stood, the glass in the frame.
+    /// </summary>
+    [Fact]
+    public void AWindowAndItsGlassAreHeldAsOneAndGoDownWhereThePreviewStood() => WithModel(model =>
+    {
+        var generator = FastCraft3D.Generators.GeneratorRegistry.Find("building.window")!;
+        float before = 0f;
+        var at = new Vector3(37f, -21f, 0f);
+        var stood = Vector3.Zero;
+
+        AnswerPanel(model, "GeneratorInsert", panel =>
+        {
+            PumpUntil(() => model.Scene.Selection.Count == 1 && model.PreviewOnly is { Count: 2 });
+            var frame = model.Scene.Selection[0];
+            var glass = model.PreviewOnly!.Single(o => o != frame);
+            Assert.True(model.PanelHandles);
+            Assert.True(model.ResizeOffered);
+
+            frame.Rotation = new Vector3(0, 0, 90);
+            frame.Position = at;
+            Assert.Equal(new Vector3(0, 0, 90), glass.Rotation);
+            Assert.True(Inside(glass.WorldBounds, frame.WorldBounds), "the glass did not follow the frame");
+
+            before = frame.WorldBounds.Size.Y;
+            frame.Scale = new Vector3(2f, 1f, 1f);
+            model.SettleHeldSize();
+            PumpUntil(() => frame.WorldBounds.Size.Y > before * 1.5f, 60000);
+            PumpUntil(() => Named<Button>(panel, "GeneratorInsert").IsEnabled, 60000);
+            stood = frame.WorldBounds.Center;
+        });
+        model.InsertGeneratedCommand.Execute(generator);
+        PumpUntil(() => model.Scene.Objects.Count == 2 && !model.HasOpenPanel, 60000);
+
+        var frameMade = model.Scene.Objects.Single(o => o.Recipe!.Role == "frame");
+        var glassMade = model.Scene.Objects.Single(o => o.Recipe!.Role == "glass");
+        Assert.NotNull(frameMade.Assembly);
+        Assert.Same(frameMade.Assembly, glassMade.Assembly);
+        Assert.All(model.Scene.Objects, o => Assert.Equal(new Vector3(0, 0, 90), o.Rotation));
+        Assert.True(Inside(glassMade.WorldBounds, frameMade.WorldBounds), "the glass went down out of its frame");
+        Assert.True(frameMade.WorldBounds.Size.Y > before * 1.5f, "the stretch was not made the window's width");
+        Assert.Equal(28f, ((FastCraft3D.Generators.Buildings.Window.Settings)FastCraft3D.Generators.Recipes.Read(generator, frameMade.Recipe!.Settings)).Width, 1);
+        Assert.True(Vector3.Distance(stood, frameMade.WorldBounds.Center) < 1e-3f, $"put down at {frameMade.WorldBounds.Center}, not where it stood at {stood}");
+    });
+
+    private static bool Inside(Bounds inner, Bounds outer) =>
+        inner.Min.X >= outer.Min.X - 1e-3f && inner.Max.X <= outer.Max.X + 1e-3f &&
+        inner.Min.Y >= outer.Min.Y - 1e-3f && inner.Max.Y <= outer.Max.Y + 1e-3f &&
+        inner.Min.Z >= outer.Min.Z - 1e-3f && inner.Max.Z <= outer.Max.Z + 1e-3f;
+
     [Theory]
     [InlineData(false)]
     [InlineData(true)]

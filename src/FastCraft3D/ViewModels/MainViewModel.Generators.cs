@@ -119,6 +119,29 @@ public sealed partial class MainViewModel
         var heldPivot = Vector3.Zero;
         Vector3 OriginOf(SceneObject o) => Vector3.Transform(-heldPivot, o.Transform);
 
+        // The rest of a set put down together - a window's glass - following the part that is held:
+        // moved, turned and stretched with it, about the set's one origin, so the handles and the
+        // bar under the view move the set as one. Shown loose instead, a set had no handles at
+        // all, and a door that gained its glass kept a bar that moved nothing.
+        var following = new List<(SceneObject Object, Vector3 Pivot)>();
+        void Follow()
+        {
+            if (held is null) return;
+
+            var origin = OriginOf(held);
+            foreach (var (o, pivot) in following)
+            {
+                o.Rotation = held.Rotation;
+                o.Scale = held.Scale;
+                Keep(o, -pivot, origin);
+            }
+        }
+
+        void Followed(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+        {
+            if (e.PropertyName == nameof(SceneObject.Transform)) Follow();
+        }
+
         void Square(SceneObject o, Vector3 middle, Vector3 n)
         {
             // Square into the face, its own +Y up the face - or, on a face lying flat, along +Y:
@@ -128,6 +151,20 @@ public sealed partial class MainViewModel
             o.Rotation = MeshTransform.EulerFrom(new Matrix4x4(
                 across.X, across.Y, across.Z, 0, up.X, up.Y, up.Z, 0, n.X, n.Y, n.Z, 0, 0, 0, 0, 1));
             o.Position = middle + n * HoleCutter.Overshoot;
+        }
+
+        void PutTogether()
+        {
+            if (held is null) return;
+
+            held.Rotation = Vector3.Zero;
+            held.Position = Vector3.Zero;
+            Follow();
+
+            var reach = BedPlacement.Reach([held, .. following.Select(f => f.Object)]);
+            var clear = ClearOf(reach);
+            held.Position += new Vector3(clear.X - reach.Center.X, clear.Y - reach.Center.Y, -reach.Min.Z);
+            Follow();
         }
 
         void Put(SceneObject o, bool cutter, Vector3? face = null)
@@ -178,29 +215,38 @@ public sealed partial class MainViewModel
 
         var (inserted, view) = OpenGenerator(generator, start, "Insert", null, target?.Name, made =>
         {
+            bool together = Held(made);
+
             // A cutter with parts beside it - a wall mount's studs - is shown as its cutter alone.
-            if (made.Parts.Count != 1 && !made.Parts[0].Cutter)
+            if (made.Parts.Count != 1 && !made.Parts[0].Cutter && !together)
             {
                 var objects = Objects(made, assembled: true, ColourOf);
                 BedPlacement.Fit(objects, 1f);
                 return (objects, true, null);
             }
 
+            // Put together, each part as it goes in the set.
+            (Mesh Mesh, Vector3 Pivot) Shown(GeneratedPart p) =>
+                together && p.Assembled is { } at ? (MeshTransform.Transformed(p.Mesh, at), Vector3.Transform(p.Pivot, at)) : (p.Mesh, p.Pivot);
+
             var part = made.Parts[0];
+            var (mesh, pivot) = Shown(part);
+            bool fresh = held is null;
             if (held is null)
             {
-                held = new SceneObject(part.Name, part.Mesh) { Colour = ColourOf(0), Anchors = part.Anchors?.ToList() ?? [] }
-                    .CentredOn(part.Pivot);
-                heldPivot = part.Pivot;
-                Put(held, part.Cutter, part.CutFace);
+                held = new SceneObject(part.Name, mesh) { Colour = part.Colour ?? ColourOf(0), Anchors = part.Anchors?.ToList() ?? [] }
+                    .CentredOn(pivot);
+                heldPivot = pivot;
+                held.PropertyChanged += Followed;
+                if (!together) Put(held, part.Cutter, part.CutFace);
             }
             else
             {
                 var origin = OriginOf(held);
-                held.Mesh = part.Mesh;
+                held.Mesh = mesh;
                 held.Anchors = part.Anchors?.ToList() ?? [];
-                held.CentredOn(part.Pivot);
-                heldPivot = part.Pivot;
+                held.CentredOn(pivot);
+                heldPivot = pivot;
                 held.Name = part.Name;
                 Keep(held, -heldPivot, origin);
 
@@ -211,9 +257,28 @@ public sealed partial class MainViewModel
             heldCuts = part.Cutter;
             heldFace = part.CutFace;
 
+            following.Clear();
+            if (together)
+            {
+                for (int i = 1; i < made.Parts.Count; i++)
+                {
+                    var (m, p) = Shown(made.Parts[i]);
+                    following.Add((new SceneObject(made.Parts[i].Name, m)
+                    {
+                        Colour = made.Parts[i].Colour ?? ColourOf(i),
+                        Anchors = made.Parts[i].Anchors?.ToList() ?? []
+                    }.CentredOn(p), p));
+                }
+
+                Follow();
+                if (fresh) PutTogether();
+            }
+
             // A cutter is shown with the part it is going into; anything else on its own.
-            return ([held], false, part.Cutter ? target : null);
+            return ([held, .. following.Select(f => f.Object)], false, part.Cutter ? target : null);
         });
+
+        if (held is not null) held.PropertyChanged -= Followed;
 
         GeneratorFacePick = null;
         GeneratorFace = null;
@@ -234,7 +299,17 @@ public sealed partial class MainViewModel
         foreach (var o in parts) o.Name = Scene.UniqueName(o.Name);
 
         var beside = new List<SceneObject>();
-        if (held is not null && (result.Parts.Count == 1 || result.Parts[0].Cutter))
+        if (held is not null && Held(result))
+        {
+            // Every part where the preview stood, turned and sized with it about the set's origin.
+            foreach (var o in parts)
+            {
+                o.Rotation = held.Rotation;
+                o.Scale = held.Scale;
+                Keep(o, o.Recipe!.Origin, OriginOf(held));
+            }
+        }
+        else if (held is not null && (result.Parts.Count == 1 || result.Parts[0].Cutter))
         {
             parts[0].Rotation = held.Rotation;
             parts[0].Scale = held.Scale;
@@ -419,7 +494,11 @@ public sealed partial class MainViewModel
             }
 
             PreviewOnly = beside is null ? shown.ToList() : [.. shown, beside];
-            if (!alone && shown.Count == 1) HoldPreview(shown[0], panelView is { Resizable: true } && action == "Insert");
+
+            // The first object is the one held, with the handles on it; a preview laid out loose has
+            // none, and the bar under the view goes with them rather than staying on to move nothing.
+            if (!alone) HoldPreview(shown[0], panelView is { Resizable: true } && action == "Insert");
+            else ReleasePreview();
         }, action, notice);
         panelView = view;
         sizing = view;
@@ -657,6 +736,13 @@ public sealed partial class MainViewModel
     /// picked whole by its name, keeps each part separate, and Reassemble puts it back together.
     /// </summary>
     private static bool InOne(Generated made) => !made.LaidOut && made.Parts.Count > 1 && !made.Parts.Any(p => p.Cutter || p.CutOnly);
+
+    /// <summary>
+    /// Whether a set put down together is held while its panel is open, as a single part is: the
+    /// first part takes the handles and the rest follow it. Not a set that moves - turning it moves
+    /// its parts each its own way, which following the first would undo.
+    /// </summary>
+    private static bool Held(Generated made) => InOne(made) && made.Motion is null;
 
     /// <summary>
     /// Every part of an assembled set as one object, as Group makes one: not fused, so Ungroup

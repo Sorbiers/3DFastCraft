@@ -181,9 +181,19 @@ public sealed class Window : Generator<Window.Settings>
     public override string Title => "Window";
     public override string Summary => "A window frame - square, arched, half round or round - with glazing bars, a sill, and glass to print in clear filament.";
 
-    /// <summary>Its height runs up it standing and front to back laid flat to print.</summary>
-    public override SizeAxis SizeAxisOf(object settings, GeneratorParameter parameter) =>
-        parameter.Name == nameof(Settings.Height) && settings is Settings { Flat: true } ? SizeAxis.Y : parameter.Size;
+    /// <summary>
+    /// Its height runs up it standing and front to back laid flat to print, and its depth the
+    /// other way round - so the Scale arrows that way change the frame's depth. A bow's depth is
+    /// how thick its faces are, not how far it stands out, so it has none.
+    /// </summary>
+    public override SizeAxis SizeAxisOf(object settings, GeneratorParameter parameter) => (parameter.Name, settings) switch
+    {
+        (nameof(Settings.Height), Settings { Flat: true }) => SizeAxis.Y,
+        (nameof(Settings.Depth), Settings { Shape: WindowShape.Bow }) => SizeAxis.None,
+        (nameof(Settings.Depth), Settings { Flat: true }) => SizeAxis.Z,
+        (nameof(Settings.Depth), Settings) => SizeAxis.Y,
+        _ => parameter.Size
+    };
 
     public sealed record Settings(
         [Length("Width", 3, 200, Group = "Size", Hint = "Outside the frame, as the model is drawn", Size = SizeAxis.X)] float Width = 14f,
@@ -196,7 +206,8 @@ public sealed class Window : Generator<Window.Settings>
         [Toggle("Sill", Group = "Sill")] bool Sill = true,
         [Length("Sill projection", 0, 10, Group = "Sill", Hint = "How far the sill stands out in front of the frame"), ShowWhen(nameof(Sill), true)] float SillOut = 0.8f,
         [Toggle("Glass", Group = "Glass", Hint = "Off for the frame alone")] bool Glass = true,
-        [Length("Glass thickness", 0.1, 2, Group = "Glass", Hint = "Two or three layers"), ShowWhen(nameof(Glass), true)] float GlassThickness = 0.4f,
+        [Choice("Glass as", Group = "Glass", Hint = "Panes in the openings, flush with the back of the frame; or one clear sheet the whole back of the window, the frame standing on it"), ShowWhen(nameof(Glass), true)] DoorGlass GlassAs = DoorGlass.Panes,
+        [Length("Glass thickness", 0.1, 20, Group = "Glass", Hint = "Two or three layers is usual; as deep as the frame at the most"), ShowWhen(nameof(Glass), true)] float GlassThickness = 0.4f,
         [Choice("Shape", Group = "Size")] WindowShape Shape = WindowShape.Rectangular,
         [Toggle("Lay flat to print", Hint = "On its back, the glass on the plate: how it prints best")] bool Flat = false);
 
@@ -217,7 +228,7 @@ public sealed class Window : Generator<Window.Settings>
         nameof(Settings.Height) => s.Shape is WindowShape.Rectangular or WindowShape.Arched or WindowShape.Bow,
         nameof(Settings.Rows) => s.Shape != WindowShape.HalfRound,
         nameof(Settings.Sill) or nameof(Settings.SillOut) => s.Shape is not (WindowShape.Round or WindowShape.Bow),
-        nameof(Settings.Flat) => s.Shape != WindowShape.Bow,
+        nameof(Settings.Flat) or nameof(Settings.GlassAs) => s.Shape != WindowShape.Bow,
         _ => true
     };
 
@@ -319,8 +330,10 @@ public sealed class Window : Generator<Window.Settings>
                  || PaneOutlines(s).Any(p => Glazing.Area(p) < 0.25f))
             yield return "The frame and bars leave panes too small to print. Fewer panes, thinner bars, or a bigger window.";
 
-        if (s.Glass && s.GlassThickness >= s.Depth)
-            yield return "The glass is as thick as the frame is deep.";
+        if (s.Glass && s.GlassAs == DoorGlass.Sheet && s.GlassThickness > s.Depth - 0.2f)
+            yield return $"The glass sheet leaves the frame nothing to stand on: it is {s.Depth:0.##} mm deep.";
+        else if (s.Glass && s.GlassThickness > s.Depth)
+            yield return "The glass is thicker than the frame is deep.";
     }
 
     /// <summary>A bow's three faces are the same width: the front, and the two at forty-five degrees back to the wall.</summary>
@@ -400,7 +413,12 @@ public sealed class Window : Generator<Window.Settings>
         // a grid of them came back open wherever their corners lined up, the triangulation being
         // written for lettering, whose holes never do.
         var panes = PaneOutlines(s);
-        var frame = Shapes.Subtract(Shapes.Prism(Outlines(s).Outside, 0, s.Depth), panes.Select(p => Shapes.Prism(p, -1, s.Depth + 1)).ToList());
+        var outside = Outlines(s).Outside;
+
+        // On a sheet of glass the frame stands a hair clear of it, as the door does. See Glazing.Hair.
+        bool sheet = s.Glass && s.GlassAs == DoorGlass.Sheet;
+        var frame = Shapes.Subtract(Shapes.Prism(outside, sheet ? s.GlassThickness + Glazing.Hair : 0f, s.Depth),
+            panes.Select(p => Shapes.Prism(p, -1, s.Depth + 1)).ToList());
 
         if (s.Sill && s.Shape != WindowShape.Round)
         {
@@ -414,7 +432,10 @@ public sealed class Window : Generator<Window.Settings>
 
         if (s.Glass)
         {
-            parts.Add(Glazing.Panes(panes, s.GlassThickness));
+            // The sheet stops short of the sill, which stands on the plate under the bottom rail.
+            var whole = s.Sill && s.Shape != WindowShape.Round
+                ? Glazing.Within(outside, -s.Width, 0.01f + Glazing.Hair, s.Width, 2f * s.Height + s.Width) : outside;
+            parts.Add(Glazing.Panes(sheet ? [whole] : panes, s.GlassThickness));
             notes.AddRange(Glazing.Notes(s.GlassThickness, printer, s.Flat));
         }
 
@@ -489,9 +510,17 @@ public sealed class Door : Generator<Door.Settings>
     public override bool IsBeta => false;
     public override string Summary => "A door in its frame - single, double, French or Dutch, square or arched - plain, panelled or glazed, with glass to print in clear filament.";
 
-    /// <summary>Its height runs up it standing and front to back laid flat to print.</summary>
-    public override SizeAxis SizeAxisOf(object settings, GeneratorParameter parameter) =>
-        parameter.Name == nameof(Settings.Height) && settings is Settings { Flat: true } ? SizeAxis.Y : parameter.Size;
+    /// <summary>
+    /// Its height runs up it standing and front to back laid flat to print, and its depth the
+    /// other way round - so the Scale arrows that way change the frame's depth.
+    /// </summary>
+    public override SizeAxis SizeAxisOf(object settings, GeneratorParameter parameter) => (parameter.Name, settings) switch
+    {
+        (nameof(Settings.Height), Settings { Flat: true }) => SizeAxis.Y,
+        (nameof(Settings.Depth), Settings { Flat: true }) => SizeAxis.Z,
+        (nameof(Settings.Depth), Settings) => SizeAxis.Y,
+        _ => parameter.Size
+    };
 
     public sealed record Settings(
         [Length("Width", 3, 200, Group = "Size", Hint = "Outside the frame, as the model is drawn", Size = SizeAxis.X)] float Width = 11f,

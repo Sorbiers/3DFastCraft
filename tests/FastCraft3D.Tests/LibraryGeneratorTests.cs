@@ -438,6 +438,19 @@ public class LibraryGeneratorTests
         Assert.Equal(1.5f + 33f * MathF.Tan(40f * MathF.PI / 180f), bounds.Max.Z, 2);
     }
 
+    [Theory]
+    [InlineData(FastCraft3D.Generators.Buildings.RoofShape.Gable)]
+    [InlineData(FastCraft3D.Generators.Buildings.RoofShape.Gambrel)]
+    public void ARoofStretchedUpGoesToThatHeightByItsPitch(FastCraft3D.Generators.Buildings.RoofShape shape)
+    {
+        var roof = new FastCraft3D.Generators.Buildings.Roof();
+        var s = roof.Default with { Shape = shape, Pitch = 30, LowerPitch = 60, UpperPitch = 20 };
+        var taller = Assert.IsType<FastCraft3D.Generators.Buildings.Roof.Settings>(roof.Stretched(s, s, new Vector3(1, 1, 1.5f)));
+
+        Assert.Equal(FastCraft3D.Generators.Buildings.Roof.Top(s) * 1.5f, FastCraft3D.Generators.Buildings.Roof.Top(taller), 1);
+        Assert.Equal(s.Width, taller.Width);
+    }
+
     [Fact]
     public void AHipRoofIsTheGableCutBackAtBothEnds()
     {
