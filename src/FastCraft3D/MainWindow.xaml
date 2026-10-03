@@ -677,6 +677,10 @@
                     <Button Style="{StaticResource ToolButton}" Content="Emboss" Tag="{StaticResource IconText}"
                             Command="{Binding BeginEmbossCommand}" MinWidth="78"
                             ToolTip="Raise lettering or a drawing off a face, or cut it in. Needs exactly one object selected." />
+                    <Button Style="{StaticResource ToolButton}" Content="Masonry" Tag="{StaticResource IconEngrave}"
+                            Command="{Binding BeginMasonryCommand}" MinWidth="82"
+                            AutomationProperties.AutomationId="Masonry"
+                            ToolTip="Brickwork on the walls you pick, laid as a bricklayer lays it: each wall a whole number of bricks, and every corner turned by a whole corner brick, its length on one face and its end on the other, swapping course by course. Click a wall, then Ctrl+click the walls either side. Square corners only." />
                     <Button Style="{StaticResource ToolButton}" Content="Engrave" Visibility="{Binding IsExtendedMode, Converter={StaticResource BoolToVisibility}}" Tag="{StaticResource IconEngrave}"
                             Command="{Binding BeginEngraveCommand}" MinWidth="82"
                             ToolTip="Legacy. One pattern - brick, tiles, planks, grain - on one flat face. Texture in Emboss does all this and more, and wraps around curves. Kept for older models." />
@@ -1681,7 +1685,7 @@
                         BorderBrush="#FFB8D2F0" BorderThickness="1" CornerRadius="3"
                         Visibility="{Binding IsEmbossMode, Converter={StaticResource BoolToVisibility}}">
                     <view:ColumnFlow>
-                        <TextBlock Text="Emboss" FontWeight="SemiBold" Margin="0,0,0,6" />
+                        <TextBlock Text="{Binding EmbossTitle}" FontWeight="SemiBold" Margin="0,0,0,6" />
                         <TextBlock Text="{Binding EmbossSummary}" TextWrapping="Wrap"
                                    Foreground="#FF3A4550" Margin="0,0,0,8" />
 
@@ -1757,7 +1761,8 @@
 
                         <!-- A drawing instead of typed letters. It becomes outlines the moment it
                              is read, so everything below applies to it unchanged. -->
-                        <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,6"
+                                    Visibility="{Binding NotMasonry, Converter={StaticResource BoolToVisibility}}">
                             <Button Content="Drawing..." Style="{StaticResource PanelButton}"
                                     Command="{Binding LoadDrawingCommand}"
                                     ToolTip="Stamp the filled shapes of an SVG, or the dark parts of a picture (PNG, JPEG...). In a picture with transparency, whatever isn't transparent is stamped." />
@@ -1865,7 +1870,8 @@
                             <TextBlock Text="{Binding DataContext.UnitLabel, RelativeSource={RelativeSource AncestorType=Window}}" Foreground="#FF9AA0A8" VerticalAlignment="Center" />
                         </StackPanel>
 
-                        <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,6"
+                                    Visibility="{Binding NotMasonry, Converter={StaticResource BoolToVisibility}}">
                             <TextBlock Text="Bevel" Style="{StaticResource FieldLabel}" Width="62"
                                        ToolTip="Slopes the walls, so raised lettering has no step to bridge and cut lettering is not a slot one line wide. Zero leaves them upright." />
                             <TextBox AutomationProperties.AutomationId="EmbossBevel" Width="64" Style="{StaticResource NumberBox}" Tag="number"
@@ -1873,7 +1879,8 @@
                             <TextBlock Text="{Binding DataContext.UnitLabel, RelativeSource={RelativeSource AncestorType=Window}}" Foreground="#FF9AA0A8" VerticalAlignment="Center" />
                         </StackPanel>
 
-                        <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,6"
+                                    Visibility="{Binding NotMasonry, Converter={StaticResource BoolToVisibility}}">
                             <TextBlock Text="Wrap" Style="{StaticResource FieldLabel}" Width="62"
                                        ToolTip="Flat on the face, or bent round the object as a barrel or a ball" />
                             <ComboBox Width="130" ItemsSource="{Binding EmbossProjections}"
@@ -1882,7 +1889,8 @@
 
                         <!-- Where it sits. The scene handles drive the same three numbers, so a
                              drag can be tidied up here and a number can be nudged with the arrows. -->
-                        <StackPanel Orientation="Horizontal" Margin="0,0,0,2">
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,2"
+                                    Visibility="{Binding NotMasonry, Converter={StaticResource BoolToVisibility}}">
                             <TextBlock Text="Across" Style="{StaticResource FieldLabel}" Width="62"
                                        ToolTip="How far from the middle, along the lettering. A texture slides round the part on this one." />
                             <TextBox AutomationProperties.AutomationId="EmbossAcross" Width="64" Style="{StaticResource NumberBox}" Tag="number"
@@ -1890,7 +1898,8 @@
                             <TextBlock Text="{Binding DataContext.UnitLabel, RelativeSource={RelativeSource AncestorType=Window}}" Foreground="#FF9AA0A8" VerticalAlignment="Center" />
                         </StackPanel>
 
-                        <StackPanel Orientation="Horizontal" Margin="0,0,0,2">
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,2"
+                                    Visibility="{Binding NotMasonry, Converter={StaticResource BoolToVisibility}}">
                             <TextBlock Text="Up" Style="{StaticResource FieldLabel}" Width="62"
                                        ToolTip="How far from the middle, across the lettering. A texture slides up and down the part on this one." />
                             <TextBox AutomationProperties.AutomationId="EmbossUp" Width="64" Style="{StaticResource NumberBox}" Tag="number"
@@ -1932,11 +1941,13 @@
                                   ToolTip="Cover the face with as many as fit at this spacing. Wrapped around a part, the spacing adjusts so there is no seam." />
 
                         <CheckBox Content="Raised instead of cut" IsChecked="{Binding EmbossRaised, Mode=TwoWay}"
+                                  Visibility="{Binding NotMasonry, Converter={StaticResource BoolToVisibility}}"
                                   AutomationProperties.AutomationId="EmbossRaised"
                                   Margin="0,0,0,6"
                                   ToolTip="Stand the lettering off the face rather than sinking it in" />
 
                         <CheckBox Content="Keep as its own part" IsChecked="{Binding EmbossSeparate, Mode=TwoWay}"
+                                  Visibility="{Binding NotMasonry, Converter={StaticResource BoolToVisibility}}"
                                   AutomationProperties.AutomationId="EmbossSeparate"
                                   Margin="0,0,0,8"
                                   ToolTip="For lettering in another filament: cut, the letters come back as a plug that fills the recess; raised, they stand on it. They go on the next filament, saved with the project, which is a 3MF." />

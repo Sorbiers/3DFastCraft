@@ -848,8 +848,9 @@ public partial class MainWindow : Window
 
             placeGizmo.Noun = slides ? "Texture" : viewModel.UsesTexture ? "Pattern" : "Lettering";
             placeGizmo.ScalesFreely = viewModel.UsesTexture;
+            // Brickwork is set out from the corners, so there is nothing to slide or size.
             placeGizmo.Show(
-                viewModel.HasEmbossFace, viewModel.EmbossSurface(),
+                viewModel.HasEmbossFace && !viewModel.IsMasonryMode, viewModel.EmbossSurface(),
                 viewModel.EmbossPlacement, viewModel.EmbossExtent,
                 slides ? PlacementHandles.Move : PlacementHandles.All | PlacementHandles.Scale);
         }

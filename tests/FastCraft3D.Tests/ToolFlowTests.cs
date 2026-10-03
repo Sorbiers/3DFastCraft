@@ -490,6 +490,91 @@ public class ToolFlowTests
         Assert.Contains("not", model.Status);
     });
 
+    /// <summary>
+    /// Masonry round all four walls of a box: one solid with bricks standing off every wall, and
+    /// Emboss back as it was when the tool is put down.
+    /// </summary>
+    [Fact]
+    public void MasonryBricksTheWallsPickedAndPutsEmbossBackAfterwards() => WithModel(model =>
+    {
+        var part = new SceneObject("Box", Primitives.Box(40, 30, 20)).Centred();
+        part.Position = new Vector3(0, 0, 10);
+        model.Scene.Objects.Add(part);
+        part.IsSelected = true;
+        model.RefreshSelection();
+
+        var texture = model.EmbossTexture;
+        var projection = model.EmbossProjection;
+
+        model.BeginMasonryCommand.Execute(null);
+        Assert.True(model.IsEmbossMode && model.IsMasonryMode);
+        Assert.Equal("Masonry", model.EmbossTitle);
+        Assert.Equal([FastCraft3D.Geometry.Engraving.TextureKind.Brick], model.EmbossTextures);
+
+        Assert.True(model.PickEmbossFace(part, new Vector3(20, 0, 10), Vector3.UnitX));
+        model.EmbossTexturePitch = 6f;
+        model.EmbossTextureLine = 0.2f;
+        model.EmbossTextureAspect = 3f;
+        model.EmbossDepth = 0.4f;
+
+        foreach (var facing in TheOtherThree)
+            Assert.True(model.AddEmbossWall(part, part.WorldBounds.Center + facing * (part.WorldBounds.Size / 2f) - Vector3.UnitZ * 5f, facing));
+        Assert.Contains("All 4 walls", model.Status);
+        Assert.Contains("bricks", model.Status);
+
+        model.ApplyEmbossCommand.Execute(null);
+        PumpUntil(() => model.Scene.Objects.Count == 1 && !ReferenceEquals(model.Scene.Objects[0], part), 120000);
+        Assert.True(!ReferenceEquals(part, model.Scene.Objects[0]), model.Status);
+
+        var mesh = model.Scene.Objects[0].ToWorldMesh();
+        Assert.True(mesh.CheckHealth().IsWatertight, mesh.CheckHealth().Describe());
+        Assert.Single(MeshComponents.Split(mesh));
+
+        var bounds = model.Scene.Objects[0].WorldBounds;
+        Assert.Equal(20.4f, bounds.Max.X, 2);
+        Assert.Equal(-15.4f, bounds.Min.Y, 2);
+
+        Assert.False(model.IsMasonryMode);
+        Assert.Equal("Emboss", model.EmbossTitle);
+        Assert.Equal(texture, model.EmbossTexture);
+        Assert.Equal(projection, model.EmbossProjection);
+    });
+
+    /// <summary>
+    /// Masonry starts at a 5 mm brick, a 0.2 mm joint and 0.3 mm proud, and comes back as it was
+    /// last left for the rest of the session - without any of it turning up in Emboss.
+    /// </summary>
+    [Fact]
+    public void MasonryRemembersItsOwnNumbersAndLeavesEmbossItsOwn() => WithModel(model =>
+    {
+        var part = new SceneObject("Box", Primitives.Box(40, 30, 20)).Centred();
+        model.Scene.Objects.Add(part);
+        part.IsSelected = true;
+        model.RefreshSelection();
+
+        model.BeginEmbossCommand.Execute(null);
+        float embossPitch = model.EmbossTexturePitch, embossDepth = model.EmbossDepth;
+        model.CancelEmbossCommand.Execute(null);
+
+        model.BeginMasonryCommand.Execute(null);
+        Assert.Equal(5f, model.EmbossTexturePitch, 3);
+        Assert.Equal(0.2f, model.EmbossTextureLine, 3);
+        Assert.Equal(0.3f, model.EmbossDepth, 3);
+
+        model.EmbossTexturePitch = 4f;
+        model.EmbossDepth = 0.5f;
+        model.CancelEmbossCommand.Execute(null);
+
+        model.BeginEmbossCommand.Execute(null);
+        Assert.Equal(embossPitch, model.EmbossTexturePitch, 3);
+        Assert.Equal(embossDepth, model.EmbossDepth, 3);
+        model.CancelEmbossCommand.Execute(null);
+
+        model.BeginMasonryCommand.Execute(null);
+        Assert.Equal(4f, model.EmbossTexturePitch, 3);
+        Assert.Equal(0.5f, model.EmbossDepth, 3);
+    });
+
     private static bool Inside(Bounds inner, Bounds outer) =>
         inner.Min.X >= outer.Min.X - 1e-3f && inner.Max.X <= outer.Max.X + 1e-3f &&
         inner.Min.Y >= outer.Min.Y - 1e-3f && inner.Max.Y <= outer.Max.Y + 1e-3f &&
