@@ -3276,7 +3276,7 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
     /// <summary>For the rows of the panel that brickwork has no use for.</summary>
     public bool NotMasonry => !isMasonryMode;
 
-    public string EmbossTitle => isMasonryMode ? "Masonry and siding" : embossTexture.IsOn ? "Texture" : "Emboss";
+    public string EmbossTitle => isMasonryMode ? "Cladding and siding" : embossTexture.IsOn ? "Texture" : "Emboss";
 
     /// <summary>The rows of the panel that follow which of the three tools it is.</summary>
     private void RaiseTool()

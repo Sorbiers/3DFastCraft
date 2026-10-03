@@ -508,7 +508,7 @@ public class ToolFlowTests
 
         model.BeginMasonryCommand.Execute(null);
         Assert.True(model.IsEmbossMode && model.IsMasonryMode);
-        Assert.Equal("Masonry and siding", model.EmbossTitle);
+        Assert.Equal("Cladding and siding", model.EmbossTitle);
         Assert.Equal(
             [FastCraft3D.Geometry.Engraving.TextureKind.Brick, FastCraft3D.Geometry.Engraving.TextureKind.Rubble,
              FastCraft3D.Geometry.Engraving.TextureKind.Castle, FastCraft3D.Geometry.Engraving.TextureKind.Siding,
@@ -634,7 +634,7 @@ public class ToolFlowTests
         model.RefreshSelection();
 
         model.BeginMasonryCommand.Execute(null);
-        Assert.Equal("Masonry and siding", model.EmbossTitle);
+        Assert.Equal("Cladding and siding", model.EmbossTitle);
         model.EmbossTexture = Enum.Parse<FastCraft3D.Geometry.Engraving.TextureKind>(kind);
 
         Assert.True(model.PickEmbossFace(part, new Vector3(20, 0, 10), Vector3.UnitX));

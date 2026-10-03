@@ -712,6 +712,13 @@ public partial class MainWindow : Window
         e.Handled = true;
     }
 
+    /// <summary>Drags the objects list's bottom edge: taller or shorter, from a few rows to most of the panel.</summary>
+    private void OnObjectListGripDrag(object sender, System.Windows.Controls.Primitives.DragDeltaEventArgs e)
+    {
+        double most = Math.Max(SidePanel.ActualHeight - 240, 120);
+        ObjectListRow.Height = new GridLength(Math.Clamp(ObjectListRow.ActualHeight + e.VerticalChange, 60, most));
+    }
+
     private void OnTextGizmoDown(object sender, MouseButtonEventArgs e)
     {
         if (placeGizmo is null) return;

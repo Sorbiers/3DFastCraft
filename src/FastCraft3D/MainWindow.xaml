@@ -681,7 +681,7 @@
                             Command="{Binding BeginTextureCommand}" MinWidth="78"
                             AutomationProperties.AutomationId="Texture"
                             ToolTip="Cover a face with a pattern - knurling, ribs, honeycomb, pips, tread plate, brick, tiles, boards, siding, roof tiles, rubble, castle walling, bark, wood grain - flat on it, or wrapped round a barrel or round the walls. Needs exactly one object selected." />
-                    <Button Style="{StaticResource ToolButton}" Content="Masonry" Tag="{StaticResource IconMasonry}"
+                    <Button Style="{StaticResource ToolButton}" Content="Cladding" Tag="{StaticResource IconMasonry}"
                             Command="{Binding BeginMasonryCommand}" MinWidth="82"
                             AutomationProperties.AutomationId="Masonry"
                             ToolTip="Brick, stone, siding or log walls on the walls you pick, built the way the real thing is. Brick: each wall a whole number of bricks, every corner a whole corner brick, swapping faces course by course. Rubble and castle walling: big cornerstones at every outside corner, long and short by turns. Siding: a post over the boards at every corner. Logs: crossing at the corners, their ends standing out. Click a wall, then Ctrl+click the walls either side. Brick and logs: square corners only." />
@@ -856,7 +856,7 @@
             <Grid Margin="10" view:LabelColumn.Fit="True">
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto" />
-                    <RowDefinition Height="180" />
+                    <RowDefinition x:Name="ObjectListRow" Height="180" MinHeight="60" />
                     <RowDefinition Height="Auto" />
                     <RowDefinition Height="Auto" />
                     <RowDefinition Height="Auto" />
@@ -1059,6 +1059,11 @@
                         </DataTemplate>
                     </ListBox.Resources>
                 </view:ObjectListBox>
+
+                <!-- The list's bottom edge, dragged to make it taller or shorter. -->
+                <Thumb x:Name="ObjectListGrip" Grid.Row="1" VerticalAlignment="Bottom" Height="7"
+                       Cursor="SizeNS" Opacity="0" ToolTip="Drag to resize the list"
+                       DragDelta="OnObjectListGripDrag" />
 
                 <!-- Split panel, shown only while a split is being set up. Blue like every other
                      tool's panel; beige is kept for printing advice. -->
@@ -1790,7 +1795,7 @@
                                       AutomationProperties.AutomationId="EmbossTexture" />
                         </StackPanel>
 
-                        <TextBlock Text="Try also the Masonry tool: it turns the corners of walls the way they are built - whole corner bricks, cornerstones, corner posts."
+                        <TextBlock Text="Try also the Cladding tool: it turns the corners of walls the way they are built - whole corner bricks, cornerstones, corner posts."
                                    TextWrapping="Wrap" Foreground="#FF2D6CB5" Margin="0,0,0,6" MaxWidth="240" HorizontalAlignment="Left"
                                    Visibility="{Binding SuggestsMasonry, Converter={StaticResource BoolToVisibility}}" />
 
