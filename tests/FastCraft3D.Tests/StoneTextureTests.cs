@@ -416,6 +416,110 @@ public class StoneTextureTests(ITestOutputHelper log)
         else Assert.True(alongX > 1.5 * alongY, "it does not run up");
     }
 
+    /// <summary>
+    /// The walls round a box, found from a face picked on one of them: four corners, the way round,
+    /// and a strip that goes round each corner on the mitre: the two walls' offsets joined at their
+    /// meeting point.
+    /// </summary>
+    [Fact]
+    public void TheWallsRoundABoxUnrollIntoOneStripThatTurnsEachCornerOnTheMitre()
+    {
+        var box = MeshTransform.Transformed(Primitives.Box(40, 30, 20), Matrix4x4.CreateTranslation(0, 0, 10));
+        var face = FacePatch.Find(box, new Vector3(20, 0, 10), Vector3.UnitX)!;
+        var loop = WallLoop.Around(box, face, new Vector3(20, 0, 10), out var why);
+
+        Assert.True(loop is not null, why);
+        Assert.Equal(4, loop!.Count);
+        Assert.Equal(140f, loop.Perimeter, 3);
+        Assert.Equal(0f, loop.Low, 3);
+        Assert.Equal(20f, loop.High, 3);
+
+        // The click is the middle of the +X wall, a quarter of the way round from its end.
+        var run = WallRun.Round(loop, box, out why);
+        Assert.True(run is { Closed: true }, why);
+        var surface = new WallsSurface(run!);
+        Assert.Equal(new Vector3(20, 0, 10), surface.At(Vector2.Zero, 0), new Vec3Comparer(1e-3f));
+        Assert.Equal(new Vector3(21, 0, 10), surface.At(Vector2.Zero, 1), new Vec3Comparer(1e-3f));
+
+        // Two fold lines a hair either side of each of the four corners.
+        var folds = surface.FoldsAcross(-70f, 70f);
+        Assert.Equal(8, folds.Count);
+        foreach (float corner in folds.Chunk(2).Select(pair => (pair[0] + pair[1]) / 2f))
+        {
+            var before = surface.At(new Vector2(corner - 0.01f, 0), 1.5f);
+            var at = surface.At(new Vector2(corner, 0), 1.5f);
+            var after = surface.At(new Vector2(corner + 0.01f, 0), 1.5f);
+
+            // A hair either side it is 1.5 mm off one wall or the other, and at the corner itself it
+            // is on the mitre, 1.5 mm off both: the two offset lines, joined at their meeting point.
+            foreach (var near in new[] { before, after })
+                Assert.True(MathF.Abs(MathF.Abs(near.X) - 21.5f) < 1e-3f || MathF.Abs(MathF.Abs(near.Y) - 16.5f) < 1e-3f);
+            Assert.Equal(21.5f, MathF.Abs(at.X), 3);
+            Assert.Equal(16.5f, MathF.Abs(at.Y), 3);
+        }
+    }
+
+    /// <summary>
+    /// Two walls picked are a strip with two ends: as long as the two walls, turning the corner
+    /// between them on the mitre, and square to each end wall at its far edge rather than leaning
+    /// out past the walls that were left alone.
+    /// </summary>
+    [Fact]
+    public void TwoWallsOfABoxAreAStripThatTurnsTheirCornerAndEndsSquare()
+    {
+        var box = MeshTransform.Transformed(Primitives.Box(40, 30, 20), Matrix4x4.CreateTranslation(0, 0, 10));
+        var face = FacePatch.Find(box, new Vector3(20, 0, 10), Vector3.UnitX)!;
+        var loop = WallLoop.Around(box, face, new Vector3(20, 0, 10), out var why)!;
+
+        int east = loop.WallNear(new Vector2(20, 0), Vector2.UnitX, out _);
+        int north = loop.WallNear(new Vector2(0, 15), Vector2.UnitY, out _);
+        var run = WallRun.Of(loop, box, east, out why)!.With(box, north, out why);
+
+        Assert.True(run is { Count: 2, Closed: false }, why);
+        Assert.Equal(70f, run!.Length, 3);
+        Assert.Equal(0f, run.Low, 3);
+        Assert.Equal(20f, run.High, 3);
+
+        // The +X wall runs from y = -15 to +15, then the +Y wall from x = +20 back to -20: the one
+        // corner is 30 mm along a 70 mm strip, 5 mm short of its middle.
+        var surface = new WallsSurface(run);
+        var folds = surface.FoldsAcross(-35f, 35f);
+        Assert.Equal(2, folds.Count);
+        Assert.Equal(-5f, (folds[0] + folds[1]) / 2f, 3);
+        Assert.Equal(new Vector3(21.5f, 16.5f, 10), surface.At(new Vector2(-5f, 0), 1.5f), new Vec3Comparer(1e-3f));
+
+        // Square at both ends, flush with the edges of the walls left bare.
+        Assert.Equal(new Vector3(21.5f, -15f, 10), surface.At(new Vector2(-35f, 0), 1.5f), new Vec3Comparer(1e-3f));
+        Assert.Equal(new Vector3(-20f, 16.5f, 10), surface.At(new Vector2(35f, 0), 1.5f), new Vec3Comparer(1e-3f));
+
+        // Taking in the far wall takes the one between with it; an end can be let go, the middle cannot.
+        int west = loop.WallNear(new Vector2(-20, 0), -Vector2.UnitX, out _);
+        int south = loop.WallNear(new Vector2(0, -15), -Vector2.UnitY, out _);
+        var three = WallRun.Of(loop, box, east, out _)!.With(box, west, out _)!;
+        Assert.Equal(3, three.Count);
+        Assert.True(three.Holds(north) ^ three.Holds(south));
+        Assert.Null(three.Without(box, three.Holds(north) ? north : south, out why));
+        Assert.Equal(2, three.Without(box, west, out _)!.Count);
+        Assert.True(three.With(box, three.Holds(north) ? south : north, out _)!.Closed);
+    }
+
+    private sealed class Vec3Comparer(float tolerance) : IEqualityComparer<Vector3>
+    {
+        public bool Equals(Vector3 a, Vector3 b) => Vector3.Distance(a, b) <= tolerance;
+        public int GetHashCode(Vector3 v) => 0;
+    }
+
+    /// <summary>A part that is not a closed upright shape cannot have its walls gone round, and says so.</summary>
+    [Fact]
+    public void AFaceOnTopOfAPartHasNoWallsToGoRound()
+    {
+        var box = MeshTransform.Transformed(Primitives.Box(40, 30, 20), Matrix4x4.CreateTranslation(0, 0, 10));
+        var top = FacePatch.Find(box, new Vector3(0, 0, 20), Vector3.UnitZ)!;
+
+        Assert.Null(WallLoop.Around(box, top, new Vector3(0, 0, 20), out var why));
+        Assert.Contains("not an upright wall", why);
+    }
+
     /// <summary>The panel offers all four, and a wall or bark arrives raised.</summary>
     [Fact]
     public void ThePanelOffersThemAndAWallArrivesRaised() => WithModel(model =>

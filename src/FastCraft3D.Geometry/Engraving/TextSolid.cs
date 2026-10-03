@@ -243,6 +243,13 @@ public static class TextSolid
     /// </summary>
     private static Mesh Warp(Mesh flat, IPlacementSurface surface)
     {
+        // Broken on every fold first, so nothing lies across a corner of the walls. Splitting by
+        // how far a step strays never lands an edge on the corner itself, only nearer and nearer
+        // it - and a wall of bricks runs out of triangle budget long before it gets close.
+        var bounds = flat.ComputeBounds();
+        foreach (float x in surface.FoldsAcross(bounds.Min.X, bounds.Max.X))
+            flat = SplitAcross(flat, x);
+
         var mesh = MeshSubdivision.SplitEdgesWhere(flat, Strays, maxTriangles: WrapTriangleBudget);
 
         var points = mesh.Positions
@@ -255,5 +262,66 @@ public static class TextSolid
         // the step is measured in the layout and the height ignored.
         bool Strays(Vector3 a, Vector3 b) =>
             surface.Sag(new Vector2(a.X, a.Y), new Vector2(b.X, b.Y)) > SagToleranceMm;
+    }
+
+    /// <summary>
+    /// The solid with every triangle that crosses the line across at <paramref name="x"/> broken
+    /// on it, so the line is made of edges and nothing lies over it. Still closed: an edge that
+    /// crosses the line gets one new vertex, shared by the triangles either side of it.
+    /// </summary>
+    private static Mesh SplitAcross(Mesh mesh, float x)
+    {
+        const float Hair = 1e-5f;
+
+        var positions = new List<Vector3>(mesh.Positions);
+        var indices = new List<int>(mesh.Indices.Count);
+        var made = new Dictionary<(int, int), int>();
+
+        int Side(int v) => positions[v].X > x + Hair ? 1 : positions[v].X < x - Hair ? -1 : 0;
+
+        int Cut(int a, int b)
+        {
+            var key = a < b ? (a, b) : (b, a);
+            if (made.TryGetValue(key, out int at)) return at;
+
+            var p = positions[key.Item1];
+            var q = positions[key.Item2];
+            float t = (x - p.X) / (q.X - p.X);
+            positions.Add(new Vector3(x, p.Y + t * (q.Y - p.Y), p.Z + t * (q.Z - p.Z)));
+            return made[key] = positions.Count - 1;
+        }
+
+        for (int i = 0; i + 2 < mesh.Indices.Count; i += 3)
+        {
+            int a = mesh.Indices[i], b = mesh.Indices[i + 1], c = mesh.Indices[i + 2];
+            int sa = Side(a), sb = Side(b), sc = Side(c);
+
+            if ((sa >= 0 && sb >= 0 && sc >= 0) || (sa <= 0 && sb <= 0 && sc <= 0))
+            {
+                indices.AddRange([a, b, c]);
+                continue;
+            }
+
+            // Turned, keeping the winding, until the first corner is the one on the line with the
+            // other two either side of it, or the one alone on its side.
+            for (int turn = 0; turn < 3; turn++)
+            {
+                if (sa == 0 ? sb * sc < 0 : sb != 0 && sb == sc) break;
+                (a, b, c, sa, sb, sc) = (b, c, a, sb, sc, sa);
+            }
+
+            if (sa == 0)
+            {
+                int m = Cut(b, c);
+                indices.AddRange([a, b, m, a, m, c]);
+            }
+            else
+            {
+                int ab = Cut(a, b), ac = Cut(a, c);
+                indices.AddRange([a, ab, ac, ab, b, c, ab, c, ac]);
+            }
+        }
+
+        return new Mesh(positions, indices);
     }
 }

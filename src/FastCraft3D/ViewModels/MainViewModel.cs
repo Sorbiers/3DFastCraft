@@ -79,6 +79,11 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
     private FacePatch? embossFace;
     private Mesh? embossMesh;
     private SurfaceProfile? embossProfile;
+    private WallLoop? embossWalls;
+    private WallRun? embossRun;
+    private bool embossWallsTried;
+    private string? embossWallsWhy;
+    private SceneObject? embossObject;
     private string embossText = "TEXT";
     private string svgFile = "";
 
@@ -2409,6 +2414,10 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
                 embossFace = null;
                 embossMesh = null;
                 embossProfile = null;
+                embossWalls = null;
+                embossRun = null;
+                embossWallsTried = false;
+                embossObject = null;
                 embossPlacement = SurfacePlacement.Middle;
                 letteringCache = null;
             }
@@ -2557,6 +2566,7 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
 
             Set(ref embossProjection, value);
             Raise(nameof(IsEmbossWrapped));
+            if (value == TextProjection.Walls && embossFace is not null) Status = WallsStatus();
             Raise(nameof(EmbossTurns));
 
             // A texture is laid out to the room it has, and wrapping changes that room from one
@@ -2575,11 +2585,16 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
     /// the boolean cannot be handed. Fixing it means the surface saying how much room each course
     /// has and every course being clipped to its own ring, which is a good deal more than a ball
     /// of tiles is worth.
+    ///
+    /// Any texture goes round the walls; lettering does not, since a word is placed rather than
+    /// laid over everything, and one round a corner is a word nobody can read from anywhere.
     /// </summary>
     public IReadOnlyList<TextProjection> EmbossProjections =>
-        embossTexture.IsProfiled
-            ? [TextProjection.Planar, TextProjection.Cylindrical]
-            : [TextProjection.Planar, TextProjection.Cylindrical, TextProjection.Spherical];
+        !embossTexture.IsOn
+            ? [TextProjection.Planar, TextProjection.Cylindrical, TextProjection.Spherical]
+            : embossTexture.IsProfiled
+                ? [TextProjection.Planar, TextProjection.Cylindrical, TextProjection.Walls]
+                : [TextProjection.Planar, TextProjection.Cylindrical, TextProjection.Spherical, TextProjection.Walls];
 
     /// <summary>Whether the lettering is being wrapped rather than laid flat.</summary>
     public bool IsEmbossWrapped => embossProjection != TextProjection.Planar;
@@ -2664,6 +2679,72 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
     }
 
     /// <summary>
+    /// The walls a texture goes round: the one picked, and those Ctrl+clicked after it. Found once
+    /// per face picked, or null - with the reason in <see cref="embossWallsWhy"/> - when the part
+    /// has no closed upright outline there, or the wall picked is not a flat one.
+    /// </summary>
+    private WallRun? Run()
+    {
+        if (embossRun is not null) return embossRun;
+        if (embossFace is not { } face || embossMesh is not { } mesh || embossWallsTried) return null;
+
+        embossWallsTried = true;
+        embossWalls = WallLoop.Around(mesh, face, embossPick, out embossWallsWhy);
+        if (embossWalls is not { } loop) return null;
+
+        var facing = new Vector2(face.Normal.X, face.Normal.Y);
+        int wall = loop.WallNear(new Vector2(embossPick.X, embossPick.Y), Vector2.Normalize(facing), out _);
+        embossRun = wall < 0 ? null : WallRun.Of(loop, mesh, wall, out embossWallsWhy);
+        return embossRun;
+    }
+
+    /// <summary>Which walls the texture goes round, and how to change that.</summary>
+    private string WallsStatus() =>
+        Run() is not { } run
+            ? embossWallsWhy ?? "There are no walls to go round here."
+            : run.Closed
+                ? $"All {run.Count} walls, the whole way round. {EmbossSummary}"
+                : $"{run.Count} of {run.Loop.Count} walls - Ctrl+click the next to carry it round the corner, "
+                  + $"or one at either end to let it go. {EmbossSummary}";
+
+    /// <summary>
+    /// Ctrl+click while a texture goes round the walls: carries it on round the corner to take in
+    /// the wall clicked, and any between - or lets go of one at either end. False when the click is
+    /// not that at all, so it is taken as an ordinary pick instead.
+    /// </summary>
+    public bool AddEmbossWall(SceneObject target, Vector3 worldPoint, Vector3 worldNormal)
+    {
+        if (!isEmbossMode || embossProjection != TextProjection.Walls || !ReferenceEquals(target, embossObject)) return false;
+        if (Run() is not { } run || embossMesh is not { } world) return false;
+
+        var facing = new Vector2(worldNormal.X, worldNormal.Y);
+        float off = float.MaxValue;
+        int wall = MathF.Abs(worldNormal.Z) < 0.2f && facing.LengthSquared() > 1e-6f
+            ? run.Loop.WallNear(new Vector2(worldPoint.X, worldPoint.Y), Vector2.Normalize(facing), out off)
+            : -1;
+
+        // Half a millimetre off the outline is a wall set back or stood forward at another height
+        // - a plinth, an upper storey - which the strip round this one cannot take in.
+        if (wall < 0 || off > 0.5f)
+        {
+            Status = "That is not one of the walls round this part - Ctrl+click an upright side beside the texture.";
+            return true;
+        }
+
+        var next = run.Holds(wall) ? run.Without(world, wall, out var why) : run.With(world, wall, out why);
+        if (next is null)
+        {
+            Status = why ?? "That wall cannot be taken in.";
+            return true;
+        }
+
+        embossRun = next;
+        RefreshLettering();
+        Status = WallsStatus();
+        return true;
+    }
+
+    /// <summary>
     /// The shape the lettering is laid onto.
     ///
     /// The curved ones are taken from where the click landed rather than from the object's
@@ -2702,6 +2783,9 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
                     new Vector3(axis.X, axis.Y, originZ), radius,
                     MathF.Atan2(outward.Y, outward.X), embossProfile);
             }
+
+            case TextProjection.Walls:
+                return Run() is { } run ? new WallsSurface(run) : new PlanarSurface(face);
 
             case TextProjection.Spherical:
             {
@@ -3060,7 +3144,7 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
             var built = await Task.Run(() =>
             {
                 var solid = ProfiledSolid(surface, coarse: false, sunk: !raised);
-                return raised && solid is not null ? TextCutter.OnTheFace(solid, surface, token) : solid;
+                return raised && solid is not null ? KeptToTheWall(solid, surface, token) : solid;
             }, token);
 
             if (built is null || built.TriangleCount == 0)
@@ -3215,6 +3299,10 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
 
         embossMesh = world;
         embossProfile = null;
+        embossWalls = null;
+        embossRun = null;
+        embossWallsTried = false;
+        embossObject = target;
         embossFace = face;
         embossPick = worldPoint;
         embossBounds = world.ComputeBounds();
@@ -3226,7 +3314,7 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
         Raise(nameof(EmbossAngle));
         Raise(nameof(DrawingShapes));
         RefreshEmboss();
-        Status = EmbossSummary;
+        Status = embossProjection == TextProjection.Walls ? WallsStatus() : EmbossSummary;
         return true;
     }
 
@@ -3357,6 +3445,10 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
         var (across, up) = FaceRoom();
         bool wrapped = embossProjection != TextProjection.Planar;
 
+        // Round some of the walls the strip has two ends, as a face has, and keeps clear of them
+        // as a face does; round all of them it closes on itself, as round a barrel.
+        bool seamless = embossProjection == TextProjection.Walls ? Run() is { Closed: true } : wrapped;
+
         // An area set by dragging the corners of its box, which can run past the face's edges:
         // raised, what is past them is trimmed off; cut, it runs off the edge as a groove should.
         if (!wrapped && embossTextureArea is { } set && across > 0.01f)
@@ -3366,7 +3458,7 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
         {
             (across, up) = (PatchMm, PatchMm);
         }
-        else if (!wrapped)
+        else if (!seamless)
         {
             // Twice the strip the retiling needs, so the field is clear of it either side and the
             // fast path is not thrown away over a hundredth of a millimetre.
@@ -3375,7 +3467,7 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
             up = MathF.Max(up - margin, 0.01f);
         }
 
-        return SurfaceTexture.Over(across, up, embossTexture, wrapped);
+        return SurfaceTexture.Over(across, up, embossTexture, seamless);
     }
 
     /// <summary>The area a flat texture covers, when its corners have been dragged; null is the whole face.</summary>
@@ -3426,6 +3518,12 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
             // Said rather than silently corrected. The wrap is a setting somebody chose, and a
             // combo box quietly changing under them while the model does not is worse than being
             // told which way it went.
+            if (!embossTexture.IsOn && embossProjection == TextProjection.Walls)
+            {
+                EmbossProjection = TextProjection.Planar;
+                Status = "Lettering is laid on the face - only a texture goes round the walls.";
+            }
+
             if (embossTexture.IsProfiled && embossProjection == TextProjection.Spherical)
             {
                 EmbossProjection = TextProjection.Cylindrical;
@@ -3479,8 +3577,9 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
     /// </summary>
     private float RingMm()
     {
-        if (embossFace is null || embossProjection != TextProjection.Cylindrical || !embossTexture.Rings)
-            return 0f;
+        if (embossFace is null || !embossTexture.Rings) return 0f;
+        if (embossProjection == TextProjection.Walls) return Run() is { Closed: true } run ? run.Length : 0f;
+        if (embossProjection != TextProjection.Cylindrical) return 0f;
 
         var axis = new Vector2(embossBounds.Center.X, embossBounds.Center.Y);
         float radius = (new Vector2(embossPick.X, embossPick.Y) - axis).Length();
@@ -3517,6 +3616,7 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
     /// </summary>
     public bool TextureSlides =>
         embossTexture.IsLaid
+        || (embossTexture.IsProfiled && embossProjection == TextProjection.Walls)
         || (embossTexture.Rings && embossProjection == TextProjection.Cylindrical);
 
     /// <summary>Whether the texture in hand is one with a shape rather than an outline.</summary>
@@ -3549,10 +3649,14 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
         if (wide <= 0.01f || tall <= 0.01f || Profile(coarse) is not { } relief) return null;
 
         // A ring fills the barrel and stays put; Across and Up slide its pattern round and up it.
-        // Anything else is a patch, placed where the handles put it as a flat texture is.
-        return round
-            ? ReliefField.Build(surface, new SlidRelief(relief, embossPlacement.OffsetMm), wide, tall, sunk, round)
-            : ReliefField.Build(new PlacedSurface(surface, embossPlacement), relief, wide, tall, sunk);
+        // Round the walls it fills them in the same way, with a sample line at every corner where
+        // the wall turns. Anything else is a patch, placed where the handles put it as a flat
+        // texture is.
+        IRelief slid = new SlidRelief(relief, embossPlacement.OffsetMm);
+        if (surface is WallsSurface) return ReliefField.Build(surface, new LinedRelief(slid, surface), wide, tall, sunk, round);
+        if (!round) return ReliefField.Build(new PlacedSurface(surface, embossPlacement), relief, wide, tall, sunk);
+
+        return ReliefField.Build(surface, slid, wide, tall, sunk, round);
     }
 
     /// <summary>
@@ -3885,6 +3989,12 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
         if (embossProjection == TextProjection.Planar)
             return (face.Max.X - face.Min.X, face.Max.Y - face.Min.Y);
 
+        // Along the walls picked, and as high as the tallest of them.
+        if (embossProjection == TextProjection.Walls)
+            return Run() is { } run
+                ? (run.Length, run.High - run.Low)
+                : (face.Max.X - face.Min.X, face.Max.Y - face.Min.Y);
+
         var axis = new Vector2(embossBounds.Center.X, embossBounds.Center.Y);
         float radius = (new Vector2(embossPick.X, embossPick.Y) - axis).Length();
 
@@ -3892,6 +4002,13 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
             ? (face.Max.X - face.Min.X, face.Max.Y - face.Min.Y)
             : (2f * MathF.PI * radius, embossBounds.Size.Z);
     }
+
+    /// <summary>
+    /// A raised solid kept to the wall it is on, so none of it stands over an opening: a flat
+    /// face's own region, or the regions of every wall it goes round.
+    /// </summary>
+    private Mesh KeptToTheWall(Mesh solid, IPlacementSurface surface, CancellationToken token = default) =>
+        TextCutter.KeptOn(solid, surface, embossDepth, token);
 
     /// <summary>A thin slab of the lettering, laid on the shape so the placement can be seen.</summary>
     public Mesh? EmbossPreview()
@@ -3905,7 +4022,7 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
         {
             var field = ProfiledSolid(surface, coarse: true);
             return embossRaised && field is not null && !embossTexture.IsLaid
-                ? TextCutter.OnTheFace(field, surface)
+                ? KeptToTheWall(field, surface)
                 : field;
         }
 
@@ -3922,7 +4039,7 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
         // Raised, kept to the face as it will be made, so a doorway already cut in it shows clear.
         // Cut is shown whole, as it is applied: a groove runs off the face's edge.
         return embossRaised
-            ? TextCutter.OnTheFace(TextSolid.Build(shapes, surface, clear, Math.Max(embossDepth, clear + 0.03f), embossBevel), surface)
+            ? TextCutter.KeptOn(TextSolid.Build(shapes, surface, clear, Math.Max(embossDepth, clear + 0.03f), embossBevel), surface, embossDepth)
             : TextSolid.Build(shapes, surface, clear, clear + 0.03f);
     }
 
@@ -3972,6 +4089,12 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
         if (embossMesh is not { } world || EmbossSurface() is not { } surface)
         {
             Status = "Pick the face again - the one that was picked has gone";
+            return;
+        }
+
+        if (embossProjection == TextProjection.Walls && Run() is null)
+        {
+            Status = embossWallsWhy ?? "There are no walls to go round here.";
             return;
         }
 

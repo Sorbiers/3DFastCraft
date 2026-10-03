@@ -12,7 +12,13 @@ public enum TextProjection
     Cylindrical,
 
     /// <summary>Wrapped over the object as if onto a ball.</summary>
-    Spherical
+    Spherical,
+
+    /// <summary>
+    /// Round the walls picked on an upright part with flat sides - a box, a house, a hexagonal
+    /// tower - as one strip that turns their corners. Picked the whole way round, it closes on itself.
+    /// </summary>
+    Walls
 }
 
 /// <summary>
@@ -66,6 +72,14 @@ public interface IPlacementSurface
 
     /// <inheritdoc cref="ProudMm"/>
     float ShortMm => 0f;
+
+    /// <summary>
+    /// Where the surface folds between two places across the layout, as lines straight up it: the
+    /// corners of the walls a texture goes round. Anything laid on it needs an edge on every one,
+    /// or it is laid across the corner on a chord - a brick over the corner of a house came out
+    /// with its face cut off at forty-five degrees. None on anything smooth.
+    /// </summary>
+    IReadOnlyList<float> FoldsAcross(float from, float to) => [];
 }
 
 /// <summary>The gap measured for any surface, from nothing but where it puts three points.</summary>
@@ -162,6 +176,38 @@ public sealed class PlacedSurface(IPlacementSurface surface, SurfacePlacement pl
     public float ProudMm => surface.ProudMm;
 
     public float ShortMm => surface.ShortMm;
+}
+
+/// <summary>
+/// The walls picked round an upright part, unrolled into one strip: across is along the walls,
+/// corners and all, and up is up them.
+///
+/// What a pattern laid on this has is no seam at a corner. A wall of flat faces unrolls exactly,
+/// so nothing is stretched, and the pattern goes round each corner without a break, since the
+/// corner is only a place on the strip. At a corner the surface it is stood off the walls by is
+/// the two walls' offsets joined along their mitre, so the corner is as sharp as the part's is.
+/// Picked the whole way round the strip closes on itself, and the pattern meets itself at the
+/// click as it does round a barrel.
+/// </summary>
+public sealed class WallsSurface(WallRun run) : IPlacementSurface
+{
+    private readonly float middle = (run.Low + run.High) / 2f;
+
+    /// <summary>The walls it goes round, for the places that have to know where the corners are.</summary>
+    public WallRun Run { get; } = run;
+
+    /// <summary>Across is along the walls from the middle of the strip; up is up from the middle of the walls.</summary>
+    public Vector3 At(Vector2 uv, float height)
+    {
+        var plan = Run.At(uv.X, height);
+        return new Vector3(plan.X, plan.Y, middle + uv.Y);
+    }
+
+    public float Sag(Vector2 from, Vector2 to) => SurfaceSag.Of(this, from, to);
+
+    public float ClearanceMm => 0.02f;
+
+    public IReadOnlyList<float> FoldsAcross(float from, float to) => Run.FoldsAcross(from, to);
 }
 
 /// <summary>

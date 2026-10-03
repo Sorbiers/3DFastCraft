@@ -1144,6 +1144,13 @@ public partial class MainWindow : Window
 
         if (viewModel.IsEmbossMode)
         {
+            // Ctrl+click carries a texture round the walls on to the next one, or lets an end one go.
+            if (IsControlDown && viewModel.AddEmbossWall(target, ToVector3(hit!.PointHit), ToVector3(hit.NormalAtHit)))
+            {
+                e.Handled = true;
+                return;
+            }
+
             if (!viewModel.Scene.Selection.Contains(target))
             {
                 PressLikeFileExplorer(target);

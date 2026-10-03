@@ -566,13 +566,23 @@ public static class TileSolid
     private static float[] Spans(IPlacementSurface surface, Rect2 piece)
     {
         float middle = (piece.MinV + piece.MaxV) / 2f;
-        float sag = surface.Sag(new Vector2(piece.MinU, middle), new Vector2(piece.MaxU, middle));
 
-        int count = Math.Clamp((int)MathF.Ceiling(sag / MostSagMm), 1, 64);
-        var us = new float[count + 1];
+        // Broken at every fold first - a corner of the walls - and then each part as far as it
+        // strays. Split evenly across a corner, a slab never has an edge on the corner itself.
+        var ends = new List<float> { piece.MinU };
+        ends.AddRange(surface.FoldsAcross(piece.MinU, piece.MaxU));
+        ends.Add(piece.MaxU);
 
-        for (int i = 0; i <= count; i++) us[i] = piece.MinU + piece.Width * i / count;
+        var us = new List<float> { piece.MinU };
+        for (int k = 0; k + 1 < ends.Count; k++)
+        {
+            float from = ends[k], to = ends[k + 1];
+            float sag = surface.Sag(new Vector2(from, middle), new Vector2(to, middle));
+            int count = Math.Clamp((int)MathF.Ceiling(sag / MostSagMm), 1, 64);
 
-        return us;
+            for (int i = 1; i <= count; i++) us.Add(from + (to - from) * i / count);
+        }
+
+        return [.. us];
     }
 }

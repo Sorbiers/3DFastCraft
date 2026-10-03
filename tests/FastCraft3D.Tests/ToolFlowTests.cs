@@ -310,6 +310,186 @@ public class ToolFlowTests
         Assert.Equal(new Vector3(0, 0, 90), Assert.Single(model.Scene.Objects).Rotation);
     });
 
+    /// <summary>Where a ray from <paramref name="origin"/> along <paramref name="dir"/> first leaves the mesh: the farthest hit.</summary>
+    private static float Reach(Mesh mesh, Vector3 origin, Vector3 dir)
+    {
+        float best = 0;
+        for (int t = 0; t + 2 < mesh.Indices.Count; t += 3)
+        {
+            var p0 = mesh.Positions[mesh.Indices[t]]; var p1 = mesh.Positions[mesh.Indices[t + 1]]; var p2 = mesh.Positions[mesh.Indices[t + 2]];
+            var e1 = p1 - p0; var e2 = p2 - p0; var h = Vector3.Cross(dir, e2); float det = Vector3.Dot(e1, h);
+            if (MathF.Abs(det) < 1e-9f) continue;
+            float f = 1f / det; var sv = origin - p0; float u = f * Vector3.Dot(sv, h); if (u < 0 || u > 1) continue;
+            var q = Vector3.Cross(sv, e1); float v = f * Vector3.Dot(dir, q); if (v < 0 || u + v > 1) continue;
+            float tt = f * Vector3.Dot(e2, q); if (tt > best) best = tt;
+        }
+        return best;
+    }
+
+    /// <summary>
+    /// A box textured round its walls: picked on the +X wall, then Ctrl+clicked on each wall in
+    /// <paramref name="more"/> - a low point on each, clear of any window through the middle.
+    /// </summary>
+    private static SceneObject TexturedBox(
+        MainViewModel model, Mesh box, Vector3 pick, string kind, float pitch, params Vector3[] more)
+    {
+        var part = new SceneObject("Box", box).Centred();
+        part.Position = new Vector3(0, 0, box.ComputeBounds().Size.Z / 2f);
+        model.Scene.Objects.Add(part);
+        part.IsSelected = true;
+        model.RefreshSelection();
+        model.BeginEmbossCommand.Execute(null);
+
+        Assert.True(model.PickEmbossFace(part, pick, Vector3.UnitX));
+        model.EmbossTexture = Enum.Parse<FastCraft3D.Geometry.Engraving.TextureKind>(kind);
+        model.EmbossProjection = FastCraft3D.Geometry.Engraving.TextProjection.Walls;
+        model.EmbossRaised = true;
+        model.EmbossDepth = 1.5f;
+        model.EmbossTexturePitch = pitch;
+
+        var bounds = part.WorldBounds;
+        foreach (var facing in more)
+        {
+            var at = bounds.Center + facing * (bounds.Size / 2f) + new Vector3(facing.Y, -facing.X, 0) * 3f
+                     - Vector3.UnitZ * (bounds.Size.Z * 0.35f);
+            Assert.True(model.AddEmbossWall(part, at, facing));
+            Assert.DoesNotContain("not", model.Status);
+        }
+
+        // Done when the part has been replaced by the textured one: a few courses of siding are a
+        // few dozen triangles, so counting them says nothing about whether it has finished.
+        model.ApplyEmbossCommand.Execute(null);
+        PumpUntil(() => model.Scene.Objects.Count == 1 && !ReferenceEquals(model.Scene.Objects[0], part), 120000);
+        Assert.True(!ReferenceEquals(part, model.Scene.Objects[0]), model.Status);
+        return model.Scene.Objects[0];
+    }
+
+    /// <summary>
+    /// How far a texture laid 1.5 mm deep may stand off the wall. Siding's boards lap, and the tail
+    /// of each stands off by the lap rather than by the depth.
+    /// </summary>
+    private static float MostProud(string kind) => kind == "Siding" ? 2.1f : 1.6f;
+
+    private static readonly Vector3[] TheOtherThree = [Vector3.UnitY, -Vector3.UnitX, -Vector3.UnitY];
+
+    /// <summary>
+    /// Round the walls of a box a texture is one closed solid that stands off every wall, the
+    /// corners included, by its depth at the most - no overhang past the mitre, no blade.
+    /// </summary>
+    [Theory]
+    [InlineData("Rubble")]
+    [InlineData("Castle")]
+    [InlineData("Bark")]
+    [InlineData("Grain")]
+    [InlineData("Brick")]
+    [InlineData("Tiles")]
+    [InlineData("Knurl")]
+    [InlineData("Siding")]
+    public void ATextureRoundTheWallsOfABoxStandsOffAllFourWallsAsOneSolid(string kind) => WithModel(model =>
+    {
+        var box = Primitives.Box(40, 30, 20);
+        var part = TexturedBox(model, box, new Vector3(20, 0, 10), kind, kind == "Grain" ? 2.5f : 8f, TheOtherThree);
+        var mesh = part.ToWorldMesh();
+
+        Assert.True(mesh.CheckHealth().IsWatertight, mesh.CheckHealth().Describe());
+        var bounds = part.WorldBounds;
+        float most = MostProud(kind);
+        Assert.InRange(bounds.Max.X, 20f + 0.5f, 20f + most);
+        Assert.InRange(bounds.Max.Y, 15f + 0.5f, 15f + most);
+        Assert.InRange(-bounds.Min.X, 20f + 0.5f, 20f + most);
+        Assert.InRange(-bounds.Min.Y, 15f + 0.5f, 15f + most);
+        Assert.Single(MeshComponents.Split(mesh));
+    });
+
+    /// <summary>A raised texture round the walls keeps off a window cut through them, as on a flat face.</summary>
+    [Fact]
+    public void ATextureRoundTheWallsKeepsOffAnOpeningInThem() => WithModel(model =>
+    {
+        var box = Primitives.Box(40, 30, 20);
+        var window = MeshTransform.Transformed(Primitives.Box(60, 8, 8), Matrix4x4.CreateTranslation(0, 0, 0));
+        var walled = FastCraft3D.Geometry.Csg.ManifoldCsg.Subtract(box, window)!;
+        var part = TexturedBox(model, walled, new Vector3(20, 10, 0), "Rubble", 8f, TheOtherThree);
+        var mesh = part.ToWorldMesh();
+        Assert.True(mesh.CheckHealth().IsWatertight, mesh.CheckHealth().Describe());
+
+        // Through the middle of the opening, along it: nothing in the way.
+        var c = part.WorldBounds.Center;
+        Assert.Equal(0f, Reach(mesh, new Vector3(c.X, c.Y, c.Z), Vector3.UnitX), 3);
+    });
+
+    /// <summary>
+    /// Two walls picked: the texture covers those two and goes round the corner between them, and
+    /// the other two are left as they were, flat and bare to the edge.
+    /// </summary>
+    [Theory]
+    [InlineData("Rubble")]
+    [InlineData("Brick")]
+    [InlineData("Planks")]
+    [InlineData("Siding")]
+    public void ATextureOnTwoWallsTurnsTheirCornerAndLeavesTheOtherTwoBare(string kind) => WithModel(model =>
+    {
+        var box = Primitives.Box(40, 30, 20);
+        var part = TexturedBox(model, box, new Vector3(20, 0, 10), kind, 8f, Vector3.UnitY);
+        var mesh = part.ToWorldMesh();
+
+        Assert.True(mesh.CheckHealth().IsWatertight, mesh.CheckHealth().Describe());
+        Assert.Single(MeshComponents.Split(mesh));
+
+        var bounds = part.WorldBounds;
+        float most = MostProud(kind);
+        Assert.InRange(bounds.Max.X, 20f + 0.5f, 20f + most);
+        Assert.InRange(bounds.Max.Y, 15f + 0.5f, 15f + most);
+        Assert.Equal(-20f, bounds.Min.X, 2);
+        Assert.Equal(-15f, bounds.Min.Y, 2);
+
+        // Right at the corner it stands off both walls: a ray along the diagonal meets it there,
+        // past the corner of the box itself.
+        var c = bounds.Center;
+        var corner = new Vector3(20, 15, c.Z);
+        var diagonal = Vector3.Normalize(new Vector3(1, 1, 0));
+        float past = Reach(mesh, corner - diagonal * 10f, diagonal) - 10f;
+        Assert.InRange(past, 0.3f, most * MathF.Sqrt(2f) + 0.1f);
+    });
+
+    /// <summary>
+    /// A wall that already carries a texture is not a flat wall any more, and the strip will not
+    /// take it in: it says so at once rather than spending minutes on a wall of a thousand facets.
+    /// </summary>
+    [Fact]
+    public void AWallAlreadyTexturedIsRefusedAtOnce() => WithModel(model =>
+    {
+        var cube = new SceneObject("Cube", Primitives.Box(30, 30, 30)).Centred();
+        cube.Position = new Vector3(0, 0, 15);
+        model.Scene.Objects.Add(cube);
+        cube.IsSelected = true;
+        model.RefreshSelection();
+        model.BeginEmbossCommand.Execute(null);
+
+        Assert.True(model.PickEmbossFace(cube, new Vector3(0, 15, 15), Vector3.UnitY));
+        model.EmbossTexture = FastCraft3D.Geometry.Engraving.TextureKind.Rubble;
+        model.EmbossRaised = true;
+        model.EmbossDepth = 0.8f;
+        model.EmbossTexturePitch = 7f;
+        model.ApplyEmbossCommand.Execute(null);
+        PumpUntil(() => model.Scene.Objects[0].ToWorldMesh().TriangleCount > 1000, 120000);
+
+        var textured = model.Scene.Objects[0];
+        textured.IsSelected = true;
+        model.RefreshSelection();
+        if (!model.IsEmbossMode) model.BeginEmbossCommand.Execute(null);
+
+        Assert.True(model.PickEmbossFace(textured, new Vector3(15, 0, 15), Vector3.UnitX));
+        model.EmbossProjection = FastCraft3D.Geometry.Engraving.TextProjection.Walls;
+        Assert.Contains("1 of", model.Status);
+
+        // On past the textured wall to the far one: refused, and quickly.
+        var watch = Stopwatch.StartNew();
+        Assert.True(model.AddEmbossWall(textured, new Vector3(-15, 5, 5), -Vector3.UnitX));
+        Assert.True(model.AddEmbossWall(textured, new Vector3(0, 15.3f, 5), Vector3.UnitY));
+        Assert.True(watch.ElapsedMilliseconds < 5000, $"{watch.ElapsedMilliseconds} ms");
+        Assert.Contains("not", model.Status);
+    });
+
     private static bool Inside(Bounds inner, Bounds outer) =>
         inner.Min.X >= outer.Min.X - 1e-3f && inner.Max.X <= outer.Max.X + 1e-3f &&
         inner.Min.Y >= outer.Min.Y - 1e-3f && inner.Max.Y <= outer.Max.Y + 1e-3f &&

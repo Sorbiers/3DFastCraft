@@ -83,6 +83,86 @@ public static class TextCutter
             : solid;
     }
 
+    /// <summary>
+    /// A raised solid trimmed to what it stands on: the face, or each of the walls it goes round.
+    /// </summary>
+    /// <param name="depthMm">How far it stands off, at the most.</param>
+    public static Mesh KeptOn(Mesh solid, IPlacementSurface surface, float depthMm, CancellationToken token = default) =>
+        surface is WallsSurface walls
+            ? OnTheWalls(solid, walls.Run, depthMm, token)
+            : OnTheFace(solid, surface, token);
+
+    /// <summary>
+    /// A raised texture laid round the walls trimmed to them, so none of it stands over a window or
+    /// a doorway: each wall's own face stood up off itself as <see cref="OnTheFace"/> does, and at
+    /// each outside corner inside the strip the wedge between the two walls' regions, which the
+    /// texture goes round and neither wall's region reaches.
+    /// </summary>
+    /// <param name="depthMm">How far the texture stands off the walls, at the most.</param>
+    public static Mesh OnTheWalls(Mesh solid, WallRun run, float depthMm, CancellationToken token = default)
+    {
+        if (solid.TriangleCount == 0) return solid;
+
+        var loop = run.Loop;
+        float above = depthMm + 1f;
+        var regions = new List<Mesh>();
+        int n = loop.Count, k = 0;
+
+        foreach (int i in run.Walls)
+        {
+            regions.Add(Region(run.Faces[k++], 1f, above));
+
+            // The outside of a corner, where the offsets of the two walls leave a gap. The strip's
+            // own ends stop square at the edge of the end wall and leave none.
+            if (i == run.First && !run.Closed) continue;
+
+            var (before, outBefore) = loop.WallAt((i + n - 1) % n);
+            var (along, outward) = loop.WallAt(i);
+            if (before.X * along.Y - before.Y * along.X > 1e-3f)
+            {
+                var a = loop.CornerAt(i);
+                var wedge = new List<Vector2> { a, a + outBefore * above, loop.At(loop.ArcOfCorner(i), above), a + outward * above };
+                regions.Add(PrismOf(wedge, run.Low, run.High));
+            }
+        }
+
+        var region = ManifoldCsg.UnionAll(regions, token);
+        return region is { TriangleCount: > 0 } && ManifoldCsg.Intersect(solid, region, token) is { TriangleCount: > 0 } kept
+               && kept.CheckHealth().IsWatertight
+            ? kept
+            : solid;
+    }
+
+    /// <summary>A prism standing on a plan between two heights, wound outward.</summary>
+    private static Mesh PrismOf(List<Vector2> plan, float low, float high)
+    {
+        var positions = new List<Vector3>();
+        var indices = new List<int>();
+        int n = plan.Count;
+
+        // Wound so the plan is anticlockwise, which puts the faces outward.
+        float area = 0;
+        for (int i = 0; i < n; i++) area += plan[i].X * plan[(i + 1) % n].Y - plan[(i + 1) % n].X * plan[i].Y;
+        if (area < 0) plan = [.. plan.AsEnumerable().Reverse()];
+
+        foreach (var p in plan) positions.Add(new Vector3(p.X, p.Y, low));
+        foreach (var p in plan) positions.Add(new Vector3(p.X, p.Y, high));
+
+        for (int i = 1; i + 1 < n; i++)
+        {
+            indices.AddRange([0, i + 1, i]);
+            indices.AddRange([n, n + i, n + i + 1]);
+        }
+
+        for (int i = 0; i < n; i++)
+        {
+            int j = (i + 1) % n;
+            indices.AddRange([i, j, n + j, i, n + j, n + i]);
+        }
+
+        return new Mesh(positions, indices);
+    }
+
     /// <summary>The face stood up off itself, <paramref name="below"/> into the part and <paramref name="above"/> out of it.</summary>
     private static Mesh Region(FacePatch face, float below, float above)
     {
@@ -202,10 +282,10 @@ public static class TextCutter
         {
             // The plug is the cut's own cutter, kept to the face so it does not stand over an opening.
             var cut = Worked(world, shapes, surface, false, depthMm, bevelMm, token);
-            return cut is { } made ? made with { Lettering = OnTheFace(made.Lettering, surface, token) } : null;
+            return cut is { } made ? made with { Lettering = KeptOn(made.Lettering, surface, depthMm, token) } : null;
         }
 
-        var letters = OnTheFace(Solid(shapes, surface, true, depthMm, bevelMm, surface.ClearanceMm), surface, token).Welded();
+        var letters = KeptOn(Solid(shapes, surface, true, depthMm, bevelMm, surface.ClearanceMm), surface, depthMm, token).Welded();
         return letters.TriangleCount == 0 ? null : new Lettered(world, letters);
     }
 
@@ -221,7 +301,7 @@ public static class TextCutter
 
         // Raised, kept off any opening in the face. Cut is left whole: over an opening it cuts
         // only air, and a groove is meant to run off the face's edge.
-        if (raised) first = OnTheFace(first, surface, token);
+        if (raised) first = KeptOn(first, surface, depthMm, token);
 
         var robust = raised
             ? ManifoldCsg.Union(world, first, token)
@@ -240,7 +320,7 @@ public static class TextCutter
             var solid = Solid(moved, surface, raised, depthMm, bevelMm, surface.ClearanceMm * factor);
 
             if (solid.TriangleCount == 0) return null;
-            if (raised) solid = OnTheFace(solid, surface, token);
+            if (raised) solid = KeptOn(solid, surface, depthMm, token);
 
             var cut = raised
                 ? CsgSolid.Union(world, solid, token: token)

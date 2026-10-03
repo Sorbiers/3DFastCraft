@@ -45,6 +45,22 @@ public sealed class SlidRelief(IRelief relief, Vector2 offsetMm) : IRelief
 }
 
 /// <summary>
+/// A profile with sample lines added across it where the surface folds - the corners of the walls
+/// a field is laid round. Between two corners the wall is flat and the field's own lines do for
+/// it; at a corner there has to be a line, or the field is cut across the corner on a chord and
+/// the wall's edge is rounded off by as much as a step.
+/// </summary>
+public sealed class LinedRelief(IRelief relief, IPlacementSurface surface) : IRelief
+{
+    public float[] Across(float acrossMm) =>
+        [.. relief.Across(acrossMm), .. surface.FoldsAcross(-acrossMm / 2f, acrossMm / 2f)];
+
+    public float[] Up(float upMm) => relief.Up(upMm);
+
+    public float Height(Vector2 at) => relief.Height(at);
+}
+
+/// <summary>
 /// Builds the solid a profile describes: a sheet at its own height over the face, a flat sheet
 /// sunk into it, and walls joining the two round the edge.
 ///
