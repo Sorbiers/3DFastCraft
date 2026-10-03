@@ -39,8 +39,13 @@ Almost all of it is written by [Claude Code](https://claude.com/claude-code) fro
   - **Working model** - any mechanism as a set to print and turn by hand: base, D-shafts,
     crank or handwheel, guides that print without supports. **Turn it** plays the motion first
     and stops at a jam.
-  - **Lay out for printing** - on: every part side by side, each its own object and color.
-    Off: put down assembled, as one group (**Ungroup** takes it apart).
+  - **A set of parts is an assembly** - laid out for printing or put down together, it goes in
+    as an assembly: picked, moved and copied by its name, each part still its own object.
+    Windows, doors and dormers come with their glass as a part of its own, and the glass can
+    be one clear sheet across the back, as thick as the frame is deep. Doors can be arched;
+    stairs can have a porch; roofs can make their dormers separate parts, each standing in a
+    hole cut to its footprint. While the panel is open the whole set is held, with Move,
+    Rotate and Scale on it.
   - **Resizing the preview** on the plate - the size boxes or the handles - changes the part's
     own size settings and remakes it rather than stretching it: a roof made longer keeps its tiles.
 - **Lithophane** - a photo as a plate lit from behind; flat, curved, or a lamp of 3-12 sides on
@@ -99,6 +104,10 @@ Almost all of it is written by [Claude Code](https://claude.com/claude-code) fro
   **corner squares** resize it along the surface - a texture's corners resize the *area* it covers,
   so a corner brick can meet the corner of the face. Raised work keeps off windows and doorways
   already cut in the face. **Keep as its own part** prints it in a second filament.
+  - **Rubble, Castle, Bark and Grain** are 3D textures: stones of every size in mortar, uneven
+    courses of squared stone, fissured plates, flowing wood grain with knots. Round a barrel they
+    go the whole way round as one closed ring, no seam; **Perimeter** takes the walls of a box,
+    a house or any upright part with flat sides as one strip that goes round the corners.
 - **Engrave** - brick, tile, plank, grain and more, cut or raised, laid *around* openings.
 - **Repeat** - along a line, round a circle (with a rise, for spiral stairs) or in a grid.
 - **Measure**, **Fit check**, **Surface info** - distances, overlap or gap between parts, and a
@@ -130,7 +139,9 @@ Almost all of it is written by [Claude Code](https://claude.com/claude-code) fro
 ## Working with it
 
 - **Selection** - *Sticky* (default, as 3D Builder): a click toggles one object. Off: Explorer
-  rules - Ctrl+click adds, Shift+click takes a range, clicking empty space clears.
+  rules - Ctrl+click adds, Shift+click takes a range, clicking empty space clears. A click on a
+  part of an assembly picks the whole assembly; **Alt**+click picks the one part. The objects
+  list can be dragged taller by its bottom edge.
 - **Handles** - **M** move, **R** rotate, **S** resize; **Snap** to 1 or 5 mm. **O** resizes one
   way only, the opposite face staying put. The resize strip reads mm or %; the box corners,
   dragged, resize in proportion.
@@ -212,7 +223,9 @@ reflection, and trimming breaks the app at runtime.
 - Patterns and wrapped lettering with counters (O, B, A) can be refused on a face already cut
   about or on a barrel - refused, never left torn. **Raised instead of cut** avoids the boolean.
 - A face with a round hole cannot take a pattern; pattern before merging a boss onto it.
-- A set put down assembled is grouped but not one solid - lay it out to print it.
+- A set put down assembled is an assembly, not one solid - lay it out to print it.
+- A fine groove on a 3D texture means a fine mesh: a few hundred thousand triangles on a big
+  wall, a minute or two to apply. A coarser pitch or groove is much quicker.
 - Undo keeps about a gigabyte of history; the oldest steps go beyond that, with an offer to
   save a version.
 - SharpDX 4.2 is unmaintained upstream - the renderer-agnostic core is the insurance.
