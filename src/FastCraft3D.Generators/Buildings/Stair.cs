@@ -16,8 +16,8 @@ public enum RailSide { Left, Right, Both }
 
 /// <summary>
 /// A flight of steps, arriving level with the floor above: straight, solid underneath or open
-/// with a sloping soffit, with a balustrade or posts and a rail if wanted; or a spiral round a
-/// column.
+/// with a sloping soffit, with a balustrade or posts and a rail if wanted, and a porch on the
+/// top step if wanted; or a spiral round a column.
 ///
 /// The numbers are the whole of the job: a riser somewhere between 150 and 190 mm on a going of
 /// 240 or more is a stair, and anything else is a ladder or a ramp. At the model's scale that is
@@ -47,7 +47,10 @@ public sealed class Stair : Generator<Stair.Settings>
         [Length("Rail height", 1, 100, Group = "Handrail", Hint = "Above the nosings: about 900 mm full size")] float RailHeight = 10f,
         [Angle("Turn", 90, 720, Hint = "How far a spiral goes round from bottom to top")] float Turn = 360f,
         [Length("Column", 0.5, 100, Hint = "The spiral's central column, across")] float Column = 3f,
-        [Length("Rail width", 0, 20, Group = "Handrail", Hint = "The posts, the rail and a balustrade's thickness. Nought for one to suit the stair.")] float RailWidth = 0f);
+        [Length("Rail width", 0, 20, Group = "Handrail", Hint = "The posts, the rail and a balustrade's thickness. Nought for one to suit the stair.")] float RailWidth = 0f,
+        [Toggle("Porch", Group = "Porch", Hint = "A level platform at the top of the flight, to stand a door on: solid to the floor, or on posts with the flight open")] bool Porch = false,
+        [Length("Porch depth", 1, 1000, Group = "Porch", Hint = "How far it runs on past the top step. Its far end is against the wall.")] float PorchDepth = 20f,
+        [Length("Porch width", 0, 1000, Group = "Porch", Hint = "Across the porch, centred on the flight. Nought for the flight's width.")] float PorchWidth = 0f);
 
     protected override IEnumerable<(string Name, Settings Settings)> Shipped =>
     [
@@ -55,7 +58,9 @@ public sealed class Stair : Generator<Stair.Settings>
         ("Open with handrails", Default with { Solid = false, Handrail = Handrail.Posts }),
         ("Between walls, balustrade one side", Default with { Handrail = Handrail.Solid, Side = RailSide.Right }),
         ("Spiral", Default with { Kind = StairKind.Spiral, Width = 10f, Steps = 14 }),
-        ("Spiral with handrail", Default with { Kind = StairKind.Spiral, Width = 10f, Steps = 14, Handrail = Handrail.Posts })
+        ("Spiral with handrail", Default with { Kind = StairKind.Spiral, Width = 10f, Steps = 14, Handrail = Handrail.Posts }),
+        ("Porch, solid with balustrade", Default with { Porch = true, PorchWidth = 22f, Handrail = Handrail.Solid }),
+        ("Porch on posts, open", Default with { Porch = true, PorchWidth = 22f, Solid = false, Handrail = Handrail.Posts })
     ];
 
     protected override bool Shows(Settings s, string parameter) => parameter switch
@@ -65,6 +70,8 @@ public sealed class Stair : Generator<Stair.Settings>
         nameof(Settings.Side) => s.Kind == StairKind.Straight && s.Handrail != Handrail.None,
         nameof(Settings.RailHeight) or nameof(Settings.RailWidth) => s.Handrail != Handrail.None,
         nameof(Settings.Turn) or nameof(Settings.Column) => s.Kind == StairKind.Spiral,
+        nameof(Settings.Porch) => s.Kind == StairKind.Straight,
+        nameof(Settings.PorchDepth) or nameof(Settings.PorchWidth) => s.Kind == StairKind.Straight && s.Porch,
         _ => true
     };
 
@@ -80,6 +87,8 @@ public sealed class Stair : Generator<Stair.Settings>
             yield return "The rail would be no higher than a step.";
         if (s.Kind == StairKind.Spiral && s.Turn / s.Steps < 5)
             yield return "Under five degrees a step: more turn, or fewer steps.";
+        if (s.Kind == StairKind.Straight && s.Porch && s.PorchWidth > 0 && s.PorchWidth < s.Width)
+            yield return "The porch is narrower than the flight. Wider, or nought for the flight's width.";
         if (s.Handrail != Handrail.None && s.RailWidth > (s.Kind == StairKind.Spiral ? s.Width : s.Width / 2f) - 0.5f)
             yield return "The rail is as wide as the steps.";
         if (s.Handrail != Handrail.None && s.RailWidth > s.RailHeight / 2f)
@@ -88,11 +97,16 @@ public sealed class Stair : Generator<Stair.Settings>
             yield return "The turn above comes down onto the handrail: more rise, or less turn.";
     }
 
-    protected override Generated Build(Settings s, Printer printer, CancellationToken token) =>
-        new([new GeneratedPart("Stair", s.Kind == StairKind.Spiral ? Spiral(s) : Straight(s, token), Role: "stair")],
-            s.Kind == StairKind.Spiral
-                ? ["The steps stand out from the column with nothing under them: print it with supports."]
-                : []);
+    protected override Generated Build(Settings s, Printer printer, CancellationToken token)
+    {
+        var notes = new List<string>();
+        if (s.Kind == StairKind.Spiral)
+            notes.Add("The steps stand out from the column with nothing under them: print it with supports.");
+        else if (s.Porch && !s.Solid)
+            notes.Add("The porch is a slab on posts, a bridge between them as it prints.");
+
+        return new([new GeneratedPart("Stair", s.Kind == StairKind.Spiral ? Spiral(s) : Straight(s, token), Role: "stair")], notes);
+    }
 
     /// <summary>From a side outline in (along the run, up) to a solid across the width, the run along X.</summary>
     private static Mesh Across(List<Vector2> side, float y0, float y1) =>
@@ -135,13 +149,63 @@ public sealed class Stair : Generator<Stair.Settings>
         float yHigh = plus ? half - t + Overlap : half, yLow = minus ? -(half - t + Overlap) : -half;
 
         var pieces = new List<Mesh> { Across(side, yLow, yHigh) };
-        if (sides.Length == 0) return pieces[0];
+        if (s.Porch) pieces.AddRange(PorchOf(s, sides, going, x0 + s.Run));
+        if (pieces.Count == 1 && sides.Length == 0) return pieces[0];
 
         token.ThrowIfCancellationRequested();
         foreach (float sign in sides)
             pieces.AddRange(Rail(s, sign, riser, going, x0, half));
 
         return Shapes.Union(pieces);
+    }
+
+    /// <summary>
+    /// The porch: a level platform from the top step on, the height of the floor above, and the
+    /// rail carried on along its sides. Solid it goes down to the floor and the balustrade with it;
+    /// open it is a slab as thick as the flight's soffit on a post at each corner, and the
+    /// balustrade hangs from its edge. Its far end is against a wall and has no rail. Everything
+    /// starts a hair back inside the flight so the two overlap rather than meet face to face.
+    /// </summary>
+    private static IEnumerable<Mesh> PorchOf(Settings s, float[] sides, float going, float x1)
+    {
+        float w = (s.PorchWidth > 0 ? s.PorchWidth : s.Width) / 2f, far = x1 + s.PorchDepth, near = x1 - Overlap;
+        float slab = s.Solid ? s.Rise : Drop(s), floor = s.Rise - slab;
+
+        yield return Shapes.Box(near, -w, floor, far, w, s.Rise);
+
+        if (!s.Solid)
+        {
+            // A post at each corner, as thick as the slab and no thicker than a quarter of the porch.
+            float post = MathF.Min(MathF.Max(slab, 0.8f), MathF.Min(s.PorchDepth, 2f * w) / 4f);
+            foreach (float y in new[] { -w, w - post })
+                foreach (float x in new[] { near, far - post })
+                    yield return Shapes.Box(x, y, 0, x + post, y + post, floor + Overlap);
+        }
+
+        float h = s.RailHeight;
+        foreach (float sign in sides)
+        {
+            if (s.Handrail == Handrail.Solid)
+            {
+                float t = BalustradeThickness(s);
+                yield return Shapes.Box(near, sign > 0 ? w - t : -w, floor, far, sign > 0 ? w : -(w - t), s.Rise + h);
+                continue;
+            }
+
+            // Posts spaced as the flight's are, with the rail over them at the flight's height.
+            float width = s.RailWidth > 0 ? s.RailWidth : MathF.Max(0.5f, MathF.Min(going * 0.4f, s.Width * 0.08f));
+            float a = w - 0.1f - width, b = w - 0.1f;
+            (float y0, float y1) = sign > 0 ? (a, b) : (-b, -a);
+
+            yield return Shapes.Box(near, y0, s.Rise + h - width, far, y1, s.Rise + h);
+
+            int count = Math.Max(1, (int)MathF.Round(s.PorchDepth / going));
+            for (int k = 0; k < count; k++)
+            {
+                float c = x1 + (k + 0.5f) * s.PorchDepth / count;
+                yield return Shapes.Box(c - width / 2f, y0, s.Rise - 0.05f, c + width / 2f, y1, s.Rise + h - width / 2f);
+            }
+        }
     }
 
     /// <summary>How far the steps run into a solid balustrade beside them.</summary>
@@ -302,6 +366,14 @@ public sealed class Stair : Generator<Stair.Settings>
             : $"Risers of {check.RiserMm:0.#} mm on treads of {check.GoingMm:0.#} mm.";
 
         yield return $"{s.Steps} risers of {s.Rise / s.Steps:0.##} mm. {real}";
+
+        if (s.Kind == StairKind.Straight && s.Porch)
+        {
+            float pw = s.PorchWidth > 0 ? s.PorchWidth : s.Width;
+            yield return scale > 1.5f
+                ? $"A porch {pw * scale:0} x {s.PorchDepth * scale:0} mm at {s.Rise * scale:0} mm above the floor."
+                : $"A porch {pw:0.#} x {s.PorchDepth:0.#} mm.";
+        }
 
         if (check.Advice.Length > 0) yield return check.Advice;
         else if (check.IsClimbable) yield return "A comfortable flight.";

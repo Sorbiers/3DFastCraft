@@ -85,6 +85,22 @@ public sealed partial class MainViewModel
     /// <summary>Whether there is an assembly to open or fold.</summary>
     public bool HasAssemblies => Scene.Objects.Any(o => o.Assembly is not null);
 
+    /// <summary>
+    /// A tool's several new parts made an assembly of their own, at home where they stand: a mold's
+    /// pieces, a split part's halves and pins, two parts connected and their pins. Called before
+    /// they reach the plate, so undoing the tool takes the assembly with them.
+    ///
+    /// Only for parts that came from nothing in an assembly. What is made from parts that were in
+    /// one joins that one instead, as it always has - see AssemblyTools.Carry.
+    /// </summary>
+    private void AssembleNew(string name, IReadOnlyList<SceneObject> parts, IEnumerable<SceneObject>? from = null)
+    {
+        if (parts.Count < 2 || parts.Any(p => p.Assembly is not null) || (from?.Any(o => o.Assembly is not null) ?? false)) return;
+
+        var assembly = new Assembly(Scene.UniqueAssemblyName(name));
+        foreach (var o in parts) Membership.AtHome(assembly, o).ApplyTo(o);
+    }
+
     /// <summary>The one assembly picked by its name, for the panel. Null for none, or for more than one.</summary>
     public Assembly? SelectedAssembly
     {

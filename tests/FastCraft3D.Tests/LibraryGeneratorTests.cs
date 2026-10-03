@@ -263,6 +263,23 @@ public class LibraryGeneratorTests
         Assert.True(made > 40, $"Only {made} made - the sweep is mostly refusals");
     }
 
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void DormersApartAreAPartEachPluggingIntoAHoleInTheRoof(bool hollow)
+    {
+        var roof = new FastCraft3D.Generators.Buildings.Roof();
+        var s = roof.Default with { Width = 60, Length = 90, Dormers = 2, DormerHeight = 6, Hollow = hollow };
+        var merged = Assert.Single(roof.Make(s, Printer.Default).Parts).Mesh;
+        var made = roof.Make(s with { DormersApart = true }, Printer.Default);
+
+        Assert.False(made.LaidOut);
+        Assert.Equal(1 + 2 * 2 * 2, made.Parts.Count);
+        Assert.All(made.Parts, p => Assert.True(p.Mesh.CheckHealth().IsWatertight, p.Name));
+        Assert.All(made.Parts.Skip(1), p => Assert.True(p.Mesh.ComputeSignedVolume() > 50, $"{p.Name} is {p.Mesh.ComputeSignedVolume():0} mm3"));
+        Assert.True(made.Parts[0].Mesh.ComputeSignedVolume() < merged.ComputeSignedVolume() - 4 * 50, "the dormers are still in the roof");
+    }
+
     [Fact]
     public void MoreDormersThanASlopeHasRoomForAreRefused()
     {
@@ -413,6 +430,28 @@ public class LibraryGeneratorTests
 
         Assert.True(made.IsRefused);
         Assert.Contains("half the door's width", made.Refusal);
+    }
+
+    [Theory]
+    [InlineData(true, FastCraft3D.Generators.Buildings.Handrail.None)]
+    [InlineData(true, FastCraft3D.Generators.Buildings.Handrail.Solid)]
+    [InlineData(false, FastCraft3D.Generators.Buildings.Handrail.Posts)]
+    [InlineData(false, FastCraft3D.Generators.Buildings.Handrail.None)]
+    public void AStairsPorchIsALevelPlatformAtTheTopOfTheFlight(bool solid, FastCraft3D.Generators.Buildings.Handrail rail)
+    {
+        var stair = new FastCraft3D.Generators.Buildings.Stair();
+        var s = stair.Default with { Solid = solid, Handrail = rail };
+        var bare = Assert.Single(stair.Make(s, Printer.Default).Parts).Mesh;
+        var made = stair.Make(s with { Porch = true, PorchDepth = 20, PorchWidth = 22 }, Printer.Default);
+        Assert.False(made.IsRefused, made.Refusal);
+        var porch = Assert.Single(made.Parts).Mesh;
+
+        Assert.True(porch.CheckHealth().IsWatertight, porch.CheckHealth().Describe());
+        Assert.Single(MeshComponents.Split(porch));
+        Assert.Equal(bare.ComputeBounds().Size.X + 20f, porch.ComputeBounds().Size.X, 2);
+        Assert.Equal(22f, porch.ComputeBounds().Size.Y, 2);
+        Assert.True(porch.ComputeSignedVolume() > bare.ComputeSignedVolume() + 20 * 22 * 2);
+        Assert.True(stair.Make(s with { Porch = true, PorchWidth = 5 }, Printer.Default).IsRefused);
     }
 
     [Fact]

@@ -38,6 +38,9 @@ public sealed class Dormer : Generator<Dormer.Settings>
         ("Wide, three panes", Default with { Width = 20, Columns = 3, Rows = 1 })
     ];
 
+    /// <summary>The window's panes, for the Roof's dormers printed apart.</summary>
+    internal static List<(float X0, float Z0, float X1, float Z1)> PanesOf(Settings s) => Panes(s);
+
     private static List<(float X0, float Z0, float X1, float Z1)> Panes(Settings s)
     {
         // The sill clear of the slope behind it, where the recess reaches back into the roof.

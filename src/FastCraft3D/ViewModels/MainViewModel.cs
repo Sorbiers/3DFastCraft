@@ -6231,6 +6231,7 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
                 Colour = NextAutomaticColour()
             }.Centred()).ToList();
 
+            AssembleNew($"{source.Name} mold", made);
             Undo.Execute(new AddObjectsCommand("Mold", made));
             RefreshSelection();
 
@@ -9139,6 +9140,8 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
                 return;
             }
 
+            // The pieces are separate objects, to be moved, printed and used on their own - not an
+            // assembly. A split part that was in an assembly still leaves its pieces in it.
             Undo.Execute(new ReplaceObjectsCommand("Split", consumed, produced));
             IsSplitMode = false;
         IsSubtractMode = false;
@@ -9308,6 +9311,7 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
                 new SceneObject(back.Name, done.Back) { Colour = back.Colour }.Centred()
             };
 
+            AssembleNew($"{front.Name} and {back.Name}", added, [front, back]);
             Undo.Execute(new ReplaceObjectsCommand("Connect with brick studs", [front, back], added));
             IsConnectMode = false;
             RefreshSelection();
@@ -9415,6 +9419,7 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
                 });
             }
 
+            AssembleNew($"{front.Name} and {back.Name}", added, [front, back]);
             Undo.Execute(new ReplaceObjectsCommand("Connect objects", [front, back], added));
             IsConnectMode = false;
             RefreshSelection();

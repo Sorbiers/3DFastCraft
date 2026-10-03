@@ -70,6 +70,12 @@ public partial class MainWindow : Window
     private bool dragMoved;
     private bool pendingToggleOff;
     private bool pendingExclusive;
+
+    /// <summary>
+    /// The press that began this one was made with Alt: one part of an assembly alone, not the lot.
+    /// Held from the press, since Alt may be let go of by the release.
+    /// </summary>
+    private bool pressedAlone;
     private bool pendingClear;
 
     /// <summary>Where a Shift range starts: the object last clicked without Shift.</summary>
@@ -1240,6 +1246,8 @@ public partial class MainWindow : Window
     /// </summary>
     private void PressWithStickySelection(SceneObject target)
     {
+        pressedAlone = IsAltDown;
+
         if (target.IsSelected)
         {
             // Acting on the release, not the press. Changing the selection under the pointer now
@@ -1249,11 +1257,27 @@ public partial class MainWindow : Window
         }
         else
         {
-            target.IsSelected = true;
+            Pick(target);
             viewModel.RefreshSelection();
         }
 
         selectionAnchor = target;
+    }
+
+    /// <summary>
+    /// A click on a part of an assembly picks the whole of it and a click on a picked one lets go of
+    /// the whole of it - a model made of parts is one thing to point at. Alt picks the one part.
+    /// </summary>
+    private void Pick(SceneObject target)
+    {
+        if (pressedAlone) target.IsSelected = true;
+        else viewModel.Scene.SelectWithMates(target);
+    }
+
+    private void LetGo(SceneObject target)
+    {
+        if (pressedAlone) target.IsSelected = false;
+        else viewModel.Scene.ReleaseWithMates(target);
     }
 
     /// <summary>
@@ -1263,6 +1287,8 @@ public partial class MainWindow : Window
     /// </summary>
     private void PressLikeFileExplorer(SceneObject target)
     {
+        pressedAlone = IsAltDown;
+
         if (IsShiftDown && selectionAnchor is not null)
         {
             SelectRange(selectionAnchor, target);
@@ -1271,7 +1297,8 @@ public partial class MainWindow : Window
 
         if (IsControlDown)
         {
-            target.IsSelected = !target.IsSelected;
+            if (target.IsSelected) LetGo(target);
+            else Pick(target);
             viewModel.RefreshSelection();
             selectionAnchor = target;
             return;
@@ -1280,13 +1307,15 @@ public partial class MainWindow : Window
         if (target.IsSelected)
         {
             // Part of a multi-selection: keep the group so it can be dragged, and narrow to
-            // this one object only if the press turns out to be a plain click.
-            pendingExclusive = viewModel.Scene.Selection.Count > 1;
+            // this one object - or its assembly - only if the press turns out to be a plain
+            // click. An assembly that is the whole selection has nothing to narrow to.
+            pendingExclusive = viewModel.Scene.Selection.Count > 1
+                && (pressedAlone || !viewModel.Scene.IsOnlyItsAssembly(target));
         }
         else
         {
             viewModel.Scene.ClearSelection();
-            target.IsSelected = true;
+            Pick(target);
             viewModel.RefreshSelection();
         }
 
@@ -1503,13 +1532,15 @@ public partial class MainWindow : Window
         }
         else if (pendingToggleOff)
         {
-            // A click, not a drag, on something already selected - so remove just that object.
-            dragTarget.IsSelected = false;
+            // A click, not a drag, on something already selected - so let go of it, and of the
+            // rest of its assembly.
+            LetGo(dragTarget);
         }
         else if (pendingExclusive)
         {
-            // Non-sticky: a plain click on one of several picks out just that object.
-            viewModel.Scene.SelectOnly(dragTarget);
+            // Non-sticky: a plain click on one of several picks out just that object, or its assembly.
+            viewModel.Scene.ClearSelection();
+            Pick(dragTarget);
         }
 
         pendingToggleOff = false;
@@ -1664,6 +1695,7 @@ public partial class MainWindow : Window
     }
 
     private static bool IsControlDown => Keyboard.Modifiers.HasFlag(ModifierKeys.Control);
+    private static bool IsAltDown => Keyboard.Modifiers.HasFlag(ModifierKeys.Alt);
     private static bool IsShiftDown => Keyboard.Modifiers.HasFlag(ModifierKeys.Shift);
 
     // --- Properties-panel undo coalescing --------------------------------------------

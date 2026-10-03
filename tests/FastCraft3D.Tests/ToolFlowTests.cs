@@ -287,6 +287,29 @@ public class ToolFlowTests
         Assert.True(Vector3.Distance(stood, frameMade.WorldBounds.Center) < 1e-3f, $"put down at {frameMade.WorldBounds.Center}, not where it stood at {stood}");
     });
 
+    [Fact]
+    public void AStairInTheLibraryIsHeldWithMoveAndRotateOnTheBar() => WithModel(model =>
+    {
+        AnswerPanel(model, "GeneratorInsert", panel =>
+        {
+            PumpUntil(() => model.Scene.Selection.Count == 1);
+            var held = model.Scene.Selection[0];
+            Assert.True(model.PanelHandles);
+            Assert.True(model.ShowManipulatorBar);
+
+            model.GizmoMode = GizmoMode.Rotate;
+            Assert.True(model.IsRotateMode);
+            Assert.Equal(GizmoMode.Rotate, model.GizmoMode);
+
+            // Turned on the plate, it goes down turned.
+            held.Rotation = new Vector3(0, 0, 90);
+        });
+        model.InsertGeneratedCommand.Execute(FastCraft3D.Generators.GeneratorRegistry.Find("building.stair"));
+        PumpUntil(() => model.Scene.Objects.Count >= 1 && !model.HasOpenPanel, 60000);
+
+        Assert.Equal(new Vector3(0, 0, 90), Assert.Single(model.Scene.Objects).Rotation);
+    });
+
     private static bool Inside(Bounds inner, Bounds outer) =>
         inner.Min.X >= outer.Min.X - 1e-3f && inner.Max.X <= outer.Max.X + 1e-3f &&
         inner.Min.Y >= outer.Min.Y - 1e-3f && inner.Max.Y <= outer.Max.Y + 1e-3f &&

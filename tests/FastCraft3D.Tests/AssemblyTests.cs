@@ -44,6 +44,32 @@ public class AssemblyTests : IDisposable
         error?.Throw();
     }
 
+    [Fact]
+    public void ClickingAPartOfAnAssemblyPicksAndLetsGoOfTheWholeAssembly() => RunSta(() =>
+    {
+        var (scene, _, assembly, a, b) = Assembled();
+        var loose = Part("Loose", new Vector3(80, 0, 15));
+        scene.Objects.Add(loose);
+        scene.ClearSelection();
+
+        scene.SelectWithMates(a);
+        Assert.True(a.IsSelected && b.IsSelected && assembly.IsSelected);
+        Assert.False(loose.IsSelected);
+        Assert.True(scene.IsOnlyItsAssembly(b));
+
+        // One more picked beside it, and the assembly is no longer the whole selection.
+        scene.SelectWithMates(loose);
+        Assert.False(scene.IsOnlyItsAssembly(a));
+
+        scene.ReleaseWithMates(b);
+        Assert.False(a.IsSelected || b.IsSelected || assembly.IsSelected);
+        Assert.True(loose.IsSelected);
+
+        // A part on its own is one pick, as it always was.
+        scene.ReleaseWithMates(loose);
+        Assert.False(loose.IsSelected);
+    });
+
     /// <summary>A box that is not a cube, so a wrong turn shows up in where its corners end up.</summary>
     private static SceneObject Part(string name, Vector3 at, Vector3 turn = default) =>
         new(name, Primitives.Box(10, 20, 30)) { Position = at, Rotation = turn };

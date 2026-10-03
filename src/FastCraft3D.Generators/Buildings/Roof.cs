@@ -113,7 +113,8 @@ public sealed class Roof : Generator<Roof.Settings>
         [Choice("On", Group = "Dormers")] DormerSides DormerSides = DormerSides.Both,
         [Length("Dormer width", 4, 100, Group = "Dormers", Hint = "Across its front")] float DormerWidth = 14f,
         [Length("Dormer height", 3, 100, Group = "Dormers", Hint = "Its front, from the roof up to its eaves")] float DormerHeight = 10f,
-        [Length("Set back", 0, 100, Group = "Dormers", Hint = "From the wall line up the slope to its front")] float DormerSetBack = 2f);
+        [Length("Set back", 0, 100, Group = "Dormers", Hint = "From the wall line up the slope to its front")] float DormerSetBack = 2f,
+        [Toggle("Dormers apart", Group = "Dormers", Hint = "Each dormer a part of its own, plugging into a hole in the roof: to print apart and glue in")] bool DormersApart = false);
 
     protected override IEnumerable<(string Name, Settings Settings)> Shipped =>
     [
@@ -169,7 +170,7 @@ public sealed class Roof : Generator<Roof.Settings>
         nameof(Settings.Ridge) => Sloped(s) && s.Shape != RoofShape.LeanTo,
         nameof(Settings.Dormers) => Sloped(s),
         nameof(Settings.DormerSides) => Sloped(s) && s.Dormers > 0 && s.Shape != RoofShape.LeanTo,
-        nameof(Settings.DormerWidth) or nameof(Settings.DormerHeight) or nameof(Settings.DormerSetBack) => Sloped(s) && s.Dormers > 0,
+        nameof(Settings.DormerWidth) or nameof(Settings.DormerHeight) or nameof(Settings.DormerSetBack) or nameof(Settings.DormersApart) => Sloped(s) && s.Dormers > 0,
         _ => true
     };
 
@@ -447,18 +448,51 @@ public sealed class Roof : Generator<Roof.Settings>
         token.ThrowIfCancellationRequested();
         if (s.Ridge && s.Shape != RoofShape.LeanTo && Caps(s, slopes, a, b, top) is { } caps) on.Add(caps);
 
+        var apart = new List<GeneratedPart>();
         if (s.Dormers > 0)
         {
             var placed = Dormers(s);
             if (placed.Faults.Count > 0) throw new Refusal(placed.Faults[0]);
-            on.AddRange(DormersOn(s, placed.At, printer, token));
-            notes.Add($"{placed.At.Count} dormer(s), merged in. Their windows are open recesses, without glass.");
+
+            if (!s.DormersApart)
+            {
+                float sink = MathF.Min(1f, (s.Hollow ? s.Shell : s.Fascia) / 2f);
+                on.AddRange(DormersOn(s, placed.At, printer, token, sink).SelectMany(d => d));
+                notes.Add($"{placed.At.Count} dormer(s), merged in. Their windows are open recesses, without glass.");
+            }
+            else
+            {
+                // Each dormer's roof tiled and capped as a merged one's is.
+                var dressing = DormersOn(s, placed.At, printer, token, 0f);
+                var holes = new List<Mesh>();
+                for (int i = 0; i < placed.At.Count; i++)
+                {
+                    token.ThrowIfCancellationRequested();
+                    var (hole, floor, walls, bare) = Insert(s, placed.At[i], printer);
+                    var cap = dressing[i].Count > 1 ? Shapes.Union([bare, .. dressing[i].Skip(1)]) : bare;
+                    holes.Add(hole);
+                    if (floor is not null) on.Add(floor);
+                    apart.Add(new GeneratedPart($"Dormer {i + 1}", walls, Role: $"dormer {i + 1}"));
+                    apart.Add(new GeneratedPart($"Dormer {i + 1} roof", cap, Role: $"dormer {i + 1} roof"));
+                }
+
+                if (on.Count > 0) roof = Shapes.Union([roof, .. on]);
+                on.Clear();
+                roof = Shapes.Subtract(roof, holes);
+                notes.Add($"{placed.At.Count} dormer(s), each its walls and its roof as parts of their own, standing in place: print the walls "
+                          + "on their flat bottoms and the roofs on their backs, drop the walls into their holes, where they stand on a flat "
+                          + "floor, and the roofs on top. Their windows are open recesses, without glass.");
+                if (s.Hollow) notes.Add("Under each dormer's hole is a block to stand it on, its flat underside a bridge inside the roof.");
+            }
         }
 
         if (on.Count > 0) roof = Shapes.Union([roof, .. on]);
 
         notes.Add($"Sits on walls {s.Width:0.#} x {s.Length:0.#} mm. Printed as it sits, the eaves on the plate.");
-        return new Generated([new GeneratedPart("Roof", roof, Role: "roof")], notes);
+        if (apart.Count == 0) return new Generated([new GeneratedPart("Roof", roof, Role: "roof")], notes);
+
+        // The roof and its dormers go down together, an assembly, each dormer standing in its hole.
+        return new Generated([new GeneratedPart("Roof", roof, Role: "roof"), .. apart], notes) { LaidOut = false };
     }
 
     /// <summary>
@@ -498,8 +532,70 @@ public sealed class Roof : Generator<Roof.Settings>
         return laid;
     }
 
-    /// <summary>The slope's region as a face of its own, for the Emboss tool's tiling to fill.</summary>
-    private static Mesh? Tiles(Settings s, Slope slope, List<Vector2> region, float joint)
+    /// <summary>
+    /// The slope's region tiled: laid as the Emboss tool lays roof tiles, over the region grown by
+    /// a tile all round, and cut back to it - so a tile across a hip, a verge or a valley is cut
+    /// along it, as a roofer cuts one. Laid in the region alone, a tile that would not fit whole
+    /// was left out, and every hip and the edges of a dormer's roof came out bare in steps.
+    /// </summary>
+    private static Mesh? Tiles(Settings s, Slope slope, List<Vector2> cutTo, float joint)
+    {
+        var region = Convex(cutTo) ? Grown(cutTo, s.TileWidth + s.Course) : cutTo;
+        var laid = Laid(s, slope, region, joint);
+        if (laid is not { TriangleCount: > 0 } || ReferenceEquals(region, cutTo)) return laid;
+
+        float low = cutTo.Min(slope.At) - 20f, high = cutTo.Max(slope.At) + 20f;
+        return Shapes.Intersect(laid, Shapes.Prism(cutTo, low, high));
+    }
+
+    private static bool Convex(List<Vector2> outline)
+    {
+        if (outline.Count < 3) return false;
+        float sign = 0f;
+        for (int i = 0; i < outline.Count; i++)
+        {
+            var a = outline[i];
+            var b = outline[(i + 1) % outline.Count];
+            var c = outline[(i + 2) % outline.Count];
+            float turn = (b.X - a.X) * (c.Y - b.Y) - (b.Y - a.Y) * (c.X - b.X);
+            if (MathF.Abs(turn) < 1e-9f) continue;
+            if (sign != 0f && MathF.Sign(turn) != sign) return false;
+            sign = MathF.Sign(turn);
+        }
+
+        return true;
+    }
+
+    /// <summary>A convex outline grown by <paramref name="by"/> all round, each side moved out square to itself.</summary>
+    private static List<Vector2> Grown(List<Vector2> outline, float by)
+    {
+        float turn = Polygon2.SignedArea(outline) >= 0 ? 1f : -1f;
+        int n = outline.Count;
+        var lines = new (Vector2 Point, Vector2 Along)[n];
+        for (int i = 0; i < n; i++)
+        {
+            var along = outline[(i + 1) % n] - outline[i];
+            var outward = along.LengthSquared() > 1e-12f ? Vector2.Normalize(new Vector2(along.Y, -along.X)) * turn : Vector2.Zero;
+            lines[i] = (outline[i] + outward * by, along);
+        }
+
+        var grown = new List<Vector2>(n);
+        for (int i = 0; i < n; i++)
+        {
+            var (p, u) = lines[(i + n - 1) % n];
+            var (q, v) = lines[i];
+            float cross = u.X * v.Y - u.Y * v.X;
+            if (MathF.Abs(cross) < 1e-9f) { grown.Add(q); continue; }
+
+            var gap = q - p;
+            grown.Add(p + u * ((gap.X * v.Y - gap.Y * v.X) / cross));
+        }
+
+        return grown;
+    }
+
+    /// <summary>The region as a face of its own, for the Emboss tool's tiling to fill.</summary>
+    private static Mesh? Laid(Settings s, Slope slope, List<Vector2> region, float joint)
     {
         var patch = new Mesh();
         var corners = region.Select(q => new Vector3(q, slope.At(q))).ToList();
@@ -742,18 +838,88 @@ public sealed class Roof : Generator<Roof.Settings>
         at.Front.X, at.Front.Y, at.Slope.At(at.Front), 1);
 
     /// <summary>
-    /// The dormers, each sunk a little into the roof so the two merge rather than meet face to
-    /// face, and what goes on their own roofs: the same covering, and a capping on the ridge.
+    /// A dormer printed apart as two parts, and its hole in the roof. The hole is the dormer's
+    /// footprint on the slope - its front, its cheeks up the slope, and the valleys where its roof
+    /// comes down to meet the slope at a point - a printer's clearance bigger all round, cut
+    /// straight down to a flat floor. The walls are that footprint stood up from a flat bottom on
+    /// the floor to the eaves, the window in their front; the roof is the gable on them, standing
+    /// out over the walls and the front, and down on the slope behind. Under a hollow roof the
+    /// floor is a block filling the roof from under the hole up to the shell; in a solid roof it
+    /// is the bottom of the pocket. The covering is cleared from under all of it.
     /// </summary>
-    private static List<Mesh> DormersOn(Settings s, List<DormerAt> dormers, Printer printer, CancellationToken token)
+    private static (Mesh Hole, Mesh? Floor, Mesh Walls, Mesh Roof) Insert(Settings s, DormerAt at, Printer printer)
     {
-        float sink = MathF.Min(1f, (s.Hollow ? s.Shell : s.Fascia) / 2f);
+        var d = DormerOn(s, at.Slope);
+        var (o, gable) = Dormer.RoofOf(d);
+        float w = d.Width / 2f, h = d.Height, rise = at.Slope.Rise, c = printer.XyClearance;
+        float peak = h + w * gable / (w + o), back = (h + gable) / rise;
+
+        // Down through the shell of a hollow roof, or a pocket as deep in a solid one, from the
+        // front - the lowest the slope comes under the dormer.
+        float under = s.Hollow ? s.Shell / MathF.Cos(at.Slope.Pitch) : MathF.Min(1.5f, s.Fascia);
+        var place = Placed(at);
+
+        List<Vector2> Footprint(float grow) =>
+            [new(-w - grow, -grow), new(w + grow, -grow), new(w + grow, h / rise), new(0, peak / rise + grow), new(-w - grow, h / rise)];
+        Mesh Upright(List<Vector2> plan, float low, float high) =>
+            MeshTransform.Transformed(Shapes.Prism(plan, low, high), place);
+
+        // Along the slope: a box whose top and bottom are sheared to lie on it.
+        var along = new Matrix4x4(1, 0, 0, 0, 0, 1, rise, 0, 0, 0, 1, 0, 0, 0, 0, 1) * place;
+        Mesh OnSlope(float x0, float y0, float z0, float x1, float y1, float z1) =>
+            MeshTransform.Transformed(Shapes.Box(x0, y0, z0, x1, y1, z1), along);
+
+        float reach = back + w + o + 5f;
+        var above = OnSlope(-reach, -reach, 0f, reach, reach, peak + gable + 5f);
+
+        // The walls: the footprint from the floor to the eaves, the window let into the front.
+        var windows = Dormer.PanesOf(d).Select(p => MeshTransform.Transformed(Shapes.Box(p.X0, -1f, p.Z0, p.X1, d.Recess, p.Z1), place)).ToList();
+        var walls = Shapes.Subtract(Upright(Footprint(0f), -under, h), windows);
+
+        // The roof: the gable from the eaves up, as far back as it reaches the slope - in the
+        // hole where the footprint is, above the slope everywhere else.
+        var endOn = new Matrix4x4(1, 0, 0, 0, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 1);
+        var gableEnd = MeshTransform.Transformed(MeshTransform.Transformed(
+            Shapes.Prism([new(-w - o, h), new(w + o, h), new(0, h + gable)], -o, back + 1f), endOn), place);
+        var cap = Shapes.Intersect(gableEnd, Shapes.Union(above, Upright(Footprint(0f), h - 1f, peak + gable + 5f)));
+
+        // The covering cleared from under the dormer's roof and no further: its plan on the slope,
+        // the overhangs in front and to the sides and back to where its ridge comes down. Cleared
+        // as a rectangle, a bare strip ran on up the slope behind it past where the roof ended.
+        List<Vector2> Covered(float grow) =>
+            [new(-w - o - grow, -o - grow), new(w + o + grow, -o - grow), new(w + o + grow, h / rise), new(0, back + grow), new(-w - o - grow, h / rise)];
+        var cleared = Shapes.Intersect(Upright(Covered(0.3f), -peak - under - 5f, peak + gable + 5f),
+            OnSlope(-reach, -reach, -0.05f, reach, reach, s.Relief + 3f));
+        var hole = Shapes.Union(Upright(Footprint(c), -under, peak + s.Relief + 3f), cleared);
+
+        // The floor under a hollow roof: the roof filled solid from a little below the hole's
+        // floor up to its slope, a wall's width round the hole, so the floor has something under it.
+        Mesh? floor = null;
+        if (s.Hollow)
+        {
+            float wall = MathF.Max(s.Shell, 1.2f);
+            floor = Shapes.Intersect(Upright(Footprint(c + wall), -under - wall, peak + 1f),
+                OnSlope(-reach, -reach, -peak - under - wall - 2f, reach, reach, -0.01f));
+        }
+
+        return (hole, floor, walls, cap);
+    }
+
+    /// <summary>
+    /// The dormers and what goes on their own roofs - the same covering, and a capping on the
+    /// ridge - each dormer's pieces together. Sunk a little into the roof when they are merged
+    /// with it, so the two merge rather than meet face to face.
+    /// </summary>
+    private static List<List<Mesh>> DormersOn(Settings s, List<DormerAt> dormers, Printer printer, CancellationToken token, float sink)
+    {
         float joint = MathF.Max(printer.Nozzle, TextureOptions.LeastLineMm);
-        var made = new List<Mesh>();
+        var all = new List<List<Mesh>>();
 
         foreach (var at in dormers)
         {
             token.ThrowIfCancellationRequested();
+            var made = new List<Mesh>();
+            all.Add(made);
             var d = DormerOn(s, at.Slope);
             var place = Placed(at);
             made.Add(MeshTransform.Transformed(Dormer.Solid(d, sink), place));
@@ -788,14 +954,16 @@ public sealed class Roof : Generator<Roof.Settings>
 
             if (s.Ridge)
             {
-                // Along its ridge, from over its front back into the main roof.
-                var from = Vector3.Transform(new Vector3(0, -o, h + gable), place);
+                // Along its ridge, from its front back into the main roof. A rod runs on a radius
+                // past each end, which covers a hip on the main ridge and on a dormer stuck out
+                // past its gable, so it starts a radius back from the front.
+                var from = Vector3.Transform(new Vector3(0, -o + Capping(s), h + gable), place);
                 var to = Vector3.Transform(new Vector3(0, meets, h + gable), place);
                 made.Add(Rod(from, to, Capping(s)));
             }
         }
 
-        return made;
+        return all;
     }
 
     protected override IEnumerable<string> Describe(Settings s, float modelScale)

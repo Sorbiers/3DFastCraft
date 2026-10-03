@@ -328,8 +328,12 @@ public class GeneratorPrinterTests
         Assert.Equal(roof.Default.Length, s.Length, 3);
         Assert.Equal(roof.Default.TileWidth, s.TileWidth, 3);
 
-        // Nothing it makes is measured up and down, so a taller stretch changes nothing more.
-        Assert.False(view.Resize(new System.Numerics.Vector3(1f, 1f, 2f)));
+        // Up and down is its pitch: a taller stretch steepens it and leaves the walls as they were.
+        var before = (FastCraft3D.Generators.Buildings.Roof.Settings)view.Current;
+        Assert.True(view.Resize(new System.Numerics.Vector3(1f, 1f, 1.2f)));
+        var taller = (FastCraft3D.Generators.Buildings.Roof.Settings)view.Current;
+        Assert.True(taller.Pitch > before.Pitch);
+        Assert.Equal(before.Width, taller.Width, 3);
     });
 
     [Fact]

@@ -44,6 +44,37 @@ public sealed class Scene
         assembly.IsSelected = members.Any(o => o.IsSelected);
     }
 
+    /// <summary>
+    /// Picks an object in the viewport: with the rest of its assembly if it is in one, as one pick,
+    /// or alone otherwise. A part of an assembly is picked by clicking any of them; one on its own
+    /// is picked by its row in the list, or with Alt held.
+    /// </summary>
+    public void SelectWithMates(SceneObject target)
+    {
+        if (target.Assembly is { } assembly) SelectAssembly(assembly);
+        else target.IsSelected = true;
+    }
+
+    /// <summary>Lets go of an object and, if it is in an assembly, of the rest of it, which goes dark in the list.</summary>
+    public void ReleaseWithMates(SceneObject target)
+    {
+        if (target.Assembly is { } assembly)
+        {
+            foreach (var o in MembersOf(assembly)) o.IsSelected = false;
+            assembly.IsSelected = false;
+        }
+        else
+        {
+            target.IsSelected = false;
+        }
+    }
+
+    /// <summary>Whether the selection is exactly one assembly's parts and nothing else.</summary>
+    public bool IsOnlyItsAssembly(SceneObject target) =>
+        target.Assembly is { } assembly
+        && Selection.Count == MembersOf(assembly).Count(o => o.IsSelected)
+        && Selection.All(o => o.Assembly == assembly);
+
     /// <summary>Whether every part of it that can be selected is, which an assembly needs to stay selected.</summary>
     public bool IsWhollySelected(Assembly assembly)
     {

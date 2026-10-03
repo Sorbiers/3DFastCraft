@@ -341,7 +341,7 @@ public sealed partial class MainViewModel
             return;
         }
 
-        // Put down as it goes together, the set is an assembly, at home where it stands. Its parts
+        // A set of parts is an assembly, at home where it stands - laid out or together. Its parts
         // are joined to it before they reach the plate, so undoing the insert takes the lot.
         Assembly? assembly = null;
         if (InOne(result))
@@ -430,7 +430,7 @@ public sealed partial class MainViewModel
 
         if (!applied || view.Result is not { } settings || view.Made is not { Parts.Count: > 0 } result) return;
 
-        var produced = grouped && InOne(result)
+        var produced = grouped && !result.LaidOut && InOne(result)
             ? [Regrouped(picked, generator, settings, result)]
             : Remade(members, generator, settings, result, NextAutomaticColour);
         foreach (var o in produced.Where(o => members.All(m => m.Name != o.Name))) o.Name = Scene.UniqueName(o.Name);
@@ -725,24 +725,25 @@ public sealed partial class MainViewModel
     private const string WholeSet = "(set)";
 
     /// <summary>
-    /// Whether a set goes down as an assembly: one put down assembled, with more than one part.
-    /// Laid out for printing, each part is its own object on its own, to be printed or moved about
-    /// singly. A set cut into a part - a thread's cutter, a wall mount's keyholes - always goes its
-    /// own ways.
+    /// Whether a set goes down as an assembly: any with more than one part, put down together or
+    /// laid out for printing - a box and its lid side by side are still one box, and put down
+    /// loose they were moved, copied and deleted one at a time. Each part can still be picked and
+    /// moved on its own. A set cut into a part - a thread's cutter, a wall mount's keyholes - goes
+    /// its own ways, the cutter used up.
     ///
     /// An assembly rather than one grouped object, as it was before there were assemblies. Put down in loose parts, a
     /// working model came apart the first time anything in it was moved; grouped, no part of it
     /// could be moved, painted or cut on its own without taking it apart for good. An assembly is
     /// picked whole by its name, keeps each part separate, and Reassemble puts it back together.
     /// </summary>
-    private static bool InOne(Generated made) => !made.LaidOut && made.Parts.Count > 1 && !made.Parts.Any(p => p.Cutter || p.CutOnly);
+    private static bool InOne(Generated made) => made.Parts.Count > 1 && !made.Parts.Any(p => p.Cutter || p.CutOnly);
 
     /// <summary>
     /// Whether a set put down together is held while its panel is open, as a single part is: the
     /// first part takes the handles and the rest follow it. Not a set that moves - turning it moves
     /// its parts each its own way, which following the first would undo.
     /// </summary>
-    private static bool Held(Generated made) => InOne(made) && made.Motion is null;
+    private static bool Held(Generated made) => !made.LaidOut && InOne(made) && made.Motion is null;
 
     /// <summary>
     /// Every part of an assembled set as one object, as Group makes one: not fused, so Ungroup
