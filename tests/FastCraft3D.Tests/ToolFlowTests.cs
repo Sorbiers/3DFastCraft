@@ -509,7 +509,10 @@ public class ToolFlowTests
         model.BeginMasonryCommand.Execute(null);
         Assert.True(model.IsEmbossMode && model.IsMasonryMode);
         Assert.Equal("Masonry", model.EmbossTitle);
-        Assert.Equal([FastCraft3D.Geometry.Engraving.TextureKind.Brick], model.EmbossTextures);
+        Assert.Equal(
+            [FastCraft3D.Geometry.Engraving.TextureKind.Brick, FastCraft3D.Geometry.Engraving.TextureKind.Rubble,
+             FastCraft3D.Geometry.Engraving.TextureKind.Castle], model.EmbossTextures);
+        Assert.Equal(FastCraft3D.Geometry.Engraving.TextureKind.Brick, model.EmbossTexture);
 
         Assert.True(model.PickEmbossFace(part, new Vector3(20, 0, 10), Vector3.UnitX));
         model.EmbossTexturePitch = 6f;
@@ -573,6 +576,45 @@ public class ToolFlowTests
         model.BeginMasonryCommand.Execute(null);
         Assert.Equal(4f, model.EmbossTexturePitch, 3);
         Assert.Equal(0.5f, model.EmbossDepth, 3);
+    });
+
+    /// <summary>
+    /// Rubble by Masonry round all four walls of a box: its own starting numbers, one closed solid,
+    /// and rubble still in hand the next time the tool is picked up.
+    /// </summary>
+    [Fact]
+    public void MasonryLaysRubbleWithQuoinsAndRemembersItWasRubble() => WithModel(model =>
+    {
+        var part = new SceneObject("Box", Primitives.Box(40, 30, 20)).Centred();
+        part.Position = new Vector3(0, 0, 10);
+        model.Scene.Objects.Add(part);
+        part.IsSelected = true;
+        model.RefreshSelection();
+
+        model.BeginMasonryCommand.Execute(null);
+        Assert.Equal(3, model.EmbossTextures.Count);
+        model.EmbossTexture = FastCraft3D.Geometry.Engraving.TextureKind.Rubble;
+        Assert.Equal(7f, model.EmbossTexturePitch, 3);
+        Assert.Equal(0.8f, model.EmbossDepth, 3);
+
+        Assert.True(model.PickEmbossFace(part, new Vector3(20, 0, 10), Vector3.UnitX));
+        foreach (var facing in TheOtherThree)
+            Assert.True(model.AddEmbossWall(part, part.WorldBounds.Center + facing * (part.WorldBounds.Size / 2f) - Vector3.UnitZ * 5f, facing));
+        Assert.Contains("All 4 walls", model.Status);
+
+        model.ApplyEmbossCommand.Execute(null);
+        PumpUntil(() => model.Scene.Objects.Count == 1 && !ReferenceEquals(model.Scene.Objects[0], part), 120000);
+        Assert.True(!ReferenceEquals(part, model.Scene.Objects[0]), model.Status);
+
+        var mesh = model.Scene.Objects[0].ToWorldMesh();
+        Assert.True(mesh.CheckHealth().IsWatertight, mesh.CheckHealth().Describe());
+        Assert.Single(MeshComponents.Split(mesh));
+        Assert.Contains("rubble walling", model.Status);
+
+        model.Scene.Objects[0].IsSelected = true;
+        model.RefreshSelection();
+        model.BeginMasonryCommand.Execute(null);
+        Assert.Equal(FastCraft3D.Geometry.Engraving.TextureKind.Rubble, model.EmbossTexture);
     });
 
     private static bool Inside(Bounds inner, Bounds outer) =>

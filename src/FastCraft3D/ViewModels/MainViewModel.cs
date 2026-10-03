@@ -94,7 +94,9 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
     /// </summary>
     private readonly Dictionary<TextureKind, (TextureOptions Texture, float Depth)> masonryKept = new()
     {
-        [TextureKind.Brick] = (new TextureOptions(TextureKind.Brick, 5f, 0.2f), 0.3f)
+        [TextureKind.Brick] = (new TextureOptions(TextureKind.Brick, 5f, 0.2f), 0.3f),
+        [TextureKind.Rubble] = (new TextureOptions(TextureKind.Rubble, 7f, 0.2f), 0.8f),
+        [TextureKind.Castle] = (new TextureOptions(TextureKind.Castle, 8f, 0.2f), 0.8f)
     };
 
     /// <summary>The kind of walling Masonry was last used with.</summary>
@@ -2828,7 +2830,8 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
     {
         get
         {
-            if (isMasonryMode) return MasonrySummary();
+            if (isMasonryMode && (embossTexture.Kind == TextureKind.Brick || embossFace is null || Run() is null))
+                return MasonrySummary();
             if (embossFace is null) return "Click the face to letter.";
 
             if (SurfaceTexture.CoursesOf(embossTexture, embossDepth) is { } courses)
@@ -3163,7 +3166,7 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
         EmbossRaised = true;
         RaiseMasonry();
 
-        Status = "Click a wall, then Ctrl+click the walls either side to carry the brickwork round the corners";
+        Status = "Click a wall, then Ctrl+click the walls either side to carry the walling round the corners";
     }
 
     private void LeaveMasonry()
@@ -3231,8 +3234,8 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
 
     private string MasonrySummary()
     {
-        if (embossFace is null) return "Click a wall to lay bricks on.";
-        if (Run() is not { } run) return embossWallsWhy ?? "There are no walls to lay bricks on here.";
+        if (embossFace is null) return "Click a wall to build on.";
+        if (Run() is not { } run) return embossWallsWhy ?? "There are no walls to build on here.";
         if (BrickBond.Refusal(run) is { } why) return why;
 
         return Brickwork(new WallsSurface(run), out int bricks) is null
@@ -3267,7 +3270,7 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
 
             if (built is null || built.TriangleCount == 0)
             {
-                if (isMasonryMode)
+                if (isMasonryMode && embossTexture.Kind == TextureKind.Brick)
                 {
                     Status = MasonrySummary();
                     return;
@@ -3306,14 +3309,16 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
                 Filament = source.Filament
             }.Centred();
 
-            bool bricked = isMasonryMode;
+            string? walling = !isMasonryMode ? null
+                : embossTexture.Kind == TextureKind.Brick ? "brickwork"
+                : $"{embossTexture.Kind.ToString().ToLowerInvariant()} walling";
             Undo.Execute(new ReplaceObjectsCommand(
-                bricked ? "Lay brickwork" : raised ? "Lay texture" : "Cut texture", [source], [textured]));
+                walling is not null ? "Lay walling" : raised ? "Lay texture" : "Cut texture", [source], [textured]));
 
             IsEmbossMode = false;
             RefreshSelection();
 
-            Status = $"{(bricked ? "brickwork" : embossTexture.Kind.ToString().ToLowerInvariant())} on {source.Name}"
+            Status = $"{walling ?? embossTexture.Kind.ToString().ToLowerInvariant()} on {source.Name}"
                    + $" - {built.TriangleCount:N0} triangles of texture,"
                    + $" {joined.TriangleCount:N0} in all";
         }
@@ -3674,8 +3679,9 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
 
     public IReadOnlyList<TextureKind> EmbossTextures => isMasonryMode ? MasonryTextures : AllTextures;
 
-    /// <summary>What Masonry lays. Rubble and castle walling, with their own corner stones, are to follow.</summary>
-    private static readonly IReadOnlyList<TextureKind> MasonryTextures = [TextureKind.Brick];
+    /// <summary>What Masonry lays: bricks with corner bricks, and stone walling with quoins.</summary>
+    private static readonly IReadOnlyList<TextureKind> MasonryTextures =
+        [TextureKind.Brick, TextureKind.Rubble, TextureKind.Castle];
 
     private static readonly IReadOnlyList<TextureKind> AllTextures =
     [
@@ -3763,7 +3769,7 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
     /// </param>
     private Mesh? ProfiledSolid(IPlacementSurface surface, bool coarse, bool sunk = false)
     {
-        if (isMasonryMode) return Brickwork(surface, out _);
+        if (isMasonryMode && embossTexture.Kind == TextureKind.Brick) return Brickwork(surface, out _);
 
         // Tiles and siding are built as the slabs they are. Boarding, stone, bark and grain are
         // sampled fields, because each of them is genuinely a height that changes everywhere.
@@ -3788,7 +3794,19 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
         // the wall turns. Anything else is a patch, placed where the handles put it as a flat
         // texture is.
         IRelief slid = new SlidRelief(relief, embossPlacement.OffsetMm);
-        if (surface is WallsSurface) return ReliefField.Build(surface, new LinedRelief(slid, surface), wide, tall, sunk, round);
+        if (surface is WallsSurface walls)
+        {
+            // Stone walling laid by Masonry has its cornerstones set into it.
+            IRelief laid = new LinedRelief(slid, surface);
+            if (isMasonryMode)
+            {
+                var o = embossTexture.Sane();
+                laid = new SurfaceProfiles.Quoins(
+                    laid, walls.Run, o.Kind, o.PitchMm, o.Courses, o.LineMm, embossDepth, coarse ? 1.2f : 0.4f);
+            }
+
+            return ReliefField.Build(surface, laid, wide, tall, sunk, round);
+        }
         if (!round) return ReliefField.Build(new PlacedSurface(surface, embossPlacement), relief, wide, tall, sunk);
 
         return ReliefField.Build(surface, slid, wide, tall, sunk, round);

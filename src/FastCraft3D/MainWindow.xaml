@@ -680,7 +680,7 @@
                     <Button Style="{StaticResource ToolButton}" Content="Masonry" Tag="{StaticResource IconEngrave}"
                             Command="{Binding BeginMasonryCommand}" MinWidth="82"
                             AutomationProperties.AutomationId="Masonry"
-                            ToolTip="Brickwork on the walls you pick, laid as a bricklayer lays it: each wall a whole number of bricks, and every corner turned by a whole corner brick, its length on one face and its end on the other, swapping course by course. Click a wall, then Ctrl+click the walls either side. Square corners only." />
+                            ToolTip="Brick or stone walling on the walls you pick, laid as a mason lays it. Brick: each wall a whole number of bricks, every corner turned by a whole corner brick, its length on one face and its end on the other, swapping course by course - square corners only. Rubble and castle walling: big cornerstones at every outside corner, long and short by turns. Click a wall, then Ctrl+click the walls either side." />
                     <Button Style="{StaticResource ToolButton}" Content="Engrave" Visibility="{Binding IsExtendedMode, Converter={StaticResource BoolToVisibility}}" Tag="{StaticResource IconEngrave}"
                             Command="{Binding BeginEngraveCommand}" MinWidth="82"
                             ToolTip="Legacy. One pattern - brick, tiles, planks, grain - on one flat face. Texture in Emboss does all this and more, and wraps around curves. Kept for older models." />

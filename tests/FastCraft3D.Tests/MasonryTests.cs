@@ -194,6 +194,76 @@ public class MasonryTests
         a.Min.Y < b.Max.Y - 1e-4f && b.Min.Y < a.Max.Y - 1e-4f &&
         a.Min.Z < b.Max.Z - 1e-4f && b.Min.Z < a.Max.Z - 1e-4f;
 
+    /// <summary>A stone field round the walls of a run with its quoins set in, as Masonry builds it.</summary>
+    private static (SurfaceProfiles.Quoins Quoins, WallsSurface Surface) Quoined(WallRun run, TextureKind kind)
+    {
+        var options = new TextureOptions(kind, kind == TextureKind.Rubble ? 7f : 8f, 0.2f).Sane();
+        var surface = new WallsSurface(run);
+        var field = SurfaceTexture.ProfileOf(options, 0.8f, 0.4f, run.Closed ? run.Length : 0f)!;
+        var lined = new LinedRelief(new SlidRelief(field, Vector2.Zero), surface);
+        return (new SurfaceProfiles.Quoins(lined, run, kind, options.PitchMm, options.Courses, 0.2f, 0.8f, 0.4f), surface);
+    }
+
+    /// <summary>
+    /// Rubble and castle walling round a box: a stack of quoins at every corner, each turning the
+    /// corner, its long face on one wall and its short face on the other, swapping course by course;
+    /// and the whole one closed solid with the box.
+    /// </summary>
+    [Theory]
+    [InlineData(TextureKind.Rubble)]
+    [InlineData(TextureKind.Castle)]
+    public void QuoinsTurnEveryOutsideCornerLongAndShortByTurns(TextureKind kind)
+    {
+        var box = Box();
+        var run = Walls(box, new Vector3(20, 0, 10), Vector3.UnitX, TheOtherThree);
+        var (quoins, surface) = Quoined(run, kind);
+
+        Assert.Equal(4, quoins.Corners);
+        Assert.True(quoins.Courses >= 2, $"{quoins.Courses} courses");
+
+        // Just past the end of a short face: inside the quoin where its long face is on that side,
+        // in the joint beside it where its short face is.
+        foreach (float corner in quoins.CornerXs)
+        {
+            bool? before = null;
+            for (int j = 0; j < quoins.Courses; j++)
+            {
+                float y = -10f + (j + 0.5f) * quoins.CourseMm;
+                float back = quoins.Height(new Vector2(corner - quoins.ShortMm - 0.1f, y));
+                float on = quoins.Height(new Vector2(corner + quoins.ShortMm + 0.1f, y));
+                bool longBefore = quoins.LongBefore(corner, j);
+
+                Assert.True(longBefore ? back > 0.2f && on == 0f : on > 0.2f && back == 0f,
+                    $"corner at {corner}, course {j}: {back} before, {on} after");
+                if (before is { } was) Assert.NotEqual(was, longBefore);
+                before = longBefore;
+            }
+        }
+
+        var field = ReliefField.Build(surface, quoins, run.Length, 20f - 0.2f, false, true);
+        var built = ManifoldCsg.Union(box, TextCutter.KeptOn(field, surface, 0.8f));
+        Assert.True(built is { } b && b.CheckHealth().IsWatertight, built?.CheckHealth().Describe());
+        Assert.Single(MeshComponents.Split(built!));
+    }
+
+    /// <summary>
+    /// Quoins go at outside corners only: the corner between two walls picked, and a corner where
+    /// the walls picked stop - but not an inside corner, which on a building is two walls meeting.
+    /// </summary>
+    [Fact]
+    public void QuoinsGoOnOutsideCornersOnly()
+    {
+        var (two, _) = Quoined(Walls(Box(), new Vector3(20, 0, 10), Vector3.UnitX, Vector3.UnitY), TextureKind.Castle);
+        Assert.Equal(3, two.Corners);
+
+        var wing = MeshTransform.Transformed(Primitives.Box(20, 40, 20), Matrix4x4.CreateTranslation(-10, 10, 10));
+        var part = ManifoldCsg.Union(Box(), wing)!;
+        var face = FacePatch.Find(part, new Vector3(20, 0, 10), Vector3.UnitX)!;
+        var loop = WallLoop.Around(part, face, new Vector3(20, 0, 10), out _)!;
+        var (all, _) = Quoined(WallRun.Round(loop, part, out _)!, TextureKind.Rubble);
+        Assert.Equal(5, all.Corners);
+    }
+
     /// <summary>A hexagonal tower has no square corner to turn, and is told so rather than bricked wrong.</summary>
     [Fact]
     public void ACornerThatIsNotSquareIsRefused()
