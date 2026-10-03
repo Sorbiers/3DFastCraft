@@ -18,26 +18,10 @@ namespace FastCraft3D.Geometry.Engraving;
 /// </summary>
 public static class BrickBond
 {
-    /// <summary>
-    /// How far a brick goes into the wall behind it, so the two overlap rather than meeting face
-    /// to face - the same hair, and for the same reason, as <see cref="ReliefField.SinkMm"/>.
-    /// </summary>
-    public const float SinkMm = 0.3f;
+    /// <summary>How far a brick goes into the wall behind it.</summary>
+    public const float SinkMm = WallBlocks.SinkMm;
 
-    /// <summary>
-    /// A corner brick's back is sunk this much further behind one wall than the other. With the
-    /// two equal, the back corner of the brick lies on the mitre through the wall's own corner and
-    /// the brick's cap is cut along a line straight through the corner edge of the part - an edge
-    /// crossing an edge, which the boolean cannot be handed. See <see cref="WallRun"/>'s fold lines.
-    /// </summary>
-    private const float SinkSkew = 1.37f;
-
-    /// <summary>
-    /// How far a brick at a free end stops short of the end of the wall, and how far a brick
-    /// running into an inside corner goes past it into the other wall: a hair either way, so its
-    /// end is never in the plane of the wall round the corner.
-    /// </summary>
-    private const float HairMm = 0.01f;
+    private const float HairMm = WallBlocks.HairMm;
 
     /// <summary>How far off square a corner may be and still be bonded: about three degrees.</summary>
     private const float SquareSlack = 0.05f;
@@ -114,7 +98,7 @@ public static class BrickBond
 
                 foreach (var (from, to) in Pieces(plan, end, stretcher, joint, depth))
                 {
-                    Box(positions, indices, run.Loop, plan.Wall, from, to, depth, bottom, top);
+                    WallBlocks.Straight(positions, indices, run.Loop, plan.Wall, from, to, depth, bottom, top);
                     bricks++;
                 }
 
@@ -123,7 +107,7 @@ public static class BrickBond
                 {
                     var next = plans[(p + 1) % plans.Length];
                     float nextEnd = Stretches(k, p + 1) ? next.Brick : next.Header;
-                    Turning(positions, indices, run.Loop, plan.Wall, end, nextEnd, depth, bottom, top);
+                    WallBlocks.Turning(positions, indices, run.Loop, plan.Wall, end, nextEnd, depth, bottom, top);
                     bricks++;
                 }
             }
@@ -179,20 +163,13 @@ public static class BrickBond
             int modules = Math.Max(2, (int)MathF.Round((length + joint) / module));
             float brick = (length + joint) / modules - joint;
 
-            var start = !run.Closed && p == 0 ? Corner.Free : Turn(loop, (wall + n - 1) % n, wall);
-            var end = !run.Closed && p == walls.Count - 1 ? Corner.Free : Turn(loop, wall, (wall + 1) % n);
+            var start = !run.Closed && p == 0 ? Corner.Free : (WallBlocks.Outside(loop, (wall + n - 1) % n, wall) ? Corner.Outside : Corner.Inside);
+            var end = !run.Closed && p == walls.Count - 1 ? Corner.Free : (WallBlocks.Outside(loop, wall, (wall + 1) % n) ? Corner.Outside : Corner.Inside);
 
             plans[p] = new WallPlan(wall, length, brick, (brick - joint) / 2f, modules, start, end);
         }
 
         return plans;
-    }
-
-    private static Corner Turn(WallLoop loop, int before, int after)
-    {
-        var (a, _) = loop.WallAt(before);
-        var (b, _) = loop.WallAt(after);
-        return a.X * b.Y - a.Y * b.X > 0 ? Corner.Outside : Corner.Inside;
     }
 
     /// <summary>
@@ -243,85 +220,6 @@ public static class BrickBond
             case Corner.Inside when end - depth - joint >= LeastPieceMm:
                 yield return (len - end, len - depth - joint);
                 break;
-        }
-    }
-
-    /// <summary>One straight brick on one wall, from its back in the wall to its face.</summary>
-    private static void Box(
-        List<Vector3> positions, List<int> indices, WallLoop loop, int wall,
-        float from, float to, float depth, float bottom, float top)
-    {
-        var start = loop.CornerAt(wall);
-        var (along, outward) = loop.WallAt(wall);
-
-        Prism(positions, indices,
-        [
-            start + along * from - outward * SinkMm,
-            start + along * to - outward * SinkMm,
-            start + along * to + outward * depth,
-            start + along * from + outward * depth
-        ], bottom, top);
-    }
-
-    /// <summary>
-    /// The brick on an outside corner: <paramref name="before"/> of it along the wall coming in,
-    /// <paramref name="after"/> along the wall going out, as one block with a square corner.
-    /// </summary>
-    private static void Turning(
-        List<Vector3> positions, List<int> indices, WallLoop loop, int wall,
-        float before, float after, float depth, float bottom, float top)
-    {
-        int n = loop.Count;
-        int next = (wall + 1) % n;
-        var corner = loop.CornerAt(next);
-        var (inAlong, inOut) = loop.WallAt(wall);
-        var (outAlong, outOut) = loop.WallAt(next);
-        float skewed = SinkMm * SinkSkew;
-
-        // Starting from the back corner, which sees the whole of the L, so the caps can be laid
-        // as a fan from it.
-        Prism(positions, indices,
-        [
-            corner - inOut * SinkMm - outOut * skewed,
-            corner + outAlong * after - outOut * skewed,
-            corner + outAlong * after + outOut * depth,
-            corner + inOut * depth + outOut * depth,
-            corner - inAlong * before + inOut * depth,
-            corner - inAlong * before - inOut * SinkMm
-        ], bottom, top);
-    }
-
-    /// <summary>
-    /// A plan stood up between two heights, closed, its faces outward. The plan must be seen
-    /// whole from its first corner, since its caps are a fan from there.
-    /// </summary>
-    private static void Prism(List<Vector3> positions, List<int> indices, Vector2[] plan, float bottom, float top)
-    {
-        float area = 0f;
-        for (int i = 0; i < plan.Length; i++)
-        {
-            var a = plan[i];
-            var b = plan[(i + 1) % plan.Length];
-            area += a.X * b.Y - b.X * a.Y;
-        }
-
-        // Anticlockwise from above, the first corner kept first.
-        if (area < 0) Array.Reverse(plan, 1, plan.Length - 1);
-
-        int n = plan.Length, low = positions.Count, high = low + n;
-        foreach (var p in plan) positions.Add(new Vector3(p.X, p.Y, bottom));
-        foreach (var p in plan) positions.Add(new Vector3(p.X, p.Y, top));
-
-        for (int i = 1; i + 1 < n; i++)
-        {
-            indices.AddRange([low, low + i + 1, low + i]);
-            indices.AddRange([high, high + i, high + i + 1]);
-        }
-
-        for (int i = 0; i < n; i++)
-        {
-            int j = (i + 1) % n;
-            indices.AddRange([low + i, low + j, high + j, low + i, high + j, high + i]);
         }
     }
 }

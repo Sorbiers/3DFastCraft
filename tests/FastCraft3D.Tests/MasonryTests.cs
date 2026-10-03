@@ -264,6 +264,63 @@ public class MasonryTests
         Assert.Equal(5, all.Corners);
     }
 
+    /// <summary>
+    /// Log walls round a box: every other wall half a course up, so the logs of two walls take
+    /// turns at each corner, every log running on past its corners, and the whole one solid that
+    /// joins the box cleanly. The count the panel quotes is the count laid.
+    /// </summary>
+    [Fact]
+    public void LogsCrossAtEveryCornerWithTheirEndsStandingOut()
+    {
+        var box = Box();
+        var run = Walls(box, new Vector3(20, 0, 10), Vector3.UnitX, TheOtherThree);
+
+        var logs = LogWalls.Build(run, 3f, 0.4f, 1f, out int count);
+        Assert.True(logs.CheckHealth().IsWatertight, logs.CheckHealth().Describe());
+        Assert.Equal(LogWalls.Count(run, 3f), count);
+
+        // Seven courses of 20/7 mm: two walls with seven logs, two lifted with six and two halves.
+        Assert.Equal(2 * 7 + 2 * 8, count);
+
+        // Past every corner by most of a course, and not past the foot or the top.
+        float course = LogWalls.CourseOf(run, 3f);
+        var bounds = logs.ComputeBounds();
+        Assert.Equal(20f + 0.75f * course, bounds.Max.X, 2);
+        Assert.Equal(-15f - 0.75f * course, bounds.Min.Y, 2);
+        Assert.True(bounds.Min.Z > 0f && bounds.Max.Z < 20f, $"{bounds.Min.Z} to {bounds.Max.Z}");
+
+        var built = ManifoldCsg.Union(box, TextCutter.KeptOn(logs, new WallsSurface(run), LogWalls.Reach(run, 3f, 1f)));
+        Assert.True(built is { } b && b.CheckHealth().IsWatertight, built?.CheckHealth().Describe());
+        Assert.Equal(bounds.Max.X, built!.ComputeBounds().Max.X, 2);
+        Assert.Single(MeshComponents.Split(built));
+    }
+
+    /// <summary>
+    /// Siding's posts on an L-shaped building: one turning each of the five outside corners and a
+    /// square one in the inside corner, prouder than the boards they cover.
+    /// </summary>
+    [Fact]
+    public void SidingHasAPostAtEveryCornerInsideAndOut()
+    {
+        var wing = MeshTransform.Transformed(Primitives.Box(20, 40, 20), Matrix4x4.CreateTranslation(-10, 10, 10));
+        var part = ManifoldCsg.Union(Box(), wing)!;
+        var face = FacePatch.Find(part, new Vector3(20, 0, 10), Vector3.UnitX)!;
+        var run = WallRun.Round(WallLoop.Around(part, face, new Vector3(20, 0, 10), out _)!, part, out _)!;
+
+        var posts = CornerPosts.Build(run, 2.5f, 0.8f, out int count);
+        Assert.Equal(6, count);
+        Assert.True(posts.CheckHealth().IsWatertight, posts.CheckHealth().Describe());
+        Assert.Equal(20f + CornerPosts.ProudFor(0.8f), posts.ComputeBounds().Max.X, 3);
+
+        // Two walls picked: the post turning their corner, and at each far end the one face of a
+        // post on the wall picked, the walls round those corners left alone.
+        var two = Walls(Box(), new Vector3(20, 0, 10), Vector3.UnitX, Vector3.UnitY);
+        var ends = CornerPosts.Build(two, 2.5f, 0.8f, out count);
+        Assert.Equal(3, count);
+        var reach = ends.ComputeBounds();
+        Assert.True(reach.Min.X > -20f && reach.Min.Y > -15f, $"{reach.Min}");
+    }
+
     /// <summary>A hexagonal tower has no square corner to turn, and is told so rather than bricked wrong.</summary>
     [Fact]
     public void ACornerThatIsNotSquareIsRefused()

@@ -51,7 +51,7 @@ public sealed class EngraveState
     /// <summary>The face's size and how many grooves the current settings would cut into it.</summary>
     public string Describe()
     {
-        if (Face is null) return "Click the face you want to engrave.";
+        if (Face is null) return "Click the face to put studs on.";
 
         var size = Face.Size;
         int grooves = Engraver.CountGrooves(Face, Options);

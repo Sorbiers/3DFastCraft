@@ -89,7 +89,8 @@ public class EngraveWiringTests
             Assert.True(picked);
             Assert.NotNull(model.EngraveFace);
             Assert.Equal(Vector3.UnitZ, model.EngraveFace!.Normal);
-            Assert.Contains("grooves", model.EngraveSummary);
+            Assert.Contains("stud", model.EngraveSummary);
+            Assert.Equal(FastCraft3D.Geometry.Engraving.PatternKind.Studs, model.EngravePattern);
             Assert.Equal(2, highlights); // once on entering the mode, once on the pick
         });
     }
@@ -170,76 +171,11 @@ public class EngraveWiringTests
             model.BeginEngraveCommand.Execute(null);
             model.PickEngraveFace(cube, TopOf(cube), Vector3.UnitZ);
 
-            model.EngraveDepth = 0.15f;
+            model.EngravePattern = Geometry.Engraving.PatternKind.StudUnderside;
+            model.EngraveDepth = 2f;
 
-            Assert.Equal(0.15f, model.EngraveDepth, 4);
-            Assert.Contains("0.15 mm deep", model.EngraveSummary);
-            Assert.True(model.HasEngraveAdvice);
-            Assert.Contains("0.2 mm layers", model.EngraveAdvice);
-        });
-    }
-
-    [Fact]
-    public void ThePreviewIsEmptyUntilAFaceIsPickedAndFilledAfterwards()
-    {
-        RunSta(() =>
-        {
-            var (model, cube) = WithACube();
-            model.BeginEngraveCommand.Execute(null);
-
-            Assert.True(model.EngravePreview.IsEmpty);
-
-            model.PickEngraveFace(cube, TopOf(cube), Vector3.UnitZ);
-
-            Assert.False(model.EngravePreview.IsEmpty);
-            Assert.NotEmpty(model.EngravePreview.Rectangles);
-        });
-    }
-
-    /// <summary>The preview has to redraw as the settings change, or it is showing a lie.</summary>
-    [Fact]
-    public void ChangingASettingRedrawsThePreview()
-    {
-        RunSta(() =>
-        {
-            var (model, cube) = WithACube();
-            model.BeginEngraveCommand.Execute(null);
-            model.PickEngraveFace(cube, TopOf(cube), Vector3.UnitZ);
-
-            int redraws = 0;
-            model.EngraveFaceChanged += () => redraws++;
-            int before = model.EngravePreview.Count;
-
-            model.EngraveSize = 4f;
-
-            Assert.True(redraws > 0, "the viewport was never told to redraw");
-            Assert.True(model.EngravePreview.Count > before, "a finer pattern should mean more grooves");
-        });
-    }
-
-    /// <summary>
-    /// Sliding the pattern is what lines a corner up, so it has to reach the preview. The count
-    /// is deliberately not asserted: shifting a pattern can carry a line off the edge of the
-    /// face, and on a small face that is the usual outcome rather than a fault.
-    /// </summary>
-    [Fact]
-    public void ShiftingThePatternMovesThePreview()
-    {
-        RunSta(() =>
-        {
-            var (model, cube) = WithACube();
-            model.BeginEngraveCommand.Execute(null);
-            model.PickEngraveFace(cube, TopOf(cube), Vector3.UnitZ);
-            model.EngravePattern = Geometry.Engraving.PatternKind.Stripes;
-            model.EngraveSize = 4f;
-
-            var before = model.EngravePreview.Rectangles.Select(r => r.MinV).ToList();
-            model.EngraveOffsetV = 1.5f;
-            var after = model.EngravePreview.Rectangles.Select(r => r.MinV).ToList();
-
-            Assert.Equal(1.5f, model.EngraveOffsetV, 4);
-            Assert.NotEmpty(after);
-            Assert.NotEqual(before, after);
+            Assert.Equal(2f, model.EngraveDepth, 4);
+            Assert.Contains("hollowed 2 mm deep", model.EngraveSummary);
         });
     }
 
@@ -258,43 +194,6 @@ public class EngraveWiringTests
             Assert.Equal(1.2f, model.EngraveGrooveWidth, 3);
             Assert.Equal(0.6f, model.EngraveDepth, 3);
             Assert.Equal(0f, model.EngraveOffsetU, 3);
-        });
-    }
-
-    /// <summary>Wood previews as curves, so the preview has to carry them as well.</summary>
-    [Fact]
-    public void WoodPreviewsAsRibbons()
-    {
-        RunSta(() =>
-        {
-            var (model, cube) = WithACube();
-            model.BeginEngraveCommand.Execute(null);
-            model.PickEngraveFace(cube, TopOf(cube), Vector3.UnitZ);
-
-            model.EngravePattern = Geometry.Engraving.PatternKind.Wood;
-            model.EngraveSize = 3f;
-
-            Assert.Empty(model.EngravePreview.Rectangles);
-            Assert.NotEmpty(model.EngravePreview.Ribbons);
-        });
-    }
-
-    /// <summary>Brick courses are always level, so the direction control does not apply to it.</summary>
-    [Fact]
-    public void OnlyStripesAndBoardsOfferADirection()
-    {
-        RunSta(() =>
-        {
-            var model = new MainViewModel();
-
-            model.EngravePattern = Geometry.Engraving.PatternKind.Brick;
-            Assert.False(model.EngraveDirectionApplies);
-
-            model.EngravePattern = Geometry.Engraving.PatternKind.Stripes;
-            Assert.True(model.EngraveDirectionApplies);
-
-            model.EngravePattern = Geometry.Engraving.PatternKind.Wood;
-            Assert.True(model.EngraveDirectionApplies);
         });
     }
 }

@@ -96,8 +96,16 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
     {
         [TextureKind.Brick] = (new TextureOptions(TextureKind.Brick, 5f, 0.2f), 0.3f),
         [TextureKind.Rubble] = (new TextureOptions(TextureKind.Rubble, 7f, 0.2f), 0.8f),
-        [TextureKind.Castle] = (new TextureOptions(TextureKind.Castle, 8f, 0.2f), 0.8f)
+        [TextureKind.Castle] = (new TextureOptions(TextureKind.Castle, 8f, 0.2f), 0.8f),
+        [TextureKind.Siding] = (new TextureOptions(TextureKind.Siding, 2.5f, 0.2f), 0.6f),
+        [TextureKind.Logs] = (new TextureOptions(TextureKind.Logs, 3f, 0.2f), 1f)
     };
+
+    /// <summary>
+    /// What the Texture tool was last used with this session, or null for its first texture. Kept
+    /// apart from lettering, which has no texture, and from Masonry, which keeps its own.
+    /// </summary>
+    private (TextureOptions Texture, float Depth)? textureKept;
 
     /// <summary>The kind of walling Masonry was last used with.</summary>
     private TextureKind masonryKind = TextureKind.Brick;
@@ -175,7 +183,8 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
     private bool isGridPanelOpen;
     private bool isShortcutsPanelOpen;
     private float modelScale = 1f;
-    private readonly EngraveState engrave = new();
+    /// <summary>The Studs tool's face and settings, opening on studs - the patterns it is for.</summary>
+    private readonly EngraveState engrave = new() { Options = EngraveOptions.Default with { Kind = PatternKind.Studs } };
     private Vector3 splitNormal = Vector3.UnitZ;
     private readonly List<SceneObject> clipboard = new();
     private GizmoMode gizmoMode = GizmoMode.Move;
@@ -291,6 +300,7 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
         VoronoiCommand = Track(AsyncRelayCommand.Simple(VoronoiSelection, () => Scene.Selection.Count > 0));
         BeginEmbossCommand = Track(RelayCommand.Simple(BeginEmboss, () => Scene.Selection.Count == 1));
         BeginMasonryCommand = Track(RelayCommand.Simple(BeginMasonry, () => Scene.Selection.Count == 1));
+        BeginTextureCommand = Track(RelayCommand.Simple(BeginTexture, () => Scene.Selection.Count == 1));
         BeginLayCommand = Track(RelayCommand.Simple(BeginLay, () => Scene.Selection.Count == 1));
         BestFaceCommand = Track(AsyncRelayCommand.Simple(BestFaceDown, () => Scene.Selection.Count == 1));
         ApplyEmbossCommand = AsyncRelayCommand.Simple(
@@ -441,6 +451,7 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
     public System.Windows.Input.ICommand PivotToCentreCommand { get; }
     public System.Windows.Input.ICommand BeginEmbossCommand { get; }
     public System.Windows.Input.ICommand BeginMasonryCommand { get; }
+    public System.Windows.Input.ICommand BeginTextureCommand { get; }
     public System.Windows.Input.ICommand BeginLayCommand { get; }
     public System.Windows.Input.ICommand BestFaceCommand { get; }
     public System.Windows.Input.ICommand ApplyEmbossCommand { get; }
@@ -2437,6 +2448,7 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
                 embossRun = null;
                 embossWallsTried = false;
                 embossObject = null;
+                KeepTexture();
                 LeaveMasonry();
                 embossPlacement = SurfacePlacement.Middle;
                 letteringCache = null;
@@ -2830,7 +2842,7 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
     {
         get
         {
-            if (isMasonryMode && (embossTexture.Kind == TextureKind.Brick || embossFace is null || Run() is null))
+            if (isMasonryMode && (Built(embossTexture.Kind) || embossFace is null || Run() is null))
                 return MasonrySummary();
             if (embossFace is null) return "Click the face to letter.";
 
@@ -3141,10 +3153,54 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
         IsAlignFaceMode = false;
         IsCentreFaceMode = false;
         LeaveMasonry();
+        KeepTexture();
         IsEmbossMode = true;
+
+        // Lettering. A texture is the Texture tool's, and is put back when that is picked up.
+        EmbossTexture = TextureKind.None;
 
         Status = "Click the face you want to letter";
     }
+
+    /// <summary>
+    /// A texture over a face, flat or wrapped round. It is the Emboss tool underneath - the same
+    /// panel, picking, preview and Apply - with a texture in hand instead of lettering, starting
+    /// where it was last left this session.
+    /// </summary>
+    private void BeginTexture()
+    {
+        if (Scene.Selection.Count != 1) return;
+
+        BeginEmboss();
+        var (texture, depth) = textureKept ?? (TextureOptions.Default, embossDepth);
+        EmbossTexture = texture.Kind;
+        SetTexture(texture);
+        EmbossDepth = depth;
+
+        Status = "Click the face you want to texture";
+    }
+
+    /// <summary>Remembers the Texture tool's texture for the next time it is picked up this session.</summary>
+    private void KeepTexture()
+    {
+        if (!isMasonryMode && embossTexture.IsOn) textureKept = (embossTexture, embossDepth);
+    }
+
+    /// <summary>Whether the Emboss panel is the Texture tool's: a texture in hand, and not Masonry.</summary>
+    public bool IsTextureTool => !isMasonryMode && embossTexture.IsOn;
+
+    /// <summary>Whether the panel offers a choice of texture: the Texture tool's and Masonry's do, lettering's does not.</summary>
+    public bool ChoosesTexture => isMasonryMode || embossTexture.IsOn;
+
+    /// <summary>Whether a drawing can be stamped instead of lettering - the Emboss tool's alone.</summary>
+    public bool ShowsDrawing => !isMasonryMode && !embossTexture.IsOn;
+
+    /// <summary>
+    /// A texture that Masonry lays as walls are built rather than as a pattern - with corner
+    /// bricks, quoins or corner posts - so the Texture tool says so.
+    /// </summary>
+    public bool SuggestsMasonry => IsTextureTool && embossTexture.Kind
+        is TextureKind.Brick or TextureKind.Rubble or TextureKind.Castle or TextureKind.Siding;
 
     /// <summary>
     /// Brickwork round the walls picked. It is the Emboss tool underneath - the same picking, the
@@ -3204,6 +3260,7 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
 
     private void RaiseMasonry()
     {
+        RaiseTool();
         Raise(nameof(IsMasonryMode));
         Raise(nameof(NotMasonry));
         Raise(nameof(EmbossTitle));
@@ -3219,7 +3276,61 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
     /// <summary>For the rows of the panel that brickwork has no use for.</summary>
     public bool NotMasonry => !isMasonryMode;
 
-    public string EmbossTitle => isMasonryMode ? "Masonry" : "Emboss";
+    public string EmbossTitle => isMasonryMode ? "Masonry and siding" : embossTexture.IsOn ? "Texture" : "Emboss";
+
+    /// <summary>The rows of the panel that follow which of the three tools it is.</summary>
+    private void RaiseTool()
+    {
+        Raise(nameof(EmbossTitle));
+        Raise(nameof(IsTextureTool));
+        Raise(nameof(ChoosesTexture));
+        Raise(nameof(ShowsDrawing));
+        Raise(nameof(SuggestsMasonry));
+    }
+
+    /// <summary>The walling Masonry builds piece by piece rather than as a field: bricks and logs.</summary>
+    private static bool Built(TextureKind kind) => kind is TextureKind.Brick or TextureKind.Logs;
+
+    /// <summary>The logs round the walls picked, or null while there are none to lay.</summary>
+    private Mesh? Logwork(IPlacementSurface surface, out int logs)
+    {
+        logs = 0;
+        if (surface is not WallsSurface walls || BrickBond.Refusal(walls.Run) is not null) return null;
+
+        var o = embossTexture.Sane();
+        var laid = LogWalls.Build(walls.Run, o.PitchMm, o.LineMm, embossDepth, out logs);
+        return laid.TriangleCount == 0 ? null : laid;
+    }
+
+    /// <summary>Siding with its corner posts joined over the ends of the boards - see <see cref="CornerPosts"/>.</summary>
+    private static Mesh WithPosts(Mesh siding, WallRun run, in TileCourses courses)
+    {
+        var posts = CornerPosts.Build(run, courses.CourseMm, TileSolid.ReliefOf(courses), out int count);
+        if (count == 0) return siding;
+
+        return ManifoldCsg.Union(siding, posts) is { TriangleCount: > 0 } joined && joined.CheckHealth().IsWatertight
+            ? joined
+            : Mesh.Combine([siding, posts]);
+    }
+
+    /// <summary>
+    /// How far what is laid stands off the walls at the most: the depth, or more for what Masonry
+    /// builds round the corners - the end of a log past the corner, a post over the boards. It is
+    /// how far out a raised texture is kept to its walls, and a log end trimmed to the depth is cut
+    /// off short of its own end.
+    /// </summary>
+    private float Proud(IPlacementSurface surface)
+    {
+        if (!isMasonryMode || surface is not WallsSurface walls) return embossDepth;
+
+        return embossTexture.Kind switch
+        {
+            TextureKind.Logs => LogWalls.Reach(walls.Run, embossTexture.Sane().PitchMm, embossDepth),
+            TextureKind.Siding when SurfaceTexture.CoursesOf(embossTexture, embossDepth) is { } courses =>
+                MathF.Max(embossDepth, CornerPosts.ProudFor(TileSolid.ReliefOf(courses))),
+            _ => embossDepth
+        };
+    }
 
     /// <summary>The bricks round the walls picked, or null while there are none to lay.</summary>
     private Mesh? Brickwork(IPlacementSurface surface, out int bricks)
@@ -3237,6 +3348,15 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
         if (embossFace is null) return "Click a wall to build on.";
         if (Run() is not { } run) return embossWallsWhy ?? "There are no walls to build on here.";
         if (BrickBond.Refusal(run) is { } why) return why;
+
+        // Logs are counted rather than laid: laying them joins every crossing at the corners.
+        if (embossTexture.Kind == TextureKind.Logs)
+        {
+            int logs = LogWalls.Count(run, embossTexture.Sane().PitchMm);
+            return logs == 0
+                ? "The walls are lower than one log - try thinner logs."
+                : $"{logs:N0} logs, {embossDepth:0.##} mm proud.";
+        }
 
         return Brickwork(new WallsSurface(run), out int bricks) is null
             ? "The walls are lower than one course - try a smaller brick."
@@ -3270,7 +3390,7 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
 
             if (built is null || built.TriangleCount == 0)
             {
-                if (isMasonryMode && embossTexture.Kind == TextureKind.Brick)
+                if (isMasonryMode && Built(embossTexture.Kind))
                 {
                     Status = MasonrySummary();
                     return;
@@ -3309,9 +3429,13 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
                 Filament = source.Filament
             }.Centred();
 
-            string? walling = !isMasonryMode ? null
-                : embossTexture.Kind == TextureKind.Brick ? "brickwork"
-                : $"{embossTexture.Kind.ToString().ToLowerInvariant()} walling";
+            string? walling = !isMasonryMode ? null : embossTexture.Kind switch
+            {
+                TextureKind.Brick => "brickwork",
+                TextureKind.Siding => "siding",
+                TextureKind.Logs => "log walls",
+                _ => $"{embossTexture.Kind.ToString().ToLowerInvariant()} walling"
+            };
             Undo.Execute(new ReplaceObjectsCommand(
                 walling is not null ? "Lay walling" : raised ? "Lay texture" : "Cut texture", [source], [textured]));
 
@@ -3674,18 +3798,23 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
             RefreshDrawing();
 
             if (isMasonryMode) TakeMasonry(value);
+            RaiseTool();
         }
     }
 
     public IReadOnlyList<TextureKind> EmbossTextures => isMasonryMode ? MasonryTextures : AllTextures;
 
-    /// <summary>What Masonry lays: bricks with corner bricks, and stone walling with quoins.</summary>
+    /// <summary>
+    /// What Masonry lays: bricks with corner bricks, stone walling with quoins, siding with corner
+    /// posts and log walls crossing at the corners.
+    /// </summary>
     private static readonly IReadOnlyList<TextureKind> MasonryTextures =
-        [TextureKind.Brick, TextureKind.Rubble, TextureKind.Castle];
+        [TextureKind.Brick, TextureKind.Rubble, TextureKind.Castle, TextureKind.Siding, TextureKind.Logs];
 
+    /// <summary>What the Texture tool lays. Lettering, which is no texture, is the Emboss tool's.</summary>
     private static readonly IReadOnlyList<TextureKind> AllTextures =
     [
-        TextureKind.None, TextureKind.Knurl, TextureKind.Ribs,
+        TextureKind.Knurl, TextureKind.Ribs,
         TextureKind.Hex, TextureKind.Dots, TextureKind.Tread,
         TextureKind.Brick, TextureKind.RoofTiles, TextureKind.Tiles, TextureKind.Planks,
         TextureKind.Siding, TextureKind.Rubble, TextureKind.Castle, TextureKind.Bark, TextureKind.Grain
@@ -3770,6 +3899,7 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
     private Mesh? ProfiledSolid(IPlacementSurface surface, bool coarse, bool sunk = false)
     {
         if (isMasonryMode && embossTexture.Kind == TextureKind.Brick) return Brickwork(surface, out _);
+        if (isMasonryMode && embossTexture.Kind == TextureKind.Logs) return Logwork(surface, out _);
 
         // Tiles and siding are built as the slabs they are. Boarding, stone, bark and grain are
         // sampled fields, because each of them is genuinely a height that changes everywhere.
@@ -3780,10 +3910,10 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
             // Across and Up move the lattice. A stamp is placed somewhere on the face; a texture
             // fills it, so the only thing those two numbers can mean here is where the courses
             // start - which is what somebody lining a joint up with a window wants from them.
-            return across <= 0.01f || up <= 0.01f
-                ? null
-                : TileSolid.Build(
-                    surface, courses, across, up, sunk, room, embossPlacement.OffsetMm);
+            if (across <= 0.01f || up <= 0.01f) return null;
+
+            var laid = TileSolid.Build(surface, courses, across, up, sunk, room, embossPlacement.OffsetMm);
+            return isMasonryMode && surface is WallsSurface sided ? WithPosts(laid, sided.Run, courses) : laid;
         }
 
         var (wide, tall, round) = FieldExtent();
@@ -4161,7 +4291,7 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
     /// face's own region, or the regions of every wall it goes round.
     /// </summary>
     private Mesh KeptToTheWall(Mesh solid, IPlacementSurface surface, CancellationToken token = default) =>
-        TextCutter.KeptOn(solid, surface, embossDepth, token);
+        TextCutter.KeptOn(solid, surface, Proud(surface), token);
 
     /// <summary>A thin slab of the lettering, laid on the shape so the placement can be seen.</summary>
     public Mesh? EmbossPreview()
@@ -5565,14 +5695,13 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
     /// <summary>What the pattern would cut, drawn on the face while the settings are chosen.</summary>
     public GrooveSet EngravePreview => engrave.Preview();
 
+    /// <summary>
+    /// What the Studs tool puts on a face. It was Engrave, with brick, tiles, planks, wood grain
+    /// and stripes as well; those are the Texture tool's now, which does all of them and wraps
+    /// them round curves, and the studs are what it had that nothing else has.
+    /// </summary>
     public IReadOnlyList<PatternChoice> EngravePatterns { get; } =
     [
-        new(PatternKind.Brick, "Brick"),
-        new(PatternKind.RoofTiles, "Roof tiles"),
-        new(PatternKind.Tiles, "Tiles"),
-        new(PatternKind.Planks, "Planks"),
-        new(PatternKind.Wood, "Wood grain"),
-        new(PatternKind.Stripes, "Stripes"),
         new(PatternKind.Studs, "Studs (brick-compatible)"),
         new(PatternKind.StudUnderside, "Brick underside")
     ];
@@ -9099,7 +9228,8 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
         IsAlignFaceMode = false;
         IsCentreFaceMode = false;
         IsEngraveMode = true;
-        Status = "Click the face you want to engrave";
+        if (!EngraveIsStuds) EngravePattern = PatternKind.Studs;
+        Status = "Click the face to put studs on";
     }
 
     /// <summary>

@@ -807,26 +807,6 @@ public class ToolTakeoverTests
     }
 
     [Fact]
-    public void ShiftingThePatternMovesTheGroovesItWouldCut()
-    {
-        RunSta(() =>
-        {
-            var (model, cube) = WithACube();
-            model.BeginEngraveCommand.Execute(null);
-            model.PickEngraveFace(cube, TopOf(cube), Vector3.UnitZ);
-
-            var before = model.EngravePreview.Rectangles.ToList();
-
-            model.EngravePlacement = new SurfacePlacement(new Vector2(0, 2f), 0);
-
-            var after = model.EngravePreview.Rectangles.ToList();
-
-            Assert.NotEmpty(before);
-            Assert.False(before.SequenceEqual(after), "shifting the pattern left the grooves alone");
-        });
-    }
-
-    [Fact]
     public void PickingADifferentFaceLevelsThePatternAgain()
     {
         RunSta(() =>

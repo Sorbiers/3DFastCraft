@@ -677,11 +677,15 @@
                     <Button Style="{StaticResource ToolButton}" Content="Emboss" Tag="{StaticResource IconText}"
                             Command="{Binding BeginEmbossCommand}" MinWidth="78"
                             ToolTip="Raise lettering or a drawing off a face, or cut it in. Needs exactly one object selected." />
-                    <Button Style="{StaticResource ToolButton}" Content="Masonry" Tag="{StaticResource IconEngrave}"
+                    <Button Style="{StaticResource ToolButton}" Content="Texture" Tag="{StaticResource IconTexture}"
+                            Command="{Binding BeginTextureCommand}" MinWidth="78"
+                            AutomationProperties.AutomationId="Texture"
+                            ToolTip="Cover a face with a pattern - knurling, ribs, honeycomb, pips, tread plate, brick, tiles, boards, siding, roof tiles, rubble, castle walling, bark, wood grain - flat on it, or wrapped round a barrel or round the walls. Needs exactly one object selected." />
+                    <Button Style="{StaticResource ToolButton}" Content="Masonry" Tag="{StaticResource IconMasonry}"
                             Command="{Binding BeginMasonryCommand}" MinWidth="82"
                             AutomationProperties.AutomationId="Masonry"
-                            ToolTip="Brick or stone walling on the walls you pick, laid as a mason lays it. Brick: each wall a whole number of bricks, every corner turned by a whole corner brick, its length on one face and its end on the other, swapping course by course - square corners only. Rubble and castle walling: big cornerstones at every outside corner, long and short by turns. Click a wall, then Ctrl+click the walls either side." />
-                    <Button Style="{StaticResource ToolButton}" Content="Engrave" Visibility="{Binding IsExtendedMode, Converter={StaticResource BoolToVisibility}}" Tag="{StaticResource IconEngrave}"
+                            ToolTip="Brick, stone, siding or log walls on the walls you pick, built the way the real thing is. Brick: each wall a whole number of bricks, every corner a whole corner brick, swapping faces course by course. Rubble and castle walling: big cornerstones at every outside corner, long and short by turns. Siding: a post over the boards at every corner. Logs: crossing at the corners, their ends standing out. Click a wall, then Ctrl+click the walls either side. Brick and logs: square corners only." />
+                    <Button Style="{StaticResource ToolButton}" Content="Studs" Visibility="{Binding IsExtendedMode, Converter={StaticResource BoolToVisibility}}" Tag="{StaticResource IconStuds}"
                             Command="{Binding BeginEngraveCommand}" MinWidth="82"
                             ToolTip="Legacy. One pattern - brick, tiles, planks, grain - on one flat face. Texture in Emboss does all this and more, and wraps around curves. Kept for older models." />
                     <Separator Visibility="{Binding IsAdvancedMode, Converter={StaticResource BoolToVisibility}}" Margin="8,0" />
@@ -1470,17 +1474,7 @@
                         BorderBrush="#FFB8D2F0" BorderThickness="1" CornerRadius="3"
                         Visibility="{Binding IsEngraveMode, Converter={StaticResource BoolToVisibility}}">
                     <view:ColumnFlow>
-                        <!-- Superseded, not broken. The mark is the same one a beta tool carries,
-                             in the other direction: said plainly rather than left to be worked out
-                             from a tooltip nobody opens. -->
-                        <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
-                            <TextBlock Text="Engrave a pattern" FontWeight="SemiBold" VerticalAlignment="Center" />
-                            <Border Margin="8,0,0,0" Padding="6,1" CornerRadius="8"
-                                    Background="#FFE4E7EC" BorderBrush="#FFA9B0BC" BorderThickness="1"
-                                    ToolTip="Superseded by Texture in Emboss, which does more and wraps around curves. Kept for older models.">
-                                <TextBlock Text="legacy" FontSize="10" FontWeight="SemiBold" Foreground="#FF525A66" />
-                            </Border>
-                        </StackPanel>
+                        <TextBlock Text="Studs" FontWeight="SemiBold" Margin="0,0,0,6" />
 
                         <TextBlock Text="{Binding EngraveSummary}" TextWrapping="Wrap"
                                    Foreground="#FF3A4550" Margin="0,0,0,8" />
@@ -1762,7 +1756,7 @@
                         <!-- A drawing instead of typed letters. It becomes outlines the moment it
                              is read, so everything below applies to it unchanged. -->
                         <StackPanel Orientation="Horizontal" Margin="0,0,0,6"
-                                    Visibility="{Binding NotMasonry, Converter={StaticResource BoolToVisibility}}">
+                                    Visibility="{Binding ShowsDrawing, Converter={StaticResource BoolToVisibility}}">
                             <Button Content="Drawing..." Style="{StaticResource PanelButton}"
                                     Command="{Binding LoadDrawingCommand}"
                                     ToolTip="Stamp the filled shapes of an SVG, or the dark parts of a picture (PNG, JPEG...). In a picture with transparency, whatever isn't transparent is stamped." />
@@ -1787,13 +1781,18 @@
                         <!-- A texture instead of a stamp. It is not placed and not repeated: it is
                              the field itself, cut to whatever room it is given, so the rows below
                              that size a stamp and lay it out have nothing to say about one. -->
-                        <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,6"
+                                    Visibility="{Binding ChoosesTexture, Converter={StaticResource BoolToVisibility}}">
                             <TextBlock Text="Texture" Style="{StaticResource FieldLabel}" Width="62"
                                        ToolTip="Cover the whole face with a pattern. Flat patterns - knurling, ribs, honeycomb, pips, checker plate, brick, tile - wrap around with no seam. Shaped ones - roof tiles, boards, lap siding, rubble and castle walling, bark, wood grain - stand proud by Depth. Wrapped round a barrel, the stone, bark and grain go the whole way round with no seam." />
                             <ComboBox Width="130" ItemsSource="{Binding EmbossTextures}"
                                       SelectedItem="{Binding EmbossTexture, Mode=TwoWay}"
                                       AutomationProperties.AutomationId="EmbossTexture" />
                         </StackPanel>
+
+                        <TextBlock Text="Try also the Masonry tool: it turns the corners of walls the way they are built - whole corner bricks, cornerstones, corner posts."
+                                   TextWrapping="Wrap" Foreground="#FF2D6CB5" Margin="0,0,0,6" MaxWidth="240" HorizontalAlignment="Left"
+                                   Visibility="{Binding SuggestsMasonry, Converter={StaticResource BoolToVisibility}}" />
 
                         <StackPanel Visibility="{Binding UsesTexture, Converter={StaticResource BoolToVisibility}}">
                             <StackPanel Orientation="Horizontal" Margin="0,0,0,2">

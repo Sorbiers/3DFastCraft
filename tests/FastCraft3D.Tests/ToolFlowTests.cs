@@ -508,10 +508,11 @@ public class ToolFlowTests
 
         model.BeginMasonryCommand.Execute(null);
         Assert.True(model.IsEmbossMode && model.IsMasonryMode);
-        Assert.Equal("Masonry", model.EmbossTitle);
+        Assert.Equal("Masonry and siding", model.EmbossTitle);
         Assert.Equal(
             [FastCraft3D.Geometry.Engraving.TextureKind.Brick, FastCraft3D.Geometry.Engraving.TextureKind.Rubble,
-             FastCraft3D.Geometry.Engraving.TextureKind.Castle], model.EmbossTextures);
+             FastCraft3D.Geometry.Engraving.TextureKind.Castle, FastCraft3D.Geometry.Engraving.TextureKind.Siding,
+             FastCraft3D.Geometry.Engraving.TextureKind.Logs], model.EmbossTextures);
         Assert.Equal(FastCraft3D.Geometry.Engraving.TextureKind.Brick, model.EmbossTexture);
 
         Assert.True(model.PickEmbossFace(part, new Vector3(20, 0, 10), Vector3.UnitX));
@@ -592,7 +593,7 @@ public class ToolFlowTests
         model.RefreshSelection();
 
         model.BeginMasonryCommand.Execute(null);
-        Assert.Equal(3, model.EmbossTextures.Count);
+        Assert.Equal(5, model.EmbossTextures.Count);
         model.EmbossTexture = FastCraft3D.Geometry.Engraving.TextureKind.Rubble;
         Assert.Equal(7f, model.EmbossTexturePitch, 3);
         Assert.Equal(0.8f, model.EmbossDepth, 3);
@@ -615,6 +616,80 @@ public class ToolFlowTests
         model.RefreshSelection();
         model.BeginMasonryCommand.Execute(null);
         Assert.Equal(FastCraft3D.Geometry.Engraving.TextureKind.Rubble, model.EmbossTexture);
+    });
+
+    /// <summary>
+    /// Siding and log walls by Masonry round all four walls of a box: one closed solid each, with
+    /// the corner posts standing over the boards and the log ends out past the corners.
+    /// </summary>
+    [Theory]
+    [InlineData("Siding")]
+    [InlineData("Logs")]
+    public void MasonryBuildsSidingAndLogWallsRoundABox(string kind) => WithModel(model =>
+    {
+        var part = new SceneObject("Box", Primitives.Box(40, 30, 20)).Centred();
+        part.Position = new Vector3(0, 0, 10);
+        model.Scene.Objects.Add(part);
+        part.IsSelected = true;
+        model.RefreshSelection();
+
+        model.BeginMasonryCommand.Execute(null);
+        Assert.Equal("Masonry and siding", model.EmbossTitle);
+        model.EmbossTexture = Enum.Parse<FastCraft3D.Geometry.Engraving.TextureKind>(kind);
+
+        Assert.True(model.PickEmbossFace(part, new Vector3(20, 0, 10), Vector3.UnitX));
+        foreach (var facing in TheOtherThree)
+            Assert.True(model.AddEmbossWall(part, part.WorldBounds.Center + facing * (part.WorldBounds.Size / 2f) - Vector3.UnitZ * 5f, facing));
+        Assert.Contains("All 4 walls", model.Status);
+
+        model.ApplyEmbossCommand.Execute(null);
+        PumpUntil(() => model.Scene.Objects.Count == 1 && !ReferenceEquals(model.Scene.Objects[0], part), 120000);
+        Assert.True(!ReferenceEquals(part, model.Scene.Objects[0]), model.Status);
+
+        var mesh = model.Scene.Objects[0].ToWorldMesh();
+        Assert.True(mesh.CheckHealth().IsWatertight, mesh.CheckHealth().Describe());
+        Assert.Single(MeshComponents.Split(mesh));
+
+        // A log end stands out past the corner by most of a course; a post a little over the boards.
+        var bounds = model.Scene.Objects[0].WorldBounds;
+        Assert.InRange(bounds.Max.X - 20f, kind == "Logs" ? 1.5f : 0.5f, kind == "Logs" ? 3f : 1.5f);
+    });
+
+    /// <summary>
+    /// Textures are a tool of their own: Emboss is lettering, with no texture to choose and a
+    /// drawing to stamp; Texture has a texture, starts where it was left, and points brick, stone
+    /// and siding to Masonry.
+    /// </summary>
+    [Fact]
+    public void TexturesHaveATextureToolOfTheirOwn() => WithModel(model =>
+    {
+        var part = new SceneObject("Box", Primitives.Box(40, 30, 20)).Centred();
+        model.Scene.Objects.Add(part);
+        part.IsSelected = true;
+        model.RefreshSelection();
+
+        model.BeginTextureCommand.Execute(null);
+        Assert.Equal("Texture", model.EmbossTitle);
+        Assert.True(model.ChoosesTexture && !model.ShowsDrawing);
+        Assert.Equal(FastCraft3D.Geometry.Engraving.TextureKind.Knurl, model.EmbossTexture);
+        Assert.DoesNotContain(FastCraft3D.Geometry.Engraving.TextureKind.None, model.EmbossTextures);
+        Assert.False(model.SuggestsMasonry);
+
+        model.EmbossTexture = FastCraft3D.Geometry.Engraving.TextureKind.Brick;
+        Assert.True(model.SuggestsMasonry);
+        model.EmbossTexture = FastCraft3D.Geometry.Engraving.TextureKind.Grain;
+        Assert.False(model.SuggestsMasonry);
+        model.EmbossTexture = FastCraft3D.Geometry.Engraving.TextureKind.Siding;
+        Assert.True(model.SuggestsMasonry);
+
+        model.BeginEmbossCommand.Execute(null);
+        Assert.Equal("Emboss", model.EmbossTitle);
+        Assert.Equal(FastCraft3D.Geometry.Engraving.TextureKind.None, model.EmbossTexture);
+        Assert.True(!model.ChoosesTexture && model.ShowsDrawing);
+        model.CancelEmbossCommand.Execute(null);
+
+        model.BeginTextureCommand.Execute(null);
+        Assert.Equal(FastCraft3D.Geometry.Engraving.TextureKind.Siding, model.EmbossTexture);
     });
 
     private static bool Inside(Bounds inner, Bounds outer) =>

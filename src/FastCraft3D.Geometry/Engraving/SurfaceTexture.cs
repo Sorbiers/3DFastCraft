@@ -60,7 +60,13 @@ public enum TextureKind
     Bark,
 
     /// <summary>Wood grain: rounded bands between fine grooves, swirling round knots.</summary>
-    Grain
+    Grain,
+
+    /// <summary>
+    /// Round logs laid one on another, crossing at the corners. Masonry's alone: a log wall is
+    /// built round its corners, and is no pattern to lay over a face.
+    /// </summary>
+    Logs
 }
 
 /// <param name="Kind">Which texture.</param>
@@ -320,6 +326,10 @@ public static class SurfaceTexture
             // along, which is the only thing separating a roof from a wall at this size.
             TextureKind.Brick => Masonry(acrossMm, upMm, o, seamless, true, 1f),
             TextureKind.Tiles => Masonry(acrossMm, upMm, o, seamless, false, 1f),
+
+            // Only ever drawn as the panel's sample, Masonry building the logs themselves: long
+            // courses as tall as a log, end to end.
+            TextureKind.Logs => Masonry(acrossMm, upMm, o with { PitchMm = o.PitchMm * 8f, Aspect = 8f }, seamless, false, 1f),
 
             _ => []
         };
