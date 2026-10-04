@@ -219,7 +219,8 @@ public static class BedPlacement
     /// Stands each object where <see cref="Arrange"/> put its footprint, on the bed. Turn and size
     /// are left alone; only where each stands changes.
     /// </summary>
-    public static Vector2 Distribute(IReadOnlyList<SceneObject> objects, float gap, float width)
+    /// <param name="drop">Whether each is also stood on the bed; off, it keeps its height.</param>
+    public static Vector2 Distribute(IReadOnlyList<SceneObject> objects, float gap, float width, bool drop = true)
     {
         var footprints = objects.Select(o => o.WorldBounds).ToList();
         var (centres, covers) = Arrange(footprints.Select(b => new Vector2(b.Size.X, b.Size.Y)).ToList(), gap, width);
@@ -230,7 +231,7 @@ public static class BedPlacement
             objects[i].Position += new Vector3(
                 centres[i].X - reach.Center.X,
                 centres[i].Y - reach.Center.Y,
-                -reach.Min.Z);
+                drop ? -reach.Min.Z : 0f);
         }
 
         return covers;

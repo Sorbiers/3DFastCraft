@@ -165,6 +165,7 @@ public partial class MainWindow : Window
         viewModel.GeneratorFaceChanged += () => renderer?.ShowFace(viewModel.GeneratorFace, tint: AlignFacePickedColour);
         viewModel.WallMountChanged += () => renderer?.ShowFace(viewModel.WallMountFace, null, viewModel.WallMountPreview());
         viewModel.RestingFacesChanged += () => renderer?.ShowRestingFaces(viewModel.RestingFaceList, viewModel.RestingHover);
+        viewModel.AlignFaceDefaulted += OnAlignFaceDefaulted;
         viewModel.AlignFaceChanged += () =>
         {
             renderer?.ShowFace(viewModel.AlignFace, tint: viewModel.HasAlignFaceTarget ? AlignFacePickedColour : null);
@@ -642,8 +643,21 @@ public partial class MainWindow : Window
 
     // --- Manipulator ------------------------------------------------------------------
 
+    /// <summary>
+    /// A click in the viewport takes the keyboard back from a box in a tool's panel. The panel's
+    /// first box has the caret when it opens, and while it has it M, R and S are letters going
+    /// into the box, not Move, Rotate and Resize - so the keys did nothing in a Library panel for
+    /// as long as anybody had not clicked somewhere else first. The box keeps what was typed:
+    /// it is taken when it loses the focus.
+    /// </summary>
+    private void LeaveTextBox()
+    {
+        if (Keyboard.FocusedElement is TextBox && !View.Focus()) Keyboard.ClearFocus();
+    }
+
     private void OnGizmoDown(object sender, MouseButtonEventArgs e)
     {
+        LeaveTextBox();
         if (gizmo is null) return;
 
         gizmo.Modifiers = Keyboard.Modifiers;
@@ -1043,6 +1057,7 @@ public partial class MainWindow : Window
 
     private void OnViewportLeftDown(object sender, MouseButtonEventArgs e)
     {
+        LeaveTextBox();
         var screen = e.GetPosition(View);
         var hit = FirstHit(screen, selectable: true);
         var target = renderer?.Resolve(hit?.ModelHit);
@@ -2175,6 +2190,24 @@ public partial class MainWindow : Window
         var reach = BedPlacement.Reach(viewModel.Scene.Objects.Where(o => !o.IsHidden));
         float radius = reach.IsEmpty ? 1f : Math.Clamp(reach.Size.Length() * 0.008f, 0.4f, 2.5f);
         renderer.ShowAnchors(points, radius, linked);
+    }
+
+    /// <summary>Shows the way of lining up the tool chose on picking a face, on the radio buttons.</summary>
+    private void OnAlignFaceDefaulted(IReadOnlyList<string> tags)
+    {
+        var wanted = new HashSet<string>(tags);
+        foreach (var radio in AllRadios(AlignFacePanel))
+            if (radio.Tag is string tag && wanted.Contains(tag)) radio.IsChecked = true;
+    }
+
+    private static IEnumerable<RadioButton> AllRadios(DependencyObject root)
+    {
+        for (int i = 0; i < VisualTreeHelper.GetChildrenCount(root); i++)
+        {
+            var child = VisualTreeHelper.GetChild(root, i);
+            if (child is RadioButton radio) yield return radio;
+            foreach (var inner in AllRadios(child)) yield return inner;
+        }
     }
 
     private void OnAlignFaceModeChanged(object sender, RoutedEventArgs e)

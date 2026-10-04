@@ -12,17 +12,26 @@ namespace FastCraft3D.View;
 /// </summary>
 public partial class DistributeDialog : ToolPanel
 {
-    private readonly Func<float, Vector2> arrange;
+    private readonly Func<float, bool, bool, Vector2> arrange;
     private readonly Vector2 bed;
     private readonly int count;
 
     /// <param name="count">How many objects are being set out.</param>
     /// <param name="gap">The gap to start from - the last one used.</param>
     /// <param name="bed">The printable area's width and depth.</param>
-    /// <param name="arrange">Sets the objects out with a gap and says how much of the bed they cover.</param>
-    public DistributeDialog(int count, float gap, Vector2 bed, Func<float, Vector2> arrange)
+    /// <param name="bestFace">Whether each object starts turned onto its best face.</param>
+    /// <param name="drop">Whether each starts dropped to the plate.</param>
+    /// <param name="arrange">
+    /// Sets the objects out with a gap - turning each onto its best face and standing it on the
+    /// plate when asked - and says how much of the bed they cover.
+    /// </param>
+    public DistributeDialog(
+        int count, float gap, bool bestFace, bool drop, Vector2 bed, Func<float, bool, bool, Vector2> arrange)
     {
         InitializeComponent();
+        BestFaceBox.IsChecked = bestFace;
+        DropBox.IsChecked = drop || bestFace;
+        DropBox.IsEnabled = !bestFace;
 
         this.count = count;
         this.bed = bed;
@@ -41,11 +50,27 @@ public partial class DistributeDialog : ToolPanel
     /// <summary>The gap chosen, or null when the panel was cancelled.</summary>
     public float? Result { get; private set; }
 
+    /// <summary>Whether each object is turned onto its best face.</summary>
+    public bool BestFace => BestFaceBox.IsChecked == true;
+
+    /// <summary>Whether each object is stood on the plate: always, with its best face down.</summary>
+    public bool Drop => BestFace || DropBox.IsChecked == true;
+
     private bool TryGap(out float gap) =>
         GapBox.TryRead(out gap)
         && float.IsFinite(gap) && gap >= 0f;
 
-    private void OnChanged(object sender, RoutedEventArgs e) => Describe();
+    private void OnChanged(object sender, RoutedEventArgs e)
+    {
+        // Standing each on its best face stands it on the plate.
+        if (BestFaceBox is not null && DropBox is not null)
+        {
+            DropBox.IsEnabled = BestFaceBox.IsChecked != true;
+            if (BestFaceBox.IsChecked == true) DropBox.IsChecked = true;
+        }
+
+        Describe();
+    }
 
     private void Describe()
     {
@@ -58,7 +83,7 @@ public partial class DistributeDialog : ToolPanel
             return;
         }
 
-        var covers = arrange(gap);
+        var covers = arrange(gap, BestFace, Drop);
         bool fits = covers.X <= bed.X + 0.01f && covers.Y <= bed.Y + 0.01f;
 
         SummaryText.Text = $"{count} objects covering {covers.X:0.#} × {covers.Y:0.#} mm"

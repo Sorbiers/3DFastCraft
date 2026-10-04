@@ -69,6 +69,7 @@ public static class Shortcuts
         new("File", "Open a project", Key.O, Ctrl, "OpenCommand"),
         new("File", "Save", Key.S, Ctrl, "SaveCommand"),
         new("File", "Save as", Key.S, Ctrl | Shift, "SaveAsCommand"),
+        new("File", "Save a version of the project", Key.S, Ctrl | ModifierKeys.Alt, "SaveVersionCommand"),
         new("File", "Import", Key.I, Ctrl, "ImportCommand"),
         new("File", "Export", Key.E, Ctrl, "ExportCommand"),
         new("File", "Blueprint: three views with dimensions, to print", Key.P, Ctrl, "PrintDrawingCommand", Advanced: true),

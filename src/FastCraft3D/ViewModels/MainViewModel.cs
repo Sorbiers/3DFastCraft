@@ -96,7 +96,7 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
     {
         [TextureKind.Brick] = (new TextureOptions(TextureKind.Brick, 5f, 0.2f), 0.3f),
         [TextureKind.Rubble] = (new TextureOptions(TextureKind.Rubble, 7f, 0.2f), 0.8f),
-        [TextureKind.Castle] = (new TextureOptions(TextureKind.Castle, 8f, 0.2f), 0.8f),
+        [TextureKind.CoursedStone] = (new TextureOptions(TextureKind.CoursedStone, 8f, 0.2f), 0.8f),
         [TextureKind.Siding] = (new TextureOptions(TextureKind.Siding, 2.5f, 0.2f), 0.6f),
         [TextureKind.Logs] = (new TextureOptions(TextureKind.Logs, 3f, 0.2f), 1f)
     };
@@ -167,6 +167,7 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
     private bool keepOnBedMove;
     private bool keepOnBedScale = true;
     private float distributeGap = 10f;
+    private bool distributeBestFace, distributeDrop = true;
     private bool showWireframe;
     private bool showXray;
     private bool showPlate = true;
@@ -1927,6 +1928,12 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
     /// <summary>Raised whenever the picked or hovered face changes, so the viewport can redraw the marker.</summary>
     public event Action? AlignFaceChanged;
 
+    /// <summary>
+    /// Raised when picking a face chose how to line up for the user, so the radio buttons can show
+    /// it: the tags of the ones to turn on, such as "X:Centre" and "SX:Minimum".
+    /// </summary>
+    public event Action<IReadOnlyList<string>>? AlignFaceDefaulted;
+
     /// <summary>The face last picked or hovered, for the viewport to highlight. Null shows nothing.</summary>
     public FacePatch? AlignFace => alignFace;
 
@@ -2036,11 +2043,40 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
         alignFace = face;
         alignFacePicked = true;
         alignFaceTargetLabel = target.Name;
+        DefaultAlignFace(face);
         RaiseAlignFace();
         System.Windows.Input.CommandManager.InvalidateRequerySuggested();
 
         Status = $"Picked a face on {target.Name} - choose how X, Y and Z should line up, then Apply";
         return true;
+    }
+
+    /// <summary>
+    /// What to do with a face just picked when nothing has been chosen: stand the selection against
+    /// it - the side of it nearest the face on the way the face looks, and its middle on the face's
+    /// middle across. With every axis left at Don't move, Apply had nothing to do and stayed grey
+    /// however the face was picked, which read as the tool being broken.
+    /// </summary>
+    private void DefaultAlignFace(FacePatch face)
+    {
+        if (alignFaceModeX is not null || alignFaceModeY is not null || alignFaceModeZ is not null) return;
+
+        var n = face.Normal;
+        var axis = MathF.Abs(n.X) >= MathF.Abs(n.Y) && MathF.Abs(n.X) >= MathF.Abs(n.Z) ? Axis.X
+                 : MathF.Abs(n.Y) >= MathF.Abs(n.Z) ? Axis.Y : Axis.Z;
+        float along = axis == Axis.X ? n.X : axis == Axis.Y ? n.Y : n.Z;
+
+        var tags = new List<string>();
+        foreach (var a in new[] { Axis.X, Axis.Y, Axis.Z })
+        {
+            var from = a == axis ? (along >= 0 ? AlignMode.Minimum : AlignMode.Maximum) : AlignMode.Centre;
+            SetAlignFaceMode(a, AlignMode.Centre);
+            SetAlignFaceMode(a, from, ofSelection: true);
+            tags.Add($"{a}:Centre");
+            tags.Add($"S{a}:{from}");
+        }
+
+        AlignFaceDefaulted?.Invoke(tags);
     }
 
     /// <summary>Which way, if any, the selection's group box should line up on this axis with the picked face.</summary>
@@ -2498,7 +2534,7 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
     public float EmbossDepth
     {
         get => embossDepth;
-        set { Set(ref embossDepth, Math.Clamp(value, 0.05f, 50f)); RefreshEmboss(); }
+        set { Set(ref embossDepth, Math.Clamp(value, 0.05f, 50f)); RefreshPicture(); RefreshEmboss(); }
     }
 
     public bool EmbossBold
@@ -2856,7 +2892,7 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
 
                 if (slabs == 0) return "The face is smaller than one course of this - try a finer pitch.";
 
-                return $"{embossTexture.Kind.ToString().ToLowerInvariant()}, {slabs:N0} pieces, "
+                return $"{TextureOptions.NameOf(embossTexture.Kind).ToLowerInvariant()}, {slabs:N0} pieces, "
                      + $"{TileSolid.ReliefOf(courses):0.##} mm of relief"
                      + $" - about {slabs * 12:N0} triangles";
             }
@@ -2872,7 +2908,7 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
                     ? " - heavy. Simplify afterwards, or use a coarser pitch."
                     : "";
 
-                return $"{embossTexture.Kind.ToString().ToLowerInvariant()}, "
+                return $"{TextureOptions.NameOf(embossTexture.Kind).ToLowerInvariant()}, "
                      + $"{embossDepth:0.##} mm of relief, about {cost.Triangles:N0} triangles{heavy}";
             }
 
@@ -3200,7 +3236,7 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
     /// bricks, quoins or corner posts - so the Texture tool says so.
     /// </summary>
     public bool SuggestsMasonry => IsTextureTool && embossTexture.Kind
-        is TextureKind.Brick or TextureKind.Rubble or TextureKind.Castle or TextureKind.Siding;
+        is TextureKind.Brick or TextureKind.Rubble or TextureKind.CoursedStone or TextureKind.Siding;
 
     /// <summary>
     /// Brickwork round the walls picked. It is the Emboss tool underneath - the same picking, the
@@ -3434,7 +3470,7 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
                 TextureKind.Brick => "brickwork",
                 TextureKind.Siding => "siding",
                 TextureKind.Logs => "log walls",
-                _ => $"{embossTexture.Kind.ToString().ToLowerInvariant()} walling"
+                _ => $"{TextureOptions.NameOf(embossTexture.Kind).ToLowerInvariant()} walling"
             };
             Undo.Execute(new ReplaceObjectsCommand(
                 walling is not null ? "Lay walling" : raised ? "Lay texture" : "Cut texture", [source], [textured]));
@@ -3442,7 +3478,7 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
             IsEmbossMode = false;
             RefreshSelection();
 
-            Status = $"{walling ?? embossTexture.Kind.ToString().ToLowerInvariant()} on {source.Name}"
+            Status = $"{walling ?? TextureOptions.NameOf(embossTexture.Kind).ToLowerInvariant()} on {source.Name}"
                    + $" - {built.TriangleCount:N0} triangles of texture,"
                    + $" {joined.TriangleCount:N0} in all";
         }
@@ -3782,12 +3818,13 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
             if (embossTexture.IsProfiled && embossProjection == TextProjection.Spherical)
             {
                 EmbossProjection = TextProjection.Cylindrical;
-                Status = $"{value.ToString().ToLowerInvariant()} cannot be wrapped over a ball - "
+                Status = $"{TextureOptions.NameOf(value).ToLowerInvariant()} cannot be wrapped over a ball - "
                        + "the courses lap themselves away from the equator. Wrapped round instead.";
             }
 
             Raise(nameof(EmbossTexture));
             Raise(nameof(UsesTexture));
+            Raise(nameof(UsesProfile));
             Raise(nameof(UsesStamp));
             Raise(nameof(TextureLeans));
             Raise(nameof(TextureRuns));
@@ -3809,7 +3846,7 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
     /// posts and log walls crossing at the corners.
     /// </summary>
     private static readonly IReadOnlyList<TextureKind> MasonryTextures =
-        [TextureKind.Brick, TextureKind.Rubble, TextureKind.Castle, TextureKind.Siding, TextureKind.Logs];
+        [TextureKind.Brick, TextureKind.Rubble, TextureKind.CoursedStone, TextureKind.Siding, TextureKind.Logs];
 
     /// <summary>What the Texture tool lays. Lettering, which is no texture, is the Emboss tool's.</summary>
     private static readonly IReadOnlyList<TextureKind> AllTextures =
@@ -3817,7 +3854,7 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
         TextureKind.Knurl, TextureKind.Ribs,
         TextureKind.Hex, TextureKind.Dots, TextureKind.Tread,
         TextureKind.Brick, TextureKind.RoofTiles, TextureKind.Tiles, TextureKind.Planks,
-        TextureKind.Siding, TextureKind.Rubble, TextureKind.Castle, TextureKind.Bark, TextureKind.Grain
+        TextureKind.Siding, TextureKind.Rubble, TextureKind.CoursedStone, TextureKind.Bark, TextureKind.Grain
     ];
 
     /// <summary>
@@ -4132,13 +4169,52 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
     /// </summary>
     public IReadOnlyList<TextShape> DrawingShapes => Lettering();
 
+    private System.Windows.Media.Imaging.BitmapSource? texturePicture;
+    private int texturePictureAt;
+
+    /// <summary>
+    /// A shaded picture of the texture, for the ones with no outlines to draw - stone, bark, grain,
+    /// boards, tiles, siding. Made off the UI thread and only the latest kept, since it is asked for
+    /// on every keystroke in a pitch box and some of them take a moment.
+    /// </summary>
+    public System.Windows.Media.ImageSource? TexturePicture => texturePicture;
+
+    private void RefreshPicture()
+    {
+        int at = ++texturePictureAt;
+        var options = embossTexture;
+        float depth = embossDepth;
+
+        if (!options.IsProfiled)
+        {
+            if (texturePicture is null) return;
+
+            texturePicture = null;
+            Raise(nameof(TexturePicture));
+            return;
+        }
+
+        var ui = SynchronizationContext.Current is null ? TaskScheduler.Default : TaskScheduler.FromCurrentSynchronizationContext();
+        Task.Run(() =>
+        {
+            try { return TexturePreview.Render(options, depth); }
+            catch (Exception) { return null; }
+        }).ContinueWith(done =>
+        {
+            if (at != texturePictureAt) return;
+
+            texturePicture = done.Result;
+            Raise(nameof(TexturePicture));
+        }, ui);
+    }
+
     public bool UsesText => svgFile.Length == 0 && !embossTexture.IsOn;
 
     public string SvgName => Path.GetFileName(svgFile);
 
     /// <summary>What is being stamped, for the messages that have to name it.</summary>
     private string Stamped() =>
-        embossTexture.IsOn ? $"{embossTexture.Kind.ToString().ToLowerInvariant()} texture"
+        embossTexture.IsOn ? $"{TextureOptions.NameOf(embossTexture.Kind).ToLowerInvariant()} texture"
         : svgFile.Length > 0 ? SvgName
         : $"\"{embossText}\"";
 
@@ -4147,6 +4223,7 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
     {
         letteringCache = null;
         Raise(nameof(DrawingShapes));
+        RefreshPicture();
         RefreshEmboss();
     }
 
@@ -7859,13 +7936,49 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
 
         var before = selection.Select(TransformState.Capture).ToList();
 
-        Vector2 Arrange(float gap)
+        // The face each would best be printed on, worked out once and only if asked for: judging
+        // every part takes a moment, and the gap is retyped over and over.
+        Vector3?[]? faces = null;
+        void Weigh()
         {
-            for (int i = 0; i < selection.Count; i++) before[i].ApplyTo(selection[i]);
-            return BedPlacement.Distribute(selection, gap, plateWidth);
+            if (faces is not null) return;
+
+            faces = new Vector3?[selection.Count];
+            var cursor = System.Windows.Input.Mouse.OverrideCursor;
+            System.Windows.Input.Mouse.OverrideCursor = System.Windows.Input.Cursors.Wait;
+            try
+            {
+                for (int i = 0; i < selection.Count; i++)
+                {
+                    before[i].ApplyTo(selection[i]);
+                    var world = selection[i].ToWorldMesh();
+                    var ranked = BestFace.Rank(world, RestingFaces.Find(world), overhangAngle);
+                    faces[i] = ranked.Count > 0 ? ranked[0].Normal : null;
+                }
+            }
+            finally
+            {
+                System.Windows.Input.Mouse.OverrideCursor = cursor;
+            }
         }
 
-        var panel = new DistributeDialog(selection.Count, distributeGap, new Vector2(plateWidth, plateDepth), Arrange);
+        Vector2 Arrange(float gap, bool bestFace, bool drop)
+        {
+            for (int i = 0; i < selection.Count; i++) before[i].ApplyTo(selection[i]);
+
+            if (bestFace)
+            {
+                Weigh();
+                for (int i = 0; i < selection.Count; i++)
+                    if (faces![i] is { } facing) TurnOnto(selection[i], before[i], facing);
+            }
+
+            return BedPlacement.Distribute(selection, gap, plateWidth, drop);
+        }
+
+        var panel = new DistributeDialog(
+            selection.Count, distributeGap, distributeBestFace, distributeDrop,
+            new Vector2(plateWidth, plateDepth), Arrange);
         if (panel.ShowDialog() != true || panel.Result is not { } chosen)
         {
             for (int i = 0; i < selection.Count; i++) before[i].ApplyTo(selection[i]);
@@ -7874,7 +7987,9 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
         }
 
         distributeGap = chosen;
-        var covers = Arrange(chosen);
+        distributeBestFace = panel.BestFace;
+        distributeDrop = panel.Drop;
+        var covers = Arrange(chosen, panel.BestFace, panel.Drop);
 
         if (TransformCommand.CreateIfChanged("Distribute", selection, before) is { } command)
             Undo.Execute(command);

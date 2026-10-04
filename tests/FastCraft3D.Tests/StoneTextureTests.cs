@@ -11,7 +11,7 @@ using Xunit.Abstractions;
 namespace FastCraft3D.Tests;
 
 /// <summary>
-/// Rubble, castle walling, bark and wood grain: the fields that look like what they are named
+/// Rubble, coursed stone walling, bark and wood grain: the fields that look like what they are named
 /// after, and go round a barrel as one ring with no seam.
 ///
 /// What is checked is what decides whether the tool works - the field comes back closed, the
@@ -22,7 +22,7 @@ namespace FastCraft3D.Tests;
 public class StoneTextureTests(ITestOutputHelper log)
 {
     private static readonly TextureKind[] Kinds =
-        [TextureKind.Rubble, TextureKind.Castle, TextureKind.Bark, TextureKind.Grain];
+        [TextureKind.Rubble, TextureKind.CoursedStone, TextureKind.Bark, TextureKind.Grain];
 
     public static TheoryData<TextureKind> EachKind
     {
@@ -266,7 +266,7 @@ public class StoneTextureTests(ITestOutputHelper log)
     /// </summary>
     [Theory]
     [InlineData(TextureKind.Rubble, 10f)]
-    [InlineData(TextureKind.Castle, 14f)]
+    [InlineData(TextureKind.CoursedStone, 14f)]
     [InlineData(TextureKind.Bark, 5f)]
     [InlineData(TextureKind.Grain, 2.5f)]
     public void ItGoesOntoAFaceAndStaysPrintable(TextureKind kind, float pitch)
@@ -366,13 +366,13 @@ public class StoneTextureTests(ITestOutputHelper log)
     }
 
     /// <summary>
-    /// Castle walling is courses of different heights and stones of different lengths - brick,
+    /// CoursedStone walling is courses of different heights and stones of different lengths - brick,
     /// with the numbers varied, which is all that keeps it from reading as brick.
     /// </summary>
     [Fact]
     public void CastleCoursesAndStonesVary()
     {
-        var relief = Profile(TextureKind.Castle, 14f, 1f, 1.5f);
+        var relief = Profile(TextureKind.CoursedStone, 14f, 1f, 1.5f);
 
         var tall = Runs(relief, along: false);
         var longs = Runs(relief, along: true);
@@ -552,6 +552,34 @@ public class StoneTextureTests(ITestOutputHelper log)
         model.EmbossTexture = TextureKind.Planks;
         Assert.False(model.TextureSlides);
         Assert.True(model.EmbossTurns);
+    });
+
+    /// <summary>
+    /// The panel shows a picture of a shaped texture the moment one is chosen: the view is told the
+    /// picture is wanted (UsesProfile) and then that it is ready (TexturePicture). Before it was
+    /// told the first, the picture box stayed collapsed however the texture changed.
+    /// </summary>
+    [Fact]
+    public void ChoosingAShapedTextureShowsItsPictureInThePanel() => WithModel(model =>
+    {
+        var told = new List<string>();
+        model.PropertyChanged += (_, e) => told.Add(e.PropertyName ?? "");
+
+        model.EmbossTexture = TextureKind.Rubble;
+        Assert.Contains(nameof(MainViewModel.UsesProfile), told);
+        Assert.True(model.UsesProfile);
+
+        var watch = System.Diagnostics.Stopwatch.StartNew();
+        while (model.TexturePicture is null && watch.ElapsedMilliseconds < 10_000) Thread.Sleep(20);
+
+        Assert.NotNull(model.TexturePicture);
+        Assert.Contains(nameof(MainViewModel.TexturePicture), told);
+
+        // And it goes again when the texture goes back to one drawn as outlines.
+        model.EmbossTexture = TextureKind.Brick;
+        watch.Restart();
+        while (model.TexturePicture is not null && watch.ElapsedMilliseconds < 10_000) Thread.Sleep(20);
+        Assert.Null(model.TexturePicture);
     });
 
     private static void WithModel(Action<MainViewModel> body)

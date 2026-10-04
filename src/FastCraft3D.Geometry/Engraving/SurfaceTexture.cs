@@ -51,10 +51,10 @@ public enum TextureKind
     Rubble,
 
     /// <summary>
-    /// Castle walling: squared, rock-faced stones in courses of uneven height, each stone its own
+    /// CoursedStone walling: squared, rock-faced stones in courses of uneven height, each stone its own
     /// length, some split into two thin ones.
     /// </summary>
-    Castle,
+    CoursedStone,
 
     /// <summary>Tree bark: long plates split by deep wandering fissures, streaked and pitted.</summary>
     Bark,
@@ -124,12 +124,23 @@ public readonly record struct TextureOptions(
     public bool IsOn => Kind != TextureKind.None;
 
     /// <summary>
+    /// What a texture is called to somebody reading a list or a status line: "Roof tiles",
+    /// "Coursed stone". The enum member cannot be shown as it is - "RoofTiles" is not a name - so
+    /// the words of its name are split and only the first is capitalised.
+    /// </summary>
+    public static string NameOf(TextureKind kind)
+    {
+        var words = System.Text.RegularExpressions.Regex.Replace(kind.ToString(), "(?<=[a-z])(?=[A-Z])", " ");
+        return words.Length == 0 ? words : char.ToUpperInvariant(words[0]) + words[1..].ToLowerInvariant();
+    }
+
+    /// <summary>
     /// Patterns made of pieces with joints between them, rather than of lines on a surface. They
     /// arrive raised, and their pieces have proportions to argue about. Bark is one: its plates
     /// are pieces as much as a wall's stones are, and sunk it is a mould of bark.
     /// </summary>
     public bool IsMasonry => Kind is TextureKind.Brick or TextureKind.Tiles
-        or TextureKind.Rubble or TextureKind.Castle or TextureKind.Bark;
+        or TextureKind.Rubble or TextureKind.CoursedStone or TextureKind.Bark;
 
     /// <summary>
     /// Patterns with a shape to them rather than an outline: a lap, a slope, a grain. They are
@@ -138,7 +149,7 @@ public readonly record struct TextureOptions(
     /// </summary>
     public bool IsProfiled =>
         Kind is TextureKind.RoofTiles or TextureKind.Planks or TextureKind.Siding
-            or TextureKind.Rubble or TextureKind.Castle or TextureKind.Bark or TextureKind.Grain;
+            or TextureKind.Rubble or TextureKind.CoursedStone or TextureKind.Bark or TextureKind.Grain;
 
     /// <summary>
     /// The fields that can be built as a ring round a barrel, with no seam at all. They are told
@@ -146,7 +157,7 @@ public readonly record struct TextureOptions(
     /// its grain are not fitted to the way round, so it is still laid as a sheet with two ends.
     /// </summary>
     public bool Rings =>
-        Kind is TextureKind.Rubble or TextureKind.Castle or TextureKind.Bark or TextureKind.Grain;
+        Kind is TextureKind.Rubble or TextureKind.CoursedStone or TextureKind.Bark or TextureKind.Grain;
 
     /// <summary>
     /// The ones built as slabs rather than sampled as a field.
@@ -178,7 +189,7 @@ public readonly record struct TextureOptions(
         TextureKind.Tiles => 1f,
         TextureKind.Planks => 8f,
         TextureKind.Rubble => 1.3f,
-        TextureKind.Castle => 2.2f,
+        TextureKind.CoursedStone => 2.2f,
         TextureKind.Bark => 6f,
         _ => 3f
     };
@@ -278,8 +289,8 @@ public static class SurfaceTexture
                 new SurfaceProfiles.Boarding(course, depth, o.LineMm, nozzleMm, o.PitchMm),
             TextureKind.Rubble =>
                 new SurfaceProfiles.Rubble(o.PitchMm, o.Courses, depth, o.LineMm, nozzleMm, around),
-            TextureKind.Castle =>
-                new SurfaceProfiles.Castle(o.PitchMm, o.Courses, depth, o.LineMm, nozzleMm, around),
+            TextureKind.CoursedStone =>
+                new SurfaceProfiles.CoursedStone(o.PitchMm, o.Courses, depth, o.LineMm, nozzleMm, around),
             TextureKind.Bark =>
                 new SurfaceProfiles.Bark(o.PitchMm, o.PitchMm * o.Courses, depth, o.LineMm, nozzleMm,
                                          o.Across, around),

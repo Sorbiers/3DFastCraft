@@ -318,7 +318,15 @@ public static class Voronoi
         // splitting anyway - its triangles are already smaller than a strut - so the cap costs
         // nothing where it bites and keeps the preview inside a frame where it would not.
         float step = MathF.Max(o.StrutMm * 0.7f, 0.05f);
-        int most = mesh.TriangleCount > 40_000 ? 2 : mesh.TriangleCount > 8_000 ? 4 : 16;
+
+        // As many points as a strut asks for, within a budget shared out over the triangles. The
+        // cap was a flat sixteen a side once - fine for a scan of a hundred thousand triangles and
+        // hopeless for a box, whose twelve faces were then sampled every few millimetres against a
+        // strut of one and a half: the contour came back as scattered fragments no one could read
+        // as a web. Points a triangle may have: (n + 1)(n + 2) / 2, so n follows from the share.
+        const int Budget = 600_000;
+        float share = MathF.Max(Budget / (float)Math.Max(mesh.TriangleCount, 1), 6f);
+        int most = Math.Clamp((int)((MathF.Sqrt(8f * share + 1f) - 3f) / 2f), 2, 160);
 
         bool edges = o.Kind == VoronoiKind.Lattice;
 

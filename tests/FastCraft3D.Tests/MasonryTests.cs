@@ -205,13 +205,13 @@ public class MasonryTests
     }
 
     /// <summary>
-    /// Rubble and castle walling round a box: a stack of quoins at every corner, each turning the
+    /// Rubble and coursed stone walling round a box: a stack of quoins at every corner, each turning the
     /// corner, its long face on one wall and its short face on the other, swapping course by course;
     /// and the whole one closed solid with the box.
     /// </summary>
     [Theory]
     [InlineData(TextureKind.Rubble)]
-    [InlineData(TextureKind.Castle)]
+    [InlineData(TextureKind.CoursedStone)]
     public void QuoinsTurnEveryOutsideCornerLongAndShortByTurns(TextureKind kind)
     {
         var box = Box();
@@ -253,7 +253,7 @@ public class MasonryTests
     [Fact]
     public void QuoinsGoOnOutsideCornersOnly()
     {
-        var (two, _) = Quoined(Walls(Box(), new Vector3(20, 0, 10), Vector3.UnitX, Vector3.UnitY), TextureKind.Castle);
+        var (two, _) = Quoined(Walls(Box(), new Vector3(20, 0, 10), Vector3.UnitX, Vector3.UnitY), TextureKind.CoursedStone);
         Assert.Equal(3, two.Corners);
 
         var wing = MeshTransform.Transformed(Primitives.Box(20, 40, 20), Matrix4x4.CreateTranslation(-10, 10, 10));

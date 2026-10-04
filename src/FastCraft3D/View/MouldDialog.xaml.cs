@@ -40,12 +40,16 @@ public partial class MouldDialog : ToolPanel
     public MouldDialog(string name, MouldStudy study, Mesh model, float keyClearance = 0.2f)
     {
         InitializeComponent();
-        ClearanceBox.Put(keyClearance);
 
         this.study = study;
         triangles = model.TriangleCount;
         bounds = model.ComputeBounds();
         Chosen = study;
+
+        // After the study is in place: putting a number in a box raises its change event, which
+        // describes the choices made so far, and with the study still null that fell over - the
+        // Mold tool came up as "Something went wrong" for every part, not only for a hollow one.
+        ClearanceBox.Put(keyClearance);
 
         SubjectText.Text = $"A mold for {name}, to pour silicone into.";
         AdviceText.Text = study.Summary;

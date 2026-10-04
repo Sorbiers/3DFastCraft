@@ -378,7 +378,7 @@ public class ToolFlowTests
     /// </summary>
     [Theory]
     [InlineData("Rubble")]
-    [InlineData("Castle")]
+    [InlineData("CoursedStone")]
     [InlineData("Bark")]
     [InlineData("Grain")]
     [InlineData("Brick")]
@@ -511,7 +511,7 @@ public class ToolFlowTests
         Assert.Equal("Cladding and siding", model.EmbossTitle);
         Assert.Equal(
             [FastCraft3D.Geometry.Engraving.TextureKind.Brick, FastCraft3D.Geometry.Engraving.TextureKind.Rubble,
-             FastCraft3D.Geometry.Engraving.TextureKind.Castle, FastCraft3D.Geometry.Engraving.TextureKind.Siding,
+             FastCraft3D.Geometry.Engraving.TextureKind.CoursedStone, FastCraft3D.Geometry.Engraving.TextureKind.Siding,
              FastCraft3D.Geometry.Engraving.TextureKind.Logs], model.EmbossTextures);
         Assert.Equal(FastCraft3D.Geometry.Engraving.TextureKind.Brick, model.EmbossTexture);
 

@@ -742,6 +742,22 @@ public sealed class GizmoController
             : $"Move {active.Axis} {millimetres:+0.##;-0.##;0} mm") + BedNote(held));
     }
 
+    /// <summary>
+    /// Which of an object's own axes lies most nearly along a direction in the world. Exact for
+    /// a part turned in quarters, which is what a model is built from; on anything turned at
+    /// another angle a scale applied before the turn cannot stretch along a world axis, so it is
+    /// the nearest of the three.
+    /// </summary>
+    private static Axis OwnAxisAlong(Vector3 rotation, Vector3 direction)
+    {
+        var turn = MeshTransform.Rotation(rotation);
+        float x = MathF.Abs(Vector3.Dot(Vector3.TransformNormal(Vector3.UnitX, turn), direction));
+        float y = MathF.Abs(Vector3.Dot(Vector3.TransformNormal(Vector3.UnitY, turn), direction));
+        float z = MathF.Abs(Vector3.Dot(Vector3.TransformNormal(Vector3.UnitZ, turn), direction));
+
+        return x >= y && x >= z ? Axis.X : y >= z ? Axis.Y : Axis.Z;
+    }
+
     private void DragScale(Point screen)
     {
         // Measured along the object's own axis, which is the one the arrow is drawn on. On
@@ -777,9 +793,16 @@ public sealed class GizmoController
         for (int i = 0; i < dragObjects.Count; i++)
         {
             Vector3 before = dragBefore[i].Scale;
+
+            // As one, the lot grows along the world's axis the arrow is on, so each part stretches
+            // along whichever of its own axes points that way: "X" of a part turned a quarter about
+            // Z is the world's Y. Each on its own, every part grows along its own axis of that name
+            // whichever way it points - the arrow says which axis, not which direction in the world.
+            // Taking the world's for both once ignored the button altogether.
+            var own = asOne ? OwnAxisAlong(dragBefore[i].Rotation, direction) : active.Axis;
             dragObjects[i].Scale = uniform
                 ? before * ratio
-                : active.Axis switch
+                : own switch
                 {
                     Axis.X => before with { X = before.X * ratio },
                     Axis.Y => before with { Y = before.Y * ratio },

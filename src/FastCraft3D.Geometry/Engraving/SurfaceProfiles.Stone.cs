@@ -9,7 +9,7 @@ public static partial class SurfaceProfiles
     /// which is what keeps a thin joint from breaking up into dashes, and the smallest stone eight,
     /// and never finer than most of a nozzle - finer than that the printer lays the same line
     /// either way. Twelve to the smallest stone was tried first and came to half a million
-    /// triangles round a 60 mm barrel of castle walling, for nothing the eye could find.
+    /// triangles round a 60 mm barrel of coursed stone walling, for nothing the eye could find.
     /// </summary>
     private static float StoneStep(float jointMm, float smallestMm, float nozzleMm) =>
         MathF.Max(nozzleMm * 0.75f, MathF.Min(jointMm * 0.5f, smallestMm / 8f));
@@ -180,7 +180,7 @@ public static partial class SurfaceProfiles
     }
 
     /// <summary>
-    /// Castle walling: squared stones in courses, every course its own height and every stone its
+    /// CoursedStone walling: squared stones in courses, every course its own height and every stone its
     /// own length, with now and then a stone split into two thin ones laid one on the other.
     ///
     /// Brick with the numbers varied, in other words, and that is all it takes to stop it reading
@@ -189,7 +189,7 @@ public static partial class SurfaceProfiles
     /// </summary>
     /// <param name="stoneMm">How long a stone is on average.</param>
     /// <param name="aspect">How many times longer than a course is deep.</param>
-    public sealed class Castle : IRelief
+    public sealed class CoursedStone : IRelief
     {
         private const int Salt = 0x4361;
 
@@ -214,7 +214,7 @@ public static partial class SurfaceProfiles
         private readonly float length, course, courseJitter, depth, joint, step, round, bend, chip, around;
         private readonly Repeat.Pattern bendX, bendY, chipped, rough;
 
-        public Castle(float stoneMm, float aspect, float depthMm, float jointMm, float nozzleMm, float aroundMm = 0f)
+        public CoursedStone(float stoneMm, float aspect, float depthMm, float jointMm, float nozzleMm, float aroundMm = 0f)
         {
             length = MathF.Max(stoneMm, 2f * jointMm + TextureOptions.LeastPadMm);
             course = MathF.Max(stoneMm / MathF.Max(aspect, 0.2f), 2f * jointMm + TextureOptions.LeastPadMm);

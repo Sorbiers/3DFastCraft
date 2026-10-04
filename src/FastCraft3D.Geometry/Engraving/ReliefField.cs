@@ -203,7 +203,7 @@ public static class ReliefField
                 {
                     // Raised, lifted the same hair a cut is sunk. A profile comes down to nothing
                     // at every joint of a wall and every groove of a grain, and laid there flush
-                    // with the face, castle walling and bark on a 60 mm cube fell off Manifold onto
+                    // with the face, coursed stone walling and bark on a 60 mm cube fell off Manifold onto
                     // the slow engine - ten and seventeen seconds, half a million triangles, and
                     // not closed at the end of it.
                     float out_ = pass == 0

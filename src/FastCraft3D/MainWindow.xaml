@@ -253,6 +253,7 @@
         <BooleanToVisibilityConverter x:Key="BoolToVisibility" />
         <view:ColourToBrushConverter x:Key="ColourToBrush" />
         <view:OutlinesToGeometryConverter x:Key="OutlinesToGeometry" />
+        <view:TextureNameConverter x:Key="TextureName" />
 
         <!-- A palette swatch: the colour itself is the whole button, so the grid reads as paint
              rather than as a row of controls. -->
@@ -680,11 +681,11 @@
                     <Button Style="{StaticResource ToolButton}" Content="Texture" Tag="{StaticResource IconTexture}"
                             Command="{Binding BeginTextureCommand}" MinWidth="78"
                             AutomationProperties.AutomationId="Texture"
-                            ToolTip="Cover a face with a pattern - knurling, ribs, honeycomb, pips, tread plate, brick, tiles, boards, siding, roof tiles, rubble, castle walling, bark, wood grain - flat on it, or wrapped round a barrel or round the walls. Needs exactly one object selected." />
+                            ToolTip="Cover a face with a pattern - knurling, ribs, honeycomb, pips, tread plate, brick, tiles, boards, siding, roof tiles, rubble, coursed stone walling, bark, wood grain - flat on it, or wrapped round a barrel or round the walls. Needs exactly one object selected." />
                     <Button Style="{StaticResource ToolButton}" Content="Cladding" Tag="{StaticResource IconMasonry}"
                             Command="{Binding BeginMasonryCommand}" MinWidth="82"
                             AutomationProperties.AutomationId="Masonry"
-                            ToolTip="Brick, stone, siding or log walls on the walls you pick, built the way the real thing is. Brick: each wall a whole number of bricks, every corner a whole corner brick, swapping faces course by course. Rubble and castle walling: big cornerstones at every outside corner, long and short by turns. Siding: a post over the boards at every corner. Logs: crossing at the corners, their ends standing out. Click a wall, then Ctrl+click the walls either side. Brick and logs: square corners only." />
+                            ToolTip="Brick, stone, siding or log walls on the walls you pick, built the way the real thing is. Brick: each wall a whole number of bricks, every corner a whole corner brick, swapping faces course by course. Rubble and coursed stone walling: big cornerstones at every outside corner, long and short by turns. Siding: a post over the boards at every corner. Logs: crossing at the corners, their ends standing out. Click a wall, then Ctrl+click the walls either side. Brick and logs: square corners only." />
                     <Button Style="{StaticResource ToolButton}" Content="Studs" Visibility="{Binding IsExtendedMode, Converter={StaticResource BoolToVisibility}}" Tag="{StaticResource IconStuds}"
                             Command="{Binding BeginEngraveCommand}" MinWidth="82"
                             ToolTip="Legacy. One pattern - brick, tiles, planks, grain - on one flat face. Texture in Emboss does all this and more, and wraps around curves. Kept for older models." />
@@ -735,7 +736,7 @@
                             ToolTip="Save the project under a new name (Ctrl+Shift+S)" />
                     <Button Style="{StaticResource ToolButton}" Content="Save version" Tag="{StaticResource IconVersions}"
                             Command="{Binding SaveVersionCommand}" MinWidth="88"
-                            ToolTip="Keep a named snapshot inside this project file, so you can come back to it later" />
+                            ToolTip="Keep a named snapshot inside this project file, so you can come back to it later (Ctrl+Alt+S)" />
                     <Button Style="{StaticResource ToolButton}" Content="Versions" Tag="{StaticResource IconVersions}"
                             Command="{Binding VersionsCommand}" MinWidth="82"
                             ToolTip="List the versions kept in this file, and restore one. Needs the project saved to a file first." />
@@ -1253,7 +1254,7 @@
                 <Border Grid.Row="2" Margin="0,10,0,0" Padding="8" Background="#FFEFF5FF"
                         BorderBrush="#FFB8D2F0" BorderThickness="1" CornerRadius="3"
                         Visibility="{Binding IsAlignFaceMode, Converter={StaticResource BoolToVisibility}}">
-                    <view:ColumnFlow>
+                    <view:ColumnFlow x:Name="AlignFacePanel">
                         <TextBlock Text="Align to a face" FontWeight="SemiBold" Margin="0,0,0,6" />
                         <TextBlock TextWrapping="Wrap" Foreground="#FF5A5F66" Margin="0,0,0,6"
                                    Text="Click a face on any object - it does not have to be part of the selection. On each axis, choose a place on the face and the point of the selection that goes there: least to least sits it flush, least to greatest stands it beside. Leave keeps that axis where it is." />
@@ -1261,55 +1262,61 @@
 
                         <!-- Two places, one on each side of the move: where on the face (red), and which
                              point of the selection goes there (blue). -->
+                        <!-- Each place with its three rows is one child, so a wide panel that flows them into
+                             columns puts a whole group in each and never splits one across two. -->
+                        <StackPanel x:Name="AlignOnFace">
                         <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
                             <Ellipse Width="9" Height="9" Fill="#FFFF2222" Margin="0,0,6,0" VerticalAlignment="Center" />
                             <TextBlock Text="On the face" FontWeight="SemiBold" Foreground="#FF3A4550" />
                         </StackPanel>
                         <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
                             <TextBlock Text="X" Style="{StaticResource FieldLabel}" />
-                            <RadioButton Content="Don\'t move" GroupName="AlignFaceX" Margin="0,0,8,0" IsChecked="True" Checked="OnAlignFaceModeChanged" Tag="X:None" />
+                            <RadioButton Content="Don't move" GroupName="AlignFaceX" Margin="0,0,8,0" IsChecked="True" Checked="OnAlignFaceModeChanged" Tag="X:None" />
                             <RadioButton Content="Min" GroupName="AlignFaceX" Margin="0,0,8,0" Checked="OnAlignFaceModeChanged" Tag="X:Minimum" />
                             <RadioButton Content="Center" GroupName="AlignFaceX" Margin="0,0,8,0" Checked="OnAlignFaceModeChanged" Tag="X:Centre" />
                             <RadioButton Content="Max" GroupName="AlignFaceX" Checked="OnAlignFaceModeChanged" Tag="X:Maximum" />
                         </StackPanel>
                         <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
                             <TextBlock Text="Y" Style="{StaticResource FieldLabel}" />
-                            <RadioButton Content="Don\'t move" GroupName="AlignFaceY" Margin="0,0,8,0" IsChecked="True" Checked="OnAlignFaceModeChanged" Tag="Y:None" />
+                            <RadioButton Content="Don't move" GroupName="AlignFaceY" Margin="0,0,8,0" IsChecked="True" Checked="OnAlignFaceModeChanged" Tag="Y:None" />
                             <RadioButton Content="Min" GroupName="AlignFaceY" Margin="0,0,8,0" Checked="OnAlignFaceModeChanged" Tag="Y:Minimum" />
                             <RadioButton Content="Center" GroupName="AlignFaceY" Margin="0,0,8,0" Checked="OnAlignFaceModeChanged" Tag="Y:Centre" />
                             <RadioButton Content="Max" GroupName="AlignFaceY" Checked="OnAlignFaceModeChanged" Tag="Y:Maximum" />
                         </StackPanel>
                         <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
                             <TextBlock Text="Z" Style="{StaticResource FieldLabel}" />
-                            <RadioButton Content="Don\'t move" GroupName="AlignFaceZ" Margin="0,0,8,0" IsChecked="True" Checked="OnAlignFaceModeChanged" Tag="Z:None" />
+                            <RadioButton Content="Don't move" GroupName="AlignFaceZ" Margin="0,0,8,0" IsChecked="True" Checked="OnAlignFaceModeChanged" Tag="Z:None" />
                             <RadioButton Content="Min" GroupName="AlignFaceZ" Margin="0,0,8,0" Checked="OnAlignFaceModeChanged" Tag="Z:Minimum" />
                             <RadioButton Content="Center" GroupName="AlignFaceZ" Margin="0,0,8,0" Checked="OnAlignFaceModeChanged" Tag="Z:Centre" />
                             <RadioButton Content="Max" GroupName="AlignFaceZ" Checked="OnAlignFaceModeChanged" Tag="Z:Maximum" />
                         </StackPanel>
+                        </StackPanel>
+                        <StackPanel>
                         <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
                             <Ellipse Width="9" Height="9" Fill="#FF268CFF" Margin="0,0,6,0" VerticalAlignment="Center" />
                             <TextBlock Text="Of the selection" FontWeight="SemiBold" Foreground="#FF3A4550" />
                         </StackPanel>
                         <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
                             <TextBlock Text="X" Style="{StaticResource FieldLabel}" />
-                            <RadioButton Content="Don\'t move" Margin="0,0,8,0" Visibility="Hidden" IsTabStop="False" />
+                            <RadioButton Content="Don't move" Margin="0,0,8,0" Visibility="Hidden" IsTabStop="False" />
                             <RadioButton Content="Min" GroupName="AlignFromX" Margin="0,0,8,0" Checked="OnAlignFaceModeChanged" Tag="SX:Minimum" />
                             <RadioButton Content="Center" GroupName="AlignFromX" Margin="0,0,8,0" IsChecked="True" Checked="OnAlignFaceModeChanged" Tag="SX:Centre" />
                             <RadioButton Content="Max" GroupName="AlignFromX" Checked="OnAlignFaceModeChanged" Tag="SX:Maximum" />
                         </StackPanel>
                         <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
                             <TextBlock Text="Y" Style="{StaticResource FieldLabel}" />
-                            <RadioButton Content="Don\'t move" Margin="0,0,8,0" Visibility="Hidden" IsTabStop="False" />
+                            <RadioButton Content="Don't move" Margin="0,0,8,0" Visibility="Hidden" IsTabStop="False" />
                             <RadioButton Content="Min" GroupName="AlignFromY" Margin="0,0,8,0" Checked="OnAlignFaceModeChanged" Tag="SY:Minimum" />
                             <RadioButton Content="Center" GroupName="AlignFromY" Margin="0,0,8,0" IsChecked="True" Checked="OnAlignFaceModeChanged" Tag="SY:Centre" />
                             <RadioButton Content="Max" GroupName="AlignFromY" Checked="OnAlignFaceModeChanged" Tag="SY:Maximum" />
                         </StackPanel>
                         <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
                             <TextBlock Text="Z" Style="{StaticResource FieldLabel}" />
-                            <RadioButton Content="Don\'t move" Margin="0,0,8,0" Visibility="Hidden" IsTabStop="False" />
+                            <RadioButton Content="Don't move" Margin="0,0,8,0" Visibility="Hidden" IsTabStop="False" />
                             <RadioButton Content="Min" GroupName="AlignFromZ" Margin="0,0,8,0" Checked="OnAlignFaceModeChanged" Tag="SZ:Minimum" />
                             <RadioButton Content="Center" GroupName="AlignFromZ" Margin="0,0,8,0" IsChecked="True" Checked="OnAlignFaceModeChanged" Tag="SZ:Centre" />
                             <RadioButton Content="Max" GroupName="AlignFromZ" Checked="OnAlignFaceModeChanged" Tag="SZ:Maximum" />
+                        </StackPanel>
                         </StackPanel>
 
                         <StackPanel Orientation="Horizontal">
@@ -1697,6 +1704,10 @@
                                 <Path MaxHeight="72" Stretch="Uniform" Fill="#FF2C3037"
                                       HorizontalAlignment="Center"
                                       Data="{Binding DrawingShapes, Converter={StaticResource OutlinesToGeometry}}" />
+                                <!-- The ones with no outline to draw: a shaded picture of the relief. -->
+                                <Image Source="{Binding TexturePicture}" MaxHeight="120" Stretch="Uniform"
+                                       HorizontalAlignment="Center" RenderOptions.BitmapScalingMode="HighQuality"
+                                       Visibility="{Binding UsesProfile, Converter={StaticResource BoolToVisibility}}" />
                                 <TextBlock Text="{Binding SvgName}" Margin="0,6,0,0" FontSize="11"
                                            Visibility="{Binding HasDrawing, Converter={StaticResource BoolToVisibility}}"
                                            HorizontalAlignment="Center" TextTrimming="CharacterEllipsis"
@@ -1789,10 +1800,16 @@
                         <StackPanel Orientation="Horizontal" Margin="0,0,0,6"
                                     Visibility="{Binding ChoosesTexture, Converter={StaticResource BoolToVisibility}}">
                             <TextBlock Text="Texture" Style="{StaticResource FieldLabel}" Width="62"
-                                       ToolTip="Cover the whole face with a pattern. Flat patterns - knurling, ribs, honeycomb, pips, checker plate, brick, tile - wrap around with no seam. Shaped ones - roof tiles, boards, lap siding, rubble and castle walling, bark, wood grain - stand proud by Depth. Wrapped round a barrel, the stone, bark and grain go the whole way round with no seam." />
+                                       ToolTip="Cover the whole face with a pattern. Flat patterns - knurling, ribs, honeycomb, pips, checker plate, brick, tile - wrap around with no seam. Shaped ones - roof tiles, boards, lap siding, rubble and coursed stone walling, bark, wood grain - stand proud by Depth. Wrapped round a barrel, the stone, bark and grain go the whole way round with no seam." />
                             <ComboBox Width="130" ItemsSource="{Binding EmbossTextures}"
                                       SelectedItem="{Binding EmbossTexture, Mode=TwoWay}"
-                                      AutomationProperties.AutomationId="EmbossTexture" />
+                                      AutomationProperties.AutomationId="EmbossTexture">
+                                <ComboBox.ItemTemplate>
+                                    <DataTemplate>
+                                        <TextBlock Text="{Binding Converter={StaticResource TextureName}}" />
+                                    </DataTemplate>
+                                </ComboBox.ItemTemplate>
+                            </ComboBox>
                         </StackPanel>
 
                         <TextBlock Text="Try also the Cladding tool: it turns the corners of walls the way they are built - whole corner bricks, cornerstones, corner posts."
@@ -1802,7 +1819,7 @@
                         <StackPanel Visibility="{Binding UsesTexture, Converter={StaticResource BoolToVisibility}}">
                             <StackPanel Orientation="Horizontal" Margin="0,0,0,2">
                                 <TextBlock Text="Pitch" Style="{StaticResource FieldLabel}" Width="62"
-                                           ToolTip="Center to center of one cell and the next, or the length of a brick, tile or board. For rubble the width of a stone, for castle walling its length, for bark the width of a plate, for wood grain the gap between the lines. Knurling on a knob: 1-2 mm; a grip for gloved hands: 3 mm or more." />
+                                           ToolTip="Center to center of one cell and the next, or the length of a brick, tile or board. For rubble the width of a stone, for coursed stone walling its length, for bark the width of a plate, for wood grain the gap between the lines. Knurling on a knob: 1-2 mm; a grip for gloved hands: 3 mm or more." />
                                 <TextBox AutomationProperties.AutomationId="EmbossTexturePitch" Width="64" Style="{StaticResource NumberBox}" Tag="number"
                                          Text="{Binding EmbossTexturePitch, StringFormat=N2, UpdateSourceTrigger=LostFocus, Converter={StaticResource Length}}" />
                                 <TextBlock Text="{Binding DataContext.UnitLabel, RelativeSource={RelativeSource AncestorType=Window}}" Foreground="#FF9AA0A8" VerticalAlignment="Center" />
@@ -1828,7 +1845,7 @@
                             <StackPanel Orientation="Horizontal" Margin="0,0,0,2"
                                         Visibility="{Binding TextureHasCourses, Converter={StaticResource BoolToVisibility}}">
                                 <TextBlock Text="Courses" Style="{StaticResource FieldLabel}" Width="62"
-                                           ToolTip="How many times longer each piece is than it is deep. A brick is about three, a wall tile one, a roof tile one and a half, a floorboard eight or more; rubble about 1.3, castle walling 2.2, a plate of bark 6." />
+                                           ToolTip="How many times longer each piece is than it is deep. A brick is about three, a wall tile one, a roof tile one and a half, a floorboard eight or more; rubble about 1.3, coursed stone walling 2.2, a plate of bark 6." />
                                 <TextBox AutomationProperties.AutomationId="EmbossTextureAspect" Width="64" Style="{StaticResource NumberBox}" Tag="number"
                                          Text="{Binding EmbossTextureAspect, StringFormat=N1, UpdateSourceTrigger=LostFocus}" />
                                 <TextBlock Text="to 1" Foreground="#FF9AA0A8" VerticalAlignment="Center" />

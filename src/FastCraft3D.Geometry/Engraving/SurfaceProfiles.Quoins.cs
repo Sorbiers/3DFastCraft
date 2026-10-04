@@ -38,7 +38,7 @@ public static partial class SurfaceProfiles
         private readonly Repeat.Pattern rough;
 
         /// <param name="wall">The stone field the quoins are set into.</param>
-        /// <param name="kind">Rubble, whose quoins are rounded boulders; or castle walling, squared and rock-faced.</param>
+        /// <param name="kind">Rubble, whose quoins are rounded boulders; or coursed stone walling, squared and rock-faced.</param>
         /// <param name="stoneMm">The field's stone size, which the quoins are sized from.</param>
         /// <param name="aspect">How many times the stone is wider than tall.</param>
         public Quoins(

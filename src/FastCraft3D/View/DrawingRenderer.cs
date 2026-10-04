@@ -253,9 +253,9 @@ public static class DrawingRenderer
             int column = k / rows, row = k % rows;
             var cell = new Vector2(left + column * PartCellWidth, top - (row + 1) * PartCellHeight);
 
-            // The picture, as large as fits its box and centred in it.
+            // The picture, as large as fits its box and centred in it. No frame round the box: the
+            // drawing stands on the page by itself.
             const float box = 38f;
-            dc.DrawRectangle(null, thin, new Rect(P(cell + new Vector2(0, box + 2f)), P(cell + new Vector2(box, 2f))));
             var lines = part.Isometric;
             float fit = MathF.Min((box - 4f) / MathF.Max(lines.Size.X, 1e-3f), (box - 4f) / MathF.Max(lines.Size.Y, 1e-3f));
             var origin = cell + new Vector2((box - lines.Size.X * fit) / 2f, 2f + (box - lines.Size.Y * fit) / 2f);
