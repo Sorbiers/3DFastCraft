@@ -17,8 +17,9 @@ path from a shape on the plate to a printable part, with almost nothing to learn
 grew well past it - a parts library, working mechanisms, molds, patterns, lithophanes.
 
 The **Classic** view shows the tools 3D Builder had, for anyone who wants the old app back.
-**Advanced** (the default) adds the working set; **Extended** adds the specialized and
-experimental tools. Only buttons are hidden - every key works at every level.
+**Advanced** (the default) has every tool. Only buttons are hidden - every key works at both
+levels. The **Custom** tab at the end of the ribbon holds the buttons you use most: right-click any
+button, even a greyed one, and choose *Add to Custom tab*; right-click one there to move or remove it.
 
 Almost all of it is written by [Claude Code](https://claude.com/claude-code) from prompts.
 
@@ -30,7 +31,10 @@ Almost all of it is written by [Claude Code](https://claude.com/claude-code) fro
   on the plate at a sensible size.
 - **Custom shape** - a primitive with its segments and roundness chosen before it is made.
 - **Text** - lettering as an object: flat, round a circle or round a cylinder, any installed font.
-- **Sketch** - lines, arcs, curves, freehand or an SVG on the plate, extruded or revolved.
+- **Sketch** - lines, arcs, curves, freehand or an SVG on the plate, extruded or revolved. The
+  pointer's X and Y are read off the axes, and the line, rectangle or circle being drawn - or the
+  sides of a corner being dragged - carries its length. Right-click finishes the line; **Esc**
+  drops what is half drawn, then leaves the sketch and puts the camera back.
 - **Import** - STL, OBJ, 3MF, SVG as a solid; another project *joins* the plate.
 - **Library** (Ctrl+L) - parts made to your numbers, previewed as you type, remade later with
   **Edit settings**: boxes and Gridfinity, organizers, hinges, clips, threads, washers, knobs,
@@ -83,6 +87,8 @@ Almost all of it is written by [Claude Code](https://claude.com/claude-code) fro
   the round surface is taken whole, by its axis - Apply puts the pin on the hole's axis
   (turning it parallel first, if asked) and the panel reads both diameters and the gap.
 - **Align, Distribute, Fit, Mirror** - line up on X, Y or Z, spread evenly, fit to the plate.
+  **Distribute** can also lay each part on its **best face** and **drop** it to the plate, to
+  arrange a print in one go.
 
 ### Tools
 
@@ -104,10 +110,13 @@ Almost all of it is written by [Claude Code](https://claude.com/claude-code) fro
   **corner squares** resize it along the surface - a texture's corners resize the *area* it covers,
   so a corner brick can meet the corner of the face. Raised work keeps off windows and doorways
   already cut in the face. **Keep as its own part** prints it in a second filament.
-  - **Rubble, Castle, Bark and Grain** are 3D textures: stones of every size in mortar, uneven
+  - **Rubble, Coursed stone, Bark and Grain** are 3D textures: stones of every size in mortar, uneven
     courses of squared stone, fissured plates, flowing wood grain with knots. Round a barrel they
     go the whole way round as one closed ring, no seam; **Perimeter** takes the walls of a box,
     a house or any upright part with flat sides as one strip that goes round the corners.
+- **Cladding** - walls built the way a mason builds them, round a house or any upright part:
+  bricks in a bond with corner bricks, logs, siding, rubble or coursed stone with cornerstones.
+  Texture and Cladding show a picture of each pattern.
 - **Engrave** - brick, tile, plank, grain and more, cut or raised, laid *around* openings.
 - **Repeat** - along a line, round a circle (with a rise, for spiral stairs) or in a grid.
 - **Measure**, **Fit check**, **Surface info** - distances, overlap or gap between parts, and a
@@ -120,7 +129,7 @@ Almost all of it is written by [Claude Code](https://claude.com/claude-code) fro
   Split and Connect), brick fit and thread clearance. **Printer profile test** in the Library prints
   every fit at once, a few samples either side of the profile's number or up from nought.
 - **Projects** are `.3mf` files: the plate as any slicer and Explorer see it, with the editable
-  project and its **versions** inside; restore is an undo step. A `.3dfc` from before 4.3 is
+  project and its **versions** inside (**Ctrl+Alt+S** saves one); restore is an undo step. A `.3dfc` from before 4.3 is
   imported, without its versions.
 - **Export** STL (binary or ASCII) or OBJ - everything or just the selection; reports
   triangles, volume and whether it is watertight before writing. For 3MF, save the project.
@@ -144,7 +153,8 @@ Almost all of it is written by [Claude Code](https://claude.com/claude-code) fro
   list can be dragged taller by its bottom edge.
 - **Handles** - **M** move, **R** rotate, **S** resize; **Snap** to 1 or 5 mm. **O** resizes one
   way only, the opposite face staying put. The resize strip reads mm or %; the box corners,
-  dragged, resize in proportion.
+  dragged, resize in proportion. With several parts selected they move, turn and resize as one
+  object; the **Each** button gives every part its own centre and axes instead.
 - **Stop on contact** (**C**) - a dragged part stops where its *shape* meets another, not its
   box. Parts that already overlap move freely.
 - **Number boxes** - every one, in every panel - take `+=5`, `-=5`, `*=1.5`, `/=2`; the wheel and
