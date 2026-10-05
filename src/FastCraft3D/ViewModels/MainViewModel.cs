@@ -238,7 +238,7 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
         InsertLithophaneCommand = Track(AsyncRelayCommand.Simple(InsertLithophane));
         HullCommand = Track(RelayCommand.Simple(HullSelection, () => Scene.Selection.Count > 0));
         BeginSketchCommand = new RelayCommand(p => BeginSketch(Enum.TryParse<SketchTool>(p as string, out var tool) ? tool : SketchTool.Line));
-        SketchCloseCommand = RelayCommand.Simple(() => SayOfSketch(sketch.Close(sketchCursor)), () => sketch.Chain.Count >= 3 || sketch.ArcEnd is not null);
+        SketchCloseCommand = RelayCommand.Simple(CloseSketch, () => sketch.Chain.Count >= 3 || sketch.ArcEnd is not null);
         SketchUndoCommand = RelayCommand.Simple(() => SayOfSketch(sketch.Undo()), () => !sketch.IsEmpty);
         SketchClearCommand = RelayCommand.Simple(() => { sketch.Clear(); SayOfSketch("Cleared. Start a new outline."); }, () => !sketch.IsEmpty);
         SketchLoadDrawingCommand = RelayCommand.Simple(PickSketchDrawing);
@@ -1075,6 +1075,17 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
 
     private static bool IsWarning(string? message) =>
         !string.IsNullOrEmpty(message) && WarningWords.Any(w => message.Contains(w, StringComparison.OrdinalIgnoreCase));
+
+    /// <summary>
+    /// Says that something could not be done, where it will be seen: in the status bar and over the
+    /// viewport for a few seconds. A refusal worded without one of the words that mean trouble
+    /// went only to the status bar, which is at the far edge of the window from the pointer.
+    /// </summary>
+    private void Warn(string message)
+    {
+        Status = message;
+        ShowNotice(message);
+    }
 
     private void ShowNotice(string message)
     {
@@ -7030,6 +7041,14 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
     /// <summary>Asks the window to look from the top, or back at the isometric view.</summary>
     public event Action<bool>? LookFromTopRequested;
 
+    /// <summary>
+    /// Asks the window to put the camera back where it was before the sketch took it to the top.
+    /// Not raised when a solid is made from the sketch: that goes round to a view of the solid.
+    /// </summary>
+    public event Action? ViewRestoreRequested;
+
+    private bool sketchLeavesForSolid;
+
     /// <summary>The outlines being drawn, and the one in progress. Kept when the sketch is left, for another go.</summary>
     public Sketch CurrentSketch => sketch;
 
@@ -7052,6 +7071,8 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
             {
                 sketch.Chain.Clear();
                 sketchCursor = null;
+                sketchDragged = null;
+                if (!sketchLeavesForSolid) ViewRestoreRequested?.Invoke();
             }
 
             Raise(nameof(IsToolRunning));
@@ -7160,8 +7181,32 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
     }
 
     /// <summary>A click on the plate while sketching. <paramref name="onFirst"/>: it landed on the first point of the line.</summary>
-    public void PlaceSketchPoint(Vector2 onPlate, bool onFirst) =>
-        SayOfSketch(sketch.Place(Snapped(onPlate), sketchTool, onFirst));
+    public void PlaceSketchPoint(Vector2 onPlate, bool onFirst)
+    {
+        var before = SketchState();
+        string said = sketch.Place(Snapped(onPlate), sketchTool, onFirst);
+        SayOfSketch(said);
+
+        // A click that changed nothing was refused: the reason is shown over the plate, where the
+        // click was, and not only in the small print of the panel.
+        if (said.Length > 0 && sketchTool != SketchTool.Freehand && SketchState() == before) Warn(said);
+    }
+
+    private (int Loops, int Points, Vector2? ArcEnd) SketchState() => (sketch.Loops.Count, sketch.Chain.Count, sketch.ArcEnd);
+
+    /// <summary>
+    /// Finishes the outline with something. If that did not make one - it crosses itself, or has
+    /// too few points - the reason is shown over the plate rather than only in the panel, so the
+    /// right button is never a click that appears to do nothing.
+    /// </summary>
+    private void FinishSketch(Func<string> finish)
+    {
+        int outlines = sketch.Loops.Count;
+        string said = finish();
+        SayOfSketch(said);
+
+        if (said.Length > 0 && sketch.Loops.Count == outlines) Warn(said);
+    }
 
     public void MoveSketchCursor(Vector2 onPlate)
     {
@@ -7171,7 +7216,12 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
         SketchChanged?.Invoke();
     }
 
-    public void CloseSketch() => SayOfSketch(sketch.Close(sketchCursor));
+    public void CloseSketch()
+    {
+        if (!sketch.IsDrawing) return;
+
+        FinishSketch(() => sketch.Close(sketchCursor));
+    }
 
     private void PickSketchDrawing()
     {
@@ -7248,10 +7298,22 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
     /// <summary>The points of the sketch that can be dragged. See Sketch.Handles.</summary>
     public IReadOnlyList<(int Loop, int Index, Vector2 At)> SketchHandles() => sketch.Handles();
 
+    private (int Loop, int Index)? sketchDragged;
+
+    /// <summary>
+    /// The lengths to write on the plate: the sides either side of the point being dragged, or
+    /// what the next click would draw. Nothing while the pointer is off the plate.
+    /// </summary>
+    public IReadOnlyList<Sketch.Dimension> SketchDimensions() =>
+        sketchCursor is not { } at ? []
+        : sketchDragged is { } grabbed ? sketch.SidesAt(grabbed.Loop, grabbed.Index)
+        : sketch.Dimensions(at, sketchTool);
+
     /// <summary>A sketch point being dragged, snapped as a placed one is.</summary>
     public void MoveSketchHandle(int loop, int index, Vector2 onPlate)
     {
         var to = Snapped(onPlate);
+        sketchDragged = (loop, index);
         sketch.MoveHandle(loop, index, to);
         SayOfSketch($"{to.X:0.#}, {to.Y:0.#} mm");
     }
@@ -7259,6 +7321,7 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
     /// <summary>The drag let go: a finished outline goes back if the move has spoiled it.</summary>
     public void SettleSketchHandle(int loop, int index, Vector2 from)
     {
+        sketchDragged = null;
         string said = sketch.SettleHandle(loop, index, from);
 
         if (said.Length > 0) SayOfSketch(said);
@@ -7270,7 +7333,7 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
     {
         if (!sketch.IsDrawing) return;
 
-        SayOfSketch(sketch.EndLine(sketchCursor));
+        FinishSketch(() => sketch.EndLine(sketchCursor, sketchTool));
     }
 
     private void SayOfSketch(string message)
@@ -7320,7 +7383,9 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
         var o = new SceneObject(Scene.UniqueName(name), solid) { Colour = NextAutomaticColour() }.Centred();
         o.Position = o.Position with { Z = o.Position.Z - o.WorldBounds.Min.Z };
 
+        sketchLeavesForSolid = true;
         IsSketchMode = false;
+        sketchLeavesForSolid = false;
         Undo.Execute(new AddObjectsCommand(said, [o]));
         RefreshSelection();
         LookFromTopRequested?.Invoke(false);

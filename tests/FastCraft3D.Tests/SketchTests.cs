@@ -30,6 +30,70 @@ public class SketchTests
     }
 
     [Fact]
+    public void ALineBeingDrawnHasItsLengthToThePointerAsATag()
+    {
+        var sketch = new Sketch();
+        sketch.Place(new Vector2(0, 0), SketchTool.Line, false);
+        sketch.Place(new Vector2(10, 0), SketchTool.Line, false);
+
+        var tags = sketch.Dimensions(new Vector2(10, 5), SketchTool.Line);
+
+        var tag = Assert.Single(tags);
+        Assert.Equal(new Vector2(10, 0), tag.From);
+        Assert.Equal(5f, tag.Millimetres, 3);
+        Assert.Equal(Sketch.DimensionKind.Length, tag.Kind);
+    }
+
+    [Fact]
+    public void ARectangleBeingDrawnHasItsWidthAndHeightAsTags()
+    {
+        var sketch = new Sketch();
+        sketch.Place(new Vector2(10, 20), SketchTool.Rectangle, false);
+
+        var tags = sketch.Dimensions(new Vector2(-5, 8), SketchTool.Rectangle);
+
+        Assert.Equal(15f, tags.Single(t => t.Kind == Sketch.DimensionKind.Width).Millimetres, 3);
+        Assert.Equal(12f, tags.Single(t => t.Kind == Sketch.DimensionKind.Height).Millimetres, 3);
+    }
+
+    [Fact]
+    public void ACircleBeingDrawnHasItsRadiusAsATagAndNothingBeforeTheFirstClick()
+    {
+        var sketch = new Sketch();
+        Assert.Empty(sketch.Dimensions(new Vector2(3, 4), SketchTool.Circle));
+
+        sketch.Place(new Vector2(0, 0), SketchTool.Circle, false);
+        var tag = Assert.Single(sketch.Dimensions(new Vector2(3, 4), SketchTool.Circle));
+
+        Assert.Equal(Sketch.DimensionKind.Radius, tag.Kind);
+        Assert.Equal(5f, tag.Millimetres, 3);
+    }
+
+    [Fact]
+    public void ADraggedCornerHasTheSidesEitherSideOfItAsTags()
+    {
+        var sketch = Rectangle(0, 0, 30, 20);
+
+        var sides = sketch.SidesAt(0, 1);
+
+        Assert.Equal(2, sides.Count);
+        Assert.All(sides, side => Assert.Equal(Sketch.DimensionKind.Length, side.Kind));
+        Assert.Equal([20f, 30f], sides.Select(side => side.Millimetres).OrderBy(x => x).ToArray());
+    }
+
+    [Fact]
+    public void TheEndOfALineStillBeingDrawnHasOnlyTheOneSideToTag()
+    {
+        var sketch = new Sketch();
+        foreach (var p in new Vector2[] { new(0, 0), new(20, 0), new(20, 10) })
+            sketch.Place(p, SketchTool.Line, false);
+
+        Assert.Single(sketch.SidesAt(-1, 2));
+        Assert.Equal(2, sketch.SidesAt(-1, 1).Count);
+        Assert.Empty(sketch.SidesAt(-1, 9));
+    }
+
+    [Fact]
     public void ALineClosesOnItsFirstPoint()
     {
         var sketch = new Sketch();
@@ -383,6 +447,92 @@ public class SketchTests
     }
 
     [Fact]
+    public void ARefusedRightClickIsShownOverThePlateNotOnlyInThePanel()
+    {
+        WithModel(model =>
+        {
+            model.BeginSketchCommand.Execute("Line");
+            model.PlaceSketchPoint(new Vector2(0, 0), false);
+            model.PlaceSketchPoint(new Vector2(10, 0), false);
+            model.EndSketchLine();
+
+            Assert.True(model.HasNotice);
+            Assert.Contains("three points", model.Notice);
+        });
+    }
+
+    [Fact]
+    public void ARightClickThatMakesAnOutlineShowsNoWarning()
+    {
+        WithModel(model =>
+        {
+            model.BeginSketchCommand.Execute("Rectangle");
+            model.PlaceSketchPoint(new Vector2(0, 0), false);
+            model.MoveSketchCursor(new Vector2(20, 10));
+            model.EndSketchLine();
+
+            Assert.False(model.HasNotice);
+            Assert.Single(model.CurrentSketch.Loops);
+        });
+    }
+
+    [Fact]
+    public void ARepeatedClickOnTheSamePointIsRefusedWithAVisibleReason()
+    {
+        WithModel(model =>
+        {
+            model.BeginSketchCommand.Execute("Line");
+            model.PlaceSketchPoint(new Vector2(5, 5), false);
+            model.PlaceSketchPoint(new Vector2(5, 5), false);
+
+            Assert.True(model.HasNotice);
+            Assert.Single(model.CurrentSketch.Chain);
+        });
+    }
+
+    [Fact]
+    public void LeavingTheSketchWithEscapeOrDoneGivesTheCameraBack()
+    {
+        WithModel(model =>
+        {
+            int restored = 0, tops = 0;
+            model.ViewRestoreRequested += () => restored++;
+            model.LookFromTopRequested += top => { if (top) tops++; };
+
+            model.BeginSketchCommand.Execute("Line");
+            model.BeginSketchCommand.Execute("Rectangle");
+            Assert.Equal(2, tops);
+            Assert.Equal(0, restored);
+
+            Assert.True(model.CancelActiveTool());
+            Assert.Equal(1, restored);
+
+            model.BeginSketchCommand.Execute("Line");
+            model.DoneSketchCommand.Execute(null);
+            Assert.Equal(2, restored);
+        });
+    }
+
+    [Fact]
+    public void MakingASolidFromTheSketchGoesRoundToTheSolidInsteadOfRestoringTheCamera()
+    {
+        WithModel(model =>
+        {
+            int restored = 0, round = 0;
+            model.ViewRestoreRequested += () => restored++;
+            model.LookFromTopRequested += top => { if (!top) round++; };
+
+            model.BeginSketchCommand.Execute("Rectangle");
+            model.PlaceSketchPoint(new Vector2(0, 0), false);
+            model.PlaceSketchPoint(new Vector2(20, 10), false);
+            model.SketchExtrudeCommand.Execute(null);
+
+            Assert.Equal(0, restored);
+            Assert.Equal(1, round);
+        });
+    }
+
+    [Fact]
     public void RevolvingInTheAppStandsTheSolidOnThePlate()
     {
         WithModel(model =>
@@ -518,6 +668,49 @@ public class SketchTests
         Assert.Empty(sketch.Loops);
         Assert.Empty(sketch.Chain);
         Assert.Contains("three points", said);
+    }
+
+    [Theory]
+    [InlineData(SketchTool.Rectangle)]
+    [InlineData(SketchTool.Circle)]
+    public void TheRightButtonFinishesARectangleOrACircleAtThePointer(SketchTool tool)
+    {
+        var sketch = new Sketch();
+        sketch.Place(new Vector2(0, 0), tool, false);
+
+        sketch.EndLine(new Vector2(20, 10), tool);
+
+        Assert.Single(sketch.Loops);
+        Assert.Empty(sketch.Chain);
+    }
+
+    [Fact]
+    public void TheRightButtonOnARectangleWithNoSizeSaysSoAndKeepsItsFirstCorner()
+    {
+        var sketch = new Sketch();
+        sketch.Place(new Vector2(5, 5), SketchTool.Rectangle, false);
+
+        string said = sketch.EndLine(new Vector2(5, 5), SketchTool.Rectangle);
+
+        Assert.Contains("width", said);
+        Assert.Empty(sketch.Loops);
+        Assert.Single(sketch.Chain);
+    }
+
+    [Theory]
+    [InlineData(SketchTool.Line)]
+    [InlineData(SketchTool.Curve)]
+    [InlineData(SketchTool.Arc)]
+    public void TheRightButtonEitherMakesAnOutlineOrLeavesAReasonForAnyLineTool(SketchTool tool)
+    {
+        var sketch = new Sketch();
+        foreach (var p in new Vector2[] { new(0, 0), new(20, 0), new(20, 10), new(0, 10) })
+            sketch.Place(p, tool, false);
+
+        string said = sketch.EndLine(new Vector2(10, 5), tool);
+
+        // Either way it is not silent: a closed outline, or the reason it is not one.
+        Assert.True(sketch.Loops.Count == 1 || said.Length > 0);
     }
 
     [Fact]

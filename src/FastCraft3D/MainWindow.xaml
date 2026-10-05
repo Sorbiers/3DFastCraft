@@ -2609,6 +2609,10 @@
                  reason as the split one: the two never interleave. -->
             <Canvas x:Name="PlacementGizmoLayer" ClipToBounds="True" Background="{x:Null}" />
 
+            <!-- What a sketch reads off the plate: guides to the axes with the pointer's X and Y, and
+                 a tag on each length being drawn. Nothing on it can be hit. -->
+            <Canvas x:Name="SketchLayer" ClipToBounds="True" Background="{x:Null}" IsHitTestVisible="False" />
+
             <!-- The measuring tape, drawn over everything so it is never hidden by the model. -->
             <!-- Hit-testable so the two ends can be taken hold of. The canvas has no background,
                  so only the markers themselves catch the mouse; everywhere else the click falls

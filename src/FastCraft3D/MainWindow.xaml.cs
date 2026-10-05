@@ -43,6 +43,7 @@ public partial class MainWindow : Window
     /// <summary>Asks the viewport for a frame. The renderer is given this same one.</summary>
     private ViewportRepaint? repaint;
     private MeasureOverlay? measure;
+    private SketchOverlay? sketchTags;
 
     /// <summary>Which end of the tape is being dragged: 0, 1, or -1 for none.</summary>
     private int heldMeasureEnd = -1;
@@ -142,10 +143,13 @@ public partial class MainWindow : Window
 
         measure = new MeasureOverlay(MeasureLayer, new Viewport3DXProjector(View));
         viewModel.MeasureChanged += () => measure.Show(viewModel.MeasureFrom, viewModel.MeasureTo);
+        sketchTags = new SketchOverlay(SketchLayer, new Viewport3DXProjector(View), SayLength);
         viewModel.SketchChanged += () =>
         {
             renderer?.ShowSketch(
                 viewModel.IsSketchMode ? viewModel.CurrentSketch : null, viewModel.SketchCursor, viewModel.CurrentSketchTool);
+
+            ShowSketchTags();
 
             // Entering and leaving sketch mode comes through here as well.
             RefreshFocus();
@@ -157,9 +161,14 @@ public partial class MainWindow : Window
         };
         viewModel.LookFromTopRequested += top =>
         {
+            // Taken once, on the way in: changing tool inside the sketch asks for the top again.
+            if (top) viewBeforeSketch ??= CameraNow();
+            else viewBeforeSketch = null;
+
             if (top) OnViewTop(this, new RoutedEventArgs());
             else OnViewIso(this, new RoutedEventArgs());
         };
+        viewModel.ViewRestoreRequested += RestoreViewBeforeSketch;
 
         viewModel.EngraveFaceChanged += ShowFacePreview;
         viewModel.GeneratorFaceChanged += () => renderer?.ShowFace(viewModel.GeneratorFace, tint: AlignFacePickedColour);
@@ -252,6 +261,7 @@ public partial class MainWindow : Window
         {
             gizmo?.Reposition();
             measure?.Reposition();
+            ShowSketchTags();
             Repaint();
         };
 
@@ -971,6 +981,25 @@ public partial class MainWindow : Window
         // The tape is anchored to the model rather than to the screen, so it is reprojected with
         // the camera. Only while it is out: this runs on every frame.
         if (viewModel.IsMeasureMode) measure?.Reposition();
+        if (viewModel.IsSketchMode) sketchTags?.Reposition();
+    }
+
+    private void ShowSketchTags()
+    {
+        if (viewModel.IsSketchMode)
+            sketchTags?.Show(
+                viewModel.SketchCursor, viewModel.SketchDimensions(),
+                new Vector2(viewModel.PlateWidth / 2f, viewModel.PlateDepth / 2f));
+        else
+            sketchTags?.Clear();
+    }
+
+    /// <summary>A length in the unit the app is set to, with its name: what the tags on a sketch say.</summary>
+    private static string SayLength(float millimetres)
+    {
+        var unit = FastCraft3D.View.LengthConverter.Unit;
+        return unit.From(millimetres).ToString(unit.Millimetres <= 1f ? "0.##" : "0.###", System.Globalization.CultureInfo.CurrentCulture)
+             + " " + unit.Label;
     }
 
     public IEffectsManager EffectsManager { get; }
@@ -2390,6 +2419,24 @@ public partial class MainWindow : Window
         new AboutDialog { Owner = this }.ShowDialog();
 
     private void OnZoomExtents(object sender, RoutedEventArgs e) => ZoomExtents();
+
+    private (Media3D.Point3D Position, Media3D.Vector3D Look, Media3D.Vector3D Up)? viewBeforeSketch;
+
+    private (Media3D.Point3D, Media3D.Vector3D, Media3D.Vector3D)? CameraNow() =>
+        View.Camera is PerspectiveCamera camera ? (camera.Position, camera.LookDirection, camera.UpDirection) : null;
+
+    /// <summary>Puts the camera back where it was when the sketch took it to the top: leaving a sketch without a solid is leaving the view alone.</summary>
+    private void RestoreViewBeforeSketch()
+    {
+        if (viewBeforeSketch is { } view && View.Camera is PerspectiveCamera camera)
+        {
+            camera.Position = view.Position;
+            camera.LookDirection = view.Look;
+            camera.UpDirection = view.Up;
+        }
+
+        viewBeforeSketch = null;
+    }
 
     private void OnViewTop(object sender, RoutedEventArgs e) =>
         LookFrom(new Media3D.Vector3D(0, 0, 1), new Media3D.Vector3D(0, 1, 0));

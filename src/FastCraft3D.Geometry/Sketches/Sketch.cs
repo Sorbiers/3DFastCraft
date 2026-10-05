@@ -210,15 +210,22 @@ public sealed class Sketch
     /// is, so the arc on screen is the arc kept. Without that the right button threw the arc away,
     /// and with nothing before it the whole outline, which left no way to finish on an arc.
     /// </summary>
-    public string EndLine(Vector2? bend = null)
+    public string EndLine(Vector2? bend = null, SketchTool tool = SketchTool.Line)
     {
         if (kind == ChainKind.Stroke) return EndStroke();
         if (Chain.Count == 0) return "";
         if (ArcEnd is not null && bend is { } through) return SetArcAndClose(through);
+
+        // A rectangle or a circle that has its first point is waiting for the second, and the
+        // right button is "finish it here": the pointer is that point. It used to be dropped as
+        // a line with too few points, which is not what was being drawn.
+        if (tool is SketchTool.Rectangle or SketchTool.Circle && Chain.Count == 1 && bend is { } second)
+            return Place(second, tool, false);
+
         if (Chain.Count >= 3) return Close();
 
         DropChain();
-        return "Dropped the line - an outline needs three points or more.";
+        return "Nothing was drawn: an outline needs at least three points. Click more points before right-clicking.";
     }
 
     private List<Vector2>? Points(int loop) =>
@@ -609,8 +616,9 @@ public sealed class Sketch
 
     private string AddLoop(List<Vector2> loop, string what)
     {
-        if (!IsSimple(loop)) return $"That {what} crosses itself, so it cannot be the edge of a solid.";
-        if (Loops.Any(other => Crosses(loop, other))) return $"That {what} crosses another outline. Outlines may sit inside one another, but not cross.";
+        const string Mend = " Drag a point to move it, or press Backspace to take the last one back.";
+        if (!IsSimple(loop)) return $"That {what} crosses itself, so it cannot be the edge of a solid." + Mend;
+        if (Loops.Any(other => Crosses(loop, other))) return $"That {what} crosses another outline. Outlines may sit inside one another, but not cross." + Mend;
 
         loopMarks.Add(Loops.Count);
         Loops.Add(loop);
@@ -691,6 +699,73 @@ public sealed class Sketch
     }
 
     private static string F(float value) => value.ToString("0.##", CultureInfo.CurrentCulture);
+
+    /// <summary>What a length drawn on the plate measures, so the tag on it can say so.</summary>
+    public enum DimensionKind { Length, Radius, Width, Height }
+
+    /// <summary>One length to read off the plate: the stretch it is measured along, and how long it is.</summary>
+    public readonly record struct Dimension(Vector2 From, Vector2 To, float Millimetres, DimensionKind Kind);
+
+    private static Dimension Measured(Vector2 from, Vector2 to, DimensionKind kind) =>
+        new(from, to, Vector2.Distance(from, to), kind);
+
+    /// <summary>
+    /// The lengths to put on the plate while the pointer is at <paramref name="cursor"/>: the line
+    /// that the next click would add, the two sides of the rectangle, the radius of the circle.
+    /// What <see cref="Readout"/> says in words, placed where it can be read off the drawing. An
+    /// arc being bent has none: its radius belongs to a centre that is not drawn.
+    /// </summary>
+    public List<Dimension> Dimensions(Vector2 cursor, SketchTool tool)
+    {
+        var found = new List<Dimension>();
+        if (Chain.Count == 0 || kind == ChainKind.Stroke) return found;
+
+        if (kind == ChainKind.Curve)
+        {
+            if (Vector2.Distance(Chain[^1], cursor) > 0.05f) found.Add(Measured(Chain[^1], cursor, DimensionKind.Length));
+            return found;
+        }
+
+        switch (tool)
+        {
+            case SketchTool.Arc when ArcEnd is not null:
+                break;
+            case SketchTool.Line or SketchTool.Arc:
+                if (Vector2.Distance(Chain[^1], cursor) > 0.05f) found.Add(Measured(Chain[^1], cursor, DimensionKind.Length));
+                break;
+            case SketchTool.Rectangle when Rectangle(Chain[0], cursor) is { } r:
+                found.Add(Measured(r[0], r[1], DimensionKind.Width));
+                found.Add(Measured(r[1], r[2], DimensionKind.Height));
+                break;
+            case SketchTool.Circle when Vector2.Distance(Chain[0], cursor) > 0.05f:
+                found.Add(Measured(Chain[0], cursor, DimensionKind.Radius));
+                break;
+        }
+
+        return found;
+    }
+
+    /// <summary>
+    /// The sides either side of a point being dragged - see <see cref="Handles"/> for what the
+    /// numbers mean. A point at the end of the line still being drawn has the one.
+    /// </summary>
+    public List<Dimension> SidesAt(int loop, int index)
+    {
+        var sides = new List<Dimension>();
+        var points = loop < 0 ? Chain : loop < Loops.Count ? Loops[loop] : null;
+        if (points is null || index < 0 || index >= points.Count) return sides;
+
+        if (loop >= 0)
+        {
+            sides.Add(Measured(points[(index - 1 + points.Count) % points.Count], points[index], DimensionKind.Length));
+            sides.Add(Measured(points[index], points[(index + 1) % points.Count], DimensionKind.Length));
+            return sides;
+        }
+
+        if (index > 0) sides.Add(Measured(points[index - 1], points[index], DimensionKind.Length));
+        if (index + 1 < points.Count) sides.Add(Measured(points[index], points[index + 1], DimensionKind.Length));
+        return sides;
+    }
 
     // --- Shapes ------------------------------------------------------------------------
 
