@@ -642,7 +642,7 @@
                  the things that move objects, and it moves nothing at all. -->
             <TabItem Header="Tools">
                 <WrapPanel Margin="4">
-                    <Button Style="{StaticResource ToolButton}" Content="Mold" Visibility="{Binding IsAdvancedMode, Converter={StaticResource BoolToVisibility}}" Tag="{StaticResource IconHollow}"
+                    <Button Style="{StaticResource ToolButton}" Content="Mold" Visibility="{Binding IsAdvancedMode, Converter={StaticResource BoolToVisibility}}" Tag="{StaticResource IconMould}"
                             Command="{Binding MouldCommand}" MinWidth="76"
                             ToolTip="Make a silicone mold of the selected object: a block with the model taken out, cut to open, with a pour hole and air vents. Select one object." />
                     <Button Style="{StaticResource ToolButton}" Content="Convex hull" Visibility="{Binding IsAdvancedMode, Converter={StaticResource BoolToVisibility}}" Tag="{StaticResource IconHull}"
