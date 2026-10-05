@@ -5093,7 +5093,7 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
 
     /// <summary>
     /// How much of the ribbon is shown. Only ribbon buttons are ever hidden - never a tool's own
-    /// settings - and every key works the same at all three levels, so neither a project nor a
+    /// settings - and every key works the same at both levels, so neither a project nor a
     /// habit depends on the mode. The viewer's own, like the grid: remembered, not saved with a
     /// project.
     /// </summary>
@@ -5106,7 +5106,6 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
 
             Set(ref uiLevel, value);
             Raise(nameof(IsAdvancedMode));
-            Raise(nameof(IsExtendedMode));
             Raise(nameof(UiMode));
             Raise(nameof(ShortcutGroups));
 
@@ -5116,24 +5115,17 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
         }
     }
 
-    /// <summary>
-    /// Whether the working set is shown. True at Extended as well, since Extended is Advanced and
-    /// more - which is what lets every button already marked this way stay exactly as it is.
-    /// </summary>
+    /// <summary>Whether every tool is shown, and not only the ones 3D Builder had.</summary>
     public bool IsAdvancedMode
     {
         get => uiLevel >= UiLevel.Advanced;
         set => UiLevel = value ? UiLevel.Advanced : UiLevel.Classic;
     }
 
-    /// <summary>Whether the specialised and experimental tools are shown as well.</summary>
-    public bool IsExtendedMode => uiLevel == UiLevel.Extended;
-
     public IReadOnlyList<UiModeChoice> UiModes { get; } =
     [
         new(UiLevel.Classic, "Classic mode", "#FF3FA34D", "The tools 3D Builder had"),
-        new(UiLevel.Advanced, "Advanced mode", "#FFD9482B", "The working set - sketches, holes, threads, gears"),
-        new(UiLevel.Extended, "Extended mode", "#FF7A4FD6", "And the specialised and experimental ones")
+        new(UiLevel.Advanced, "Advanced mode", "#FFD9482B", "Every tool - sketches, holes, threads, gears, pivots, the session recorder")
     ];
 
     public UiModeChoice UiMode
@@ -5232,19 +5224,20 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
         ShowZAxis = settings.ShowZAxis;
         ShowGridLabels = settings.ShowGridLabels;
         ShowProperties = !settings.FoldProperties;
-        UiLevel = settings.ClassicMode ? UiLevel.Classic
-               : settings.ExtendedMode ? UiLevel.Extended
-               : UiLevel.Advanced;
+        // A file written when there was an Extended level has its flag still, and it is not read:
+        // those who chose it have Advanced, which now has everything it had.
+        UiLevel = settings.ClassicMode ? UiLevel.Classic : UiLevel.Advanced;
         ShowShadows = settings.ShowShadows;
         ShowReflections = settings.ShowReflections;
         StickySelection = !settings.SingleSelection;
         sidePanelWidth = settings.SidePanelWidth;
+        RestoreCustomButtons(settings.CustomButtons);
     }
 
     public RememberedSettings Remembered =>
         new(plateWidth, plateDepth, plateHeight, unit.Label, showAxes, showZAxis, showGridLabels, !showProperties,
             uiLevel == UiLevel.Classic, showShadows, showReflections, !stickySelection,
-            uiLevel == UiLevel.Extended, sidePanelWidth);
+            sidePanelWidth, customButtons.ToArray());
 
     private float sidePanelWidth;
 

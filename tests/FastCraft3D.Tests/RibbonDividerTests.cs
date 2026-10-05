@@ -34,16 +34,13 @@ public class RibbonDividerTests(ITestOutputHelper log)
         return reader.ReadToEnd();
     }
 
-    /// <summary>Which mode an element first appears in: 0 Classic, 1 Advanced, 2 Extended.</summary>
+    /// <summary>Which mode an element first appears in: 0 Classic, 1 Advanced.</summary>
     private static int LevelOf(string attributes) =>
-        attributes.Contains("IsExtendedMode") ? 2
-        : attributes.Contains("IsAdvancedMode") ? 1
-        : 0;
+        attributes.Contains("IsAdvancedMode") ? 1 : 0;
 
     [Theory]
     [InlineData(0, "Classic")]
     [InlineData(1, "Advanced")]
-    [InlineData(2, "Extended")]
     public void NoTabShowsADividerWithNothingBesideIt(int level, string mode)
     {
         string markup = Markup();

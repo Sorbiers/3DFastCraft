@@ -402,7 +402,7 @@
         <!-- Ribbon -->
         <!-- Standing down while a tool has the object: see MainViewModel.IsToolInHand. Buttons
              bound to IsAdvancedMode are the ones 3D Builder never had, left out in Classic. -->
-        <TabControl DockPanel.Dock="Top" Background="#FFFAFAFB" BorderThickness="0,0,0,1"
+        <TabControl x:Name="Ribbon" DockPanel.Dock="Top" Background="#FFFAFAFB" BorderThickness="0,0,0,1"
                     IsEnabled="{Binding NothingInHand}"
                     BorderBrush="#FFD8DBE0" Padding="6">
             <TabControl.Resources>
@@ -487,7 +487,7 @@
                     <Button Style="{StaticResource ToolButton}" Content="Duplicate" Tag="{StaticResource IconDuplicate}"
                             Command="{Binding DuplicateCommand}"
                             ToolTip="Copy the selection and set it beside the original (Ctrl+D)" />
-                    <Button Style="{StaticResource ToolButton}" Content="In place" Visibility="{Binding IsExtendedMode, Converter={StaticResource BoolToVisibility}}" Tag="{StaticResource IconDuplicate}"
+                    <Button Style="{StaticResource ToolButton}" Content="In place" Visibility="{Binding IsAdvancedMode, Converter={StaticResource BoolToVisibility}}" Tag="{StaticResource IconDuplicate}"
                             Command="{Binding DuplicateCommand}" CommandParameter="InPlace" MinWidth="64"
                             ToolTip="Copy the selection without moving it - what you want before a boolean or a mirror (Ctrl+Shift+D)" />
                     <Button Style="{StaticResource ToolButton}" Content="Delete" Tag="{StaticResource IconDelete}"
@@ -507,11 +507,11 @@
                     <Button Style="{StaticResource ToolButton}" Content="Split" Tag="{StaticResource IconSplit}"
                             Command="{Binding BeginSplitCommand}"
                             ToolTip="Cut the selected object in two with a plane, or with a face you pick" />
-                    <Separator Visibility="{Binding IsExtendedMode, Converter={StaticResource BoolToVisibility}}" Margin="8,0" />
-                    <Button Style="{StaticResource ToolButton}" Content="Set pivot" Visibility="{Binding IsExtendedMode, Converter={StaticResource BoolToVisibility}}" Tag="{StaticResource IconPivot}"
+                    <Separator Visibility="{Binding IsAdvancedMode, Converter={StaticResource BoolToVisibility}}" Margin="8,0" />
+                    <Button Style="{StaticResource ToolButton}" Content="Set pivot" Visibility="{Binding IsAdvancedMode, Converter={StaticResource BoolToVisibility}}" Tag="{StaticResource IconPivot}"
                             Command="{Binding SetPivotCommand}" MinWidth="80"
                             ToolTip="Click a point to turn and measure about - a shaft hole, a corner, a hinge line. The position boxes then read that point. Saved with the project. Select one object." />
-                    <Button Style="{StaticResource ToolButton}" Content="Pivot to center" Visibility="{Binding IsExtendedMode, Converter={StaticResource BoolToVisibility}}" Tag="{StaticResource IconPivotCentre}"
+                    <Button Style="{StaticResource ToolButton}" Content="Pivot to center" Visibility="{Binding IsAdvancedMode, Converter={StaticResource BoolToVisibility}}" Tag="{StaticResource IconPivotCentre}"
                             Command="{Binding PivotToCentreCommand}" MinWidth="104"
                             ToolTip="Puts the pivot back in the middle of the object's box, where it starts out. Needs exactly one object selected." />
                     <Separator Visibility="{Binding IsAdvancedMode, Converter={StaticResource BoolToVisibility}}" Margin="8,0" />
@@ -566,10 +566,10 @@
                     <Button Style="{StaticResource ToolButton}" Content="Align to" Visibility="{Binding IsAdvancedMode, Converter={StaticResource BoolToVisibility}}" Tag="{StaticResource IconAlignCentre}"
                             Command="{Binding AlignToSelectionCommand}" MinWidth="72"
                             ToolTip="Center the first picked object's box on the second's. Nothing is rotated or resized. Select two objects." />
-                    <Button Style="{StaticResource ToolButton}" Content="Align to face" Visibility="{Binding IsExtendedMode, Converter={StaticResource BoolToVisibility}}" Tag="{StaticResource IconAlignToFace}"
+                    <Button Style="{StaticResource ToolButton}" Content="Align to face" Visibility="{Binding IsAdvancedMode, Converter={StaticResource BoolToVisibility}}" Tag="{StaticResource IconAlignToFace}"
                             Command="{Binding BeginAlignFaceCommand}" MinWidth="86"
                             ToolTip="Pick a face, then choose a place on it and the point of the selection that goes there, for X, Y and Z. The selection moves as one; nothing is rotated or resized." />
-                    <Button Style="{StaticResource ToolButton}" Content="Center face to face" Visibility="{Binding IsExtendedMode, Converter={StaticResource BoolToVisibility}}" Tag="{StaticResource IconCentreFaceToFace}"
+                    <Button Style="{StaticResource ToolButton}" Content="Center face to face" Visibility="{Binding IsAdvancedMode, Converter={StaticResource BoolToVisibility}}" Tag="{StaticResource IconCentreFaceToFace}"
                             Command="{Binding BeginCentreFaceCommand}" MinWidth="96"
                             ToolTip="Pick a face on the selection, then one on another object; the selection moves so their middles line up - like centering a lid on an opening. Round faces line up by their axis." />
                     <Separator Margin="8,0" Visibility="{Binding IsAdvancedMode, Converter={StaticResource BoolToVisibility}}" />
@@ -656,7 +656,7 @@
                             Command="{Binding RebuildCommand}" MinWidth="82"
                             ToolTip="Rebuild the surface from scratch. Mends anything, including a model that passes through itself - at the cost of fine detail." />
                     <Separator Margin="8,0" />
-                    <Button Style="{StaticResource ToolButton}" Content="Voronoi" Visibility="{Binding IsExtendedMode, Converter={StaticResource BoolToVisibility}}" Tag="{StaticResource IconVoronoi}"
+                    <Button Style="{StaticResource ToolButton}" Content="Voronoi" Visibility="{Binding IsAdvancedMode, Converter={StaticResource BoolToVisibility}}" Tag="{StaticResource IconVoronoi}"
                             Command="{Binding VoronoiCommand}" MinWidth="82"
                             ToolTip="Beta. Cut the selection into a web of Voronoi struts - an openwork lamp or vase, or a lightweight core. Built on a voxel grid, so it is watertight; detail finer than a voxel is lost." />
                     <Button Style="{StaticResource ToolButton}" Content="Extrude down" Tag="{StaticResource IconExtrudeDown}"
@@ -686,7 +686,7 @@
                             Command="{Binding BeginMasonryCommand}" MinWidth="82"
                             AutomationProperties.AutomationId="Masonry"
                             ToolTip="Brick, stone, siding or log walls on the walls you pick, built the way the real thing is. Brick: each wall a whole number of bricks, every corner a whole corner brick, swapping faces course by course. Rubble and coursed stone walling: big cornerstones at every outside corner, long and short by turns. Siding: a post over the boards at every corner. Logs: crossing at the corners, their ends standing out. Click a wall, then Ctrl+click the walls either side. Brick and logs: square corners only." />
-                    <Button Style="{StaticResource ToolButton}" Content="Studs" Visibility="{Binding IsExtendedMode, Converter={StaticResource BoolToVisibility}}" Tag="{StaticResource IconStuds}"
+                    <Button Style="{StaticResource ToolButton}" Content="Studs" Visibility="{Binding IsAdvancedMode, Converter={StaticResource BoolToVisibility}}" Tag="{StaticResource IconStuds}"
                             Command="{Binding BeginEngraveCommand}" MinWidth="82"
                             ToolTip="Legacy. One pattern - brick, tiles, planks, grain - on one flat face. Texture in Emboss does all this and more, and wraps around curves. Kept for older models." />
                     <Separator Visibility="{Binding IsAdvancedMode, Converter={StaticResource BoolToVisibility}}" Margin="8,0" />
@@ -748,11 +748,11 @@
                             Command="{Binding PrintDrawingCommand}" MinWidth="70"
                             AutomationProperties.Name="Blueprint"
                             ToolTip="Front, top and right views and an isometric, with dimensions - to print or save as PDF. The selection, or everything if nothing is selected. (Ctrl+P)" />
-                    <Separator Margin="8,0" Visibility="{Binding IsExtendedMode, Converter={StaticResource BoolToVisibility}}" />
-                    <Button Style="{StaticResource ToolButton}" Content="Export session" Visibility="{Binding IsExtendedMode, Converter={StaticResource BoolToVisibility}}" Tag="{StaticResource IconExportSession}"
+                    <Separator Margin="8,0" Visibility="{Binding IsAdvancedMode, Converter={StaticResource BoolToVisibility}}" />
+                    <Button Style="{StaticResource ToolButton}" Content="Export session" Visibility="{Binding IsAdvancedMode, Converter={StaticResource BoolToVisibility}}" Tag="{StaticResource IconExportSession}"
                             Command="{Binding ExportSessionCommand}" MinWidth="96"
                             ToolTip="Save every undo step since the plate was empty, one file each, as a project or an STL. For pictures, use Record." />
-                    <Button Style="{StaticResource ToolButton}" Content="{Binding RecordButtonLabel}" Visibility="{Binding IsExtendedMode, Converter={StaticResource BoolToVisibility}}" Tag="{StaticResource IconRecord}"
+                    <Button Style="{StaticResource ToolButton}" Content="{Binding RecordButtonLabel}" Visibility="{Binding IsAdvancedMode, Converter={StaticResource BoolToVisibility}}" Tag="{StaticResource IconRecord}"
                             Command="{Binding RecordCommand}" MinWidth="86"
                             ToolTip="While on, saves a screenshot after every action - and one just before each Apply - to a folder you choose." />
                     <Separator Margin="8,0" />
@@ -785,7 +785,7 @@
                     <ToggleButton Style="{StaticResource ToolToggle}" Content="X-ray" Tag="{StaticResource IconXray}"
                                   IsChecked="{Binding ShowXray}"
                                   ToolTip="Fade everything not selected, to see parts hidden inside others. During a tool, shows the rest see-through. (X)" />
-                    <ToggleButton Style="{StaticResource ToolToggle}" Content="Outline" Visibility="{Binding IsExtendedMode, Converter={StaticResource BoolToVisibility}}" Tag="{StaticResource IconOutline}"
+                    <ToggleButton Style="{StaticResource ToolToggle}" Content="Outline" Visibility="{Binding IsAdvancedMode, Converter={StaticResource BoolToVisibility}}" Tag="{StaticResource IconOutline}"
                                   IsChecked="{Binding ShowOutlines}" MinWidth="76"
                                   AutomationProperties.Name="Outline"
                                   ToolTip="The white line round a selected object's own edges. Turn it off on a dense mesh, where it traces every feature edge and covers the surface it is meant to bound" />
@@ -821,6 +821,19 @@
                                   Text="{Binding ModelScaleText, UpdateSourceTrigger=LostFocus}"
                                   ToolTip="1:87 is HO, 1:160 is N, 1:12 a dolls' house, 1:1 life size. Select something to see the reading." />
                     </StackPanel>
+                </WrapPanel>
+            </TabItem>
+
+            <!-- Custom: whichever buttons are used most, gathered in one place. A button is added by
+                 right-clicking it on its own tab, or from Add here; what is shown are copies that do
+                 what the originals do, built in the code behind from the list the view model keeps. -->
+            <TabItem x:Name="CustomTabItem" Header="Custom">
+                <WrapPanel x:Name="CustomPanel" Margin="4">
+                    <TextBlock x:Name="CustomHint" VerticalAlignment="Center" Margin="8,0" Foreground="#FF6B7280"
+                               Text="Right-click any ribbon button and choose Add to Custom tab, or press Add." />
+                    <Button x:Name="AddCustomButton" Style="{StaticResource ToolButton}" Content="Add" Tag="{StaticResource IconPlus}"
+                            Click="OnAddCustomButton" MinWidth="60"
+                            ToolTip="Choose which buttons this tab holds. Right-click a button on any other tab to add it from there; right-click one here to move or remove it." />
                 </WrapPanel>
             </TabItem>
         </TabControl>
@@ -2575,7 +2588,7 @@
                             MSAA="Four"
                             FXAALevel="Low"
                             ShowCoordinateSystem="True"
-                            ShowViewCube="True"
+                            ShowViewCube="False"
                             UseDefaultGestures="True"
                             ZoomExtentsWhenLoaded="False"
                             IsShadowMappingEnabled="{Binding ShowShadows}">
@@ -3117,7 +3130,7 @@
               Focusable="False"
               ItemsSource="{Binding UiModes}" SelectedItem="{Binding UiMode, Mode=TwoWay}"
               AutomationProperties.AutomationId="UiMode"
-              ToolTip="Classic: the tools 3D Builder had. Advanced: the working set - sketches, holes, the Library, blueprints. Extended: specialized and experimental tools too - pivot, session recorder, Voronoi, legacy Engrave. Keys work at every level; only buttons are hidden.">
+              ToolTip="Classic: the tools 3D Builder had. Advanced: every tool - sketches, holes, the Library, blueprints, pivots, the session recorder. Keys work at both levels; only buttons are hidden.">
         <ComboBox.ItemTemplate>
             <DataTemplate>
                 <StackPanel Orientation="Horizontal" ToolTip="{Binding Hint}">

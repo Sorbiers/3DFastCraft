@@ -141,6 +141,7 @@ public partial class MainWindow : Window
         // on the renderer that is only ever pushed there through that event.
         ApplyViewSettings();
 
+        SetUpCustomTab();
         measure = new MeasureOverlay(MeasureLayer, new Viewport3DXProjector(View));
         viewModel.MeasureChanged += () => measure.Show(viewModel.MeasureFrom, viewModel.MeasureTo);
         sketchTags = new SketchOverlay(SketchLayer, new Viewport3DXProjector(View), SayLength);
@@ -1011,7 +1012,10 @@ public partial class MainWindow : Window
     /// which way the picture is oriented; the turntable spins about <c>ModelUpDirection</c>, a
     /// property of the viewport that defaults to Y. Leaving it at the default made a horizontal
     /// drag orbit around the green axis and let the scene roll onto its side, which is wrong for
-    /// a build plate. The view cube and zoom-to-extents read the same property. The toolkit
+    /// a build plate. Zoom-to-extents reads the same property. (The toolkit's view cube did too,
+    /// and still came out with the colours and labels of a Y-up cube - a blue face reading "L" -
+    /// so it is off: the View tab and keys 1-4 do what it did, and the axis indicator in the
+    /// corner already says which way is up.) The toolkit
     /// already defaults to turntable rotation, which is the behaviour we want once it is told
     /// which way is up.
     ///
@@ -2400,7 +2404,8 @@ public partial class MainWindow : Window
 
         // The menu inherits the window's DataContext so its items can reach the command.
         menu.DataContext = viewModel;
-        menu.PlacementTarget = button;
+        // Beside the copy on the Custom tab when that is where it was clicked: the original may be on a tab that is not showing.
+        menu.PlacementTarget = CustomTab.ClickedCopy ?? button;
         menu.Placement = System.Windows.Controls.Primitives.PlacementMode.Bottom;
         menu.IsOpen = true;
     }
@@ -2413,6 +2418,116 @@ public partial class MainWindow : Window
     {
         if (sender is ComboBox box && box.SelectedItem is string chosen)
             viewModel.ModelScaleText = chosen;
+    }
+
+    // --- The Custom tab ----------------------------------------------------------------------
+
+    private List<CustomTab.Entry> ribbonButtons = [];
+    private readonly List<UIElement> customCopies = [];
+
+    /// <summary>
+    /// Names every button of the ribbon, offers each a right-click to put it on the Custom tab,
+    /// and builds the tab from what was chosen last time.
+    /// </summary>
+    private void SetUpCustomTab()
+    {
+        ribbonButtons = CustomTab.Collect(Ribbon, CustomTabItem);
+
+        // A button with a menu of its own - the recent projects - is added from the Add button instead.
+        // Shown on a disabled button as well: most of them are while an object is not selected,
+        // which is exactly when somebody is setting the tab up.
+        foreach (var entry in ribbonButtons.Where(e => e.Button.ContextMenu is null))
+        {
+            entry.Button.ContextMenu = AddToCustomMenu(entry);
+            ContextMenuService.SetShowOnDisabled(entry.Button, true);
+        }
+
+        viewModel.CustomButtonsChanged += BuildCustomTab;
+        BuildCustomTab();
+    }
+
+    private static MenuItem MenuEntry(string header, Action click)
+    {
+        var item = new MenuItem { Header = header };
+        item.Click += (_, _) => click();
+        return item;
+    }
+
+    private ContextMenu AddToCustomMenu(CustomTab.Entry entry)
+    {
+        var item = MenuEntry("", () =>
+        {
+            if (viewModel.HasCustomButton(entry.Id)) viewModel.RemoveCustomButton(entry.Id);
+            else viewModel.AddCustomButton(entry.Id);
+        });
+
+        var menu = new ContextMenu();
+        menu.Items.Add(item);
+        menu.Opened += (_, _) =>
+            item.Header = viewModel.HasCustomButton(entry.Id) ? "Remove from Custom tab" : "Add to Custom tab";
+        return menu;
+    }
+
+    private ContextMenu CustomCopyMenu(string id)
+    {
+        var menu = new ContextMenu();
+        menu.Items.Add(MenuEntry("Move left", () => viewModel.MoveCustomButton(id, -1)));
+        menu.Items.Add(MenuEntry("Move right", () => viewModel.MoveCustomButton(id, 1)));
+        menu.Items.Add(new Separator());
+        menu.Items.Add(MenuEntry("Remove from Custom tab", () => viewModel.RemoveCustomButton(id)));
+        return menu;
+    }
+
+    /// <summary>The tab built again: a copy of every button chosen that is still on the ribbon, in order, ahead of the Add button.</summary>
+    private void BuildCustomTab()
+    {
+        foreach (var copy in customCopies) CustomPanel.Children.Remove(copy);
+        customCopies.Clear();
+
+        var byId = ribbonButtons.ToDictionary(e => e.Id);
+        foreach (string id in viewModel.CustomButtons)
+        {
+            if (!byId.TryGetValue(id, out var entry)) continue;
+
+            var copy = CustomTab.Mirror(entry.Button);
+            copy.ContextMenu = CustomCopyMenu(id);
+            ContextMenuService.SetShowOnDisabled(copy, true);
+            CustomPanel.Children.Insert(customCopies.Count, copy);
+            customCopies.Add(copy);
+        }
+
+        CustomHint.Visibility = customCopies.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    /// <summary>Every button on the ribbon by tab, ticked where it is on the Custom tab; ticking one adds it, unticking takes it off.</summary>
+    private void OnAddCustomButton(object sender, RoutedEventArgs e)
+    {
+        var menu = new ContextMenu { PlacementTarget = AddCustomButton, Placement = System.Windows.Controls.Primitives.PlacementMode.Bottom };
+
+        foreach (var tab in ribbonButtons.GroupBy(b => b.Tab))
+        {
+            var group = new MenuItem { Header = tab.Key };
+            foreach (var entry in tab)
+            {
+                var item = new MenuItem
+                {
+                    Header = entry.Label,
+                    IsCheckable = true,
+                    IsChecked = viewModel.HasCustomButton(entry.Id),
+                    StaysOpenOnClick = true
+                };
+                item.Click += (_, _) =>
+                {
+                    if (item.IsChecked) viewModel.AddCustomButton(entry.Id);
+                    else viewModel.RemoveCustomButton(entry.Id);
+                };
+                group.Items.Add(item);
+            }
+
+            menu.Items.Add(group);
+        }
+
+        menu.IsOpen = true;
     }
 
     private void OnAbout(object sender, RoutedEventArgs e) =>

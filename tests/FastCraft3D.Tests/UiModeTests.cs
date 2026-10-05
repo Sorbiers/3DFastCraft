@@ -8,8 +8,7 @@ using Xunit;
 namespace FastCraft3D.Tests;
 
 /// <summary>
-/// The three levels of ribbon: Classic with only the tools 3D Builder had, Advanced with the
-/// working set, and Extended with the specialised and experimental ones on top.
+/// The two levels of ribbon: Classic with only the tools 3D Builder had, and Advanced with every tool.
 /// </summary>
 public class UiModeTests
 {
@@ -32,34 +31,13 @@ public class UiModeTests
     {
         Assert.Equal(UiLevel.Advanced, model.UiLevel);
         Assert.True(model.IsAdvancedMode);
-        Assert.False(model.IsExtendedMode);
         Assert.False(model.Remembered.ClassicMode);
-        Assert.False(model.Remembered.ExtendedMode);
-    });
-
-    /// <summary>
-    /// Extended is Advanced and more, not a mode beside it. Every button already marked for
-    /// Advanced has to keep showing, or moving one tool up a level would take a dozen down with it.
-    /// </summary>
-    [Fact]
-    public void ExtendedShowsEverythingAdvancedDoes() => WithModel(model =>
-    {
-        model.UiLevel = UiLevel.Extended;
-
-        Assert.True(model.IsAdvancedMode);
-        Assert.True(model.IsExtendedMode);
-        Assert.True(model.Remembered.ExtendedMode);
-        Assert.False(model.Remembered.ClassicMode);
-
-        model.UiLevel = UiLevel.Advanced;
-        Assert.True(model.IsAdvancedMode);
-        Assert.False(model.IsExtendedMode);
     });
 
     [Fact]
-    public void TheSwitchOffersThreeAndPicksTheOneItIsOn() => WithModel(model =>
+    public void TheSwitchOffersTwoAndPicksTheOneItIsOn() => WithModel(model =>
     {
-        Assert.Equal(3, model.UiModes.Count);
+        Assert.Equal(2, model.UiModes.Count);
 
         foreach (var choice in model.UiModes)
         {
@@ -101,10 +79,8 @@ public class UiModeTests
     });
 
     /// <summary>
-    /// The third level is stored as its own flag beside the first, rather than as one number
-    /// saying which of three. A settings file written before it existed has neither field, the
-    /// reader fills both with false, and false on both has to go on meaning Advanced - which is
-    /// where everybody already was.
+    /// A settings file written before the mode existed has no field, the reader fills it with
+    /// false, and false has to go on meaning Advanced - which is where everybody already was.
     /// </summary>
     [Fact]
     public void TheModeIsRememberedAndAFileFromBeforeItOpensAdvanced()
@@ -116,7 +92,6 @@ public class UiModeTests
 
             var old = LocalSettings.Load(store)!.Value;
             Assert.False(old.ClassicMode);
-            Assert.False(old.ExtendedMode);
 
             WithModel(model =>
             {
@@ -127,7 +102,7 @@ public class UiModeTests
             foreach (var (settings, wanted) in new (RememberedSettings, UiLevel)[]
             {
                 (new RememberedSettings(200f, 200f, 200f, "mm", ClassicMode: true), UiLevel.Classic),
-                (new RememberedSettings(200f, 200f, 200f, "mm", ExtendedMode: true), UiLevel.Extended)
+                (new RememberedSettings(200f, 200f, 200f, "mm"), UiLevel.Advanced)
             })
             {
                 LocalSettings.Save(settings, store);
@@ -139,6 +114,33 @@ public class UiModeTests
                     Assert.Equal(wanted, model.UiLevel);
                 });
             }
+        }
+        finally
+        {
+            File.Delete(store);
+        }
+    }
+
+    /// <summary>
+    /// There was a third level, Extended, and a file written then has its flag. It is not read:
+    /// whoever chose it is in Advanced, which now has every tool Extended had.
+    /// </summary>
+    [Fact]
+    public void AFileWrittenWhenThereWasAnExtendedLevelOpensAdvanced()
+    {
+        string store = Path.Combine(Path.GetTempPath(), $"modes-{Guid.NewGuid():N}.json");
+        try
+        {
+            File.WriteAllText(store, """{"PlateWidth":200,"PlateDepth":200,"PlateHeight":200,"Unit":"mm","ClassicMode":false,"ExtendedMode":true}""");
+
+            var old = LocalSettings.Load(store)!.Value;
+
+            WithModel(model =>
+            {
+                model.ApplySettings(old);
+                Assert.Equal(UiLevel.Advanced, model.UiLevel);
+                Assert.True(model.IsAdvancedMode);
+            });
         }
         finally
         {
