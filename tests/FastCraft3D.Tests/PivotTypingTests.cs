@@ -53,6 +53,26 @@ public class PivotTypingTests
     }
 
     [Fact]
+    public void TheEachButtonStartsOffAndIsTheAsOneSwitchTheOtherWayRound()
+    {
+        WithTwo((model, a, b) =>
+        {
+            Assert.False(model.EachOnItsOwn);
+            Assert.True(model.AroundSelectionCentre);
+
+            var raised = new List<string?>();
+            model.PropertyChanged += (_, e) => raised.Add(e.PropertyName);
+
+            model.EachOnItsOwn = true;
+            Assert.False(model.AroundSelectionCentre);
+            Assert.Contains(nameof(MainViewModel.EachOnItsOwn), raised);
+
+            model.AroundSelectionCentre = true;
+            Assert.False(model.EachOnItsOwn);
+        });
+    }
+
+    [Fact]
     public void EachOnItsOwnAPositionLinesThemUp()
     {
         WithTwo((model, a, b) =>

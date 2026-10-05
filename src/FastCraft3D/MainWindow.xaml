@@ -2794,15 +2794,15 @@
                                     Visibility="{Binding HasManySelected, Converter={StaticResource BoolToVisibility}}">
                             <TextBlock Text="X" Style="{StaticResource GizmoLabelX}" />
                             <TextBox Style="{StaticResource GizmoMixedBox}" Tag="transform"
-                                     ToolTip="Type a value to set it, or +=5 / -=5 to change by that much. With the As one button off, every selected object gets it."
+                                     ToolTip="Type a value to set it, or +=5 / -=5 to change by that much. With the Each button on, every selected object gets it."
                                      Text="{Binding GroupX, Converter={StaticResource Mixed}, ConverterParameter=0.####, UpdateSourceTrigger=LostFocus}" />
                             <TextBlock Text="Y" Style="{StaticResource GizmoLabelY}" />
                             <TextBox Style="{StaticResource GizmoMixedBox}" Tag="transform"
-                                     ToolTip="Type a value to set it, or +=5 / -=5 to change by that much. With the As one button off, every selected object gets it."
+                                     ToolTip="Type a value to set it, or +=5 / -=5 to change by that much. With the Each button on, every selected object gets it."
                                      Text="{Binding GroupY, Converter={StaticResource Mixed}, ConverterParameter=0.####, UpdateSourceTrigger=LostFocus}" />
                             <TextBlock Text="Z" Style="{StaticResource GizmoLabelZ}" />
                             <TextBox Style="{StaticResource GizmoMixedBox}" Tag="transform"
-                                     ToolTip="Type a value to set it, or +=5 / -=5 to change by that much. With the As one button off, every selected object gets it."
+                                     ToolTip="Type a value to set it, or +=5 / -=5 to change by that much. With the Each button on, every selected object gets it."
                                      Text="{Binding GroupZ, Converter={StaticResource Mixed}, ConverterParameter=0.####, UpdateSourceTrigger=LostFocus}" />
                         </StackPanel>
                         <TextBlock Text="{Binding UnitLabel}" Style="{StaticResource GizmoUnit}" />
@@ -2891,15 +2891,15 @@
                                     Visibility="{Binding HasManySelected, Converter={StaticResource BoolToVisibility}}">
                             <TextBlock Text="Roll" Style="{StaticResource GizmoLabelX}" />
                             <TextBox Style="{StaticResource GizmoMixedBox}" Tag="transform"
-                                     ToolTip="Type a value to set it, or +=5 / -=5 to change by that much. With the As one button off, every selected object gets it."
+                                     ToolTip="Type a value to set it, or +=5 / -=5 to change by that much. With the Each button on, every selected object gets it."
                                      Text="{Binding GroupRoll, Converter={StaticResource Mixed}, ConverterParameter=N1, UpdateSourceTrigger=LostFocus}" />
                             <TextBlock Text="Pitch" Style="{StaticResource GizmoLabelY}" />
                             <TextBox Style="{StaticResource GizmoMixedBox}" Tag="transform"
-                                     ToolTip="Type a value to set it, or +=5 / -=5 to change by that much. With the As one button off, every selected object gets it."
+                                     ToolTip="Type a value to set it, or +=5 / -=5 to change by that much. With the Each button on, every selected object gets it."
                                      Text="{Binding GroupPitch, Converter={StaticResource Mixed}, ConverterParameter=N1, UpdateSourceTrigger=LostFocus}" />
                             <TextBlock Text="Yaw" Style="{StaticResource GizmoLabelZ}" />
                             <TextBox Style="{StaticResource GizmoMixedBox}" Tag="transform"
-                                     ToolTip="Type a value to set it, or +=5 / -=5 to change by that much. With the As one button off, every selected object gets it."
+                                     ToolTip="Type a value to set it, or +=5 / -=5 to change by that much. With the Each button on, every selected object gets it."
                                      Text="{Binding GroupYaw, Converter={StaticResource Mixed}, ConverterParameter=N1, UpdateSourceTrigger=LostFocus}" />
                         </StackPanel>
                         <TextBlock Text="deg" Style="{StaticResource GizmoUnit}" />
@@ -2956,15 +2956,15 @@
                                  is how wide the group sits rather than any one part's own. -->
                             <TextBlock Text="W" Style="{StaticResource GizmoLabelX}" ToolTip="Width of the selection - along X" />
                             <TextBox Style="{StaticResource GizmoMixedBox}" Tag="transform"
-                                     ToolTip="Type a value to set it, or +=5 / -=5 to change by that much. With the As one button off, every selected object gets it."
+                                     ToolTip="Type a value to set it, or +=5 / -=5 to change by that much. With the Each button on, every selected object gets it."
                                      Text="{Binding GroupSizeX, Converter={StaticResource Mixed}, ConverterParameter=0.####, UpdateSourceTrigger=LostFocus}" />
                             <TextBlock Text="D" Style="{StaticResource GizmoLabelY}" ToolTip="Depth of the selection - along Y" />
                             <TextBox Style="{StaticResource GizmoMixedBox}" Tag="transform"
-                                     ToolTip="Type a value to set it, or +=5 / -=5 to change by that much. With the As one button off, every selected object gets it."
+                                     ToolTip="Type a value to set it, or +=5 / -=5 to change by that much. With the Each button on, every selected object gets it."
                                      Text="{Binding GroupSizeY, Converter={StaticResource Mixed}, ConverterParameter=0.####, UpdateSourceTrigger=LostFocus}" />
                             <TextBlock Text="H" Style="{StaticResource GizmoLabelZ}" ToolTip="Height of the selection - along Z" />
                             <TextBox Style="{StaticResource GizmoMixedBox}" Tag="transform"
-                                     ToolTip="Type a value to set it, or +=5 / -=5 to change by that much. With the As one button off, every selected object gets it."
+                                     ToolTip="Type a value to set it, or +=5 / -=5 to change by that much. With the Each button on, every selected object gets it."
                                      Text="{Binding GroupSizeZ, Converter={StaticResource Mixed}, ConverterParameter=0.####, UpdateSourceTrigger=LostFocus}" />
                         </StackPanel>
                         </StackPanel>
@@ -3067,18 +3067,23 @@
                         </ToggleButton>
                     </StackPanel>
 
-                    <!-- Several selected: as one about the middle of the lot, or each on its own.
+                    <!-- Several selected: as one about the middle of the lot unless this is on, and then each on its own.
                          Last in the bar, with the other switches, rather than beside the mode
                          buttons: it is a setting of whichever mode is up, not a mode of its own. -->
                     <ToggleButton Style="{StaticResource ModeButton}" Margin="2,0,0,0"
-                                  AutomationProperties.Name="As one"
-                                  ToolTip="On: move, turn and resize the selection as one object, around its center. Off: each object on its own, around its own center."
-                                  IsChecked="{Binding AroundSelectionCentre, Mode=TwoWay}"
+                                  AutomationProperties.Name="Each"
+                                  ToolTip="Each: move, turn and resize every selected object on its own, around its own center. Off: the selection moves as one object, around its center."
+                                  IsChecked="{Binding EachOnItsOwn, Mode=TwoWay}"
                                   Visibility="{Binding HasManySelected, Converter={StaticResource BoolToVisibility}}">
-                        <!-- A frame round three parts: the lot taken together. -->
-                        <Path Data="M1,1 L19,1 L19,19 L1,19 Z M4,4 L9,4 L9,9 L4,9 Z M11,4 L16,4 L16,9 L11,9 Z M7.5,11 L12.5,11 L12.5,16 L7.5,16 Z"
-                              Stroke="#FF33383F" StrokeThickness="1.5" Fill="{x:Null}"
-                              Stretch="Uniform" Width="16" Height="16" />
+                        <!-- Three parts, each turned its own way with a dot at its own centre. -->
+                        <Viewbox Width="16" Height="16">
+                            <Canvas Width="20" Height="20">
+                                <Path Data="M1,1 L8,1 L8,8 L1,8 Z M13.066,0.444 L19.556,3.066 L16.934,9.556 L10.444,6.934 Z M5.59,12.753 L12.247,10.59 L14.41,17.247 L7.753,19.41 Z"
+                                      Stroke="#FF33383F" StrokeThickness="1.5" Fill="{x:Null}" />
+                                <Path Data="M3.4,4.5 A1.1,1.1 0 1 1 5.6,4.5 A1.1,1.1 0 1 1 3.4,4.5 Z M13.9,5 A1.1,1.1 0 1 1 16.1,5 A1.1,1.1 0 1 1 13.9,5 Z M8.9,15 A1.1,1.1 0 1 1 11.1,15 A1.1,1.1 0 1 1 8.9,15 Z"
+                                      Fill="#FF33383F" />
+                            </Canvas>
+                        </Viewbox>
                     </ToggleButton>
                 </StackPanel>
             </Border>

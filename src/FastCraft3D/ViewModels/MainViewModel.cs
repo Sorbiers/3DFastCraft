@@ -1661,8 +1661,20 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
             aroundSelectionCentre = value;
             if (value) ResetGroupTurnSinceGrab();
             Raise(nameof(AroundSelectionCentre));
+            Raise(nameof(EachOnItsOwn));
             foreach (var name in GroupBoxes) Raise(name);
         }
+    }
+
+    /// <summary>
+    /// The same switch the other way round, for the "Each" button. Moving a selection as one is
+    /// what nearly everyone wants nearly always, so the button that is lit by default said
+    /// nothing and was ignored; the exception is what gets a button, and it starts out off.
+    /// </summary>
+    public bool EachOnItsOwn
+    {
+        get => !aroundSelectionCentre;
+        set => AroundSelectionCentre = !value;
     }
 
     private static readonly string[] GroupBoxes =
