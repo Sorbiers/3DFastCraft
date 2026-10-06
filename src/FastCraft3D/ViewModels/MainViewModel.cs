@@ -138,6 +138,12 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
     private FacePatch? alignFace;
     private bool alignFacePicked;
     private string? alignFaceTargetLabel;
+
+    /// <summary>The round or flat-sided hole under the face picked for Align to face, when it is one.</summary>
+    private RoundSurface? alignSurface;
+
+    /// <summary>The meshes of what is hovered over, as they stand: working one out is the slow part of hovering.</summary>
+    private readonly Dictionary<SceneObject, Mesh> alignMeshes = [];
     private AlignMode? alignFaceModeX, alignFaceModeY, alignFaceModeZ;
     private bool isCentreFaceMode;
     private FacePatch? centreFaceA, centreFaceB;
@@ -2031,7 +2037,9 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
             if (!value)
             {
                 alignFace = null;
+                alignSurface = null;
                 alignFaceTargetLabel = null;
+                alignMeshes.Clear();
                 RaiseAlignFace();
             }
             Raise(nameof(IsToolRunning));
@@ -2095,9 +2103,9 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
     /// <summary>The middle of a flat face, or of the triangles of a round one.</summary>
     private static Vector3 Middle(FacePatch face) => face.Normal == Vector3.Zero ? face.Origin : face.ToLocal((face.Min + face.Max) * 0.5f);
 
-    public string AlignFaceTargetLabel => alignFaceTargetLabel is { } name
-        ? $"Picked a face on {name}"
-        : "Click a face on any object";
+    public string AlignFaceTargetLabel => alignFaceTargetLabel is { } what
+        ? $"Picked {what}"
+        : "Click a face on any object, or the wall of a hole";
 
     private void RaiseAlignFace()
     {
@@ -2120,14 +2128,16 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
         IsCentreFaceMode = false;
 
         alignFace = null;
+        alignSurface = null;
         alignFacePicked = false;
         alignFaceTargetLabel = null;
+        alignMeshes.Clear();
 
         // The axes are not cleared: the buttons in the panel stay as they were last left, and
         // clearing these behind them showed a choice that was not there and kept Apply greyed out.
         IsAlignFaceMode = true;
         RaiseAlignFace();
-        Status = "Click a face on any object to align the selection against";
+        Status = "Click a face on any object to align the selection against - or the wall of a hole, to line up with its middle";
     }
 
     /// <summary>
@@ -2139,30 +2149,32 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
     {
         if (!isAlignFaceMode || alignFacePicked) return;
 
-        alignFace = target is null ? null : FacePatch.Find(target.ToWorldMesh(), worldPoint, worldNormal);
+        alignFace = target is null ? null : SurfaceUnder(alignMeshes, target, worldPoint, worldNormal).Face;
         AlignFaceChanged?.Invoke();
     }
 
     /// <summary>
     /// Picks the face the selection will be lined up against - the face's own middle, not the
     /// point clicked on it, so a click near the corner of a wall and one in the middle of it
-    /// align the same way.
+    /// align the same way. The wall of a hole is taken whole, round or with flat sides: its middle
+    /// is the hole's, and a facet of it or one side of it would put the selection off to one side.
     /// </summary>
     public bool PickAlignFace(SceneObject target, Vector3 worldPoint, Vector3 worldNormal)
     {
         if (!isAlignFaceMode) return false;
 
-        var face = FacePatch.Find(target.ToWorldMesh(), worldPoint, worldNormal);
+        var (face, round) = SurfaceUnder(alignMeshes, target, worldPoint, worldNormal);
         if (face is null) return false;
 
         alignFace = face;
+        alignSurface = round;
         alignFacePicked = true;
-        alignFaceTargetLabel = target.Name;
-        DefaultAlignFace(face);
+        alignFaceTargetLabel = round?.Describe(target.Name) ?? $"a face on {target.Name}";
+        DefaultAlignFace(face, round);
         RaiseAlignFace();
         System.Windows.Input.CommandManager.InvalidateRequerySuggested();
 
-        Status = $"Picked a face on {target.Name} - choose how X, Y and Z should line up, then Apply";
+        Status = $"Picked {alignFaceTargetLabel} - choose how X, Y and Z should line up, then Apply";
         return true;
     }
 
@@ -2172,9 +2184,30 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
     /// middle across. With every axis left at Don't move, Apply had nothing to do and stayed grey
     /// however the face was picked, which read as the tool being broken.
     /// </summary>
-    private void DefaultAlignFace(FacePatch face)
+    private void DefaultAlignFace(FacePatch face, RoundSurface? round = null)
     {
         if (alignFaceModeX is not null || alignFaceModeY is not null || alignFaceModeZ is not null) return;
+
+        // A hole: its middle on the selection's middle across the axis, and along it left as it is,
+        // so what is put in keeps its depth - as Center face to face does.
+        if (round is not null)
+        {
+            var through = round.Axis;
+            var lengthwise = MathF.Abs(through.X) >= MathF.Abs(through.Y) && MathF.Abs(through.X) >= MathF.Abs(through.Z) ? Axis.X
+                           : MathF.Abs(through.Y) >= MathF.Abs(through.Z) ? Axis.Y : Axis.Z;
+
+            var chosen = new List<string>();
+            foreach (var a in new[] { Axis.X, Axis.Y, Axis.Z })
+            {
+                SetAlignFaceMode(a, a == lengthwise ? null : AlignMode.Centre);
+                SetAlignFaceMode(a, AlignMode.Centre, ofSelection: true);
+                chosen.Add(a == lengthwise ? $"{a}:None" : $"{a}:Centre");
+                chosen.Add($"S{a}:Centre");
+            }
+
+            AlignFaceDefaulted?.Invoke(chosen);
+            return;
+        }
 
         var n = face.Normal;
         var axis = MathF.Abs(n.X) >= MathF.Abs(n.Y) && MathF.Abs(n.X) >= MathF.Abs(n.Z) ? Axis.X
@@ -2325,8 +2358,8 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
 
     public string CentreFaceStatusLabel => (centreFaceAPicked, centreFaceBPicked) switch
     {
-        (false, false) => "Click a face on the selected object(s) - a flat face, or a round one such as a pin's side",
-        (true, false) => $"Picked {Picked(centreRoundA, centreFaceALabel)} - now click a face on a different, unselected object: a hole's wall to put it in",
+        (false, false) => "Click a face on the selected object(s) - a flat face, or a round one such as a pin's side, or the wall of a hole",
+        (true, false) => $"Picked {Picked(centreRoundA, centreFaceALabel)} - now click a face on a different, unselected object: the wall of a hole to put it in",
         (false, true) => $"Picked {Picked(centreRoundB, centreFaceBLabel)} - now click a face on the selected object(s)",
         (true, true) => $"Picked {Picked(centreRoundA, centreFaceALabel)} against {Picked(centreRoundB, centreFaceBLabel)}"
                         + (CentreIsRound ? " - Apply puts them on one axis" : " - choose the axes, then Apply")
@@ -2335,14 +2368,14 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
 
     private static string Picked(RoundSurface? round, string? on) => round is null
         ? $"a face on {on}"
-        : round.IsHole ? $"a Ø{round.Diameter:0.##} hole in {on}" : $"a Ø{round.Diameter:0.##} round face on {on}";
+        : round.Describe(on);
 
     /// <summary>A pin that will not go in, or will rattle, said before it is moved rather than found in print.</summary>
     private string Misfit()
     {
         if (centreRoundA is not { } a || centreRoundB is not { } b || a.IsHole == b.IsHole) return "";
         var (pin, hole) = a.IsHole ? (b, a) : (a, b);
-        float gap = hole.Diameter - pin.Diameter;
+        float gap = hole.Narrow - pin.Wide;
         return gap < 0 ? $". The pin is {-gap:0.##} mm too big for the hole."
             : $". {gap:0.##} mm between them across.";
     }
@@ -2380,16 +2413,29 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
     /// </summary>
     private (FacePatch? Face, RoundSurface? Round) CentreSurfaceAt(SceneObject target, Vector3 worldPoint, Vector3 worldNormal)
     {
-        if (!centreMeshes.TryGetValue(target, out var world))
-            centreMeshes[target] = world = target.ToWorldMesh();
+        var found = SurfaceUnder(centreMeshes, target, worldPoint, worldNormal);
+        if (found.Round is { } round) centreHoverRound = round;
 
-        if (RoundSurface.Find(world, worldPoint, worldNormal) is { } round)
-        {
-            centreHoverRound = round;
-            return (round.Patch, round);
-        }
+        return found;
+    }
 
-        return (FacePatch.Find(world, worldPoint, worldNormal), null);
+    /// <summary>
+    /// What is under a point for the tools that line a face up with another: the whole of a round
+    /// surface, or of the walls of a hole with flat sides, when it is on one - a facet of a pin or one
+    /// wall of an opening would put its middle off to one side - and otherwise the flat face.
+    /// </summary>
+    private static (FacePatch? Face, RoundSurface? Round) SurfaceUnder(
+        Dictionary<SceneObject, Mesh> meshes, SceneObject target, Vector3 worldPoint, Vector3 worldNormal)
+    {
+        if (!meshes.TryGetValue(target, out var world))
+            meshes[target] = world = target.ToWorldMesh();
+
+        var surface = RoundSurface.Find(world, worldPoint, worldNormal)
+                      ?? RoundSurface.FindOpening(world, worldPoint, worldNormal);
+
+        return surface is null
+            ? (FacePatch.Find(world, worldPoint, worldNormal), null)
+            : (surface.Patch, surface);
     }
 
     private void BeginCentreFace()

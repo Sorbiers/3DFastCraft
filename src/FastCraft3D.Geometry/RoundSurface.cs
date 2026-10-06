@@ -5,14 +5,15 @@ namespace FastCraft3D.Geometry;
 
 /// <summary>
 /// A round surface picked on a mesh - a pin's side, a hole's wall, a boss - and the axis it goes
-/// round, so two of them can be put on one line: a pin in its hole, a shaft in its bore.
+/// round, so two of them can be put on one line: a pin in its hole, a shaft in its bore. Also the
+/// walls of a hole with flat sides, a window's opening in a wall: see <see cref="FindOpening"/>.
 ///
 /// A flat face will not do for this. A cylinder is facets, and the one under the pointer has its
 /// middle off to one side of the axis by the radius; a hole straight through has no floor to pick
 /// at all. So the facets round the one clicked are gathered while they keep turning about one
 /// line, and a circle is fitted to their corners across that line.
 /// </summary>
-public sealed class RoundSurface
+public sealed partial class RoundSurface
 {
     /// <summary>How sharply two neighbouring facets may meet and still be one round surface.</summary>
     private const float TurnDegrees = 40f;
@@ -20,7 +21,9 @@ public sealed class RoundSurface
     /// <summary>How far a facet's normal may lean along the axis and still go round it.</summary>
     private const float Lean = 0.2f;
 
-    private RoundSurface(FacePatch patch, Vector3 axis, Vector3 centre, float radius, float length, bool isHole)
+    private RoundSurface(
+        FacePatch patch, Vector3 axis, Vector3 centre, float radius, float length, bool isHole,
+        bool isRound = true, float? wide = null, float? narrow = null)
     {
         Patch = patch;
         Axis = axis;
@@ -28,6 +31,9 @@ public sealed class RoundSurface
         Radius = radius;
         Length = length;
         IsHole = isHole;
+        IsRound = isRound;
+        Wide = wide ?? 2f * radius;
+        Narrow = narrow ?? 2f * radius;
     }
 
     /// <summary>The triangles gathered, to light in the viewport.</summary>
@@ -48,6 +54,20 @@ public sealed class RoundSurface
     public bool IsHole { get; }
 
     public float Diameter => 2f * Radius;
+
+    /// <summary>False for the walls of a hole with flat sides, where there is no one diameter.</summary>
+    public bool IsRound { get; }
+
+    /// <summary>The longest the surface spans across its axis; the diameter when it is round.</summary>
+    public float Wide { get; }
+
+    /// <summary>The shortest, across the other way: what a pin has to be less than to go in.</summary>
+    public float Narrow { get; }
+
+    /// <summary>What it is, for a message: "a Ø6 hole in Wall", "a 12 × 8 mm opening in Wall".</summary>
+    public string Describe(string? on) => IsRound
+        ? IsHole ? $"a Ø{Diameter:0.##} hole in {on}" : $"a Ø{Diameter:0.##} round face on {on}"
+        : $"a {Wide:0.##} × {Narrow:0.##} mm opening in {on}";
 
     /// <summary>Normals and which triangles share each edge, kept per mesh: hovering asks on every move.</summary>
     private sealed record Topology(Vector3[] Normals, Dictionary<(int, int), List<int>> Edges, int[] Corner);
@@ -245,7 +265,12 @@ public sealed class RoundSurface
             x = nx / length; y = ny / length; z = nz / length;
         }
 
-        var axis = Vector3.Normalize(new Vector3((float)x, (float)y, (float)z));
+        return Upright(Vector3.Normalize(new Vector3((float)x, (float)y, (float)z)));
+    }
+
+    /// <summary>An axis pointed up, or along its largest part, so it reads the same whichever way it was found.</summary>
+    private static Vector3 Upright(Vector3 axis)
+    {
         float biggest = MathF.Abs(axis.Z) > 0.3f ? axis.Z
             : MathF.Abs(axis.X) >= MathF.Abs(axis.Y) ? axis.X : axis.Y;
         return biggest < 0 ? -axis : axis;
