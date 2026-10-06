@@ -33,6 +33,7 @@ public partial class VersionsDialog : Window
             {
                 Index = i,
                 v.Label,
+                Picture = Decode(v.Thumbnail),
                 // Shown in local time: a version is a note to yourself about when you were working.
                 Detail = $"{v.SavedUtc.ToLocalTime():d MMM yyyy HH:mm} - " +
                          (v.ObjectCount == 1 ? "1 object" : $"{v.ObjectCount} objects")
@@ -47,6 +48,29 @@ public partial class VersionsDialog : Window
         }
 
         UpdateButtons();
+    }
+
+    /// <summary>The picture kept with a version, or null if it has none or the bytes are not a picture.</summary>
+    private static System.Windows.Media.Imaging.BitmapSource? Decode(byte[]? png)
+    {
+        if (png is not { Length: > 0 }) return null;
+
+        try
+        {
+            using var stream = new MemoryStream(png);
+            var picture = new System.Windows.Media.Imaging.BitmapImage();
+            picture.BeginInit();
+            picture.CacheOption = System.Windows.Media.Imaging.BitmapCacheOption.OnLoad;
+            picture.StreamSource = stream;
+            picture.EndInit();
+            picture.Freeze();
+            return picture;
+        }
+        catch
+        {
+            // A picture that will not decode is not worth losing the list over.
+            return null;
+        }
     }
 
     private int? SelectedIndex()

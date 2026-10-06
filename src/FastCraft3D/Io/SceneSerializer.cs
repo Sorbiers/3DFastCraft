@@ -11,7 +11,8 @@ namespace FastCraft3D.Io;
 /// <param name="Label">What the user called this version.</param>
 /// <param name="SavedUtc">When it was kept.</param>
 /// <param name="ObjectCount">How many objects it holds, for the picker.</param>
-public readonly record struct SceneVersion(string Label, DateTime SavedUtc, int ObjectCount);
+/// <param name="Thumbnail">A small PNG of the scene as it was saved, or null for a version kept before they were.</param>
+public readonly record struct SceneVersion(string Label, DateTime SavedUtc, int ObjectCount, byte[]? Thumbnail = null);
 
 /// <summary>How the project is looked at and measured: none of it touches the geometry.</summary>
 /// <param name="PlateWidth">The printable area across X, in millimetres.</param>
@@ -129,6 +130,13 @@ public static class SceneSerializer
         Write(path, dto, scene);
     }
 
+    /// <summary>
+    /// How big the picture kept with a version is, a side. Twice what the list shows it at, so it
+    /// is sharp on a high-resolution screen, and small enough that a project with dozens of
+    /// versions does not grow by more than a few hundred kilobytes.
+    /// </summary>
+    private const int VersionPicturePx = 144;
+
     /// <summary>Keeps a labelled snapshot in the file, and saves the scene as current.</summary>
     public static void SaveVersion(string path, Scene scene, string label, ProjectSettings? settings = null)
     {
@@ -142,7 +150,13 @@ public static class SceneSerializer
             Label = string.IsNullOrWhiteSpace(label) ? "Version" : label.Trim(),
             SavedUtc = DateTime.UtcNow,
             Objects = dto.Objects, // the snapshot is the state being saved
-            Assemblies = dto.Assemblies
+            Assemblies = dto.Assemblies,
+
+            // What is on the plate, drawn small, so a version can be told from the next by looking
+            // at it rather than by the time it was kept. The same picture the project's 3MF carries.
+            Thumbnail = MeshThumbnail.Png(
+                ExportComposer.ComposeForObj(scene.Shown).Select(part => (part.Mesh, part.Colour)).ToList(),
+                VersionPicturePx)
         });
 
         Write(path, dto, scene);
@@ -193,7 +207,7 @@ public static class SceneSerializer
         if (dto?.Versions is null) return [];
 
         return dto.Versions
-            .Select(v => new SceneVersion(v.Label ?? "Version", v.SavedUtc, v.Objects?.Count ?? 0))
+            .Select(v => new SceneVersion(v.Label ?? "Version", v.SavedUtc, v.Objects?.Count ?? 0, v.Thumbnail))
             .ToList();
     }
 
@@ -518,6 +532,9 @@ public static class SceneSerializer
         public DateTime SavedUtc { get; set; }
         public List<ObjectDto>? Objects { get; set; }
         public List<AssemblyDto>? Assemblies { get; set; }
+
+        /// <summary>A PNG, as base64 in the JSON. Added without a format bump: a version without one still reads.</summary>
+        public byte[]? Thumbnail { get; set; }
     }
 
     private sealed class AssemblyDto
