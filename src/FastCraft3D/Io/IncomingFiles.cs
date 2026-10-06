@@ -28,6 +28,15 @@ public static class IncomingFiles
         Path.GetExtension(path).Equals(SceneSerializer.Extension, StringComparison.OrdinalIgnoreCase) && SceneSerializer.IsProject(path);
 
     /// <summary>
+    /// Whether a drop has two things it could mean, and so has to be asked about: a single project,
+    /// which could replace the plate or join it. Anything else - a model, a 3MF from a slicer or
+    /// exported without its project, several files - can only be imported, and a dialog whose one
+    /// live button is Import is a click in the way of what was dropped.
+    /// </summary>
+    public static bool NeedsAsking(IReadOnlyList<string> files) =>
+        files.Count == 1 && IsProject(files[0]);
+
+    /// <summary>
     /// The files among these that are worth opening, in the order they were given.
     ///
     /// Anything else is dropped silently rather than reported. A command line can carry switches

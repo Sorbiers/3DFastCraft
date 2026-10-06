@@ -453,11 +453,11 @@ public partial class MainWindow : Window
     }
 
     /// <summary>
-    /// Takes files dropped on the window, having asked what they are for.
+    /// Takes files dropped on the window. A project is asked about; anything else is imported.
     ///
-    /// It asks rather than guessing. A dropped project could reasonably mean either thing - put
-    /// this up in place of what I have, or add it to it - and guessing the first way throws away
-    /// work that was never saved.
+    /// A dropped project could reasonably mean either thing - put this up in place of what I
+    /// have, or add it to it - and guessing the first way throws away work that was never saved.
+    /// A model has only the one thing to mean, so it goes straight in.
     /// </summary>
     private void OnFilesDropped(object sender, DragEventArgs e)
     {
@@ -466,7 +466,13 @@ public partial class MainWindow : Window
 
         if (files.Count == 0 || viewModel.IsBusy || viewModel.IsToolInHand) return;
 
-        var asking = new DropDialog(files) { Owner = this };
+        if (!IncomingFiles.NeedsAsking(files))
+        {
+            viewModel.ImportFiles(files);
+            return;
+        }
+
+        var asking = new DropDialog(files[0]) { Owner = this };
         if (asking.ShowDialog() != true) return;
 
         if (asking.OpenAsProject) viewModel.OpenDropped(files[0]);

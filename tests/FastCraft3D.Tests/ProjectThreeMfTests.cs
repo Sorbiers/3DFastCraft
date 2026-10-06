@@ -99,6 +99,30 @@ public class ProjectThreeMfTests : IDisposable
         Assert.True(IncomingFiles.IsProject(path));
     }
 
+    /// <summary>
+    /// A dropped model has one thing to mean, so it is imported without a dialog whose Open button
+    /// would be greyed. Only a single project is asked about, since it could replace the plate or join it.
+    /// </summary>
+    [Fact]
+    public void OnlyASingleProjectDroppedIsAskedAbout()
+    {
+        string project = File_("mine.3mf");
+        SceneSerializer.Save(project, SceneWith("A"));
+
+        string slicer = File_("slicer.3mf");
+        ThreeMf.Write(slicer, [new ObjObject("Part", Primitives.Box(10, 10, 10), new Vector3(1, 0, 0))]);
+
+        string stl = File_("part.stl");
+        File.WriteAllText(stl, string.Empty);
+
+        Assert.True(IncomingFiles.NeedsAsking([project]));
+        Assert.False(IncomingFiles.NeedsAsking([slicer]));
+        Assert.False(IncomingFiles.NeedsAsking([stl]));
+
+        // Several at once can only be imported, whatever is among them.
+        Assert.False(IncomingFiles.NeedsAsking([project, slicer]));
+    }
+
     [Fact]
     public void AnOld3dfcIsNoProjectButItsPartsStillRead()
     {

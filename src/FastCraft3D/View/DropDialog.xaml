@@ -14,15 +14,12 @@
             the file to what is already here, keeping both.
         </TextBlock>
 
-        <TextBlock x:Name="WhyNotText" TextWrapping="Wrap" Foreground="#FF8A6A2E"
-                   Margin="0,6,0,0" Visibility="Collapsed" />
-
         <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,16,0,0">
             <Button x:Name="OpenButton" Content="Open as a project" MinWidth="132" Padding="10,6"
-                    Margin="0,0,8,0" Click="OnOpen"
+                    Margin="0,0,8,0" Click="OnOpen" IsDefault="True"
                     AutomationProperties.AutomationId="DropOpen" />
             <Button x:Name="ImportButton" Content="Import onto this plate" MinWidth="150"
-                    Padding="10,6" Margin="0,0,8,0" IsDefault="True" Click="OnImport"
+                    Padding="10,6" Margin="0,0,8,0" Click="OnImport"
                     AutomationProperties.AutomationId="DropImport" />
             <Button Content="Cancel" IsCancel="True" MinWidth="80" Padding="10,6" />
         </StackPanel>

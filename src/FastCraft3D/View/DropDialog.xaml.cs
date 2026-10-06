@@ -4,40 +4,20 @@ using System.Windows;
 namespace FastCraft3D.View;
 
 /// <summary>
-/// What to do with files dropped on the window.
+/// What to do with a project dropped on the window.
 ///
 /// It asks rather than guessing. A dropped project could reasonably mean either thing - put this
 /// up instead of what I have, or add it to what I have - and guessing wrong in the first
-/// direction throws away work that was never saved.
+/// direction throws away work that was never saved. Only a project comes here: see
+/// <see cref="Io.IncomingFiles.NeedsAsking"/>.
 /// </summary>
 public partial class DropDialog : Window
 {
-    public DropDialog(IReadOnlyList<string> files)
+    public DropDialog(string project)
     {
         InitializeComponent();
 
-        SubjectText.Text = files.Count == 1
-            ? Path.GetFileName(files[0])
-            : $"{files.Count} files: " + string.Join(", ", files.Select(Path.GetFileName));
-
-        // Opening puts one plate up in place of another, so it only means anything for a single
-        // project file. Everything else can still be imported.
-        bool project = files.Count == 1 && Io.IncomingFiles.IsProject(files[0]);
-
-        OpenButton.IsEnabled = project;
-
-        if (!project)
-        {
-            WhyNotText.Text = files.Count > 1
-                ? "Only one project at a time can be opened, so these can only be imported."
-                : "Only a 3DFastCraft project can be opened. A model file can be imported.";
-            WhyNotText.Visibility = Visibility.Visible;
-        }
-        else
-        {
-            OpenButton.IsDefault = true;
-            ImportButton.IsDefault = false;
-        }
+        SubjectText.Text = Path.GetFileName(project);
     }
 
     /// <summary>True to open the file as a project, false to import onto the current plate.</summary>
