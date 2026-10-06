@@ -1733,7 +1733,7 @@
                                     <StackPanel Grid.Column="1" Margin="3,0,0,0">
                                         <Image Source="{Binding TextureReliefPicture}" Height="140" Stretch="Uniform"
                                                HorizontalAlignment="Center" RenderOptions.BitmapScalingMode="HighQuality" />
-                                        <TextBlock Text="Relief" FontSize="11" Foreground="#FF6B7480" HorizontalAlignment="Center" />
+                                        <TextBlock Text="{Binding TextureReliefCaption}" FontSize="11" Foreground="#FF6B7480" HorizontalAlignment="Center" />
                                     </StackPanel>
                                 </Grid>
                                 <TextBlock Text="{Binding SvgName}" Margin="0,6,0,0" FontSize="11"

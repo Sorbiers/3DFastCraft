@@ -4226,12 +4226,15 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
 
     public System.Windows.Media.ImageSource? TextureReliefPicture => texturePictures?.Relief;
 
+    /// <summary>What the second picture is of: the relief, or - for log walls - a corner of the wall.</summary>
+    public string TextureReliefCaption => texturePictures?.ReliefCaption ?? "Relief";
+
     /// <summary>
-    /// Whether the panel shows the two pictures. Every texture has them but log walls, which are
-    /// built round their corners and are no pattern to show; lettering and a drawing are shown as
-    /// the outlines they are.
+    /// <summary>
+    /// Whether the panel shows the two pictures: every texture has them, log walls too. Lettering
+    /// and a drawing are shown as the outlines they are.
     /// </summary>
-    public bool ShowsTexturePictures => embossTexture.IsOn && embossTexture.Kind != TextureKind.Logs;
+    public bool ShowsTexturePictures => embossTexture.IsOn;
 
     public bool ShowsOutlinePreview => !ShowsTexturePictures;
 
@@ -4268,6 +4271,7 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
     {
         Raise(nameof(TextureFlatPicture));
         Raise(nameof(TextureReliefPicture));
+        Raise(nameof(TextureReliefCaption));
     }
 
     public bool UsesText => svgFile.Length == 0 && !embossTexture.IsOn;

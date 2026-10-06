@@ -22,7 +22,7 @@ public class TexturePreviewTests
         get
         {
             var data = new TheoryData<TextureKind>();
-            foreach (var kind in Enum.GetValues<TextureKind>().Where(k => k is not (TextureKind.None or TextureKind.Logs)))
+            foreach (var kind in Enum.GetValues<TextureKind>().Where(k => k != TextureKind.None))
                 data.Add(kind);
             return data;
         }
@@ -58,7 +58,7 @@ public class TexturePreviewTests
     {
         var sizes = new HashSet<(int, int)>();
 
-        foreach (var kind in Enum.GetValues<TextureKind>().Where(k => k is not (TextureKind.None or TextureKind.Logs)))
+        foreach (var kind in Enum.GetValues<TextureKind>().Where(k => k != TextureKind.None))
         {
             var pictures = TexturePreview.Render(Of(kind), 1.2f);
             Assert.NotNull(pictures);
@@ -71,10 +71,58 @@ public class TexturePreviewTests
     }
 
     [Fact]
-    public void NothingChosenAndLogWallsHaveNoPictures()
+    public void NothingChosenHasNoPictures()
     {
         Assert.Null(TexturePreview.Render(TextureOptions.Default with { Kind = TextureKind.None }, 1f));
-        Assert.Null(TexturePreview.Render(TextureOptions.Default with { Kind = TextureKind.Logs }, 1f));
+    }
+
+    /// <summary>
+    /// Log walls are drawn as the logs are laid: rows of round logs, one to a pitch, so the flat
+    /// picture is bands and the relief has each one lit on its upper side.
+    /// </summary>
+    [Fact]
+    public void LogsAreDrawnAsRowsOfRoundLogsOnePerPitch()
+    {
+        var pictures = TexturePreview.Render(new TextureOptions(TextureKind.Logs, 6f, 0.6f), 2f)!;
+        var flat = Pixels(pictures.Flat);
+        int n = pictures.Flat.PixelWidth;
+
+        // Down one column: dark bands (a log) and light ones (the gaps between), as many logs as pitches shown.
+        int bands = 0;
+        bool dark = flat[0] < 128;
+        for (int y = 0; y < n; y++)
+        {
+            bool now = flat[(y * n + n / 2) * 3] < 128;
+            if (now && !dark) bands++;
+            dark = now;
+        }
+
+        Assert.InRange(bands, 4, 6);
+
+        // Every row of a log is the same across the wall.
+        Assert.Equal(flat[(10 * n + 3) * 3], flat[(10 * n + n - 4) * 3]);
+    }
+
+    /// <summary>
+    /// The second picture of a log wall is a corner of it - logs and the tower they are laid on,
+    /// drawn from a corner - and says so, where the others say Relief.
+    /// </summary>
+    [Fact]
+    public void LogsShowACornerOfTheWallWhereTheOthersShowTheRelief()
+    {
+        var logs = TexturePreview.Render(new TextureOptions(TextureKind.Logs, 6f, 0.6f), 2f)!;
+        Assert.Equal("Corner", logs.ReliefCaption);
+        Assert.Equal("Relief", TexturePreview.Render(Of(TextureKind.Rubble), 1f)!.ReliefCaption);
+
+        var pixels = Pixels(logs.Relief);
+        Assert.True(pixels.Distinct().Count() > 20, "the corner came out nearly flat");
+
+        // Something is drawn and something is left bare: the tower is not the whole picture.
+        int paper = 0;
+        for (int i = 0; i < pixels.Length; i += 3)
+            if (pixels[i] > 235 && pixels[i + 1] > 235 && pixels[i + 2] > 235) paper++;
+
+        Assert.InRange(paper / (float)(pixels.Length / 3), 0.1f, 0.9f);
     }
 
     /// <summary>

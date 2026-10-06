@@ -29,23 +29,26 @@ public static class TexturePreview
     private static readonly byte[] Ink = [0x2C, 0x30, 0x37];
     private static readonly byte[] Paper = [0xF4, 0xF5, 0xF7];
 
-    /// <summary>The two pictures, the same size and of the same patch of face.</summary>
-    public sealed record Pictures(BitmapSource Flat, BitmapSource Relief);
+    /// <summary>
+    /// The two pictures, the same size. Of the same patch of face, but for log walls: the second is
+    /// a corner of the wall, the one thing a view of the face cannot show.
+    /// </summary>
+    public sealed record Pictures(BitmapSource Flat, BitmapSource Relief, string ReliefCaption = "Relief");
 
-    /// <summary>The pictures, or null for what has no pattern to show.</summary>
-    public static Pictures? Render(TextureOptions options, float depthMm)
+    /// <summary>The pictures, or null for what has no pattern to show; <paramref name="sizePx"/> a side, for a use larger than the panel.</summary>
+    public static Pictures? Render(TextureOptions options, float depthMm, int sizePx = SizePx)
     {
         var o = options.Sane();
-
-        // Log walls are built round their corners and are no pattern to show.
-        if (!o.IsOn || o.Kind == TextureKind.Logs) return null;
+        if (!o.IsOn) return null;
 
         float side = Side(o);
         float depth = MathF.Max(depthMm, 0.1f);
-        int n = SizePx;
+        int n = Math.Clamp(sizePx, 32, 2048);
 
-        bool outlined = !o.IsProfiled;
-        var height = outlined ? Pads(o, side, n, depth)
+        bool logs = o.Kind == TextureKind.Logs;
+        bool outlined = !o.IsProfiled && !logs;
+        var height = logs ? Rounds(o, depth, side, n)
+            : outlined ? Pads(o, side, n, depth)
             : o.IsLaid ? Laid(o, depth, side, side, n, n)
             : Shaped(o, depth, side, side, n, n);
         if (height is null) return null;
@@ -53,6 +56,11 @@ public static class TexturePreview
         // Where there is material: the footprint of a pad, or of what stands high enough to be seen.
         float level = outlined ? depth / 2f : height.Max() * 0.3f;
         var on = height.Select(z => z > level).ToArray();
+
+        // A log wall is built round its corners, with each log's end standing out past the next
+        // wall's: a corner is what shows that, and it is shown in place of the shaded face.
+        if (logs && Corner(o, depth, n) is { } corner)
+            return new Pictures(Flat(on, n), corner, "Corner");
 
         var relief = outlined ? Soften(height, n) : height;
         return new Pictures(Flat(on, n), Shade(relief, n, n, side / n, depth));
@@ -66,12 +74,73 @@ public static class TexturePreview
     {
         TextureKind.Grain => o.PitchMm * 16f,
         TextureKind.Bark => o.PitchMm * 6f,
-        TextureKind.Siding => o.PitchMm * 5f,
+        TextureKind.Siding or TextureKind.Logs => o.PitchMm * 5f,
         TextureKind.Planks => o.PitchMm * 3f,
         TextureKind.Rubble or TextureKind.CoursedStone => o.PitchMm * 5f,
         TextureKind.Brick or TextureKind.RoofTiles or TextureKind.Tiles => o.PitchMm * 4f,
         _ => o.PitchMm * 8f
     };
+
+    /// <summary>
+    /// Round logs laid one on another along the wall, as <see cref="LogWalls"/> lays them: a circle
+    /// of the course less the gap, its middle <paramref name="proudMm"/> short of its own radius
+    /// from the wall, so what shows is the cap that stands out of it.
+    /// </summary>
+    private static float[] Rounds(TextureOptions o, float proudMm, float side, int n)
+    {
+        float course = MathF.Max(o.PitchMm, 0.5f);
+        float gap = Math.Clamp(o.LineMm, 0.05f, course * 0.4f);
+        float radius = (course - gap) / 2f;
+        float axis = Math.Clamp(proudMm, 0.1f, radius) - radius;
+
+        var height = new float[n * n];
+        for (int y = 0; y < n; y++)
+        {
+            // Up the face, from the middle of a log.
+            float up = side / 2f - (y + 0.5f) * side / n;
+            float across = up - MathF.Round(up / course) * course;
+            float z = MathF.Max(axis + MathF.Sqrt(MathF.Max(radius * radius - across * across, 0f)), 0f);
+
+            for (int x = 0; x < n; x++) height[y * n + x] = z;
+        }
+
+        return height;
+    }
+
+    /// <summary>
+    /// A corner of log wall as <see cref="LogWalls"/> lays it: a small square tower of four walls
+    /// with logs laid on them, seen from a corner, a little above - the logs crossing, half a course
+    /// apart, and their ends standing out. Null if the walls could not be found or laid.
+    /// </summary>
+    private static BitmapSource? Corner(TextureOptions o, float proudMm, int n)
+    {
+        float course = MathF.Max(o.PitchMm, 0.5f);
+        float wide = course * 6f, tall = course * 4f;
+
+        var tower = MeshTransform.Transformed(Primitives.Box(wide, wide, tall), Matrix4x4.CreateTranslation(0, 0, tall / 2f));
+        if (FacePatch.Find(tower, new Vector3(0, -wide / 2f, tall / 2f), -Vector3.UnitY) is not { } face) return null;
+
+        var pick = new Vector3(0, -wide / 2f, tall / 2f);
+        if (WallLoop.Around(tower, face, pick, out _) is not { } loop) return null;
+        if (WallRun.Round(loop, tower, out _) is not { } run) return null;
+
+        var logs = LogWalls.Build(run, course, o.LineMm, proudMm, out _);
+        if (logs.TriangleCount == 0) return null;
+
+        var pieces = new List<MeshShot.Piece>
+        {
+            new(tower, new Vector3(0.62f, 0.64f, 0.67f)),
+            new(logs, new Vector3(0.93f, 0.92f, 0.88f))
+        };
+
+        var middle = new Vector3(0, 0, tall / 2f);
+        var eye = middle + Vector3.Normalize(new Vector3(1f, -1f, 0.5f)) * wide * 3.1f;
+        var pixels = MeshShot.Render(pieces, eye, middle, 30f, n, new Vector3(0.957f, 0.961f, 0.969f));
+
+        var image = BitmapSource.Create(n, n, 96, 96, PixelFormats.Rgb24, null, pixels, n * 3);
+        image.Freeze();
+        return image;
+    }
 
     /// <summary>A height field read off the profile at every pixel.</summary>
     private static float[]? Shaped(TextureOptions o, float depth, float wide, float tall, int w, int h)
