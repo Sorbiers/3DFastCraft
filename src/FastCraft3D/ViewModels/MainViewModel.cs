@@ -10258,7 +10258,8 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
         switch (answer)
         {
             case MessageBoxResult.Yes:
-                SaveProject(saveAs: false);
+                // On the spot: what asked cannot go on until it knows whether this worked.
+                SaveProject(saveAs: false, onTheSpot: true);
                 // Still dirty means the save dialog was cancelled or the write failed, so the
                 // original request must not go ahead either.
                 return !IsDirty;
@@ -10360,7 +10361,12 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
         Raise(nameof(WindowTitle));
     }
 
-    private void SaveProject(bool saveAs)
+    /// <summary>
+    /// Saves the project, with "Saving..." over the window when there is a lot to write. With
+    /// <paramref name="onTheSpot"/> it is done before this returns, without the message, for what
+    /// has to know whether it worked before it goes on - see <see cref="Run"/>.
+    /// </summary>
+    private void SaveProject(bool saveAs, bool onTheSpot = false)
     {
         string? target = projectPath;
         if (saveAs || target is null)
@@ -10376,6 +10382,17 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
             target = dialog.FileName;
         }
 
+        string path = target;
+        Run(!onTheSpot && SaveIsSlow(), "Saving...", () => WriteProject(path));
+    }
+
+    /// <summary>Whether writing the project will take a moment: a lot of geometry, or a file already big with versions.</summary>
+    private bool SaveIsSlow() =>
+        (projectPath is not null && IsBig(projectPath))
+        || Scene.Objects.Sum(o => (long)o.Mesh.Positions.Count * 12 + (long)o.Mesh.Indices.Count * 4) >= SlowFromBytes;
+
+    private void WriteProject(string target)
+    {
         try
         {
             SceneSerializer.Save(target, Scene, ViewSettings, versionsFrom: projectPath);
@@ -10386,6 +10403,7 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
         }
         catch (Exception ex)
         {
+            StopWaiting(now: true);
             MessageBox.Show(ex.Message, "Could not save project", MessageBoxButton.OK, MessageBoxImage.Error);
         }
     }
@@ -10404,25 +10422,33 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
         // A version has to live in a file, so an unsaved scene needs a home first.
         if (projectPath is null)
         {
-            SaveProject(saveAs: true);
+            SaveProject(saveAs: true, onTheSpot: true);
             if (projectPath is null) return;
         }
 
         var prompt = new VersionNameDialog { Owner = Application.Current?.MainWindow };
         if (prompt.ShowDialog() != true) return;
 
+        string path = projectPath;
+        string label = prompt.VersionLabel;
+        Run(SaveIsSlow(), "Saving...", () => KeepVersion(path, label));
+    }
+
+    private void KeepVersion(string path, string label)
+    {
         try
         {
-            SceneSerializer.SaveVersion(projectPath, Scene, prompt.VersionLabel, ViewSettings);
+            SceneSerializer.SaveVersion(path, Scene, label, ViewSettings);
             IsDirty = false;
 
             // There is a way back again, so the notice has done its job.
             HistoryTrimmed = false;
 
-            Status = $"Kept version \"{prompt.VersionLabel}\" in {Path.GetFileName(projectPath)}";
+            Status = $"Kept version \"{label}\" in {Path.GetFileName(path)}";
         }
         catch (Exception ex)
         {
+            StopWaiting(now: true);
             MessageBox.Show(ex.Message, "Could not save the version", MessageBoxButton.OK, MessageBoxImage.Error);
         }
     }
