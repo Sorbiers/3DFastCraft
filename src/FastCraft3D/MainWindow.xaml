@@ -3195,5 +3195,19 @@
             </StackPanel>
         </Border>
     </Border>
+
+    <!-- A line over the window while something that cannot report on itself runs on the UI
+         thread, such as opening a large project. Only text: that thread does the work, so a
+         counter or a bar here could not move until it was over. Takes the mouse as the busy
+         panel does. -->
+    <Border Name="WaitOverlay" Background="#66202428" Panel.ZIndex="10"
+            AutomationProperties.AutomationId="WaitOverlay"
+            Visibility="{Binding IsWaiting, Converter={StaticResource BoolToVisibility}}">
+        <Border Background="White" BorderBrush="#FFD4D8DE" BorderThickness="1" CornerRadius="4"
+                Padding="28,16" HorizontalAlignment="Center" VerticalAlignment="Center">
+            <TextBlock Text="{Binding WaitMessage}" FontSize="15" FontWeight="SemiBold"
+                       Foreground="#FF2C3037" AutomationProperties.AutomationId="WaitMessage" />
+        </Border>
+    </Border>
     </Grid>
 </Window>

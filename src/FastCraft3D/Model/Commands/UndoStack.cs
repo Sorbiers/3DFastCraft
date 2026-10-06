@@ -77,6 +77,14 @@ public sealed class UndoStack
     public string? NextUndoLabel => done.Count > 0 ? done[^1].Label : null;
     public string? NextRedoLabel => undone.Count > 0 ? undone.Peek().Label : null;
 
+    /// <summary>
+    /// How much geometry the next undo or redo will put back or take away - a guide to how long it
+    /// will take, which nought, a move or a colour, does not.
+    /// </summary>
+    public long NextUndoBytes => done.Count > 0 ? done[^1].Bytes : 0;
+
+    public long NextRedoBytes => undone.Count > 0 ? undone.Peek().Bytes : 0;
+
     /// <summary>How much the history is holding, for anything that wants to show it.</summary>
     public long Held => held;
 

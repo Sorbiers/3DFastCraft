@@ -417,6 +417,13 @@ public partial class MainWindow : Window
     /// </summary>
     private void OnBusyKey(object sender, KeyEventArgs e)
     {
+        // The line that says something is opening has nothing to press, so no key is for anything.
+        if (viewModel.IsWaiting)
+        {
+            e.Handled = true;
+            return;
+        }
+
         if (!viewModel.IsBusy) return;
 
         if (e.Key == Key.Escape)

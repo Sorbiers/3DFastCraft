@@ -336,8 +336,12 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
         ApplyEngraveCommand = AsyncRelayCommand.Simple(ApplyEngrave, () => isEngraveMode && engrave.HasFace);
         CancelEngraveCommand = RelayCommand.Simple(() => IsEngraveMode = false);
 
-        UndoCommand = RelayCommand.Simple(() => { Undo.Undo(); RefreshSelection(); }, () => Undo.CanUndo);
-        RedoCommand = RelayCommand.Simple(() => { Undo.Redo(); RefreshSelection(); }, () => Undo.CanRedo);
+        UndoCommand = RelayCommand.Simple(
+            () => Run(Undo.NextUndoBytes >= SlowFromBytes, "Undoing...", () => { Undo.Undo(); RefreshSelection(); }),
+            () => Undo.CanUndo);
+        RedoCommand = RelayCommand.Simple(
+            () => Run(Undo.NextRedoBytes >= SlowFromBytes, "Redoing...", () => { Undo.Redo(); RefreshSelection(); }),
+            () => Undo.CanRedo);
 
         OpenRecentCommand = new RelayCommand(OpenRecent);
         recent.Changed += () => Raise(nameof(RecentFiles));
@@ -1071,6 +1075,92 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
     }
 
     public bool HasNotice => notice.Length > 0;
+
+    private string waitMessage = "";
+
+    /// <summary>
+    /// A line over the window while something runs on the UI thread that cannot report on itself,
+    /// such as opening a large project. Plain text, with no counter and nothing moving: that thread
+    /// is the one doing the work, so nothing here could tick or animate until it was over. The
+    /// work that can be moved off it has the busy panel instead.
+    /// </summary>
+    public string WaitMessage
+    {
+        get => waitMessage;
+        private set
+        {
+            Set(ref waitMessage, value);
+            Raise(nameof(IsWaiting));
+        }
+    }
+
+    public bool IsWaiting => waitMessage.Length > 0;
+
+    /// <summary>
+    /// A file smaller than this opens before the message could be read, so it is not shown: it
+    /// would only be a flash of the window dimming.
+    /// </summary>
+    private const long WaitFromBytes = 512 * 1024;
+
+    /// <summary>
+    /// A step that puts back or takes away this much geometry is slow enough to be worth saying
+    /// so: about a fifth of a second, from measuring a dense mesh. A move or a colour holds
+    /// nothing and is instant, and is done on the spot as it always was.
+    /// </summary>
+    private const long SlowFromBytes = 2L * 1024 * 1024;
+
+    /// <summary>Another slow job is already waiting its turn, so a second ask for one is not another job.</summary>
+    private bool deferred;
+
+    /// <summary>
+    /// Does <paramref name="work"/> on the spot when it is quick, and when it is not, a moment
+    /// after returning, with <paramref name="message"/> over the window meanwhile.
+    ///
+    /// Not on the spot, because the click or key that asks for it is on a menu or a dialog that is
+    /// only closed once it has been handled, and the window cannot say anything until it has had a
+    /// frame to draw it in. Done in the handler the list stayed open for the whole job with
+    /// nothing to show for it, and not being able to tell it had worked, people clicked again.
+    /// Waiting for the frame from inside the handler does not work either: the frame is queued
+    /// by the message appearing, behind anything asked for first.
+    /// </summary>
+    private void Run(bool slow, string message, Action work)
+    {
+        var dispatcher = Application.Current?.Dispatcher;
+        if (!slow || dispatcher is null)
+        {
+            work();
+            return;
+        }
+
+        if (deferred) return;
+
+        deferred = true;
+        WaitMessage = message;
+
+        // Below render priority, so the menu closes and the message is drawn first.
+        dispatcher.BeginInvoke(() =>
+        {
+            try { work(); }
+            finally
+            {
+                deferred = false;
+                StopWaiting();
+            }
+        }, DispatcherPriority.Background);
+    }
+
+    /// <summary>
+    /// Takes the message away - once the window has gone idle rather than on the spot, because
+    /// what the work put on the plate is drawn in the frame after it returns, and a message that
+    /// went first would leave the old plate on show for that frame.
+    /// </summary>
+    private void StopWaiting(bool now = false)
+    {
+        var dispatcher = Application.Current?.Dispatcher;
+
+        if (now || dispatcher is null) WaitMessage = "";
+        else dispatcher.BeginInvoke(() => WaitMessage = "", DispatcherPriority.ContextIdle);
+    }
 
     private static readonly string[] WarningWords =
         ["nothing was changed", "nothing was added", "could not", "cannot", "can't", "failed", "would not", "no room", "is not a", "not closed", "too small", "too big", "too short"];
@@ -10161,16 +10251,23 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
         LoadProject(dialog.FileName);
     }
 
-    private void LoadProject(string path)
-    {
-        if (!SceneSerializer.IsProject(path))
-        {
-            OpenModel(path);
-            return;
-        }
+    /// <summary>Opens a project or a model - with "Opening..." over the window if the file is big. See <see cref="Run"/>.</summary>
+    private void LoadProject(string path) =>
+        Run(IsBig(path), "Opening...", () => LoadProjectNow(path));
 
+    /// <summary>Whether a file is big enough to take a moment to read.</summary>
+    private static bool IsBig(string path) => File.Exists(path) && new FileInfo(path).Length >= WaitFromBytes;
+
+    private void LoadProjectNow(string path)
+    {
         try
         {
+            if (!SceneSerializer.IsProject(path))
+            {
+                OpenModel(path);
+                return;
+            }
+
             var loaded = SceneSerializer.Load(path, out var settings);
             // A file from before the scale was kept is taken as life size rather than inheriting
             // whatever the last project was drawn at.
@@ -10189,6 +10286,8 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
         }
         catch (Exception ex)
         {
+            // Before the message box, not behind it: the dimmed window is not what to look at then.
+            StopWaiting(now: true);
             MessageBox.Show(ex.Message, "Could not open project", MessageBoxButton.OK, MessageBoxImage.Error);
         }
     }
@@ -10302,9 +10401,15 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
         var dialog = new VersionsDialog(projectPath) { Owner = Application.Current?.MainWindow };
         if (dialog.ShowDialog() != true || dialog.RestoreIndex is not { } index) return;
 
+        string path = projectPath;
+        Run(IsBig(path), "Restoring...", () => RestoreVersion(path, index));
+    }
+
+    private void RestoreVersion(string path, int index)
+    {
         try
         {
-            var restored = SceneSerializer.LoadVersion(projectPath, index);
+            var restored = SceneSerializer.LoadVersion(path, index);
 
             // Routed through undo, so restoring a version is as reversible as anything else.
             // The version's parts arrive in its own assemblies, which are not to be guessed at.
@@ -10315,6 +10420,7 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
         }
         catch (Exception ex)
         {
+            StopWaiting(now: true);
             MessageBox.Show(ex.Message, "Could not restore that version", MessageBoxButton.OK, MessageBoxImage.Error);
         }
     }
