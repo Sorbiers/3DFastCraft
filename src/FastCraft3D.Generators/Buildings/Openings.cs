@@ -158,6 +158,39 @@ internal static class Glazing
     }
 }
 
+/// <summary>What the window does, which decides what else the form asks.</summary>
+public enum WindowType
+{
+    [ShownAs("Fixed")] Fixed,
+    [ShownAs("Single hung")] SingleHung,
+    Sliding,
+    Casement
+}
+
+/// <summary>The architrave: the trim on the wall round the frame.</summary>
+public enum WindowTrim
+{
+    None,
+    Plain,
+    [ShownAs("With lintel")] Lintel,
+    Pedimented
+}
+
+public enum WindowShutters
+{
+    None,
+    Pair,
+    [ShownAs("Left only")] Left,
+    [ShownAs("Right only")] Right
+}
+
+public enum ShutterKind
+{
+    Louvred,
+    Panelled,
+    Planked
+}
+
 public enum WindowShape
 {
     Rectangular,
@@ -173,7 +206,7 @@ public enum WindowShape
 /// half round or round. Printed lying on its face's back, the glass on the plate; sizes as the
 /// model is drawn, with the real ones said beside them.
 /// </summary>
-public sealed class Window : Generator<Window.Settings>
+public sealed partial class Window : Generator<Window.Settings>
 {
     public override string Id => "building.window";
     public override int Version => 1;
@@ -196,20 +229,42 @@ public sealed class Window : Generator<Window.Settings>
     };
 
     public sealed record Settings(
+        [Choice("Type", Hint = "Fixed is the window with its shapes. The others are square, with sashes that overlap or casements side by side")] WindowType Type = WindowType.Fixed,
+        [Choice("Shape", Group = "Size")] WindowShape Shape = WindowShape.Rectangular,
         [Length("Width", 3, 200, Group = "Size", Hint = "Outside the frame, as the model is drawn", Size = SizeAxis.X)] float Width = 14f,
         [Length("Height", 3, 200, Group = "Size", Size = SizeAxis.Z)] float Height = 16f,
         [Length("Frame", 0.4, 10, Group = "Frame", Hint = "How wide the frame is, seen from the front")] float Frame = 0.8f,
         [Length("Depth", 0.4, 20, Group = "Frame", Hint = "How deep the frame is, into the wall")] float Depth = 1.6f,
+        [Count("Casements", 1, 4, Group = "Sashes", Hint = "Side by side, each a sash in the frame")] int Casements = 2,
+        [Length("Sash", 0.2, 5, Group = "Sashes", Hint = "How wide the sash's own frame is")] float Sash = 0.6f,
+        [Length("Set back", 0, 5, Group = "Sashes", Hint = "How far the sashes stand back from the face of the frame")] float SetBack = 0.4f,
+        [Length("Step", 0, 3, Group = "Sashes", Hint = "How far the sash behind stands back of the one in front, where they overlap")] float Step = 0.4f,
+        [Toggle("Upper sash in front", Group = "Sashes", Hint = "As on a box sash window. Off puts the lower one in front")] bool UpperFront = true,
+        [Toggle("Left sash in front", Group = "Sashes")] bool LeftFront = false,
+        [Length("Mullion", 0.2, 5, Group = "Sashes", Hint = "The bar of the frame between one casement and the next")] float Mullion = 0.8f,
         [Count("Panes across", 1, 8, Group = "Panes", Hint = "For a half round window, how many it is divided into round the arc")] int Columns = 2,
         [Count("Panes up", 1, 8, Group = "Panes")] int Rows = 2,
         [Length("Glazing bars", 0.2, 5, Group = "Panes", Hint = "How wide the bars between the panes are")] float Bar = 0.4f,
+        [Count("Lights across", 1, 6, Group = "Muntins", Hint = "Panes of glass across each sash, divided by muntins")] int LightsAcross = 2,
+        [Count("Lights up", 1, 6, Group = "Muntins", Hint = "Panes of glass up each sash")] int LightsUp = 2,
+        [Length("Muntin width", 0.2, 3, Group = "Muntins", Hint = "How wide the bars between the lights are")] float Muntin = 0.3f,
         [Toggle("Sill", Group = "Sill")] bool Sill = true,
         [Length("Sill projection", 0, 10, Group = "Sill", Hint = "How far the sill stands out in front of the frame"), ShowWhen(nameof(Sill), true)] float SillOut = 0.8f,
+        [Choice("Architrave", Group = "Trim", Hint = "Trim on the wall round the frame: a part of its own, printed flat and put on the wall")] WindowTrim Trim = WindowTrim.None,
+        [Length("Trim width", 0.3, 6, Group = "Trim", Hint = "How wide the trim is, seen from the front")] float TrimWidth = 1.2f,
+        [Length("Trim projection", 0.2, 4, Group = "Trim", Hint = "How far it stands out from the wall")] float TrimOut = 0.6f,
+        [Choice("Shutters", Group = "Shutters", Hint = "False shutters, fixed to the wall beside the window: parts of their own, printed flat")] WindowShutters Shutters = WindowShutters.None,
+        [Choice("Shutter style", Group = "Shutters")] ShutterKind Style = ShutterKind.Louvred,
+        [Length("Shutter width", 0, 100, Group = "Shutters", Hint = "Each one. Nought for half the window's width, as they would close")] float ShutterWidth = 0f,
+        [Length("Shutter gap", 0, 5, Group = "Shutters", Hint = "Between a shutter and the frame, or its trim")] float ShutterGap = 0.4f,
+        [Length("Shutter thickness", 0.4, 4, Group = "Shutters", Hint = "How far they stand out from the wall")] float ShutterThickness = 0.8f,
+        [Count("Slats", 2, 40, Group = "Shutters", Hint = "Louvres, one above another")] int Slats = 8,
+        [Count("Panels", 1, 4, Group = "Shutters", Hint = "One above another")] int ShutterPanels = 2,
+        [Count("Boards", 2, 10, Group = "Shutters", Hint = "Side by side")] int Boards = 4,
         [Toggle("Glass", Group = "Glass", Hint = "Off for the frame alone")] bool Glass = true,
         [Choice("Glass as", Group = "Glass", Hint = "Panes in the openings, flush with the back of the frame; or one clear sheet the whole back of the window, the frame standing on it"), ShowWhen(nameof(Glass), true)] DoorGlass GlassAs = DoorGlass.Panes,
         [Length("Glass thickness", 0.1, 20, Group = "Glass", Hint = "Two or three layers is usual; as deep as the frame at the most"), ShowWhen(nameof(Glass), true)] float GlassThickness = 0.4f,
-        [Choice("Shape", Group = "Size")] WindowShape Shape = WindowShape.Rectangular,
-        [Toggle("Lay flat to print", Hint = "On its back, the glass on the plate: how it prints best")] bool Flat = false);
+        [Toggle("Lay flat to print", Hint = "On its back, the facade up and the glass on the plate: how it prints best")] bool Flat = false);
 
     protected override IEnumerable<(string Name, Settings Settings)> Shipped =>
     [
@@ -220,17 +275,68 @@ public sealed class Window : Generator<Window.Settings>
         ("Arched, two by three", Default with { Shape = WindowShape.Arched, Width = 10, Height = 20, Columns = 2, Rows = 3 }),
         ("Lunette", Default with { Shape = WindowShape.HalfRound, Width = 16, Columns = 4 }),
         ("Round, four panes", Default with { Shape = WindowShape.Round, Width = 10, Columns = 2, Rows = 2, Sill = false }),
-        ("Bow", Default with { Shape = WindowShape.Bow, Width = 24, Height = 16, Columns = 1, Rows = 2 })
+        ("Bow", Default with { Shape = WindowShape.Bow, Width = 24, Height = 16, Columns = 1, Rows = 2 }),
+        ("Single hung, two over two", Default with { Type = WindowType.SingleHung, Width = 12, Height = 18 }),
+        ("Single hung, six over six", Default with { Type = WindowType.SingleHung, Width = 14, Height = 22, LightsAcross = 3, LightsUp = 3, Muntin = 0.25f }),
+        ("Single hung, trim and shutters", Default with { Type = WindowType.SingleHung, Width = 12, Height = 20, Trim = WindowTrim.Lintel, Shutters = WindowShutters.Pair, Style = ShutterKind.Louvred }),
+        ("Sliding, two lights", Default with { Type = WindowType.Sliding, Width = 20, Height = 12, LightsAcross = 1, LightsUp = 1 }),
+        ("Sliding, grilles", Default with { Type = WindowType.Sliding, Width = 22, Height = 14, LightsAcross = 2, LightsUp = 2 }),
+        ("Casement pair", Default with { Type = WindowType.Casement, Width = 14, Height = 18, Casements = 2, LightsAcross = 1, LightsUp = 3 }),
+        ("Casement, three", Default with { Type = WindowType.Casement, Width = 24, Height = 16, Casements = 3, LightsAcross = 1, LightsUp = 2 }),
+        ("Casement, pedimented, shutters", Default with { Type = WindowType.Casement, Width = 14, Height = 20, Casements = 2, LightsAcross = 1, LightsUp = 3, Trim = WindowTrim.Pedimented, Shutters = WindowShutters.Pair, Style = ShutterKind.Panelled })
     ];
 
-    protected override bool Shows(Settings s, string parameter) => parameter switch
+    /// <summary>What each type of window is, filled in when it is chosen.</summary>
+    protected override Settings Adjust(Settings before, Settings after, string changed) =>
+        changed != nameof(Settings.Type) ? after : after.Type switch
+        {
+            WindowType.SingleHung => after with { Shape = WindowShape.Rectangular, LightsAcross = 2, LightsUp = 2 },
+            WindowType.Sliding => after with { Shape = WindowShape.Rectangular, LightsAcross = 1, LightsUp = 2 },
+            WindowType.Casement => after with
+            {
+                Shape = WindowShape.Rectangular, LightsAcross = 1, LightsUp = 3,
+                Casements = Math.Clamp((int)MathF.Round(after.Width / 7f), 1, 4)
+            },
+            _ => after
+        };
+
+    protected override bool Shows(Settings s, string parameter)
     {
-        nameof(Settings.Height) => s.Shape is WindowShape.Rectangular or WindowShape.Arched or WindowShape.Bow,
-        nameof(Settings.Rows) => s.Shape != WindowShape.HalfRound,
-        nameof(Settings.Sill) or nameof(Settings.SillOut) => s.Shape is not (WindowShape.Round or WindowShape.Bow),
-        nameof(Settings.Flat) or nameof(Settings.GlassAs) => s.Shape != WindowShape.Bow,
-        _ => true
-    };
+        bool fixedType = s.Type == WindowType.Fixed;
+
+        // The trim and the shutters follow a square outline; the round shapes have none to follow.
+        bool squared = !fixedType || s.Shape == WindowShape.Rectangular;
+
+        return parameter switch
+        {
+            nameof(Settings.Shape) => fixedType,
+            nameof(Settings.Height) => !fixedType || s.Shape is WindowShape.Rectangular or WindowShape.Arched or WindowShape.Bow,
+
+            nameof(Settings.Columns) or nameof(Settings.Bar) => fixedType,
+            nameof(Settings.Rows) => fixedType && s.Shape != WindowShape.HalfRound,
+
+            nameof(Settings.Casements) => s.Type == WindowType.Casement,
+            nameof(Settings.Mullion) => s.Type == WindowType.Casement && s.Casements > 1,
+            nameof(Settings.Step) => s.Type is WindowType.SingleHung or WindowType.Sliding,
+            nameof(Settings.UpperFront) => s.Type == WindowType.SingleHung,
+            nameof(Settings.LeftFront) => s.Type == WindowType.Sliding,
+            nameof(Settings.Sash) or nameof(Settings.SetBack)
+                or nameof(Settings.LightsAcross) or nameof(Settings.LightsUp) or nameof(Settings.Muntin) => !fixedType,
+
+            nameof(Settings.Sill) or nameof(Settings.SillOut) => !fixedType || s.Shape is not (WindowShape.Round or WindowShape.Bow),
+
+            nameof(Settings.Trim) or nameof(Settings.Shutters) => squared,
+            nameof(Settings.TrimWidth) or nameof(Settings.TrimOut) => squared && s.Trim != WindowTrim.None,
+            nameof(Settings.Style) or nameof(Settings.ShutterWidth) or nameof(Settings.ShutterGap)
+                or nameof(Settings.ShutterThickness) => squared && s.Shutters != WindowShutters.None,
+            nameof(Settings.Slats) => squared && s.Shutters != WindowShutters.None && s.Style == ShutterKind.Louvred,
+            nameof(Settings.ShutterPanels) => squared && s.Shutters != WindowShutters.None && s.Style == ShutterKind.Panelled,
+            nameof(Settings.Boards) => squared && s.Shutters != WindowShutters.None && s.Style == ShutterKind.Planked,
+
+            nameof(Settings.Flat) or nameof(Settings.GlassAs) => !fixedType || s.Shape != WindowShape.Bow,
+            _ => true
+        };
+    }
 
     /// <summary>Each pane's opening in a rectangular window: X from left to right, Y from the bottom up.</summary>
     internal static List<(float X0, float Y0, float X1, float Y1)> Panes(Settings s)
@@ -311,6 +417,18 @@ public sealed class Window : Generator<Window.Settings>
     }
 
     protected override IEnumerable<string> Check(Settings s, Printer printer)
+    {
+        if (s.Type != WindowType.Fixed)
+        {
+            foreach (var problem in CheckSashed(s)) yield return problem;
+            yield break;
+        }
+
+        foreach (var problem in CheckFixed(s)) yield return problem;
+        foreach (var problem in CheckSurround(s)) yield return problem;
+    }
+
+    private static IEnumerable<string> CheckFixed(Settings s)
     {
         if (s.Shape == WindowShape.Bow)
         {
@@ -407,6 +525,7 @@ public sealed class Window : Generator<Window.Settings>
 
     protected override Generated Build(Settings s, Printer printer, CancellationToken token)
     {
+        if (s.Type != WindowType.Fixed) return BuildSashed(s, printer);
         if (s.Shape == WindowShape.Bow) return Bow(s, printer);
 
         // The panes cut out of a solid rather than laid as holes in one outline: laid as holes,
@@ -439,11 +558,16 @@ public sealed class Window : Generator<Window.Settings>
             notes.AddRange(Glazing.Notes(s.GlassThickness, printer, s.Flat));
         }
 
+        parts.AddRange(Surround(s, notes));
         notes.Add(Glazing.Printing(s.Flat));
         return Glazing.Assembled(Glazing.Stood(parts, s.Flat), notes);
     }
 
-    protected override IEnumerable<string> Describe(Settings s, float modelScale)
+    protected override IEnumerable<string> Describe(Settings s, float modelScale) =>
+        (s.Type == WindowType.Fixed ? DescribeFixed(s, modelScale) : DescribeSashed(s, modelScale))
+        .Concat(DescribeSurround(s, modelScale));
+
+    private static IEnumerable<string> DescribeFixed(Settings s, float modelScale)
     {
         float tall = s.Shape switch { WindowShape.HalfRound => s.Width / 2f, WindowShape.Round => s.Width, _ => s.Height };
         if (Glazing.Real(s.Width, tall, modelScale, "window") is { } real) yield return real;
