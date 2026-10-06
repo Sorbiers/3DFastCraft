@@ -299,6 +299,47 @@ public class BedPlacementTests
         });
     }
 
+    /// <summary>
+    /// Keep on plate stops a part going below the bed and nothing else: shrunk, a part that stood
+    /// on the bed is not pulled down to it again. Otherwise Z could only be resized upward.
+    /// </summary>
+    [Fact]
+    public void ShrunkWithKeepOnBedAPartIsFreeToFloatAboveTheBed()
+    {
+        RunSta(() =>
+        {
+            var (gizmo, canvas, cube) = Standing(GizmoMode.Scale, keep: true);
+
+            // 40 px down is 10 mm: half the part's height, taken from the top and the bottom.
+            gizmo.TryBeginDrag(new Point(0, 0), (FrameworkElement)canvas.Children[13]);
+            gizmo.ContinueDrag(new Point(0, 40));
+            gizmo.EndDrag();
+
+            Assert.True(cube.WorldBounds.Size.Z < 19.5f, "it did not shrink");
+            Assert.True(cube.WorldBounds.Min.Z > 0.5f, "it was pulled back down to the bed");
+        });
+    }
+
+    [Fact]
+    public void ResizedAlongZBothWaysWithKeepOnBedItNeverGoesBelowTheBed()
+    {
+        RunSta(() =>
+        {
+            var (gizmo, canvas, cube) = Standing(GizmoMode.Scale, keep: true);
+
+            // Smaller, then bigger than it began, in the one drag.
+            gizmo.TryBeginDrag(new Point(0, 0), (FrameworkElement)canvas.Children[13]);
+            foreach (int y in new[] { 20, 40, 0, -40, -120 })
+            {
+                gizmo.ContinueDrag(new Point(0, y));
+                Assert.True(cube.WorldBounds.Min.Z > -1e-3f, $"below the bed at {y}");
+            }
+            gizmo.EndDrag();
+
+            Assert.True(cube.WorldBounds.Size.Z > 20.5f, "it did not grow");
+        });
+    }
+
     // --- The boxes ----------------------------------------------------------------------
 
     private static void WithModel(Action<MainViewModel, SceneObject> body)

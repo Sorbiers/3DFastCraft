@@ -176,8 +176,10 @@ public sealed class GizmoController
     public bool RecordsUndo { get; set; } = true;
 
     /// <summary>
-    /// Nothing resized goes below the bed, and what stood on the bed when the drag began stays
-    /// standing on it, so it grows upward only.
+    /// Nothing resized goes below the bed. That is all it does: a part that would grow into the
+    /// bed is lifted out of it, and one that shrinks is left where it is - free to float above the
+    /// bed, as it is free to when it is moved. Pinning a part that stood on the bed to it, so that
+    /// it could only grow and shrink upward, took away every way of resizing along Z but one.
     /// </summary>
     public bool KeepOnBedScale { get; set; }
 
@@ -841,7 +843,7 @@ public sealed class GizmoController
             }
         }
 
-        bool onBed = KeepOnBedScale && BedPlacement.HoldToBed(dragObjects, dragBounds, together: asOne || !several, settle: true);
+        bool onBed = KeepOnBedScale && BedPlacement.HoldToBed(dragObjects, dragBounds, together: asOne || !several, settle: false);
 
         dragChanged = true;
         string stillThere = oneSide ? ", far side held" : "";
@@ -876,7 +878,7 @@ public sealed class GizmoController
             dragObjects[i].Position = anchor + (dragBefore[i].Position - anchor) * ratio;
         }
 
-        bool onBed = KeepOnBedScale && BedPlacement.HoldToBed(dragObjects, dragBounds, together: true, settle: true);
+        bool onBed = KeepOnBedScale && BedPlacement.HoldToBed(dragObjects, dragBounds, together: true, settle: false);
 
         dragChanged = true;
         Feedback?.Invoke($"Resize {ratio * 100:0.#}% (in proportion{(oneSide ? ", opposite corner held" : "")})" + BedNote(onBed));

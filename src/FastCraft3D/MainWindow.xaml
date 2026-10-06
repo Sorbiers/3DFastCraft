@@ -3075,7 +3075,7 @@
                                   Stretch="Uniform" Width="15" Height="15" />
                         </ToggleButton>
                         <ToggleButton Style="{StaticResource ModeButton}" Margin="2,0,0,0"
-                                      ToolTip="Keep on plate: a part on the plate grows upward only, and nothing goes below the plate. Off: it grows about its middle."
+                                      ToolTip="Keep on plate: nothing is resized below the plate - a part that would grow into it is lifted out. It can still float above the plate. Off: it grows about its middle, through the plate if it reaches."
                                       AutomationProperties.Name="Keep on bed when resizing"
                                       IsChecked="{Binding KeepOnBedScale, Mode=TwoWay}">
                             <Path Data="{StaticResource IconKeepOnBed}"
