@@ -58,6 +58,9 @@ public sealed class GizmoController
     private Rect screenBox;
     private bool screenBoxValid;
     private Point lastLayoutCentre;
+
+    /// <summary>Which arrows were left out of the last layout, one bit each. See <see cref="SitsOnPivot"/>.</summary>
+    private int lastHidden;
     private Bounds lastLayoutBounds;
     private Handle? active;
     private Point dragStart;
@@ -244,6 +247,10 @@ public sealed class GizmoController
         if (bounds.IsEmpty) return false;
         if (bounds.Min != lastLayoutBounds.Min || bounds.Max != lastLayoutBounds.Max) return true;
 
+        // Moving the pivot, or the one way only button, changes which arrows there are without
+        // touching the bounds or the camera.
+        if (HiddenArrows() != lastHidden) return true;
+
         if (!projector.TryProject(bounds.Center, out Point centre)) return true;
         return Math.Abs(centre.X - lastLayoutCentre.X) > 0.5
             || Math.Abs(centre.Y - lastLayoutCentre.Y) > 0.5;
@@ -284,6 +291,7 @@ public sealed class GizmoController
         layer.Visibility = Visibility.Visible;
         NeedsReposition = false;
         lastLayoutBounds = bounds;
+        lastHidden = HiddenArrows();
         TryProject(centre, out lastLayoutCentre);
 
         foreach (var handle in handles)
@@ -429,8 +437,57 @@ public sealed class GizmoController
 
     // --- Placement --------------------------------------------------------------------
 
+    /// <summary>
+    /// Whether dragging this arrow would do nothing, because the face it is on is where the object
+    /// is pivoted.
+    ///
+    /// Resizing grows a part about its origin, so a face that lies on the origin cannot move. The
+    /// arrow on it looked as though it should, and dragging it made the far face run off instead,
+    /// which read as the tool going wrong. It is not drawn, and the other end is the one to use.
+    ///
+    /// With One way only on, the part is moved to keep the far face still, so every face can be
+    /// dragged and every arrow is there.
+    /// </summary>
+    private bool SitsOnPivot(Handle handle)
+    {
+        if (mode != GizmoMode.Scale || handle.Kind != HandleKind.AxisArrow) return false;
+        if (ScaleOneSide || scene.Selection.Count != 1) return false;
+
+        var o = scene.Selection[0];
+        var (scale, middle, size) = handle.Axis switch
+        {
+            Axis.X => (o.Scale.X, o.LocalCentre.X, o.SizeX),
+            Axis.Y => (o.Scale.Y, o.LocalCentre.Y, o.SizeY),
+            _ => (o.Scale.Z, o.LocalCentre.Z, o.SizeZ)
+        };
+
+        // How far the face is from the origin along the axis, as it is on the plate: the middle of
+        // the box, scaled, and half the size out from it. The sign of a mirrored part's scale is
+        // already inside the first term.
+        float away = scale * middle + handle.Sign * size / 2f;
+        return MathF.Abs(away) < PivotReachMm;
+    }
+
+    /// <summary>How near the origin a face has to be to count as on it - far finer than anything drawn.</summary>
+    private const float PivotReachMm = 0.02f;
+
+    private int HiddenArrows()
+    {
+        int hidden = 0;
+        for (int i = 0; i < handles.Count; i++)
+            if (SitsOnPivot(handles[i])) hidden |= 1 << i;
+
+        return hidden;
+    }
+
     private void PositionArrow(Handle handle, Frame frame, Vector3 centre)
     {
+        if (SitsOnPivot(handle))
+        {
+            handle.Visual.Visibility = Visibility.Collapsed;
+            return;
+        }
+
         Vector3 direction = frame.Along(handle.Axis) * handle.Sign;
         Vector3 anchor = centre + direction * (frame.Reach(handle.Axis) / 2f);
 

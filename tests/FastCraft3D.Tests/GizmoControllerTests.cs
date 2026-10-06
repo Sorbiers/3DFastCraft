@@ -755,4 +755,106 @@ public class GizmoControllerTests
             Assert.Equal(60f, second.Position.X, 3);
         });
     }
+
+    // --- Pivots ---------------------------------------------------------------------------
+
+    private static (GizmoController Gizmo, Canvas Canvas, SceneObject Cube) PivotedCube(
+        Vector3 pivot, Vector3? scale = null, bool oneSide = false)
+    {
+        var scene = new Scene();
+        var cube = new SceneObject("Cube", Primitives.Box(20, 20, 20)) { IsSelected = true };
+        if (scale is { } mirrored) cube.Scale = mirrored;
+        scene.Objects.Add(cube);
+        cube.CentredOn(pivot);
+
+        var canvas = new Canvas();
+        var gizmo = Build(canvas, scene, new UndoStack(scene), GizmoMode.Scale);
+        gizmo.ScaleOneSide = oneSide;
+        gizmo.Reposition();
+        return (gizmo, canvas, cube);
+    }
+
+    // Children of the canvas in Scale mode: the box, eight corners, then X+, X-, Y+, Y-, Z+, Z-.
+    private const int PlusX = 9, MinusX = 10;
+
+    /// <summary>
+    /// Resizing grows a part about its origin, so the face a pivot sits on cannot move, and an arrow
+    /// there would only make the far face run off instead. It is not drawn.
+    /// </summary>
+    [Fact]
+    public void ThePivotsOwnFaceHasNoScaleArrow() => RunSta(() =>
+    {
+        var (_, canvas, _) = PivotedCube(new Vector3(-10, 0, 0)); // the pivot goes to the -X face
+
+        Assert.Equal(Visibility.Visible, HandleFor(canvas, PlusX).Visibility);
+        Assert.Equal(Visibility.Collapsed, HandleFor(canvas, MinusX).Visibility);
+    });
+
+    [Fact]
+    public void AMirroredPartLosesTheArrowOnTheSideItsPivotIsReallyOn() => RunSta(() =>
+    {
+        // Mirrored along X, the part's own -X face is on the world's +X side.
+        var (_, canvas, _) = PivotedCube(new Vector3(-10, 0, 0), scale: new Vector3(-1, 1, 1));
+
+        Assert.Equal(Visibility.Collapsed, HandleFor(canvas, PlusX).Visibility);
+        Assert.Equal(Visibility.Visible, HandleFor(canvas, MinusX).Visibility);
+    });
+
+    [Fact]
+    public void APivotInsideOrOnTheMiddleLeavesEveryArrow() => RunSta(() =>
+    {
+        foreach (var pivot in new[] { Vector3.Zero, new Vector3(-4, 0, 0), new Vector3(9, 0, 0) })
+        {
+            var (_, canvas, _) = PivotedCube(pivot);
+
+            Assert.Equal(Visibility.Visible, HandleFor(canvas, PlusX).Visibility);
+            Assert.Equal(Visibility.Visible, HandleFor(canvas, MinusX).Visibility);
+        }
+    });
+
+    /// <summary>One way only keeps the far face still by moving the part, so any face can be dragged.</summary>
+    [Fact]
+    public void WithOneWayOnlyEveryArrowIsThereWhateverThePivot() => RunSta(() =>
+    {
+        var (_, canvas, _) = PivotedCube(new Vector3(-10, 0, 0), oneSide: true);
+
+        Assert.Equal(Visibility.Visible, HandleFor(canvas, PlusX).Visibility);
+        Assert.Equal(Visibility.Visible, HandleFor(canvas, MinusX).Visibility);
+    });
+
+    /// <summary>Moving the pivot or the button changes the arrows without moving the part or the camera.</summary>
+    [Fact]
+    public void MovingThePivotOrTheButtonRedrawsTheArrows() => RunSta(() =>
+    {
+        var (gizmo, canvas, cube) = PivotedCube(Vector3.Zero);
+        Assert.False(gizmo.IsStale());
+
+        cube.CentredOn(new Vector3(-10, 0, 0));
+        Assert.True(gizmo.IsStale());
+        gizmo.Reposition();
+        Assert.Equal(Visibility.Collapsed, HandleFor(canvas, MinusX).Visibility);
+        Assert.False(gizmo.IsStale());
+
+        gizmo.ScaleOneSide = true;
+        Assert.True(gizmo.IsStale());
+        gizmo.Reposition();
+        Assert.Equal(Visibility.Visible, HandleFor(canvas, MinusX).Visibility);
+    });
+
+    [Fact]
+    public void SeveralPartsKeepAllTheirArrows() => RunSta(() =>
+    {
+        var scene = new Scene();
+        var first = new SceneObject("A", Primitives.Box(10, 10, 10)) { IsSelected = true };
+        var second = new SceneObject("B", Primitives.Box(10, 10, 10)) { IsSelected = true, Position = new Vector3(30, 0, 0) };
+        scene.Objects.Add(first);
+        scene.Objects.Add(second);
+        first.CentredOn(new Vector3(-5, 0, 0));
+
+        var canvas = new Canvas();
+        Build(canvas, scene, new UndoStack(scene), GizmoMode.Scale);
+
+        Assert.Equal(Visibility.Visible, HandleFor(canvas, PlusX).Visibility);
+        Assert.Equal(Visibility.Visible, HandleFor(canvas, MinusX).Visibility);
+    });
 }
