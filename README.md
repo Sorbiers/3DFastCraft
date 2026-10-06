@@ -116,7 +116,8 @@ Almost all of it is written by [Claude Code](https://claude.com/claude-code) fro
     a house or any upright part with flat sides as one strip that goes round the corners.
 - **Cladding** - walls built the way a mason builds them, round a house or any upright part:
   bricks in a bond with corner bricks, logs, siding, rubble or coursed stone with cornerstones.
-  Texture and Cladding show a picture of each pattern.
+  Texture and Cladding show each pattern flat and in 3D - for log walls, a corner of the wall. Siding,
+  rubble, coursed stone and bark can have no groove at all.
 - **Engrave** - brick, tile, plank, grain and more, cut or raised, laid *around* openings.
 - **Repeat** - along a line, round a circle (with a rise, for spiral stairs) or in a grid.
 - **Measure**, **Fit check**, **Surface info** - distances, overlap or gap between parts, and a
@@ -129,7 +130,7 @@ Almost all of it is written by [Claude Code](https://claude.com/claude-code) fro
   Split and Connect), brick fit and thread clearance. **Printer profile test** in the Library prints
   every fit at once, a few samples either side of the profile's number or up from nought.
 - **Projects** are `.3mf` files: the plate as any slicer and Explorer see it, with the editable
-  project and its **versions** inside (**Ctrl+Alt+S** saves one); restore is an undo step. A `.3dfc` from before 4.3 is
+  project and its **versions** inside (**Ctrl+Alt+S** saves one, with a small picture of the plate); restore is an undo step. A `.3dfc` from before 4.3 is
   imported, without its versions.
 - **Export** STL (binary or ASCII) or OBJ - everything or just the selection; reports
   triangles, volume and whether it is watertight before writing. For 3MF, save the project.
