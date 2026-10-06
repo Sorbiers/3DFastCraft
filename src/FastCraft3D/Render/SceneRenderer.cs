@@ -50,7 +50,9 @@ public sealed class SceneRenderer : IDisposable
 
     /// <summary>
     /// Above this, tracing the outline would cost more than it is worth on a selection click.
-    /// Dense imports fall back to the brightened material alone.
+    /// Dense imports are marked by a deeper colour alone - see <see cref="SelectionColour"/>.
+    /// A screen-space contour was tried for them and dropped: Helix's mask pass takes no notice of
+    /// the depth buffer, so it drew straight over whatever stood in front.
     /// </summary>
     private const int OutlineTriangleLimit = 200_000;
 
@@ -1150,6 +1152,7 @@ public sealed class SceneRenderer : IDisposable
                 visual.Geometry = MeshConverter.ToGeometry(o.Mesh);
                 RemoveOutline(o); // the old edges describe geometry that no longer exists
                 UpdateOutline(o);
+                ApplyLook(o, visual); // whether it is dense enough to go without an outline may have changed
                 UpdateMirror(o); // a fresh buffer, so the reflection's borrowed reference is stale too
                 break;
 
@@ -1262,13 +1265,17 @@ public sealed class SceneRenderer : IDisposable
 
     /// <summary>
     /// Selected objects keep their colour and are lifted a little, so they read as picked even
-    /// where the outline is edge-on to the camera.
+    /// where the outline is edge-on to the camera. One too dense to have an outline has its colour
+    /// deepened instead, which is all it has to be told by; a lift on top would only wash it out.
     /// </summary>
     private PhongMaterial MaterialFor(SceneObject o)
     {
-        var colour = new SharpDX.Color4(o.ShownColour.X, o.ShownColour.Y, o.ShownColour.Z, 1f);
+        bool deepened = o.IsSelected && o.Mesh.TriangleCount > OutlineTriangleLimit;
 
-        float lift = o.IsSelected ? 0.22f : 0f;
+        var shown = deepened ? SelectionColour.Intensified(o.ShownColour) : o.ShownColour;
+        var colour = new SharpDX.Color4(shown.X, shown.Y, shown.Z, 1f);
+
+        float lift = o.IsSelected && !deepened ? 0.22f : 0f;
         var diffuse = new SharpDX.Color4(
             Math.Min(colour.Red + lift, 1f),
             Math.Min(colour.Green + lift, 1f),
