@@ -217,6 +217,13 @@ public static class TileSolid
     /// <summary>Below this a slab is not a slab, and the printer will not lay it either.</summary>
     public const float LeastMm = TextureOptions.LeastPadMm;
 
+    /// <summary>
+    /// The least gap left between two slabs. They never touch - each is a closed solid - so a
+    /// texture with no groove still has this: too small to print or to see, and enough that two
+    /// slabs do not share a wall.
+    /// </summary>
+    public const float LeastJointMm = 0.05f;
+
     /// <summary>Past this the tilt is a fin rather than a tile.</summary>
     public const float MostSlopeDegrees = 45f;
 

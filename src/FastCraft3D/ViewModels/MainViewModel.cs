@@ -94,11 +94,13 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
     /// </summary>
     private readonly Dictionary<TextureKind, (TextureOptions Texture, float Depth)> masonryKept = new()
     {
-        [TextureKind.Brick] = (new TextureOptions(TextureKind.Brick, 5f, 0.2f), 0.3f),
-        [TextureKind.Rubble] = (new TextureOptions(TextureKind.Rubble, 7f, 0.2f), 0.8f),
-        [TextureKind.CoursedStone] = (new TextureOptions(TextureKind.CoursedStone, 8f, 0.2f), 0.8f),
-        [TextureKind.Siding] = (new TextureOptions(TextureKind.Siding, 2.5f, 0.2f), 0.6f),
-        [TextureKind.Logs] = (new TextureOptions(TextureKind.Logs, 3f, 0.2f), 1f)
+        // The groove each started with is the one it got: 0.2 was raised to the least, 0.4, whatever
+        // the box said. Siding's is nothing - its boards lap, with no groove between them.
+        [TextureKind.Brick] = (new TextureOptions(TextureKind.Brick, 5f, 0.4f), 0.3f),
+        [TextureKind.Rubble] = (new TextureOptions(TextureKind.Rubble, 7f, 0.4f), 0.8f),
+        [TextureKind.CoursedStone] = (new TextureOptions(TextureKind.CoursedStone, 8f, 0.4f), 0.8f),
+        [TextureKind.Siding] = (new TextureOptions(TextureKind.Siding, 2.5f, 0f), 0.6f),
+        [TextureKind.Logs] = (new TextureOptions(TextureKind.Logs, 3f, 0.4f), 1f)
     };
 
     /// <summary>
@@ -3820,7 +3822,16 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
             if (embossTexture.Kind == value) return;
 
             if (isMasonryMode) KeepMasonry();
-            embossTexture = embossTexture with { Kind = value };
+
+            // Siding starts with no groove between its boards. The rest keep what was typed, raised to
+            // the least the new texture allows: a groove of nought on a knurl is no knurl.
+            embossTexture = embossTexture with
+            {
+                Kind = value,
+                LineMm = value == TextureKind.Siding
+                    ? 0f
+                    : MathF.Max(embossTexture.LineMm, TextureOptions.LeastLineOf(value))
+            };
             if (value != TextureKind.None) svgFile = "";
 
             // Brickwork arrives raised. Cutting the pieces sinks the bricks and leaves the mortar
@@ -3848,6 +3859,9 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
             Raise(nameof(EmbossTexture));
             Raise(nameof(UsesTexture));
             Raise(nameof(UsesProfile));
+            Raise(nameof(EmbossTextureLine));
+            Raise(nameof(ShowsTexturePictures));
+            Raise(nameof(ShowsOutlinePreview));
             Raise(nameof(UsesStamp));
             Raise(nameof(TextureLeans));
             Raise(nameof(TextureRuns));
@@ -4055,7 +4069,13 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
     public float EmbossTextureLine
     {
         get => embossTexture.LineMm;
-        set => SetTexture(embossTexture with { LineMm = value });
+        set
+        {
+            // Raised to the least this texture allows, and the box told so. It used to go on showing
+            // what was typed while the picture, the preview and the part all used the least.
+            SetTexture(embossTexture with { LineMm = MathF.Max(value, embossTexture.LeastLine) });
+            Raise(nameof(EmbossTextureLine));
+        }
     }
 
     public float EmbossTextureAngle
@@ -4128,6 +4148,8 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
 
         Raise(nameof(EmbossTexturePitch));
         Raise(nameof(EmbossTextureLine));
+        Raise(nameof(ShowsTexturePictures));
+        Raise(nameof(ShowsOutlinePreview));
         Raise(nameof(EmbossTextureAngle));
         Raise(nameof(EmbossTextureAcross));
         Raise(nameof(TextureLeans));
@@ -4192,15 +4214,26 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
     /// </summary>
     public IReadOnlyList<TextShape> DrawingShapes => Lettering();
 
-    private System.Windows.Media.Imaging.BitmapSource? texturePicture;
+    private TexturePreview.Pictures? texturePictures;
     private int texturePictureAt;
 
     /// <summary>
-    /// A shaded picture of the texture, for the ones with no outlines to draw - stone, bark, grain,
-    /// boards, tiles, siding. Made off the UI thread and only the latest kept, since it is asked for
-    /// on every keystroke in a pitch box and some of them take a moment.
+    /// Two pictures of the texture in the panel, of the same patch of face: the pattern flat, from
+    /// above, and the relief shaded. Made off the UI thread and only the latest kept, since they are
+    /// asked for on every keystroke in a pitch box and some of them take a moment.
     /// </summary>
-    public System.Windows.Media.ImageSource? TexturePicture => texturePicture;
+    public System.Windows.Media.ImageSource? TextureFlatPicture => texturePictures?.Flat;
+
+    public System.Windows.Media.ImageSource? TextureReliefPicture => texturePictures?.Relief;
+
+    /// <summary>
+    /// Whether the panel shows the two pictures. Every texture has them but log walls, which are
+    /// built round their corners and are no pattern to show; lettering and a drawing are shown as
+    /// the outlines they are.
+    /// </summary>
+    public bool ShowsTexturePictures => embossTexture.IsOn && embossTexture.Kind != TextureKind.Logs;
+
+    public bool ShowsOutlinePreview => !ShowsTexturePictures;
 
     private void RefreshPicture()
     {
@@ -4208,12 +4241,12 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
         var options = embossTexture;
         float depth = embossDepth;
 
-        if (!options.IsProfiled)
+        if (!ShowsTexturePictures)
         {
-            if (texturePicture is null) return;
+            if (texturePictures is null) return;
 
-            texturePicture = null;
-            Raise(nameof(TexturePicture));
+            texturePictures = null;
+            RaisePictures();
             return;
         }
 
@@ -4226,9 +4259,15 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
         {
             if (at != texturePictureAt) return;
 
-            texturePicture = done.Result;
-            Raise(nameof(TexturePicture));
+            texturePictures = done.Result;
+            RaisePictures();
         }, ui);
+    }
+
+    private void RaisePictures()
+    {
+        Raise(nameof(TextureFlatPicture));
+        Raise(nameof(TextureReliefPicture));
     }
 
     public bool UsesText => svgFile.Length == 0 && !embossTexture.IsOn;

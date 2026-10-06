@@ -1716,11 +1716,26 @@
                             <StackPanel>
                                 <Path MaxHeight="72" Stretch="Uniform" Fill="#FF2C3037"
                                       HorizontalAlignment="Center"
+                                      Visibility="{Binding ShowsOutlinePreview, Converter={StaticResource BoolToVisibility}}"
                                       Data="{Binding DrawingShapes, Converter={StaticResource OutlinesToGeometry}}" />
-                                <!-- The ones with no outline to draw: a shaded picture of the relief. -->
-                                <Image Source="{Binding TexturePicture}" MaxHeight="120" Stretch="Uniform"
-                                       HorizontalAlignment="Center" RenderOptions.BitmapScalingMode="HighQuality"
-                                       Visibility="{Binding UsesProfile, Converter={StaticResource BoolToVisibility}}" />
+                                <!-- A texture: the pattern flat and the relief shaded, of one patch of face, in a box of
+                                     one size whatever the texture, so the panel does not jump as the choice changes. -->
+                                <Grid Visibility="{Binding ShowsTexturePictures, Converter={StaticResource BoolToVisibility}}">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel Grid.Column="0" Margin="0,0,3,0">
+                                        <Image Source="{Binding TextureFlatPicture}" Height="140" Stretch="Uniform"
+                                               HorizontalAlignment="Center" RenderOptions.BitmapScalingMode="HighQuality" />
+                                        <TextBlock Text="Flat" FontSize="11" Foreground="#FF6B7480" HorizontalAlignment="Center" />
+                                    </StackPanel>
+                                    <StackPanel Grid.Column="1" Margin="3,0,0,0">
+                                        <Image Source="{Binding TextureReliefPicture}" Height="140" Stretch="Uniform"
+                                               HorizontalAlignment="Center" RenderOptions.BitmapScalingMode="HighQuality" />
+                                        <TextBlock Text="Relief" FontSize="11" Foreground="#FF6B7480" HorizontalAlignment="Center" />
+                                    </StackPanel>
+                                </Grid>
                                 <TextBlock Text="{Binding SvgName}" Margin="0,6,0,0" FontSize="11"
                                            Visibility="{Binding HasDrawing, Converter={StaticResource BoolToVisibility}}"
                                            HorizontalAlignment="Center" TextTrimming="CharacterEllipsis"
@@ -1840,7 +1855,7 @@
 
                             <StackPanel Orientation="Horizontal" Margin="0,0,0,2">
                                 <TextBlock Text="Groove" Style="{StaticResource FieldLabel}" Width="62"
-                                           ToolTip="The gap left between one cell and the next, or the joint between two bricks - or two stones, the fissures in bark, the grooves of a wood grain. Under a nozzle width it closes up as it prints." />
+                                           ToolTip="The gap left between one cell and the next, or the joint between two bricks - or two stones, the fissures in bark, the grooves of a wood grain. At least 0.4 mm, a nozzle width: under that it closes up as it prints. Siding, rubble, coursed stone and bark can have none - siding boards then lap with no gap, and stones meet edge to edge." />
                                 <TextBox AutomationProperties.AutomationId="EmbossTextureLine" Width="64" Style="{StaticResource NumberBox}" Tag="number"
                                          Text="{Binding EmbossTextureLine, StringFormat=N2, UpdateSourceTrigger=LostFocus, Converter={StaticResource Length}}" />
                                 <TextBlock Text="{Binding DataContext.UnitLabel, RelativeSource={RelativeSource AncestorType=Window}}" Foreground="#FF9AA0A8" VerticalAlignment="Center" />

@@ -116,6 +116,19 @@ public readonly record struct TextureOptions(
     public const float LeastLineMm = 0.4f;
 
     /// <summary>
+    /// The narrowest groove a texture may have. Nought for the ones whose pieces can simply meet:
+    /// lapped siding has no groove between its boards, only the step of the lap, and stones and
+    /// bark plates that touch are still told apart by the rounding of their edges. The rest are
+    /// made of pads on a face, and pads that touch are one pad.
+    /// </summary>
+    public static float LeastLineOf(TextureKind kind) =>
+        kind is TextureKind.Siding or TextureKind.Rubble or TextureKind.CoursedStone or TextureKind.Bark
+            ? 0f
+            : LeastLineMm;
+
+    public float LeastLine => LeastLineOf(Kind);
+
+    /// <summary>
     /// Settings to start from. Not <c>new TextureOptions()</c>, which is the zero value and skips
     /// the primary constructor's defaults - the trap this codebase has met before.
     /// </summary>
@@ -196,7 +209,7 @@ public readonly record struct TextureOptions(
 
     public TextureOptions Sane()
     {
-        float line = Math.Max(LineMm, LeastLineMm);
+        float line = Math.Max(LineMm, LeastLine);
 
         return this with
         {
@@ -260,12 +273,16 @@ public static class SurfaceTexture
 
         float course = MathF.Max(o.PitchMm / MathF.Max(o.Courses, 0.2f), TextureOptions.LeastPadMm);
 
+        // Slabs never touch - each is a closed solid of its own - so a groove of nought is a gap
+        // too small to print or to see, not a shared wall.
+        float joint = MathF.Max(o.LineMm, TileSolid.LeastJointMm);
+
         // Siding is one strip the whole way across, so its course is the pitch itself rather than
         // the pitch divided by how long a piece is - there are no pieces.
         return o.Kind == TextureKind.Siding
-            ? new TileCourses(o.PitchMm, o.PitchMm, thickMm, o.LineMm, o.SlopeDegrees, o.Slope,
+            ? new TileCourses(o.PitchMm, o.PitchMm, thickMm, joint, o.SlopeDegrees, o.Slope,
                               Stagger: false, Ends: false)
-            : new TileCourses(o.PitchMm, course, thickMm, o.LineMm, o.SlopeDegrees, o.Slope,
+            : new TileCourses(o.PitchMm, course, thickMm, joint, o.SlopeDegrees, o.Slope,
                               Stagger: true, Ends: true);
     }
 

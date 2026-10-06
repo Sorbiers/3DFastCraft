@@ -555,31 +555,38 @@ public class StoneTextureTests(ITestOutputHelper log)
     });
 
     /// <summary>
-    /// The panel shows a picture of a shaped texture the moment one is chosen: the view is told the
-    /// picture is wanted (UsesProfile) and then that it is ready (TexturePicture). Before it was
-    /// told the first, the picture box stayed collapsed however the texture changed.
+    /// The panel shows both pictures of a texture the moment one is chosen: the view is told they are
+    /// wanted (ShowsTexturePictures) and then that they are ready. Before it was told the first, the
+    /// picture box stayed collapsed however the texture changed.
     /// </summary>
-    [Fact]
-    public void ChoosingAShapedTextureShowsItsPictureInThePanel() => WithModel(model =>
+    [Theory]
+    [InlineData(TextureKind.Rubble)]
+    [InlineData(TextureKind.Brick)]
+    public void ChoosingATextureShowsItsTwoPicturesInThePanel(TextureKind kind) => WithModel(model =>
     {
         var told = new List<string>();
         model.PropertyChanged += (_, e) => told.Add(e.PropertyName ?? "");
 
-        model.EmbossTexture = TextureKind.Rubble;
-        Assert.Contains(nameof(MainViewModel.UsesProfile), told);
-        Assert.True(model.UsesProfile);
+        model.EmbossTexture = kind;
+        Assert.Contains(nameof(MainViewModel.ShowsTexturePictures), told);
+        Assert.True(model.ShowsTexturePictures);
+        Assert.False(model.ShowsOutlinePreview);
 
         var watch = System.Diagnostics.Stopwatch.StartNew();
-        while (model.TexturePicture is null && watch.ElapsedMilliseconds < 10_000) Thread.Sleep(20);
+        while ((model.TextureFlatPicture is null || model.TextureReliefPicture is null) && watch.ElapsedMilliseconds < 10_000)
+            Thread.Sleep(20);
 
-        Assert.NotNull(model.TexturePicture);
-        Assert.Contains(nameof(MainViewModel.TexturePicture), told);
+        Assert.NotNull(model.TextureFlatPicture);
+        Assert.NotNull(model.TextureReliefPicture);
+        Assert.Contains(nameof(MainViewModel.TextureFlatPicture), told);
+        Assert.Contains(nameof(MainViewModel.TextureReliefPicture), told);
 
-        // And it goes again when the texture goes back to one drawn as outlines.
-        model.EmbossTexture = TextureKind.Brick;
+        // And they go again when no texture is chosen: lettering is shown as the outlines it is.
+        model.EmbossTexture = TextureKind.None;
         watch.Restart();
-        while (model.TexturePicture is not null && watch.ElapsedMilliseconds < 10_000) Thread.Sleep(20);
-        Assert.Null(model.TexturePicture);
+        while (model.TextureFlatPicture is not null && watch.ElapsedMilliseconds < 10_000) Thread.Sleep(20);
+        Assert.Null(model.TextureFlatPicture);
+        Assert.True(model.ShowsOutlinePreview);
     });
 
     private static void WithModel(Action<MainViewModel> body)

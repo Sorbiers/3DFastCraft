@@ -545,7 +545,7 @@ public class ToolFlowTests
     });
 
     /// <summary>
-    /// Masonry starts at a 5 mm brick, a 0.2 mm joint and 0.3 mm proud, and comes back as it was
+    /// Masonry starts at a 5 mm brick, a 0.4 mm joint - the least a nozzle lays, which the 0.2 it said before was raised to anyway - and 0.3 mm proud, and comes back as it was
     /// last left for the rest of the session - without any of it turning up in Emboss.
     /// </summary>
     [Fact]
@@ -562,7 +562,7 @@ public class ToolFlowTests
 
         model.BeginMasonryCommand.Execute(null);
         Assert.Equal(5f, model.EmbossTexturePitch, 3);
-        Assert.Equal(0.2f, model.EmbossTextureLine, 3);
+        Assert.Equal(0.4f, model.EmbossTextureLine, 3);
         Assert.Equal(0.3f, model.EmbossDepth, 3);
 
         model.EmbossTexturePitch = 4f;
