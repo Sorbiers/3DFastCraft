@@ -1,6 +1,7 @@
 using System.IO;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Input;
 using FastCraft3D.Io;
 
 namespace FastCraft3D.View;
@@ -94,6 +95,20 @@ public partial class VersionsDialog : Window
 
         RestoreIndex = index;
         DialogResult = true;
+    }
+
+    /// <summary>
+    /// A double click on a version restores it, as Restore does. Only on a version: the list takes
+    /// a double click anywhere in it, on its scroll bar or the empty space below the last one,
+    /// and none of those is a choice.
+    /// </summary>
+    private void OnListDoubleClick(object sender, MouseButtonEventArgs e)
+    {
+        if (e.OriginalSource is DependencyObject source
+            && ItemsControl.ContainerFromElement(VersionList, source) is ListBoxItem)
+        {
+            OnRestore(sender, e);
+        }
     }
 
     private void OnDelete(object sender, RoutedEventArgs e)

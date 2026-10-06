@@ -15,7 +15,8 @@
 
         <TextBlock x:Name="HeaderText" TextWrapping="Wrap" Foreground="#FF33383F" Margin="0,0,0,10" />
 
-        <ListBox x:Name="VersionList" Grid.Row="1" SelectionChanged="OnSelectionChanged">
+        <ListBox x:Name="VersionList" Grid.Row="1" SelectionChanged="OnSelectionChanged"
+                 MouseDoubleClick="OnListDoubleClick">
             <ListBox.ItemTemplate>
                 <DataTemplate>
                     <Grid Margin="2,4">
