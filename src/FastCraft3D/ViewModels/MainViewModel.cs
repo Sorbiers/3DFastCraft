@@ -8025,10 +8025,15 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
         var selection = Scene.Selection;
         var before = selection.Select(TransformState.Capture).ToList();
 
-        foreach (var o in selection)
+        // With Each off an assembly goes down as one block, so its parts keep their places relative
+        // to each other: set down one by one the roof would land on the plate beside the walls.
+        // A part outside any assembly, and every part with Each on, is set down by itself.
+        foreach (var block in selection.GroupBy(o => o.Assembly is { } assembly && !EachOnItsOwn ? (object)assembly : o))
         {
-            float bottom = o.WorldBounds.Min.Z;
-            o.Position = o.Position with { Z = o.Position.Z - bottom };
+            var parts = block.ToList();
+            float bottom = parts.Min(o => o.WorldBounds.Min.Z);
+
+            foreach (var o in parts) o.Position = o.Position with { Z = o.Position.Z - bottom };
         }
 
         if (TransformCommand.CreateIfChanged("Align to plate", selection, before) is { } command)
