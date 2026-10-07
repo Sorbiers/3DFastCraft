@@ -47,6 +47,11 @@ Almost all of it is written by [Claude Code](https://claude.com/claude-code) fro
     as an assembly: picked, moved and copied by its name, each part still its own object.
     Windows, doors and dormers come with their glass as a part of its own, and the glass can
     be one clear sheet across the back, as thick as the frame is deep. Doors can be arched;
+    **Windows** begin with a **Type** - fixed (with its shapes), single hung, sliding or casement,
+    the sashes at two depths so the meeting rail shows, divided into lights by muntins - and any
+    square one can have an **architrave** (plain, with a lintel, pedimented) and false **shutters**
+    (louvered, paneled, planked), each a part of its own: on the wall when it stands, and laid
+    beside the window on its back when printed flat, so the facade prints up with nothing to support;
     stairs can have a porch; roofs can make their dormers separate parts, each standing in a
     hole cut to its footprint. While the panel is open the whole set is held, with Move,
     Rotate and Scale on it.
@@ -62,7 +67,9 @@ Almost all of it is written by [Claude Code](https://claude.com/claude-code) fro
 - **Subtract / Intersect / Merge** (Ctrl+- / Ctrl+=) - with **Subtract**, the cutter is the last
   one picked; a **tolerance** takes it out that much wider, so printed parts fit.
 - **Split** - with a plane you drag or type; keep either half or both.
-- **Set pivot** - turn and measure about a point you click (a shaft hole, a hinge line).
+- **Set pivot** - turn and measure about a point you click (a shaft hole, a hinge line). Resizing
+  grows a part away from its pivot, so the arrow on a face that lies on the pivot is left out
+  (**One way only** keeps every arrow).
 - **Round edges**, **Twist / Taper / Bend**, **Simplify**, **Smooth**, **Hollow**.
 - **Fill up** - fills what the part would hold if liquid were poured in from above, to a level:
   the inside of a cup or a box, a recess, a sealed hollow; a pocket open to the side fills only up
@@ -72,7 +79,8 @@ Almost all of it is written by [Claude Code](https://claude.com/claude-code) fro
 
 ### Align
 
-- **Drop to plate** - sets the selection on Z = 0.
+- **Drop to plate** - sets the selection on Z = 0. With **Each** off, an assembly goes down as
+  one block and keeps its parts' places; loose parts, and every part with Each on, go down alone.
 - **Drop down** (End) - moves the selection straight down until it rests on whatever is under it,
   or on the plate. It goes by the shapes, not their boxes, so crossed ridges stop where they
   meet. With **Ctrl** or **Shift** (or **Ctrl+End**) it sinks 0.2 mm into the part below, so
@@ -81,11 +89,14 @@ Almost all of it is written by [Claude Code](https://claude.com/claude-code) fro
   way up ranked for printing.
 - **Align to face** - click a face on *any* object; then for X, Y and Z choose a place on that
   face (near edge, middle, far edge) and the point of the selection that goes there. Near to
-  near sits it flush; near to far stands it beside. Red marks the place, blue the point.
+  near sits it flush; near to far stands it beside. Red marks the place, blue the point. Click the
+  wall of a **hole** - round, or with flat sides such as a window's opening - and it is taken
+  whole: the selection goes to the hole's middle across its axis and keeps its depth.
 - **Center face to face** - click a face on the selection, then one on another object: their
   middles meet on the axes you tick. Click the **side of a pin** or the **wall of a hole** and
   the round surface is taken whole, by its axis - Apply puts the pin on the hole's axis
-  (turning it parallel first, if asked) and the panel reads both diameters and the gap.
+  (turning it parallel first, if asked) and the panel reads both diameters and the gap. A hole
+  with flat sides is taken whole too, so a window frame can be put on the middle of its opening.
 - **Align, Distribute, Fit, Mirror** - line up on X, Y or Z, spread evenly, fit to the plate.
   **Distribute** can also lay each part on its **best face** and **drop** it to the plate, to
   arrange a print in one go.
@@ -130,7 +141,8 @@ Almost all of it is written by [Claude Code](https://claude.com/claude-code) fro
   Split and Connect), brick fit and thread clearance. **Printer profile test** in the Library prints
   every fit at once, a few samples either side of the profile's number or up from nought.
 - **Projects** are `.3mf` files: the plate as any slicer and Explorer see it, with the editable
-  project and its **versions** inside (**Ctrl+Alt+S** saves one, with a small picture of the plate); restore is an undo step. A `.3dfc` from before 4.3 is
+  project and its **versions** inside (**Ctrl+Alt+S** saves one, with a small picture of the plate;
+  double-click a version to restore it); restore is an undo step. A `.3dfc` from before 4.3 is
   imported, without its versions.
 - **Export** STL (binary or ASCII) or OBJ - everything or just the selection; reports
   triangles, volume and whether it is watertight before writing. For 3MF, save the project.
@@ -141,7 +153,8 @@ Almost all of it is written by [Claude Code](https://claude.com/claude-code) fro
 ### View
 
 - Axis views, **Wireframe**, **X-ray** (X), **Outline**, **Overhangs** (faces that will need
-  support), **Grid**.
+  support), **Grid**. A selected part of more than 200,000 triangles has no outline - tracing it
+  would cost more than it is worth - so its color deepens instead.
 - **Units** - mm, cm, m, in or ft; every box and tool panel reads in them. Models are always
   stored and exported in millimeters.
 - **Model scale** - set 1:87 and a second set of boxes reads real size beside the model's.
@@ -161,6 +174,9 @@ Almost all of it is written by [Claude Code](https://claude.com/claude-code) fro
 - **Number boxes** - every one, in every panel - take `+=5`, `-=5`, `*=1.5`, `/=2`; the wheel and
   arrows nudge (Shift ×10, Ctrl ×0.1), and a count stays whole. **Enter** applies, **Esc** takes
   back what was typed, and a box left holding something that is not a number goes back.
+- **Slow jobs say so** - opening or saving a big project, undo, redo and restoring a version put
+  "Opening...", "Saving...", "Undoing..." over the window while they run, and a second click or
+  key meanwhile is ignored.
 - **A tool in hand has the plate to itself** - only the selection is drawn until it is put down;
   **X-ray** shows the rest. Tools that pick a face on anything (align to face, center face to
   face, surface info, measure) keep everything.
