@@ -5,3 +5,6 @@ build/
 
 # Python leaves these beside the verifier
 __pycache__/
+
+# My own notes on patents and licences: kept here, not in the repository
+docs/ip-notes.md
