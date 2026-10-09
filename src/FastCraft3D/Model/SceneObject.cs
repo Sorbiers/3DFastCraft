@@ -381,6 +381,47 @@ public sealed class SceneObject : INotifyPropertyChanged
         return currentScale < 0 ? -magnitude : magnitude;
     }
 
+    /// <summary>
+    /// Reflects the object on the plate, through the plane across one of the plate's axes at
+    /// <paramref name="plane"/>.
+    ///
+    /// Negating the scale on its own is not this. The scale is applied before the turn, so it
+    /// mirrors along the object's own axis through its own origin: a part turned a quarter round
+    /// was flipped along the wrong line, and the parts of a selection were each flipped where they
+    /// stood, which left the arrangement exactly as it was. Carried back through the turn, a
+    /// reflection of the plate comes out as that same negated scale with the two angles about the
+    /// other axes reversed, and the origin goes to the far side of the plane.
+    /// </summary>
+    public void MirrorAcross(Axis axis, float plane)
+    {
+        switch (axis)
+        {
+            case Axis.X:
+                scale.X = -scale.X;
+                rotation = new Vector3(rotation.X, Reversed(rotation.Y), Reversed(rotation.Z));
+                position.X = 2f * plane - position.X;
+                break;
+
+            case Axis.Y:
+                scale.Y = -scale.Y;
+                rotation = new Vector3(Reversed(rotation.X), rotation.Y, Reversed(rotation.Z));
+                position.Y = 2f * plane - position.Y;
+                break;
+
+            default:
+                scale.Z = -scale.Z;
+                rotation = new Vector3(Reversed(rotation.X), Reversed(rotation.Y), rotation.Z);
+                position.Z = 2f * plane - position.Z;
+                break;
+        }
+
+        RaiseTransform();
+    }
+
+    /// <summary>Not a bare minus: that makes 0 into -0, which a box prints as "-0", and 180 into -180.</summary>
+    private static float Reversed(float degrees) =>
+        degrees == 0f ? 0f : degrees == 180f ? 180f : -degrees;
+
     public Matrix4x4 Transform => MeshTransform.Compose(position, rotation, scale);
 
     /// <summary>The marked features where they actually are on the plate.</summary>

@@ -8046,18 +8046,15 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
         var selection = Scene.Selection;
         var before = selection.Select(TransformState.Capture).ToList();
 
-        // Negating the scale is what mirrors; MeshTransform flips the winding to match, so the
-        // result still exports with outward-facing normals.
+        // As one, the selection is reflected through the middle of the lot, so the arrangement is
+        // mirrored along with the parts: what was on the left is on the right. Each on its own, a
+        // part is reflected through the middle of its own box. Either way what is mirrored stays
+        // in the box it was in. The scale comes out negative; MeshTransform flips the winding to
+        // match, so the result still exports with outward-facing normals.
+        float middle = Along(GroupCentre(), axis);
+
         foreach (var o in selection)
-        {
-            var s = o.Scale;
-            o.Scale = axis switch
-            {
-                Axis.X => s with { X = -s.X },
-                Axis.Y => s with { Y = -s.Y },
-                _ => s with { Z = -s.Z }
-            };
-        }
+            o.MirrorAcross(axis, EachOnItsOwn ? Along(o.WorldBounds.Center, axis) : middle);
 
         if (TransformCommand.CreateIfChanged($"Mirror {axis}", selection, before) is { } command)
             Undo.Execute(command);
