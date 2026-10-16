@@ -98,6 +98,8 @@ Almost all of it is written by [Claude Code](https://claude.com/claude-code) fro
   (turning it parallel first, if asked) and the panel reads both diameters and the gap. A hole
   with flat sides is taken whole too, so a window frame can be put on the middle of its opening.
 - **Align, Distribute, Fit, Mirror** - line up on X, Y or Z, spread evenly, fit to the plate.
+  **Mirror** reflects a selection of several parts as one, so they change sides (each part in its
+  own place with **Each** on), along the plate's axes however a part is turned.
   **Distribute** can also lay each part on its **best face** and **drop** it to the plate, to
   arrange a print in one go.
 
