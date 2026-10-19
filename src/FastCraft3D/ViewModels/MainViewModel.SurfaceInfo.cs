@@ -10,14 +10,18 @@ public sealed record SurfaceFact(string Label, string Value);
 
 /// <summary>
 /// Surface info: where a face is and how big - its middle, which way it faces, its size and area -
-/// read off by pointing at it. The face under the pointer lights up; a click reads it. Nothing is
-/// changed, so the tool stays out until Cancel and every click reads another face, on any object.
+/// read off by pointing at it. The face under the pointer lights up; a click reads it. Reading
+/// changes nothing, so the tool stays out until Cancel and every click reads another face, on any
+/// object. The one thing it can change is the face read, and only when asked: Rebuild face lays it
+/// again from its outline (see MainViewModel.RebuildFace.cs).
 /// </summary>
 public partial class MainViewModel
 {
     private bool isSurfaceInfoMode;
     private FacePatch? infoHover, infoFace;
     private string? infoObject;
+    private SceneObject? infoTarget;
+    private Vector3 infoPoint, infoNormal;
     private ICommand? beginSurfaceInfo, cancelSurfaceInfo;
 
     /// <summary>
@@ -43,6 +47,7 @@ public partial class MainViewModel
             {
                 infoHover = infoFace = null;
                 infoObject = null;
+                infoTarget = null;
                 infoMeshes.Clear();
                 RaiseSurfaceInfo();
             }
@@ -85,6 +90,7 @@ public partial class MainViewModel
 
         infoHover = infoFace = null;
         infoObject = null;
+        infoTarget = null;
         infoMeshes.Clear();
         IsSurfaceInfoMode = true;
         RaiseSurfaceInfo();
@@ -129,6 +135,9 @@ public partial class MainViewModel
 
         infoFace = infoHover = face;
         infoObject = target.Name;
+        infoTarget = target;
+        infoPoint = worldPoint;
+        infoNormal = worldNormal;
         RaiseSurfaceInfo();
         Status = $"Read a face on {target.Name}";
         return true;
@@ -171,6 +180,7 @@ public partial class MainViewModel
                 new("Normal", $"{n.X:0.###}, {n.Y:0.###}, {n.Z:0.###}"),
                 new("Size", $"{L(face.Size.X)} × {L(face.Size.Y)} {unit.Label}"),
                 new("Area", $"{area:0.##} {unit.Label}²"),
+                new("Triangles", TrianglesOf(face)),
                 new("From", $"X {L(low.X)}   Y {L(low.Y)}   Z {L(low.Z)}"),
                 new("To", $"X {L(high.X)}   Y {L(high.Y)}   Z {L(high.Z)}")
             };

@@ -446,3 +446,36 @@ public sealed class ColourCommand(
         return before.All(c => c == colour) ? null : new ColourCommand(label, objects, before, colour);
     }
 }
+
+/// <summary>
+/// The same object given another mesh of the same shape, such as a face laid again.
+///
+/// The object itself stays, rather than being swapped for a copy as the booleans do: nothing about
+/// it but its triangles has changed, so its place in the list, its assembly, its marks and its
+/// pivot all carry on. The Mesh setter clears the marks and the pivot because new geometry usually
+/// means a new shape; here it does not, so they are put straight back, and the recipe is bound
+/// to the new mesh so Edit settings still works.
+/// </summary>
+public sealed class ReshapeCommand(string label, SceneObject target, Geometry.Mesh before, Geometry.Mesh after) : IUndoableCommand
+{
+    public string Label { get; } = label;
+
+    public long Bytes => (long)(before.Positions.Count + after.Positions.Count) * 12
+                       + (long)(before.Indices.Count + after.Indices.Count) * 4;
+
+    public void Apply(Scene scene) => Swap(after);
+
+    public void Revert(Scene scene) => Swap(before);
+
+    private void Swap(Geometry.Mesh mesh)
+    {
+        var anchors = target.Anchors.ToList();
+        bool ownPivot = target.PivotIsOwn;
+        var recipe = target.Recipe;
+
+        target.Mesh = mesh;
+        target.Anchors = anchors;
+        target.PivotIsOwn = ownPivot;
+        if (recipe is not null) target.Recipe = recipe;
+    }
+}

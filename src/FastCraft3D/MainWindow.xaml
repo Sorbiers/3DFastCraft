@@ -655,6 +655,9 @@
                     <Button Style="{StaticResource ToolButton}" Content="Rebuild" Visibility="{Binding IsAdvancedMode, Converter={StaticResource BoolToVisibility}}" Tag="{StaticResource IconRebuild}"
                             Command="{Binding RebuildCommand}" MinWidth="82"
                             ToolTip="Rebuild the surface from scratch. Mends anything, including a model that passes through itself - at the cost of fine detail." />
+                    <Button Style="{StaticResource ToolButton}" Content="Rebuild by outline" Visibility="{Binding IsAdvancedMode, Converter={StaticResource BoolToVisibility}}" Tag="{StaticResource IconRebuild}"
+                            Command="{Binding RebuildByOutlineCommand}" MinWidth="82" AutomationProperties.AutomationId="RebuildByOutline"
+                            ToolTip="Rebuild the selection from its corners: points in the middle of flat faces and along straight edges go, and every flat face is filled again from its outline. The shape does not change. Faces with holes are left as they are." />
                     <Separator Margin="8,0" />
                     <Button Style="{StaticResource ToolButton}" Content="Voronoi" Visibility="{Binding IsAdvancedMode, Converter={StaticResource BoolToVisibility}}" Tag="{StaticResource IconVoronoi}"
                             Command="{Binding VoronoiCommand}" MinWidth="82"
@@ -1240,7 +1243,7 @@
                     <view:ColumnFlow>
                         <TextBlock Text="Surface info" FontWeight="SemiBold" Margin="0,0,0,6" />
                         <TextBlock TextWrapping="Wrap" Foreground="#FF5A5F66" Margin="0,0,0,8"
-                                   Text="Point at a face on any object to light it; click to read it. Click another to read that one." />
+                                   Text="Point at a face on any object to light it; click to read it. Click another to read that one. Rebuild face lays the face read again from its outline." />
                         <ItemsControl ItemsSource="{Binding SurfaceFacts}" Margin="0,0,0,8" AutomationProperties.AutomationId="SurfaceFacts"
                                       Visibility="{Binding HasSurfaceInfo, Converter={StaticResource BoolToVisibility}}">
                             <ItemsControl.ItemTemplate>
@@ -1257,8 +1260,14 @@
                                 </DataTemplate>
                             </ItemsControl.ItemTemplate>
                         </ItemsControl>
-                        <Button Content="Cancel" Style="{StaticResource PanelButton}" HorizontalAlignment="Left"
-                                Command="{Binding CancelSurfaceInfoCommand}" />
+                        <StackPanel Orientation="Horizontal">
+                            <Button Content="Rebuild face" Style="{StaticResource PanelButton}" Margin="0,0,6,0"
+                                    Command="{Binding RebuildFaceCommand}" AutomationProperties.AutomationId="RebuildFace"
+                                    ToolTip="Lay this face again with as few triangles as its outline needs. The points inside it go; its outline and the shape stay exactly as they are."
+                                    Visibility="{Binding HasSurfaceInfo, Converter={StaticResource BoolToVisibility}}" />
+                            <Button Content="Cancel" Style="{StaticResource PanelButton}"
+                                    Command="{Binding CancelSurfaceInfoCommand}" />
+                        </StackPanel>
                     </view:ColumnFlow>
                 </Border>
 
