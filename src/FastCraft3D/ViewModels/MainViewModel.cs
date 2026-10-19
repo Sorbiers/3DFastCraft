@@ -9218,6 +9218,12 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
         var dialog = new RebuildDialog(targets);
         if (dialog.ShowDialog() != true || dialog.Result is not { } resolution) return;
 
+        if (dialog.KeepShape)
+        {
+            RebuildKeepingShape(targets, dialog.Tolerance);
+            return;
+        }
+
         if (IsBusy) return;
 
         var token = StartWork($"Rebuilding {targets.Count} object(s)");

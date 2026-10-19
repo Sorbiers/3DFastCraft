@@ -1,33 +1,25 @@
-using System.Windows.Input;
 using FastCraft3D.Geometry;
+using FastCraft3D.Model;
 using FastCraft3D.Model.Commands;
-using FastCraft3D.View;
 
 namespace FastCraft3D.ViewModels;
 
 /// <summary>
-/// Rebuild by outline: each selected object rebuilt from its corners, every flat face filled
-/// again from the corners on its outline. See <see cref="OutlineRebuild"/>. The objects stay the
-/// same objects - only their triangles change - so this is one undo step that swaps meshes.
+/// Rebuild, keeping the shape: each object rebuilt from its corners, every flat face filled again
+/// from the corners on its outline. See <see cref="OutlineRebuild"/>. Chosen in Rebuild's panel,
+/// beside rebuilding from scratch. The objects stay the same objects - only their triangles
+/// change - so this is one undo step that swaps meshes.
 /// </summary>
 public partial class MainViewModel
 {
-    private ICommand? rebuildByOutline;
-
-    public ICommand RebuildByOutlineCommand => rebuildByOutline ??= Track(RelayCommand.Simple(RebuildByOutline,
-        () => Scene.Selection.Any(o => !o.IsLocked)));
-
-    private void RebuildByOutline()
+    private void RebuildKeepingShape(IReadOnlyList<SceneObject> objects, float tolerance)
     {
-        var targets = Scene.Selection.Where(o => !o.IsLocked).ToList();
+        var targets = objects.Where(o => !o.IsLocked).ToList();
         if (targets.Count == 0) return;
-
-        var dialog = new OutlineRebuildDialog();
-        if (dialog.ShowDialog() != true || dialog.Result is not { } tolerance) return;
 
         long bytes = targets.Sum(o => (long)o.Mesh.Positions.Count * 12 + (long)o.Mesh.Indices.Count * 4);
 
-        Run(bytes >= SlowFromBytes, "Rebuilding by outline...", () =>
+        Run(bytes >= SlowFromBytes, "Rebuilding...", () =>
         {
             var steps = new List<IUndoableCommand>();
             int before = 0, after = 0, left = 0;
@@ -44,7 +36,7 @@ public partial class MainViewModel
                 before += result.TrianglesBefore;
                 after += result.TrianglesAfter;
                 left += result.FacesLeft;
-                steps.Add(new ReshapeCommand("Rebuild by outline", o, o.Mesh, result.Mesh));
+                steps.Add(new ReshapeCommand("Rebuild", o, o.Mesh, result.Mesh));
             }
 
             if (steps.Count == 0)
@@ -55,10 +47,10 @@ public partial class MainViewModel
                 return;
             }
 
-            Undo.Execute(steps.Count == 1 ? steps[0] : new CompoundCommand("Rebuild by outline", steps));
+            Undo.Execute(steps.Count == 1 ? steps[0] : new CompoundCommand("Rebuild", steps));
             RefreshSelection();
 
-            Status = $"Rebuilt by outline: {before:N0} triangles became {after:N0}"
+            Status = $"Rebuilt, keeping the shape: {before:N0} triangles became {after:N0}"
                    + (left > 0 ? $" - {left:N0} faces with holes left as they were" : "");
         });
     }

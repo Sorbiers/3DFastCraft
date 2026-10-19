@@ -37,7 +37,34 @@ public partial class RebuildDialog : ToolPanel
         ResolutionSlider.Maximum = VoxelRebuild.MaximumResolution;
         ResolutionSlider.Value = VoxelRebuild.DefaultResolution;
 
+        MergeBox.IsChecked = merge;
+        (fromScratch ? ScratchChoice : ShapeChoice).IsChecked = true;
+        OnModeChanged(this, new RoutedEventArgs());
+
         Describe();
+    }
+
+    /// <summary>
+    /// Remembered for the session. Keeping the shape comes first, since it costs nothing; once
+    /// someone has needed the other, or merging, the same model will need it again.
+    /// </summary>
+    private static bool fromScratch, merge;
+
+    /// <summary>Whether the shape is to be kept - Rebuild by outline - rather than rebuilt from voxels.</summary>
+    public bool KeepShape { get; private set; }
+
+    /// <summary>For keeping the shape: how flat a face has to be to be filled as one.</summary>
+    public float Tolerance { get; private set; } = OutlineRebuild.ToleranceMm;
+
+    private void OnModeChanged(object sender, RoutedEventArgs e)
+    {
+        if (ShapePanel is null || ScratchPanel is null) return;
+
+        bool scratch = ScratchChoice.IsChecked == true;
+        ShapePanel.IsEnabled = !scratch;
+        ScratchPanel.IsEnabled = scratch;
+        ShapePanel.Opacity = scratch ? 0.5 : 1;
+        ScratchPanel.Opacity = scratch ? 1 : 0.5;
     }
 
     /// <summary>The chosen resolution, or null when the dialog was cancelled.</summary>
@@ -101,6 +128,11 @@ public partial class RebuildDialog : ToolPanel
 
     private void OnAccept(object sender, RoutedEventArgs e)
     {
+        fromScratch = ScratchChoice.IsChecked == true;
+        merge = MergeBox.IsChecked == true;
+
+        KeepShape = !fromScratch;
+        Tolerance = merge ? OutlineRebuild.MergeToleranceMm : OutlineRebuild.ToleranceMm;
         Result = Resolution;
         DialogResult = true;
     }
