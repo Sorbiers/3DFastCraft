@@ -17,6 +17,11 @@ uncommitted and say what changed.
 **Do not update README.md as you go.** It is brought up to date in one pass before the context is
 compacted, not after every change. The same for the screenshot.
 
+**Use the scripts in `tools/dev` for repeated jobs; they print only what matters.**
+`check.ps1` builds (no argument) or runs tests by name (`check.ps1 FaceRebuild`, `-All` for the
+suite); `release.ps1 -Version x.y.z -Prepare`, then `-Notes <file>`, cuts a release;
+`site-release.ps1 -Version x.y.z` points the website at it. Test sparingly - the user tests.
+
 **Prefer one large tool call to several small ones.** Batch edits into a single script; do not
 re-read a file to confirm an edit landed.
 
