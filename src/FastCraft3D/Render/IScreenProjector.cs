@@ -56,7 +56,7 @@ public sealed class Viewport3DXProjector(Viewport3DX view) : IScreenProjector
     {
         get
         {
-            if (view.Camera is not PerspectiveCamera camera) return -Vector3.UnitZ;
+            if (view.Camera is not ProjectionCamera camera) return -Vector3.UnitZ;
             var d = camera.LookDirection;
             return new Vector3((float)d.X, (float)d.Y, (float)d.Z);
         }

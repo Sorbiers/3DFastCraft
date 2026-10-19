@@ -162,8 +162,10 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
     private Vector3 embossPick;
     private Bounds embossBounds = Bounds.Empty;
     private bool measureSnap = true;
-    private Vector3? measureFrom;
-    private Vector3? measureTo;
+    private readonly List<Vector3> measurePoints = [];
+    private bool measureMultipoint, measureLegs, measureFinished;
+    private bool measureKeep = true;
+    private readonly List<List<Vector3>> keptMeasures = [];
     private bool? damaged;
     private bool scaleOneSide;
     private bool aroundSelectionCentre = true;
@@ -177,6 +179,7 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
     private float distributeGap = 10f;
     private bool distributeBestFace, distributeDrop = true;
     private bool showWireframe;
+    private bool showOrthographic;
     private bool showXray;
     private bool showPlate = true;
     private float plateWidth = Scene.PlateSize;
@@ -4759,7 +4762,8 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
 
             Set(ref isMeasureMode, value);
             RaiseToolInHand();
-            if (!value) { measureFrom = null; measureTo = null; }
+            if (!value) { measurePoints.Clear(); keptMeasures.Clear(); }
+            measureFinished = false;
 
             RaiseMeasure();
         }
@@ -4772,24 +4776,151 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
         set => Set(ref measureSnap, value);
     }
 
-    public Vector3? MeasureFrom => measureFrom;
-    public Vector3? MeasureTo => measureTo;
+    /// <summary>
+    /// Click after click, each point joined to the last, with every stretch and the total read
+    /// off - a wall round its corners, a path. Off, the third click starts a fresh measurement.
+    /// </summary>
+    public bool MeasureMultipoint
+    {
+        get => measureMultipoint;
+        set
+        {
+            if (measureMultipoint == value) return;
+            Set(ref measureMultipoint, value);
 
-    public bool HasMeasurement => measureFrom is not null && measureTo is not null;
+            // A run of points read as one tape is not two measurements; keep the last two.
+            if (!value && measurePoints.Count > 2) measurePoints.RemoveRange(0, measurePoints.Count - 2);
+            RaiseMeasure();
+        }
+    }
+
+    /// <summary>
+    /// Each stretch also as the right triangle it makes with the plate: how far along the plate,
+    /// how far up, and the angles - the slope of a roof, the rise of a stair.
+    /// </summary>
+    public bool MeasureLegs
+    {
+        get => measureLegs;
+        set
+        {
+            if (measureLegs == value) return;
+            Set(ref measureLegs, value);
+            RaiseMeasure();
+        }
+    }
+
+    public IReadOnlyList<Vector3> MeasurePoints => measurePoints;
+
+    /// <summary>
+    /// Earlier measurements left on screen while the next is taken, the way rulers stay where
+    /// they were put: comparing two gaps, or reading a wall's length and its height together,
+    /// needs both at once. Clear takes them away.
+    /// </summary>
+    public bool MeasureKeep
+    {
+        get => measureKeep;
+        set
+        {
+            if (measureKeep == value) return;
+            Set(ref measureKeep, value);
+            if (!value) keptMeasures.Clear();
+            RaiseMeasure();
+        }
+    }
+
+    /// <summary>The measurements kept from before the one being taken.</summary>
+    public IReadOnlyList<IReadOnlyList<Vector3>> KeptMeasures => keptMeasures;
+
+    /// <summary>
+    /// Moves a point of a measurement kept from before, <paramref name="tape"/> counted in the
+    /// order they were taken; -1 is the one being taken now.
+    /// </summary>
+    public void MoveMeasurePoint(int tape, int index, Vector3 world)
+    {
+        if (tape < 0)
+        {
+            MoveMeasurePoint(index, world);
+            return;
+        }
+
+        if (!isMeasureMode || tape >= keptMeasures.Count || index < 0 || index >= keptMeasures[tape].Count) return;
+
+        keptMeasures[tape][index] = world;
+        RaiseMeasure();
+    }
+
+    /// <summary>
+    /// Whether the run of points is finished, by a right click: the tape stays to be read, stops
+    /// following the pointer, and the next click starts a fresh one.
+    /// </summary>
+    public bool MeasureFinished => measureFinished || (!measureMultipoint && measurePoints.Count >= 2);
+
+    /// <summary>Ends the run of points being measured, keeping it on screen.</summary>
+    public void FinishMeasure()
+    {
+        if (!isMeasureMode || measurePoints.Count == 0 || measureFinished) return;
+
+        measureFinished = true;
+        RaiseMeasure();
+    }
+
+    public Vector3? MeasureFrom => measurePoints.Count > 0 ? measurePoints[0] : null;
+    public Vector3? MeasureTo => measurePoints.Count > 1 ? measurePoints[1] : null;
+
+    public bool HasMeasurement => measurePoints.Count > 1;
+
+    /// <summary>How far along the plate, how far up, and the slope, of the stretch from one point to another.</summary>
+    public static (float Along, float Up, float SlopeDegrees) Legs(Vector3 a, Vector3 b)
+    {
+        float along = new Vector2(b.X - a.X, b.Y - a.Y).Length();
+        float up = MathF.Abs(b.Z - a.Z);
+        float slope = along < 1e-6f && up < 1e-6f ? 0f : MathF.Atan2(up, along) * 180f / MathF.PI;
+        return (along, up, slope);
+    }
 
     /// <summary>The reading, including the axis-by-axis gaps that a single number hides.</summary>
     public string MeasureSummary
     {
         get
         {
-            if (measureFrom is not { } a) return "Click the first point.";
-            if (measureTo is not { } b) return "Click the second point.";
+            if (measurePoints.Count == 0) return "Click the first point.";
+            if (measurePoints.Count == 1) return measureMultipoint ? "Click the next point." : "Click the second point.";
 
+            var a = measurePoints[^2];
+            var b = measurePoints[^1];
             var gap = Vector3.Abs(b - a);
-            return $"{Vector3.Distance(a, b):0.##} mm    "
-                 + $"X {gap.X:0.##}    Y {gap.Y:0.##}    Z {gap.Z:0.##} mm";
+            string reading = $"{Vector3.Distance(a, b):0.##} mm    "
+                           + $"X {gap.X:0.##}    Y {gap.Y:0.##}    Z {gap.Z:0.##} mm";
+
+            if (measureLegs)
+            {
+                var (along, up, slope) = Legs(a, b);
+                reading += $"{Environment.NewLine}Along the plate {along:0.##} mm, up {up:0.##} mm, "
+                         + $"{slope:0.#}° from level, {90f - slope:0.#}° from upright";
+            }
+
+            if (measureMultipoint && measurePoints.Count > 2)
+            {
+                float total = 0;
+                for (int i = 1; i < measurePoints.Count; i++) total += Vector3.Distance(measurePoints[i - 1], measurePoints[i]);
+                reading = $"Total {total:0.##} mm over {measurePoints.Count - 1} stretches{Environment.NewLine}Last: " + reading;
+            }
+
+            return reading;
         }
     }
+
+    /// <summary>Takes the points away and starts again, still measuring.</summary>
+    public System.Windows.Input.ICommand ClearMeasureCommand => clearMeasure ??= RelayCommand.Simple(() =>
+    {
+        measurePoints.Clear();
+        keptMeasures.Clear();
+        measureFinished = false;
+        RaiseMeasure();
+        Status = MeasureSummary;
+    });
+
+    private System.Windows.Input.ICommand? clearMeasure;
 
     /// <summary>
     /// While this is on, the Extrude down panel is open and the plane shows where the cut will go.
@@ -4954,11 +5085,10 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
         IsLayMode = false;
         IsAlignFaceMode = false;
         IsCentreFaceMode = false;
-        measureFrom = null;
-        measureTo = null;
+        measurePoints.Clear();
         IsMeasureMode = true;
 
-        Status = "Click two points to measure between them";
+        Status = "Click two points to measure between them; hold Ctrl to turn or pan the view over a part";
     }
 
     /// <summary>
@@ -4969,15 +5099,14 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
     {
         if (!isMeasureMode) return;
 
-        if (measureFrom is null || measureTo is not null)
+        if (MeasureFinished)
         {
-            measureFrom = world;
-            measureTo = null;
+            if (measureKeep && measurePoints.Count >= 2) keptMeasures.Add(measurePoints.ToList());
+            measurePoints.Clear();
         }
-        else
-        {
-            measureTo = world;
-        }
+
+        measureFinished = false;
+        measurePoints.Add(world);
 
         RaiseMeasure();
         Status = MeasureSummary;
@@ -4988,12 +5117,13 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
     /// twice - the first click is rarely on the exact corner meant, and re-clicking used to
     /// start a whole new measurement rather than adjust the one on screen.
     /// </summary>
-    public void MoveMeasurePoint(bool second, Vector3 world)
-    {
-        if (!isMeasureMode) return;
+    public void MoveMeasurePoint(bool second, Vector3 world) => MoveMeasurePoint(second ? 1 : 0, world);
 
-        if (second) measureTo = world;
-        else measureFrom = world;
+    public void MoveMeasurePoint(int index, Vector3 world)
+    {
+        if (!isMeasureMode || index < 0 || index >= measurePoints.Count) return;
+
+        measurePoints[index] = world;
 
         RaiseMeasure();
         Status = MeasureSummary;
@@ -5003,6 +5133,7 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
     {
         Raise(nameof(MeasureFrom));
         Raise(nameof(MeasureTo));
+        Raise(nameof(MeasurePoints));
         Raise(nameof(HasMeasurement));
         Raise(nameof(MeasureSummary));
         MeasureChanged?.Invoke();
@@ -5023,6 +5154,16 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
     {
         get => showWireframe;
         set { Set(ref showWireframe, value); ViewChanged?.Invoke(); }
+    }
+
+    /// <summary>
+    /// No perspective: parallel edges stay parallel and a size reads the same near and far, which is
+    /// what lining things up by eye in the Front, Top or Right view wants.
+    /// </summary>
+    public bool ShowOrthographic
+    {
+        get => showOrthographic;
+        set { Set(ref showOrthographic, value); ViewChanged?.Invoke(); }
     }
 
     /// <summary>Unselected objects go see-through, so a part inside another can be worked on.</summary>
@@ -6599,12 +6740,24 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
             return true;
         }
 
+        // Escape ends a run of measured points first, keeping it to be read, as a right click does.
+        if (openPanel is null && isMeasureMode && measureMultipoint && measurePoints.Count >= 2 && !measureFinished)
+        {
+            FinishMeasure();
+            Status = "Measurement finished - Escape again to stop measuring";
+            return true;
+        }
+
+        // The tools that only read the model have nothing to undo, and "nothing was changed" read
+        // as though something had been about to be.
+        string? said = null;
+
         if (openPanel is not null) openPanel.DialogResult = false;
         else if (IsSketchMode) IsSketchMode = false;
         else if (IsExtrudeMode) IsExtrudeMode = false;
         else if (IsConnectMode) IsConnectMode = false;
         else if (IsSplitMode) IsSplitMode = false;
-        else if (IsMeasureMode) IsMeasureMode = false;
+        else if (IsMeasureMode) { IsMeasureMode = false; said = "Stopped measuring"; }
         else if (IsEngraveMode) IsEngraveMode = false;
         else if (IsEmbossMode) IsEmbossMode = false;
         else if (IsLayMode) IsLayMode = false;
@@ -6612,11 +6765,11 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
         else if (IsAlignFaceMode) IsAlignFaceMode = false;
         else if (IsCentreFaceMode) IsCentreFaceMode = false;
         else if (IsWallMountMode) IsWallMountMode = false;
-        else if (IsSurfaceInfoMode) IsSurfaceInfoMode = false;
+        else if (IsSurfaceInfoMode) { IsSurfaceInfoMode = false; said = "Closed Surface info"; }
         else if (IsSubtractMode) IsSubtractMode = false;
         else return false;
 
-        Status = "Canceled - nothing was changed";
+        Status = said ?? "Canceled - nothing was changed";
         return true;
     }
 

@@ -46,7 +46,7 @@ public partial class MainWindow : Window
     private SketchOverlay? sketchTags;
 
     /// <summary>Which end of the tape is being dragged: 0, 1, or -1 for none.</summary>
-    private int heldMeasureEnd = -1;
+    private List<(int Tape, int Index)>? heldMeasure;
     private PlateLook? plateShown;
     private GizmoController? gizmo;
     private SplitPlaneGizmo? splitGizmo;
@@ -143,7 +143,21 @@ public partial class MainWindow : Window
 
         SetUpCustomTab();
         measure = new MeasureOverlay(MeasureLayer, new Viewport3DXProjector(View));
-        viewModel.MeasureChanged += () => measure.Show(viewModel.MeasureFrom, viewModel.MeasureTo);
+        // Shift down or up changes what a click on a point does, and the cursor over it, without
+        // waiting for the pointer to move.
+        PreviewKeyDown += (_, e) => { if (e.Key is Key.LeftShift or Key.RightShift && viewModel.IsMeasureMode) measure.Editing = true; };
+        PreviewKeyUp += (_, e) => { if (e.Key is Key.LeftShift or Key.RightShift) measure.Editing = false; };
+
+        viewModel.MeasureChanged += () =>
+        {
+            measure.Show(viewModel.MeasurePoints, viewModel.MeasureLegs, viewModel.MeasureMultipoint, viewModel.MeasureFinished,
+                viewModel.KeptMeasures);
+            if (!viewModel.IsMeasureMode)
+            {
+                measure.Hover(null);
+                snapShapes.Clear();
+            }
+        };
         sketchTags = new SketchOverlay(SketchLayer, new Viewport3DXProjector(View), SayLength);
         viewModel.SketchChanged += () =>
         {
@@ -1044,7 +1058,16 @@ public partial class MainWindow : Window
         View.InputBindings.Add(new MouseBinding(ViewportCommands.Rotate, new MouseGesture(MouseAction.LeftClick)));
         View.InputBindings.Add(new MouseBinding(ViewportCommands.Pan, new MouseGesture(MouseAction.RightClick)));
         View.InputBindings.Add(new MouseBinding(ViewportCommands.Zoom, new MouseGesture(MouseAction.MiddleClick)));
+
+        // The same with Ctrl held, which a gesture with no keys in it does not match: while
+        // measuring, Ctrl is how the view is moved over a part without putting a point down.
+        View.InputBindings.Add(new MouseBinding(ViewportCommands.Rotate, new MouseGesture(MouseAction.LeftClick, ModifierKeys.Control)));
+        View.InputBindings.Add(new MouseBinding(ViewportCommands.Pan, new MouseGesture(MouseAction.RightClick, ModifierKeys.Control)));
+        View.InputBindings.Add(new MouseBinding(ViewportCommands.Zoom, new MouseGesture(MouseAction.MiddleClick, ModifierKeys.Control)));
     }
+
+    /// <summary>The perspective camera's horizontal field of view, and what the orthographic one is sized to match.</summary>
+    private const double FieldOfViewDegrees = 45;
 
     private static PerspectiveCamera CreateCamera() => new()
     {
@@ -1054,8 +1077,50 @@ public partial class MainWindow : Window
         UpDirection = new Media3D.Vector3D(0, 0, 1),
         NearPlaneDistance = 0.5,
         FarPlaneDistance = 20000,
-        FieldOfView = 45
+        FieldOfView = FieldOfViewDegrees
     };
+
+    /// <summary>
+    /// Swaps the camera between perspective and orthographic when the View tab asks.
+    ///
+    /// A new camera rather than a setting on the old one: the toolkit has no such setting. It is
+    /// put where the old one was looking from, sized so the part at the middle of the view
+    /// stays the same size on screen - an orthographic camera has no distance, only a width, and
+    /// the width a 45 degree view covers at the point it is looking at is what keeps the switch
+    /// from jumping.
+    /// </summary>
+    private void ApplyProjection()
+    {
+        if (View.Camera is not ProjectionCamera now) return;
+
+        bool orthographic = viewModel.ShowOrthographic;
+        if (orthographic == now is OrthographicCamera) return;
+
+        var look = now.LookDirection;
+        double distance = look.Length;
+        if (distance < 1e-6) return;
+
+        var target = now.Position + look;
+        double halfTan = Math.Tan(FieldOfViewDegrees * Math.PI / 360.0);
+
+        ProjectionCamera next;
+        if (orthographic)
+        {
+            next = new OrthographicCamera { Width = 2 * distance * halfTan, Position = now.Position, LookDirection = look };
+        }
+        else
+        {
+            double width = now is OrthographicCamera ortho ? ortho.Width : 2 * distance * halfTan;
+            double back = Math.Max(width / (2 * halfTan), 1);
+            var along = look / distance;
+            next = new PerspectiveCamera { FieldOfView = FieldOfViewDegrees, Position = target - along * back, LookDirection = along * back };
+        }
+
+        next.UpDirection = now.UpDirection;
+        next.NearPlaneDistance = 0.5;
+        next.FarPlaneDistance = 20000;
+        View.Camera = next;
+    }
 
     // --- Dragging the ends of the tape -------------------------------------------------
     //
@@ -1065,10 +1130,11 @@ public partial class MainWindow : Window
 
     private void OnMeasureDown(object sender, MouseButtonEventArgs e)
     {
-        if (measure is null || !viewModel.IsMeasureMode) return;
+        if (measure is null || !viewModel.IsMeasureMode || IsControlDown || !IsShiftDown) return;
 
-        heldMeasureEnd = measure.EndAt(e.GetPosition(View));
-        if (heldMeasureEnd < 0) return;
+        var held = measure.PointsAt(e.GetPosition(View));
+        if (held.Count == 0) return;
+        heldMeasure = held;
 
         MeasureLayer.CaptureMouse();
         e.Handled = true;
@@ -1076,7 +1142,7 @@ public partial class MainWindow : Window
 
     private void OnMeasureMove(object sender, MouseEventArgs e)
     {
-        if (heldMeasureEnd < 0 || e.LeftButton != MouseButtonState.Pressed) return;
+        if (heldMeasure is not { } held || e.LeftButton != MouseButtonState.Pressed) return;
 
         var screen = e.GetPosition(View);
         var hit = FirstHit(screen);
@@ -1086,15 +1152,16 @@ public partial class MainWindow : Window
         // rather than flying off to wherever the ground plane happens to be.
         if (target is null) return;
 
-        viewModel.MoveMeasurePoint(heldMeasureEnd == 1, SnappedPoint(target, ToVector3(hit!.PointHit)));
+        var to = SnappedPoint(screen, target, ToVector3(hit!.PointHit));
+        foreach (var (tape, index) in held) viewModel.MoveMeasurePoint(tape, index, to);
         e.Handled = true;
     }
 
     private void OnMeasureUp(object sender, MouseButtonEventArgs e)
     {
-        if (heldMeasureEnd < 0) return;
+        if (heldMeasure is null) return;
 
-        heldMeasureEnd = -1;
+        heldMeasure = null;
         MeasureLayer.ReleaseMouseCapture();
         e.Handled = true;
     }
@@ -1169,7 +1236,18 @@ public partial class MainWindow : Window
         // thing a click means while it is out.
         if (viewModel.IsMeasureMode)
         {
-            viewModel.TakeMeasurePoint(SnappedPoint(target, ToVector3(hit!.PointHit)));
+            // Ctrl held hands the press to the camera alone - turn, pan, zoom - even over a part,
+            // where a plain press would put a point down. It picks and moves nothing.
+            if (IsControlDown) return;
+
+            // Shift is for taking hold of a point already down; off one, it puts nothing down.
+            if (IsShiftDown)
+            {
+                e.Handled = true;
+                return;
+            }
+
+            viewModel.TakeMeasurePoint(SnappedPoint(screen, target, ToVector3(hit!.PointHit)));
             e.Handled = true;
             return;
         }
@@ -1185,7 +1263,7 @@ public partial class MainWindow : Window
         // edge or the centre of a hole, and none of those is where the pointer actually landed.
         if (viewModel.IsPivotMode)
         {
-            viewModel.TakePivot(target, SnappedPoint(target, ToVector3(hit!.PointHit)));
+            viewModel.TakePivot(target, SnappedPoint(screen, target, ToVector3(hit!.PointHit)));
             RefreshPivotMark();
             e.Handled = true;
             return;
@@ -1297,6 +1375,103 @@ public partial class MainWindow : Window
 
         View.CaptureMouse();
         e.Handled = true; // suppress camera orbit while moving an object
+    }
+
+    /// <summary>
+    /// Each object's corners and edges on the plate, kept while measuring: the pointer asks on
+    /// every move, and nothing the tape measures moves while it is out.
+    /// </summary>
+    private readonly Dictionary<SceneObject, (Mesh Source, Matrix4x4 Transform, Mesh World, List<(Vector3 A, Vector3 B)> Edges)> snapShapes = [];
+
+    /// <summary>How near on screen a corner or an edge has to be to take the point, in pixels.</summary>
+    private const double SnapReachPixels = 12;
+
+    /// <summary>
+    /// Pulls a picked point onto the corner or edge under the pointer that is nearest the viewer.
+    ///
+    /// Measured on screen, not in the model. Looking straight down a wall, its top corner and its
+    /// foot are the same spot on screen, and the nearest corner in the model to a click on the
+    /// floor beside it was the foot: the tape went to the floor while the eye was on the top. So
+    /// every corner and edge within reach of the pointer on screen is a candidate, and the one
+    /// nearest the viewer wins - except anything behind the face under the pointer, which is
+    /// hidden by it.
+    /// </summary>
+    private Vector3 SnappedPoint(Point screen, SceneObject target, Vector3 hit)
+    {
+        if (!viewModel.MeasureSnap) return hit;
+        if (SnapShape(target) is not var (world, edges)) return SnappedPoint(target, hit);
+
+        var projector = new Viewport3DXProjector(View);
+        var view = projector.ViewDirection;
+        if (view.LengthSquared() < 1e-12f || SightLine(screen) is not var (origin, direction)) return hit;
+        view = Vector3.Normalize(view);
+
+        // Millimetres per pixel at the point hit, to rule out most of the mesh before projecting.
+        var across = Vector3.Normalize(Vector3.Cross(view, MathF.Abs(view.Z) < 0.9f ? Vector3.UnitZ : Vector3.UnitY));
+        if (!projector.TryProject(hit, out var onHit) || !projector.TryProject(hit + across, out var onAcross)) return hit;
+        double pixelsPerMm = (onAcross - onHit).Length;
+        if (pixelsPerMm < 1e-9) return hit;
+
+        float reachMm = (float)(SnapReachPixels / pixelsPerMm);
+        float hidden = Vector3.Dot(hit, view) + MathF.Max(reachMm * 0.25f, 0.05f);
+
+        Vector3? best = null;
+        float bestDepth = float.MaxValue;
+        double bestPixels = double.MaxValue;
+
+        void Consider(Vector3 p, double reach)
+        {
+            float depth = Vector3.Dot(p, view);
+            if (depth > hidden) return;
+            if (Vector3.Cross(p - origin, direction).Length() > reachMm * 2) return;
+            if (!projector.TryProject(p, out var at)) return;
+
+            double pixels = (at - screen).Length;
+            if (pixels > reach) return;
+
+            // Nearest the viewer first; between two at the same depth, nearest the pointer.
+            bool nearer = depth < bestDepth - 0.01f || (MathF.Abs(depth - bestDepth) <= 0.01f && pixels < bestPixels);
+            if (!nearer) return;
+
+            best = p;
+            bestDepth = depth;
+            bestPixels = pixels;
+        }
+
+        foreach (var p in world.Positions) Consider(p, SnapReachPixels);
+        foreach (var (a, b) in edges) Consider((a + b) * 0.5f, SnapReachPixels);
+        if (best is { } corner) return corner;
+
+        foreach (var (a, b) in edges) Consider(ClosestOnSegment(a, b, origin, direction), SnapReachPixels * 0.75);
+        return best ?? hit;
+    }
+
+    /// <summary>The point of the segment from <paramref name="a"/> to <paramref name="b"/> nearest the sight line.</summary>
+    private static Vector3 ClosestOnSegment(Vector3 a, Vector3 b, Vector3 origin, Vector3 direction)
+    {
+        var u = b - a;
+        var w = a - origin;
+        float uu = Vector3.Dot(u, u), ud = Vector3.Dot(u, direction), dd = Vector3.Dot(direction, direction);
+        float uw = Vector3.Dot(u, w), dw = Vector3.Dot(direction, w);
+        float denominator = uu * dd - ud * ud;
+        float s = denominator < 1e-12f ? 0f : Math.Clamp((ud * dw - dd * uw) / denominator, 0f, 1f);
+        return a + u * s;
+    }
+
+    private (Mesh World, List<(Vector3 A, Vector3 B)> Edges)? SnapShape(SceneObject o)
+    {
+        // Past this, walking every corner on every move of the pointer is felt; the old snap,
+        // nearest in the model, is cheap enough and still right most of the time.
+        if (o.Mesh.TriangleCount > 300_000) return null;
+
+        var transform = o.Transform;
+        if (snapShapes.TryGetValue(o, out var kept) && ReferenceEquals(kept.Source, o.Mesh) && kept.Transform == transform)
+            return (kept.World, kept.Edges);
+
+        var world = o.ToWorldMesh();
+        var edges = FeatureEdges.Build(world);
+        snapShapes[o] = (o.Mesh, transform, world, edges);
+        return (world, edges);
     }
 
     /// <summary>
@@ -1421,6 +1596,13 @@ public partial class MainWindow : Window
     /// </summary>
     private void OnViewportRightUp(object sender, MouseButtonEventArgs e)
     {
+        // The same for a run of measured points: a right click ends it, and leaves it to be read.
+        if (viewModel.IsMeasureMode && IsClick(e.GetPosition(View), rightPressScreen))
+        {
+            viewModel.FinishMeasure();
+            return;
+        }
+
         if (!viewModel.IsSketchMode || !viewModel.CurrentSketch.IsDrawing) return;
         if (!IsClick(e.GetPosition(View), rightPressScreen)) return;
 
@@ -1464,6 +1646,15 @@ public partial class MainWindow : Window
 
     private void OnViewportMove(object sender, MouseEventArgs e)
     {
+        if (viewModel.IsMeasureMode && heldMeasure is null && measure is not null)
+        {
+            measure.Editing = IsShiftDown;
+            var pointer = e.GetPosition(View);
+            var under = FirstHit(pointer);
+            var target = renderer?.Resolve(under?.ModelHit);
+            measure.Hover(target is null || IsControlDown || IsShiftDown ? null : SnappedPoint(pointer, target, ToVector3(under!.PointHit)));
+        }
+
         if (viewModel.IsPivotMode) RefreshPivotMark(e.GetPosition(View));
 
         if (viewModel.IsAlignFaceMode)
@@ -1977,8 +2168,10 @@ public partial class MainWindow : Window
         if (renderer is null) return;
 
         renderer.Wireframe = viewModel.ShowWireframe;
+        ApplyProjection();
         renderer.Xray = viewModel.ShowXray;
         renderer.ShowOutlines = viewModel.ShowOutlines;
+        renderer.ShowEdges = viewModel.ShowOrthographic;
         renderer.ShowReflections = viewModel.ShowReflections;
         RefreshFocus();
         renderer.ShowOverhangs(viewModel.ShowOverhangs, viewModel.OverhangAngle, viewModel.OverhangColour);
@@ -2378,7 +2571,7 @@ public partial class MainWindow : Window
     private void ZoomExtents()
     {
         if (viewModel.Scene.Objects.Count == 0) return;
-        if (View.Camera is not PerspectiveCamera camera) return;
+        if (View.Camera is not ProjectionCamera camera) return;
 
         var back = -camera.LookDirection;
         if (back.Length < 1e-6) return;
@@ -2551,12 +2744,12 @@ public partial class MainWindow : Window
     private (Media3D.Point3D Position, Media3D.Vector3D Look, Media3D.Vector3D Up)? viewBeforeSketch;
 
     private (Media3D.Point3D, Media3D.Vector3D, Media3D.Vector3D)? CameraNow() =>
-        View.Camera is PerspectiveCamera camera ? (camera.Position, camera.LookDirection, camera.UpDirection) : null;
+        View.Camera is ProjectionCamera camera ? (camera.Position, camera.LookDirection, camera.UpDirection) : null;
 
     /// <summary>Puts the camera back where it was when the sketch took it to the top: leaving a sketch without a solid is leaving the view alone.</summary>
     private void RestoreViewBeforeSketch()
     {
-        if (viewBeforeSketch is { } view && View.Camera is PerspectiveCamera camera)
+        if (viewBeforeSketch is { } view && View.Camera is ProjectionCamera camera)
         {
             camera.Position = view.Position;
             camera.LookDirection = view.Look;
@@ -2613,7 +2806,7 @@ public partial class MainWindow : Window
     {
         // The frame tick can arrive before the window has finished putting itself together, and
         // this runs ahead of the gizmo check that used to be the guard for everything below it.
-        if (KeyLight is null || View?.Camera is not PerspectiveCamera camera) return;
+        if (KeyLight is null || View?.Camera is not ProjectionCamera camera) return;
 
         var forward = camera.LookDirection;
         if (forward.Length < 1e-6) return;
@@ -2659,14 +2852,14 @@ public partial class MainWindow : Window
 
     private void LookFrom(Media3D.Vector3D direction, Media3D.Vector3D up, Bounds? frame = null)
     {
-        if (View.Camera is not PerspectiveCamera camera) return;
+        if (View.Camera is not ProjectionCamera camera) return;
 
         up = Upright(direction, up);
         direction.Normalize();
 
         var bounds = frame ?? viewModel.Scene.ComputeShownBounds();
         var centre = bounds.IsEmpty ? new Vector3(0, 0, 0) : bounds.Center;
-        double distance = bounds.IsEmpty ? 320 : DistanceToFit(bounds, direction, up, camera.FieldOfView);
+        double distance = bounds.IsEmpty ? 320 : DistanceToFit(bounds, direction, up, FieldOfViewDegrees);
 
         camera.Position = new Media3D.Point3D(
             centre.X + direction.X * distance,
@@ -2674,6 +2867,11 @@ public partial class MainWindow : Window
             centre.Z + direction.Z * distance);
         camera.LookDirection = new Media3D.Vector3D(-direction.X * distance, -direction.Y * distance, -direction.Z * distance);
         camera.UpDirection = up;
+
+        // Orthographic has no distance to back off by, only a width: the one a perspective view
+        // covers from that far back.
+        if (camera is OrthographicCamera ortho)
+            ortho.Width = 2 * distance * Math.Tan(FieldOfViewDegrees * Math.PI / 360.0);
     }
 
     /// <summary>

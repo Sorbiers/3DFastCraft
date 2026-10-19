@@ -779,6 +779,9 @@
                     <Button Style="{StaticResource ToolButton}" Content="Bottom" Tag="{StaticResource IconViewTop}" Click="OnViewBottom" />
                     <Button Style="{StaticResource ToolButton}" Content="Isometric" Tag="{StaticResource IconViewIso}" Click="OnViewIso" ToolTip="Look from the front right, above (4)" />
                     <Separator Visibility="{Binding IsAdvancedMode, Converter={StaticResource BoolToVisibility}}" Margin="8,0" />
+                    <ToggleButton Style="{StaticResource ToolToggle}" Content="Orthographic" Tag="{StaticResource IconViewIso}"
+                                  IsChecked="{Binding ShowOrthographic}" MinWidth="88" AutomationProperties.AutomationId="Orthographic"
+                                  ToolTip="No perspective: parallel edges stay parallel and sizes read the same near and far - for lining things up in the Front, Top or Right view" />
                     <ToggleButton Style="{StaticResource ToolToggle}" Content="Wireframe" Tag="{StaticResource IconWireframe}"
                                   IsChecked="{Binding ShowWireframe}" MinWidth="80"
                                   ToolTip="Draw every triangle edge - useful for seeing how dense an import is" />
@@ -1494,9 +1497,24 @@
                                    Foreground="#FF3A4550" Margin="0,0,0,8" />
                         <CheckBox Content="Snap to corners and edges" Margin="0,0,0,8"
                                   IsChecked="{Binding MeasureSnap, Mode=TwoWay}"
-                                  ToolTip="Pull each click onto the nearest corner or edge midpoint, so the reading is exact" />
-                        <Button Content="Done" Style="{StaticResource PanelButton}"
-                                Command="{Binding CancelMeasureCommand}" HorizontalAlignment="Left" />
+                                  ToolTip="Pull each click onto the corner or edge under the pointer that is nearest you, so the reading is exact" />
+                        <CheckBox Content="Several points" Margin="0,0,0,8" AutomationProperties.AutomationId="MeasureSeveral"
+                                  IsChecked="{Binding MeasureMultipoint, Mode=TwoWay}"
+                                  ToolTip="Each click joins the last: every stretch is read, and the total. Clear starts again." />
+                        <CheckBox Content="Legs and angles" Margin="0,0,0,8" AutomationProperties.AutomationId="MeasureLegs"
+                                  IsChecked="{Binding MeasureLegs, Mode=TwoWay}"
+                                  ToolTip="Also read each stretch as a right triangle on the plate: how far along, how far up, and the angles - the slope of a roof, the rise of a stair" />
+                        <CheckBox Content="Keep each measurement" Margin="0,0,0,8" AutomationProperties.AutomationId="MeasureKeep"
+                                  IsChecked="{Binding MeasureKeep, Mode=TwoWay}"
+                                  ToolTip="Leave earlier measurements on screen while the next is taken. Clear takes them all away." />
+                        <TextBlock Text="Right click or Escape ends a run of points. Hold Shift to drag a point already down. Hold Ctrl to turn, pan or zoom the view over a part without measuring."
+                                   TextWrapping="Wrap" Foreground="#FF5A5F66" Margin="0,0,0,8" />
+                        <StackPanel Orientation="Horizontal">
+                            <Button Content="Clear" Style="{StaticResource PanelButton}" Margin="0,0,6,0"
+                                    Command="{Binding ClearMeasureCommand}" AutomationProperties.AutomationId="ClearMeasure" />
+                            <Button Content="Done" Style="{StaticResource PanelButton}"
+                                    Command="{Binding CancelMeasureCommand}" />
+                        </StackPanel>
                     </view:ColumnFlow>
                 </Border>
 

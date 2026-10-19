@@ -38,6 +38,15 @@ public sealed class SceneRenderer : IDisposable
 {
     private static readonly Color OutlineColour = Colors.White;
 
+    /// <summary>
+    /// Every object's edges, drawn dark, for the orthographic view: seen straight on, every face
+    /// that points the same way is lit the same, and a plan of white walls on a white floor was
+    /// one white shape. Selected parts are drawn in the selection blue, since white on white
+    /// would say nothing.
+    /// </summary>
+    private static readonly Color EdgeColour = Color.FromRgb(0x3A, 0x42, 0x4C);
+    private static readonly Color SelectedEdgeColour = Color.FromRgb(0x3E, 0x7B, 0xD6);
+
     /// <summary>Matches the repair banner's border, so the same red means the same thing in both places.</summary>
     private static readonly Color DamagedOutlineColour = Color.FromRgb(0xD6, 0x45, 0x45);
 
@@ -615,6 +624,27 @@ public sealed class SceneRenderer : IDisposable
             foreach (var o in visuals.Keys.ToList()) UpdateOutline(o);
         }
     }
+
+    /// <summary>Every object's edges drawn, not just the selection's: see <see cref="EdgeColour"/>.</summary>
+    public bool ShowEdges
+    {
+        get => showEdges;
+        set
+        {
+            if (showEdges == value) return;
+
+            Invalidate();
+            showEdges = value;
+
+            foreach (var o in visuals.Keys.ToList())
+            {
+                RemoveOutline(o); // the thickness changes with it, and a traced outline only takes a new colour
+                UpdateOutline(o);
+            }
+        }
+    }
+
+    private bool showEdges;
 
     /// <summary>
     /// Whether the plate reflects what stands on it, the way a glossy print bed does.
@@ -1211,20 +1241,25 @@ public sealed class SceneRenderer : IDisposable
 
         bool damaged = !o.Health.IsWatertight;
 
-        if (!showOutlines || (!o.IsSelected && !damaged))
+        if (showEdges ? false : !showOutlines || (!o.IsSelected && !damaged))
         {
             RemoveOutline(o);
             return;
         }
 
         // Broken wins: that is the one that needs doing something about.
-        var colour = damaged ? DamagedOutlineColour : o.InPickedAssembly ? AssemblyOutlineColour : OutlineColour;
+        var colour = damaged ? DamagedOutlineColour
+            : o.InPickedAssembly ? AssemblyOutlineColour
+            : !showEdges ? OutlineColour
+            : o.IsSelected ? SelectedEdgeColour
+            : EdgeColour;
 
         // Already traced: the edges are the same, and only what it says may have changed - a part
         // whose assembly was picked or let go of keeps its outline and changes its colour.
         if (outlines.TryGetValue(o, out var traced))
         {
             traced.Color = colour;
+            traced.Thickness = damaged ? 2.2 : showEdges && !o.IsSelected ? 1.0 : 1.4;
             return;
         }
 
@@ -1245,7 +1280,7 @@ public sealed class SceneRenderer : IDisposable
         {
             Geometry = builder.ToLineGeometry3D(),
             Color = colour,
-            Thickness = damaged ? 2.2 : 1.4,
+            Thickness = damaged ? 2.2 : showEdges && !o.IsSelected ? 1.0 : 1.4,
             Transform = MeshConverter.ToTransform(o.Transform),
             IsHitTestVisible = false // picking must still hit the solid underneath
         };
