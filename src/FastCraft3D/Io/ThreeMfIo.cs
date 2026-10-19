@@ -26,6 +26,29 @@ public static class ThreeMf
     private const string ThumbnailPath = "Metadata/thumbnail.png";
 
     /// <summary>
+    /// The package's picture, read without reading the model: the Recent list shows one for
+    /// each project, and opening every project to draw it would take as long as opening them.
+    /// Null for a file without one or that will not open.
+    /// </summary>
+    public static byte[]? ReadThumbnail(string path)
+    {
+        try
+        {
+            using var zip = ZipFile.OpenRead(path);
+            if (zip.GetEntry(ThumbnailPath) is not { } entry) return null;
+
+            using var stream = entry.Open();
+            using var copy = new MemoryStream();
+            stream.CopyTo(copy);
+            return copy.ToArray();
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    /// <summary>
     /// Where a slicer of the PrusaSlicer family keeps what the core format has no place for.
     ///
     /// Which filament prints a part is one of those. The core format carries a colour per object

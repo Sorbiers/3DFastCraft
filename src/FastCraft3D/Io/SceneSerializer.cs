@@ -20,7 +20,8 @@ public readonly record struct SceneVersion(string Label, DateTime SavedUtc, int 
 /// <param name="PlateHeight">How tall a part the printer takes.</param>
 /// <param name="Unit">What the boxes read in - "mm", "in" and so on.</param>
 /// <param name="ModelScale">87 for a model drawn at 1:87.</param>
-public readonly record struct ProjectSettings(float PlateWidth, float PlateDepth, float PlateHeight, string Unit, float ModelScale);
+/// <param name="Notes">What the Project page's notes say, or null for none.</param>
+public readonly record struct ProjectSettings(float PlateWidth, float PlateDepth, float PlateHeight, string Unit, float ModelScale, string? Notes = null);
 
 /// <summary>
 /// The project format: a 3MF with the project inside it, beside the model.
@@ -176,7 +177,7 @@ public static class SceneSerializer
         float? width = dto.PlateWidth ?? dto.PlateSize;
         float? depth = dto.PlateDepth ?? dto.PlateSize;
         settings = width is { } w && depth is { } d && dto.Unit is { } unit && dto.ModelScale is { } scale
-            ? new ProjectSettings(w, d, dto.PlateHeight ?? Scene.PrintHeight, unit, scale)
+            ? new ProjectSettings(w, d, dto.PlateHeight ?? Scene.PrintHeight, unit, scale, dto.Notes)
             : null;
         return Objects(dto.Objects, dto.Assemblies);
     }
@@ -198,7 +199,11 @@ public static class SceneSerializer
         dto.PlateHeight = s.PlateHeight;
         dto.Unit = s.Unit;
         dto.ModelScale = s.ModelScale;
+        dto.Notes = string.IsNullOrWhiteSpace(s.Notes) ? null : s.Notes;
     }
+
+    /// <summary>The picture saved in a project, for the Recent list, or null for a file without one.</summary>
+    public static byte[]? ReadThumbnail(string path) => ThreeMf.ReadThumbnail(path);
 
     /// <summary>The versions kept in a file, oldest first.</summary>
     public static List<SceneVersion> ReadVersions(string path)
@@ -524,6 +529,7 @@ public static class SceneSerializer
         public float? PlateHeight { get; set; }
         public string? Unit { get; set; }
         public float? ModelScale { get; set; }
+        public string? Notes { get; set; }
     }
 
     private sealed class VersionDto

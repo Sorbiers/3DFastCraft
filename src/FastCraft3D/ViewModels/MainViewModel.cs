@@ -517,12 +517,56 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
 
     /// <summary>Recently opened projects, most recent first, for the File tab.</summary>
     public IReadOnlyList<RecentEntry> RecentFiles => recent.Paths
-        .Select(p => new RecentEntry(Path.GetFileNameWithoutExtension(p), p))
+        .Select(p => recentEntries.TryGetValue(p, out var known) ? known : recentEntries[p] = new RecentEntry(p))
         .ToList();
 
-    /// <param name="Name">What to show.</param>
-    /// <param name="Path">The full path, shown as a tooltip and used to open it.</param>
-    public readonly record struct RecentEntry(string Name, string Path);
+    /// <summary>The same entry each time, so a picture read once is not read again.</summary>
+    private readonly Dictionary<string, RecentEntry> recentEntries = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// Reads the picture of each recent project that does not have one yet, or whose file has
+    /// changed since, one after another off the interface's thread. Called as the list opens: the
+    /// names are there at once and the pictures arrive under them.
+    /// </summary>
+    public async Task LoadRecentPicturesAsync()
+    {
+        foreach (var entry in RecentFiles) await entry.LoadPictureAsync();
+    }
+
+    /// <summary>One project in the Recent list.</summary>
+    public sealed class RecentEntry(string path) : System.ComponentModel.INotifyPropertyChanged
+    {
+        private byte[]? picture;
+        private DateTime readFrom;
+
+        /// <summary>What to show.</summary>
+        public string Name { get; } = System.IO.Path.GetFileNameWithoutExtension(path);
+
+        /// <summary>The full path, shown as a tooltip and used to open it.</summary>
+        public string Path { get; } = path;
+
+        /// <summary>The PNG saved in the project, once it has been read; null before, or for a file without one.</summary>
+        public byte[]? Picture
+        {
+            get => picture;
+            private set
+            {
+                picture = value;
+                PropertyChanged?.Invoke(this, new System.ComponentModel.PropertyChangedEventArgs(nameof(Picture)));
+            }
+        }
+
+        public event System.ComponentModel.PropertyChangedEventHandler? PropertyChanged;
+
+        public async Task LoadPictureAsync()
+        {
+            var stamp = File.Exists(Path) ? File.GetLastWriteTimeUtc(Path) : default;
+            if (stamp == readFrom) return;
+
+            readFrom = stamp;
+            Picture = stamp == default ? null : await Task.Run(() => SceneSerializer.ReadThumbnail(Path));
+        }
+    }
 
     /// <summary>Raised when geometry changed enough that the camera should reframe.</summary>
     public event Action? ZoomExtentsRequested;
@@ -5518,7 +5562,8 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
     }
 
     /// <summary>The bed, the unit and the scale, as the project file and the local settings keep them.</summary>
-    public ProjectSettings ViewSettings => new(plateWidth, plateDepth, plateHeight, unit.Label, modelScale);
+    public ProjectSettings ViewSettings => new(plateWidth, plateDepth, plateHeight, unit.Label, modelScale,
+        projectNotes.Length > 0 ? projectNotes : null);
 
     /// <summary>Raised when the bed, the unit or the scale changes, for the window to remember it.</summary>
     public event Action? SettingsChanged;
@@ -5530,6 +5575,8 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
         PlateHeight = settings.PlateHeight;
         Unit = MeasureUnit.All.FirstOrDefault(u => u.Label == settings.Unit, MeasureUnit.Default);
         ModelScale = settings.ModelScale;
+        projectNotes = settings.Notes ?? "";
+        Raise(nameof(ProjectNotes));
     }
 
     /// <summary>The bed and unit last used; the scale belongs to a project and is not carried over.</summary>
@@ -10438,6 +10485,7 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
         openedFrom = null;
         inventedName = null; // a new project, so a new name for it
         ModelScale = 1f; // the scale was the last project's, not this one's
+        projectNotes = ""; // and so were the notes
         IsDirty = false;
         RefreshSelection();
         Status = "New scene";
@@ -10480,7 +10528,11 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
             // A file from before the scale was kept is taken as life size rather than inheriting
             // whatever the last project was drawn at.
             if (settings is { } kept) ApplySettings(kept);
-            else ModelScale = 1f;
+            else
+            {
+                ModelScale = 1f;
+                projectNotes = "";
+            }
             Scene.Objects.Clear();
             foreach (var o in loaded) Scene.Objects.Add(o);
             Undo.Clear();
@@ -10510,6 +10562,7 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
         Scene.Objects.Clear();
         Undo.Clear();
         projectPath = null;
+        projectNotes = "";
         ImportFiles([path]);
         Undo.Clear();
         openedFrom = path;

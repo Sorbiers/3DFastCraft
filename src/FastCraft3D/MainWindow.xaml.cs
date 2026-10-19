@@ -2614,6 +2614,9 @@ public partial class MainWindow : Window
         menu.PlacementTarget = CustomTab.ClickedCopy ?? button;
         menu.Placement = System.Windows.Controls.Primitives.PlacementMode.Bottom;
         menu.IsOpen = true;
+
+        // The names first, then the pictures as they are read: the list never waits for them.
+        _ = viewModel.LoadRecentPicturesAsync();
     }
 
     /// <summary>

@@ -58,7 +58,16 @@ public sealed partial class MainViewModel
         customButtons.Clear();
         if (ids is null) return;
 
-        foreach (string id in ids)
+        foreach (string saved in ids)
+        {
+            string id = RenamedButtons.TryGetValue(saved, out var now) ? now : saved;
             if (!string.IsNullOrWhiteSpace(id) && !customButtons.Contains(id)) customButtons.Add(id);
+        }
     }
+
+    /// <summary>Buttons renamed since a choice may have been saved, so the choice still finds them.</summary>
+    private static readonly Dictionary<string, string> RenamedButtons = new()
+    {
+        ["File/Settings"] = "File/Printer profile"
+    };
 }

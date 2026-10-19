@@ -719,7 +719,21 @@
                             <ContextMenu ItemsSource="{Binding RecentFiles}">
                                 <ContextMenu.ItemContainerStyle>
                                     <Style TargetType="MenuItem">
-                                        <Setter Property="Header" Value="{Binding Name}" />
+                                        <Setter Property="Header" Value="{Binding}" />
+                                        <Setter Property="HeaderTemplate">
+                                            <Setter.Value>
+                                                <!-- The picture saved in the project, read lazily: an empty box until it arrives, and for a file without one. -->
+                                                <DataTemplate>
+                                                    <StackPanel Orientation="Horizontal">
+                                                        <Border Width="56" Height="56" Margin="0,2,10,2" CornerRadius="3"
+                                                                Background="#FFEEF0F3" BorderBrush="#FFD8DBE0" BorderThickness="1">
+                                                            <Image Source="{Binding Picture}" Stretch="Uniform" Margin="2" />
+                                                        </Border>
+                                                        <TextBlock Text="{Binding Name}" VerticalAlignment="Center" />
+                                                    </StackPanel>
+                                                </DataTemplate>
+                                            </Setter.Value>
+                                        </Setter>
                                         <Setter Property="ToolTip" Value="{Binding Path}" />
                                         <Setter Property="Command"
                                                 Value="{Binding DataContext.OpenRecentCommand,
@@ -740,6 +754,9 @@
                     <Button Style="{StaticResource ToolButton}" Content="Versions" Tag="{StaticResource IconVersions}"
                             Command="{Binding VersionsCommand}" MinWidth="82"
                             ToolTip="List the versions kept in this file, and restore one. Needs the project saved to a file first." />
+                    <Button Style="{StaticResource ToolButton}" Content="Project" Tag="{StaticResource IconProject}"
+                            Command="{Binding ProjectCommand}" MinWidth="70" AutomationProperties.AutomationId="Project"
+                            ToolTip="Notes kept in this project, and a summary of what is in it" />
                     <Separator Margin="8,0" />
                     <Button Style="{StaticResource ToolButton}" Content="Export STL / OBJ" Tag="{StaticResource IconExport}"
                             Command="{Binding ExportCommand}" MinWidth="140"
@@ -756,8 +773,8 @@
                             Command="{Binding RecordCommand}" MinWidth="86"
                             ToolTip="While on, saves a screenshot after every action - and one just before each Apply - to a folder you choose." />
                     <Separator Margin="8,0" />
-                    <Button Style="{StaticResource ToolButton}" Content="Settings" Tag="{StaticResource IconSettings}"
-                            Command="{Binding OpenSettingsCommand}" MinWidth="70" AutomationProperties.AutomationId="Settings"
+                    <Button Style="{StaticResource ToolButton}" Content="Printer profile" Tag="{StaticResource IconPrinter}"
+                            Command="{Binding OpenSettingsCommand}" MinWidth="90" AutomationProperties.AutomationId="Settings"
                             ToolTip="Printer profiles: nozzle, layer and the fits the tools start from, with a test print for them" />
                     <Button Style="{StaticResource ToolButton}" Content="About" Tag="{StaticResource IconAbout}"
                             Click="OnAbout" ToolTip="Version, license and where the source lives" />
