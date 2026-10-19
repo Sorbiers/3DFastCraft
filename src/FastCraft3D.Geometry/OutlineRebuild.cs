@@ -31,7 +31,15 @@ public static class OutlineRebuild
     /// <summary>How far a point may sit off its face's plane, or off the straight edge it is dropped from.</summary>
     public const float ToleranceMm = FaceRebuild.FlatnessMm;
 
-    public static OutlineRebuildResult Rebuild(Mesh input, CancellationToken token = default)
+    /// <summary>
+    /// The looser choice: faces that are flat to a hundredth, as Surface info reads them. A wall
+    /// put together from parts, or cut a little past its edge, is often two faces a few thousandths
+    /// apart, and at the tight tolerance the seam between them has to keep all its points. Merged,
+    /// the surface can move by up to this much where a point is dropped.
+    /// </summary>
+    public const float MergeToleranceMm = FacePatch.DefaultToleranceMm;
+
+    public static OutlineRebuildResult Rebuild(Mesh input, float tolerance = ToleranceMm, CancellationToken token = default)
     {
         OutlineRebuildResult Keep(string? why) =>
             new(input, input.TriangleCount, input.TriangleCount, 0, 0, why, false);
@@ -60,28 +68,19 @@ public static class OutlineRebuild
             }
 
         // Flat faces, grown from the biggest triangles first: a sliver's normal is float noise,
-        // and the plane is taken from the seed and never from its neighbours, so it cannot drift.
+        // and the plane is tested against one plane, never neighbour to neighbour, so it cannot
+        // drift. That plane is refitted to the face grown so far and the face grown again: the
+        // seed alone can be tilted by its points' own wander, and a tilt of a few thousandths over
+        // a triangle is a tenth of a millimetre across a wall, which cut the wall into pieces.
         var region = new int[count];
         Array.Fill(region, -1);
         var faces = new List<List<int>>();
         var normals = new List<V3>();
 
-        foreach (int seed in Enumerable.Range(0, count).OrderByDescending(i => cross[i].Length).ThenBy(i => i))
+        List<int> Grow(int seed, int r, V3 n, double d)
         {
-            if (region[seed] >= 0) continue;
-            token.ThrowIfCancellationRequested();
-
-            int r = faces.Count;
             var members = new List<int> { seed };
             region[seed] = r;
-            faces.Add(members);
-
-            double length = cross[seed].Length;
-            var n = length > 1e-12 ? cross[seed] / length : new V3(0, 0, 0);
-            normals.Add(n);
-            if (length <= 1e-12) continue;
-
-            double d = n.Dot(V3.Of(points[indices[3 * seed]]));
 
             for (int m = 0; m < members.Count; m++)
             {
@@ -97,13 +96,68 @@ public static class OutlineRebuild
 
                     bool flat = true;
                     for (int j = 0; j < 3 && flat; j++)
-                        flat = Math.Abs(n.Dot(V3.Of(points[indices[3 * u + j]])) - d) <= ToleranceMm;
+                        flat = Math.Abs(n.Dot(V3.Of(points[indices[3 * u + j]])) - d) <= tolerance;
                     if (!flat) continue;
 
                     region[u] = r;
                     members.Add(u);
                 }
             }
+
+            return members;
+        }
+
+        foreach (int seed in Enumerable.Range(0, count).OrderByDescending(i => cross[i].Length).ThenBy(i => i))
+        {
+            if (region[seed] >= 0) continue;
+            token.ThrowIfCancellationRequested();
+
+            int r = faces.Count;
+            double length = cross[seed].Length;
+            if (length <= 1e-12)
+            {
+                region[seed] = r;
+                faces.Add([seed]);
+                normals.Add(new V3(0, 0, 0));
+                continue;
+            }
+
+            var n = cross[seed] / length;
+            var members = Grow(seed, r, n, n.Dot(V3.Of(points[indices[3 * seed]])));
+
+            for (int pass = 0; pass < 3 && members.Count > 1; pass++)
+            {
+                var sum = new V3(0, 0, 0);
+                var middle = new V3(0, 0, 0);
+                double weight = 0;
+                foreach (int t in members)
+                {
+                    double w = cross[t].Length;
+                    sum += cross[t];
+                    middle += (V3.Of(points[indices[3 * t]]) + V3.Of(points[indices[3 * t + 1]]) + V3.Of(points[indices[3 * t + 2]])) * (w / 3);
+                    weight += w;
+                }
+
+                if (sum.Length < 1e-12 || weight < 1e-12) break;
+                var fitted = sum / sum.Length;
+
+                foreach (int t in members) region[t] = -1;
+                var regrown = Grow(seed, r, fitted, fitted.Dot(middle / weight));
+
+                if (regrown.Count <= members.Count)
+                {
+                    // No better: put the face back as it was grown.
+                    foreach (int t in regrown) region[t] = -1;
+                    foreach (int t in members) region[t] = r;
+                    break;
+                }
+
+                members = regrown;
+                n = fitted;
+            }
+
+            faces.Add(members);
+            normals.Add(n);
         }
 
         // Each face's outline, as one loop. A face with a hole, or one whose outline touches
@@ -136,7 +190,7 @@ public static class OutlineRebuild
             if (round > faces.Count + 1) return Keep("it could not be settled which points to keep");
             token.ThrowIfCancellationRequested();
 
-            Corners(points, facesAt, loops, left, keep);
+            Corners(points, facesAt, loops, left, keep, tolerance);
 
             rebuilt.Clear();
             int failed = -1;
@@ -184,13 +238,16 @@ public static class OutlineRebuild
         if (MeshStitch.Count(result) > MeshStitch.Count(mesh))
             return Keep("the result would have left edges meeting partway");
 
+        // A dropped point stood at most the tolerance off what replaces it, so the volume can move
+        // by no more than that over the area, and the box by no more than that on any side.
         double before = mesh.ComputeSignedVolume(), after = result.ComputeSignedVolume();
-        if (Math.Abs(after - before) > 1e-6 * Math.Abs(before) + 1e-3)
+        if (Math.Abs(after - before) > 1e-6 * Math.Abs(before) + tolerance * mesh.ComputeSurfaceArea() + 1e-3)
             return Keep("the volume would have changed");
 
         var boxBefore = mesh.ComputeBounds();
         var boxAfter = result.ComputeBounds();
-        if (boxBefore.Min != boxAfter.Min || boxBefore.Max != boxAfter.Max)
+        float slack = tolerance + 1e-5f;
+        if (Vector3.Abs(boxBefore.Min - boxAfter.Min).Length() > slack || Vector3.Abs(boxBefore.Max - boxAfter.Max).Length() > slack)
             return Keep("the size would have changed");
 
         if (result.TriangleCount >= input.TriangleCount) return Keep(null);
@@ -205,7 +262,7 @@ public static class OutlineRebuild
     /// Marks the points that have to stay: every one except those in the middle of a face and
     /// those halfway along a straight edge between exactly two faces that are both being rebuilt.
     /// </summary>
-    private static void Corners(List<Vector3> points, List<int>[] facesAt, List<int>?[] loops, bool[] left, bool[] keep)
+    private static void Corners(List<Vector3> points, List<int>[] facesAt, List<int>?[] loops, bool[] left, bool[] keep, float tolerance)
     {
         Array.Fill(keep, true);
 
@@ -236,7 +293,7 @@ public static class OutlineRebuild
 
                 // The same two neighbours on both faces, the other way round, and in line.
                 if (onF.Prev != onQ.Next || onF.Next != onQ.Prev) continue;
-                if (Between(points[onF.Prev], points[v], points[onF.Next])) keep[v] = false;
+                if (Between(points[onF.Prev], points[v], points[onF.Next], tolerance)) keep[v] = false;
             }
         }
 
@@ -258,7 +315,7 @@ public static class OutlineRebuild
                     int back = i, ahead = i;
                     do back = (back + n - 1) % n; while (!keep[loop[back]] && back != i);
                     do ahead = (ahead + 1) % n; while (!keep[loop[ahead]] && ahead != i);
-                    if (back == i || ahead == i || !Between(points[loop[back]], points[v], points[loop[ahead]]))
+                    if (back == i || ahead == i || !Between(points[loop[back]], points[v], points[loop[ahead]], tolerance))
                     {
                         keep[v] = true;
                         changed = true;
@@ -269,7 +326,7 @@ public static class OutlineRebuild
     }
 
     /// <summary>Whether <paramref name="v"/> lies on the segment from <paramref name="p"/> to <paramref name="q"/>.</summary>
-    private static bool Between(Vector3 p, Vector3 v, Vector3 q)
+    private static bool Between(Vector3 p, Vector3 v, Vector3 q, float tolerance)
     {
         var a = V3.Of(p);
         var line = V3.Of(q) - a;
@@ -278,10 +335,10 @@ public static class OutlineRebuild
         if (length <= 0) return false;
 
         double along = to.Dot(line) / length;
-        if (along <= ToleranceMm || along >= length - ToleranceMm) return false;
+        if (along <= tolerance || along >= length - tolerance) return false;
 
         double off = to.Cross(line).Length / length;
-        return off <= ToleranceMm;
+        return off <= tolerance;
     }
 
     /// <summary>The face's outline as one loop in its winding, or null for a hole or a pinch.</summary>

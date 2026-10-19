@@ -51,6 +51,28 @@ public class OutlineRebuildTests
     }
 
     [Fact]
+    public void MergingTakesAFaceWhosePointsWanderAHairAsOneFace()
+    {
+        // The top of a finely cut box, its inner points nudged up and down by a few thousandths:
+        // at the exact tolerance that is many faces, merged it is one.
+        var mesh = MeshSubdivision.Subdivide(Primitives.Box(20, 20, 20), 3);
+        for (int i = 0; i < mesh.Positions.Count; i++)
+        {
+            var p = mesh.Positions[i];
+            if (p.Z == 10 && MathF.Abs(p.X) < 9.9f && MathF.Abs(p.Y) < 9.9f)
+                mesh.Positions[i] = p with { Z = 10 + (i % 2 == 0 ? 0.004f : -0.004f) };
+        }
+
+        var exact = OutlineRebuild.Rebuild(mesh);
+        var merged = OutlineRebuild.Rebuild(mesh, OutlineRebuild.MergeToleranceMm);
+
+        Assert.True(merged.Changed, merged.Refusal);
+        Assert.Equal(12, merged.TrianglesAfter);
+        Assert.True(merged.TrianglesAfter < exact.TrianglesAfter, $"exact {exact.TrianglesAfter}, merged {merged.TrianglesAfter}");
+        Assert.True(merged.Mesh.CheckHealth().IsWatertight);
+    }
+
+    [Fact]
     public void ACurvedSurfaceIsLeftAlone()
     {
         var mesh = Primitives.Sphere(10, 32, 16);

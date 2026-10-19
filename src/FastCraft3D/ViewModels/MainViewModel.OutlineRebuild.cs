@@ -1,6 +1,7 @@
 using System.Windows.Input;
 using FastCraft3D.Geometry;
 using FastCraft3D.Model.Commands;
+using FastCraft3D.View;
 
 namespace FastCraft3D.ViewModels;
 
@@ -21,6 +22,9 @@ public partial class MainViewModel
         var targets = Scene.Selection.Where(o => !o.IsLocked).ToList();
         if (targets.Count == 0) return;
 
+        var dialog = new OutlineRebuildDialog();
+        if (dialog.ShowDialog() != true || dialog.Result is not { } tolerance) return;
+
         long bytes = targets.Sum(o => (long)o.Mesh.Positions.Count * 12 + (long)o.Mesh.Indices.Count * 4);
 
         Run(bytes >= SlowFromBytes, "Rebuilding by outline...", () =>
@@ -31,7 +35,9 @@ public partial class MainViewModel
 
             foreach (var o in targets)
             {
-                var result = OutlineRebuild.Rebuild(o.Mesh);
+                // The tolerance is on the plate; the mesh is in its own coordinates, stretched by the scale.
+                float scale = MathF.Max(MathF.Abs(o.Scale.X), MathF.Max(MathF.Abs(o.Scale.Y), MathF.Abs(o.Scale.Z)));
+                var result = OutlineRebuild.Rebuild(o.Mesh, tolerance / MathF.Max(scale, 1e-6f));
                 refusal ??= result.Refusal;
                 if (!result.Changed) continue;
 
