@@ -21,6 +21,15 @@
                 For walls joined from parts or cut a little past an edge, which come out as two faces a
                 hair apart. The surface can move by up to 0.01 mm. Off, nothing moves by more than 0.001 mm.
             </TextBlock>
+
+            <StackPanel Orientation="Horizontal" Margin="0,8,0,4">
+                <CheckBox x:Name="EvenBox" Content="Even triangles, about" VerticalAlignment="Center"
+                          AutomationProperties.AutomationId="EvenTriangles" Checked="OnEvenChanged" Unchecked="OnEvenChanged" />
+                <TextBox x:Name="EvenSizeBox" Width="48" Margin="6,0,4,0" Style="{DynamicResource NumberBox}"
+                         AutomationProperties.AutomationId="EvenSize" TextChanged="OnEvenChanged" />
+                <TextBlock Text="mm" Foreground="#FF9AA0A8" VerticalAlignment="Center" />
+            </StackPanel>
+            <TextBlock x:Name="EvenText" TextWrapping="Wrap" Foreground="#FF5A5F66" Margin="20,0,0,0" />
         </StackPanel>
 
         <RadioButton x:Name="ScratchChoice" GroupName="RebuildMode" Margin="0,0,0,4" FontWeight="SemiBold"

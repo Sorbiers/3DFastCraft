@@ -9220,7 +9220,7 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
 
         if (dialog.KeepShape)
         {
-            RebuildKeepingShape(targets, dialog.Tolerance);
+            RebuildKeepingShape(targets, dialog.Tolerance, dialog.EvenEdgeMm);
             return;
         }
 

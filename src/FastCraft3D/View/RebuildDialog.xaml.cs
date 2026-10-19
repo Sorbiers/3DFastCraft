@@ -38,6 +38,9 @@ public partial class RebuildDialog : ToolPanel
         ResolutionSlider.Value = VoxelRebuild.DefaultResolution;
 
         MergeBox.IsChecked = merge;
+        EvenBox.IsChecked = even;
+        EvenSizeBox.Text = evenMm.ToString("0.##", CultureInfo.CurrentCulture);
+        OnEvenChanged(this, new RoutedEventArgs());
         (fromScratch ? ScratchChoice : ShapeChoice).IsChecked = true;
         OnModeChanged(this, new RoutedEventArgs());
 
@@ -48,7 +51,38 @@ public partial class RebuildDialog : ToolPanel
     /// Remembered for the session. Keeping the shape comes first, since it costs nothing; once
     /// someone has needed the other, or merging, the same model will need it again.
     /// </summary>
-    private static bool fromScratch, merge;
+    private static bool fromScratch, merge, even;
+    private static float evenMm = 2f;
+
+    /// <summary>For keeping the shape: the size to cut the triangles to, or null to leave them as few as they come.</summary>
+    public float? EvenEdgeMm { get; private set; }
+
+    private float? TypedEvenMm =>
+        float.TryParse(EvenSizeBox.Text, NumberStyles.Float, CultureInfo.CurrentCulture, out float mm) && mm >= 0.1f ? mm : null;
+
+    private void OnEvenChanged(object sender, RoutedEventArgs e)
+    {
+        if (EvenText is null || EvenSizeBox is null) return;
+
+        EvenSizeBox.IsEnabled = EvenBox.IsChecked == true;
+        if (EvenBox.IsChecked != true)
+        {
+            EvenText.Text = "Off: as few triangles as the corners allow.";
+            return;
+        }
+
+        if (TypedEvenMm is not { } mm)
+        {
+            EvenText.Text = "Type a size of 0.1 mm or more.";
+            return;
+        }
+
+        long triangles = EvenTriangles.Estimate(surfaceAreaMm2, mm);
+        EvenText.Text = (triangles > EvenTriangles.MostTriangles
+                ? $"About {triangles:N0} triangles - too many; choose a larger size. "
+                : $"About {triangles:N0} triangles, all close to {mm:0.##} mm. ")
+            + "The shape does not change. For Smooth, Deform or a texture; a printer gains nothing from it.";
+    }
 
     /// <summary>Whether the shape is to be kept - Rebuild by outline - rather than rebuilt from voxels.</summary>
     public bool KeepShape { get; private set; }
@@ -130,6 +164,9 @@ public partial class RebuildDialog : ToolPanel
     {
         fromScratch = ScratchChoice.IsChecked == true;
         merge = MergeBox.IsChecked == true;
+        even = EvenBox.IsChecked == true;
+        if (TypedEvenMm is { } typed) evenMm = typed;
+        EvenEdgeMm = even && !fromScratch ? evenMm : null;
 
         KeepShape = !fromScratch;
         Tolerance = merge ? OutlineRebuild.MergeToleranceMm : OutlineRebuild.ToleranceMm;
