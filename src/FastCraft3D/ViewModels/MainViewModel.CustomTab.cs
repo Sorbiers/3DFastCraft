@@ -68,6 +68,7 @@ public sealed partial class MainViewModel
     /// <summary>Buttons renamed since a choice may have been saved, so the choice still finds them.</summary>
     private static readonly Dictionary<string, string> RenamedButtons = new()
     {
-        ["File/Settings"] = "File/Printer profile"
+        ["File/Settings"] = "File/Printer profile",
+        ["Tools/Surface info"] = "Tools/Surface"
     };
 }

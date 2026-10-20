@@ -47,6 +47,9 @@ public partial class MainWindow : Window
 
     /// <summary>Which end of the tape is being dragged: 0, 1, or -1 for none.</summary>
     private List<(int Tape, int Index)>? heldMeasure;
+
+    /// <summary>The part last added, waiting for the list to be rebuilt round it before it is scrolled to.</summary>
+    private SceneObject? scrollTo;
     private PlateLook? plateShown;
     private GizmoController? gizmo;
     private SplitPlaneGizmo? splitGizmo;
@@ -147,6 +150,25 @@ public partial class MainWindow : Window
         // waiting for the pointer to move.
         PreviewKeyDown += (_, e) => { if (e.Key is Key.LeftShift or Key.RightShift && viewModel.IsMeasureMode) measure.Editing = true; };
         PreviewKeyUp += (_, e) => { if (e.Key is Key.LeftShift or Key.RightShift) measure.Editing = false; };
+
+        // A part added - inserted, pasted, cloned, made by a tool - is scrolled to in the list, so
+        // it can be seen to have arrived. Once per burst: opening a project adds its parts one by one.
+        viewModel.Scene.Objects.CollectionChanged += (_, e) =>
+        {
+            if (e.Action != System.Collections.Specialized.NotifyCollectionChangedAction.Add
+                || e.NewItems is not { Count: > 0 } items || items[^1] is not SceneObject added)
+                return;
+
+            bool waiting = scrollTo is not null;
+            scrollTo = added;
+            if (waiting) return;
+
+            Dispatcher.BeginInvoke(() =>
+            {
+                if (scrollTo is { } shown && ObjectList.Items.Contains(shown)) ObjectList.ScrollIntoView(shown);
+                scrollTo = null;
+            }, DispatcherPriority.Background);
+        };
 
         viewModel.MeasureChanged += () =>
         {

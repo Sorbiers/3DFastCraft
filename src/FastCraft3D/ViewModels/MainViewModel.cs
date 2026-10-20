@@ -6812,7 +6812,7 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
         else if (IsAlignFaceMode) IsAlignFaceMode = false;
         else if (IsCentreFaceMode) IsCentreFaceMode = false;
         else if (IsWallMountMode) IsWallMountMode = false;
-        else if (IsSurfaceInfoMode) { IsSurfaceInfoMode = false; said = "Closed Surface info"; }
+        else if (IsSurfaceInfoMode) { IsSurfaceInfoMode = false; said = "Closed Surface"; }
         else if (IsSubtractMode) IsSubtractMode = false;
         else return false;
 

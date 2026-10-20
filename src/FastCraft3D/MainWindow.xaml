@@ -700,10 +700,10 @@
                     <Button Style="{StaticResource ToolButton}" Content="Fit check" Visibility="{Binding IsAdvancedMode, Converter={StaticResource BoolToVisibility}}" Tag="{StaticResource IconMeasure}"
                             Command="{Binding FitCheckCommand}" MinWidth="72"
                             ToolTip="Measure how far two parts overlap, or the gap between them, without changing either. Select two objects." />
-                    <Button Style="{StaticResource ToolButton}" Content="Surface info" Tag="{StaticResource IconSurfaceInfo}"
-                            Command="{Binding BeginSurfaceInfoCommand}" MinWidth="84"
+                    <Button Style="{StaticResource ToolButton}" Content="Surface" Tag="{StaticResource IconSurfaceInfo}"
+                            Command="{Binding BeginSurfaceInfoCommand}" MinWidth="70"
                             AutomationProperties.AutomationId="SurfaceInfo"
-                            ToolTip="Point at a face to highlight it; click to read its middle, direction, size and area. Stays on until Cancel." />
+                            ToolTip="Point at a face to highlight it; click to read its middle, direction, size and area, lay it again, or clone it as a thin solid. Stays on until Cancel." />
                 </WrapPanel>
             </TabItem>
 
@@ -1258,9 +1258,9 @@
                         BorderBrush="#FFB8D2F0" BorderThickness="1" CornerRadius="3"
                         Visibility="{Binding IsSurfaceInfoMode, Converter={StaticResource BoolToVisibility}}">
                     <view:ColumnFlow>
-                        <TextBlock Text="Surface info" FontWeight="SemiBold" Margin="0,0,0,6" />
+                        <TextBlock Text="Surface" FontWeight="SemiBold" Margin="0,0,0,6" />
                         <TextBlock TextWrapping="Wrap" Foreground="#FF5A5F66" Margin="0,0,0,8"
-                                   Text="Point at a face on any object to light it; click to read it. Click another to read that one. Rebuild face lays the face read again from its outline." />
+                                   Text="Point at a face on any object to light it; click to read it. Click another to read that one. Rebuild face lays the face read again from its outline; Clone adds it as a thin solid of its own, standing on it." />
                         <ItemsControl ItemsSource="{Binding SurfaceFacts}" Margin="0,0,0,8" AutomationProperties.AutomationId="SurfaceFacts"
                                       Visibility="{Binding HasSurfaceInfo, Converter={StaticResource BoolToVisibility}}">
                             <ItemsControl.ItemTemplate>
@@ -1281,6 +1281,10 @@
                             <Button Content="Rebuild face" Style="{StaticResource PanelButton}" Margin="0,0,6,0"
                                     Command="{Binding RebuildFaceCommand}" AutomationProperties.AutomationId="RebuildFace"
                                     ToolTip="Lay this face again with as few triangles as its outline needs. The points inside it go; its outline and the shape stay exactly as they are."
+                                    Visibility="{Binding HasSurfaceInfo, Converter={StaticResource BoolToVisibility}}" />
+                            <Button Content="Clone" Style="{StaticResource PanelButton}" Margin="0,0,6,0"
+                                    Command="{Binding CloneSurfaceCommand}" AutomationProperties.AutomationId="CloneSurface"
+                                    ToolTip="Add the face read as an object of its own, 0.1 mm thick, standing on the face - where it is, as copy and paste would put it"
                                     Visibility="{Binding HasSurfaceInfo, Converter={StaticResource BoolToVisibility}}" />
                             <Button Content="Cancel" Style="{StaticResource PanelButton}"
                                     Command="{Binding CancelSurfaceInfoCommand}" />

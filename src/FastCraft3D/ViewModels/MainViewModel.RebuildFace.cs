@@ -64,6 +64,43 @@ public partial class MainViewModel
         });
     }
 
+    private ICommand? cloneSurface;
+
+    public ICommand CloneSurfaceCommand => cloneSurface ??= RelayCommand.Simple(CloneSurface,
+        () => isSurfaceInfoMode && infoFace is not null && infoTarget is { } target && Scene.Objects.Contains(target));
+
+    /// <summary>
+    /// The face read, added as an object of its own: a thin solid standing on the face, where the
+    /// face is. See <see cref="SurfaceClone"/>.
+    /// </summary>
+    private void CloneSurface()
+    {
+        if (infoTarget is not { } target || infoFace is null) return;
+
+        // On the plate as the object stands now, not as it stood when the face was read.
+        infoMeshes.Remove(target);
+        if (SurfaceAt(target, infoPoint, infoNormal) is not { } face)
+        {
+            Status = "That face is not there any more - read it again";
+            return;
+        }
+
+        if (SurfaceClone.Extrude(face) is not { } mesh)
+        {
+            Status = "Could not clone that face - its outline does not close round it";
+            return;
+        }
+
+        var clone = new SceneObject($"{target.Name} surface", mesh)
+        {
+            Colour = target.Colour,
+            Filament = target.Filament
+        }.Centred();
+
+        Undo.Execute(new AddObjectsCommand("Clone surface", [clone]));
+        Status = $"Cloned the face as {clone.Name}, {unit.From(SurfaceClone.DefaultThicknessMm):0.##} {unit.Label} thick";
+    }
+
     /// <summary>The face's triangle count, and how many points sit inside it rather than on its outline.</summary>
     private static string TrianglesOf(FacePatch face)
     {
