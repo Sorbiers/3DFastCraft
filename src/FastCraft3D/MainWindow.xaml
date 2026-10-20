@@ -1285,6 +1285,14 @@
                                      Text="{Binding CloneThickness, StringFormat=N2, UpdateSourceTrigger=LostFocus, Converter={StaticResource Length}}" />
                             <TextBlock Text="{Binding DataContext.UnitLabel, RelativeSource={RelativeSource AncestorType=Window}}" Foreground="#FF9AA0A8" VerticalAlignment="Center" Margin="5,0,0,0" />
                         </StackPanel>
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,8"
+                                    Visibility="{Binding HasSurfaceInfo, Converter={StaticResource BoolToVisibility}}">
+                            <TextBlock Text="Grow outline" Style="{StaticResource FieldLabel}" Width="96"
+                                       ToolTip="Move the clone's outline out by this much - in, below zero - and its holes the other way: a frame round an opening, a gasket" />
+                            <TextBox Width="64" Style="{StaticResource NumberBox}" Tag="number" AutomationProperties.AutomationId="CloneGrow"
+                                     Text="{Binding CloneGrow, StringFormat=N2, UpdateSourceTrigger=LostFocus, Converter={StaticResource Length}}" />
+                            <TextBlock Text="{Binding DataContext.UnitLabel, RelativeSource={RelativeSource AncestorType=Window}}" Foreground="#FF9AA0A8" VerticalAlignment="Center" Margin="5,0,0,0" />
+                        </StackPanel>
                         <StackPanel Orientation="Horizontal">
                             <Button Content="Rebuild face" Style="{StaticResource PanelButton}" Margin="0,0,6,0"
                                     Command="{Binding RebuildFaceCommand}" AutomationProperties.AutomationId="RebuildFace"

@@ -22,6 +22,17 @@ public partial class MainViewModel
     private string? infoObject;
     private SceneObject? infoTarget;
     private Vector3 infoPoint, infoNormal;
+
+    /// <summary>
+    /// More faces picked with Shift, beside the one read, for Clone to make into one object. Kept
+    /// as where they were clicked rather than as faces, so they are found again on the meshes as
+    /// they stand when Clone is pressed.
+    /// </summary>
+    private readonly List<(SceneObject Target, Vector3 Point, Vector3 Normal)> extraPicks = [];
+
+    /// <summary>The faces picked with Shift, for the viewport to light.</summary>
+    public IReadOnlyList<FacePatch> SurfaceExtraFaces =>
+        extraPicks.Select(p => SurfaceAt(p.Target, p.Point, p.Normal)).OfType<FacePatch>().ToList();
     private ICommand? beginSurfaceInfo, cancelSurfaceInfo;
 
     /// <summary>
@@ -48,6 +59,7 @@ public partial class MainViewModel
                 infoHover = infoFace = null;
                 infoObject = null;
                 infoTarget = null;
+                extraPicks.Clear();
                 infoMeshes.Clear();
                 RaiseSurfaceInfo();
             }
@@ -91,6 +103,7 @@ public partial class MainViewModel
         infoHover = infoFace = null;
         infoObject = null;
         infoTarget = null;
+        extraPicks.Clear();
         infoMeshes.Clear();
         IsSurfaceInfoMode = true;
         RaiseSurfaceInfo();
@@ -123,7 +136,7 @@ public partial class MainViewModel
         ReferenceEquals(a.Mesh, b.Mesh) && a.Triangles.Count == b.Triangles.Count
         && a.Triangles.Count > 0 && a.Triangles[0] == b.Triangles[0];
 
-    public bool PickSurfaceInfo(SceneObject target, Vector3 worldPoint, Vector3 worldNormal)
+    public bool PickSurfaceInfo(SceneObject target, Vector3 worldPoint, Vector3 worldNormal, bool add = false)
     {
         if (!isSurfaceInfoMode) return false;
 
@@ -132,6 +145,24 @@ public partial class MainViewModel
             Status = "Nothing to read there - point at a face";
             return true;
         }
+
+        // Shift adds the face to the ones Clone will make, or takes it out again.
+        if (add && infoFace is not null)
+        {
+            if (SameSurface(face, infoFace)) return true;
+
+            int already = extraPicks.FindIndex(p => SurfaceAt(p.Target, p.Point, p.Normal) is { } picked && SameSurface(picked, face));
+            if (already >= 0) extraPicks.RemoveAt(already);
+            else extraPicks.Add((target, worldPoint, worldNormal));
+
+            RaiseSurfaceInfo();
+            Status = extraPicks.Count == 0
+                ? "One face picked"
+                : $"{extraPicks.Count + 1} faces picked - Clone makes them one object";
+            return true;
+        }
+
+        extraPicks.Clear();
 
         infoFace = infoHover = face;
         infoObject = target.Name;
@@ -181,6 +212,7 @@ public partial class MainViewModel
                 new("Size", $"{L(face.Size.X)} × {L(face.Size.Y)} {unit.Label}"),
                 new("Area", $"{area:0.##} {unit.Label}²"),
                 new("Triangles", TrianglesOf(face)),
+                new("Picked", extraPicks.Count == 0 ? "this face - Shift+click to add more for Clone" : $"{extraPicks.Count + 1} faces, for Clone"),
                 new("From", $"X {L(low.X)}   Y {L(low.Y)}   Z {L(low.Z)}"),
                 new("To", $"X {L(high.X)}   Y {L(high.Y)}   Z {L(high.Z)}")
             };

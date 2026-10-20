@@ -66,6 +66,22 @@ public partial class MainViewModel
 
     private ICommand? cloneSurface;
     private float cloneThickness = SurfaceClone.DefaultThicknessMm;
+    private float cloneGrow;
+
+    /// <summary>
+    /// How far Clone moves the outline out, in millimetres - in, below zero: a frame round an
+    /// opening, a gasket. Holes go the other way. Kept for the session.
+    /// </summary>
+    public float CloneGrow
+    {
+        get => cloneGrow;
+        set
+        {
+            if (!float.IsFinite(value) || cloneGrow == value) return;
+            cloneGrow = value;
+            Raise(nameof(CloneGrow));
+        }
+    }
 
     /// <summary>How thick Clone makes the face, in millimetres. Kept for the session.</summary>
     public float CloneThickness
@@ -91,21 +107,36 @@ public partial class MainViewModel
     {
         if (infoTarget is not { } target || infoFace is null) return;
 
-        // On the plate as the object stands now, not as it stood when the face was read.
-        infoMeshes.Remove(target);
-        if (SurfaceAt(target, infoPoint, infoNormal) is not { } face)
+        // On the plate as the objects stand now, not as they stood when the faces were read.
+        var picks = new List<(SceneObject Target, Vector3 Point, Vector3 Normal)> { (target, infoPoint, infoNormal) };
+        picks.AddRange(extraPicks);
+        foreach (var (o, _, _) in picks) infoMeshes.Remove(o);
+
+        var pieces = new List<Mesh>();
+        foreach (var (o, point, normal) in picks)
         {
-            Status = "That face is not there any more - read it again";
-            return;
+            if (SurfaceAt(o, point, normal) is not { } face)
+            {
+                Status = "A face picked is not there any more - read it again";
+                return;
+            }
+
+            if (SurfaceClone.Extrude(face, cloneThickness, cloneGrow) is not { } piece)
+            {
+                Status = cloneGrow != 0
+                    ? $"Could not clone a face grown by {unit.From(cloneGrow):0.##} {unit.Label} - its outline would vanish or cross itself"
+                    : "Could not clone a face - its outline does not close round it";
+                return;
+            }
+
+            pieces.Add(piece);
         }
 
-        if (SurfaceClone.Extrude(face, cloneThickness) is not { } mesh)
-        {
-            Status = "Could not clone that face - its outline does not close round it";
-            return;
-        }
+        // Each face its own shell, in one object: they are not fused, so faces that meet at an
+        // edge overlap there by the thickness, which a slicer takes as one.
+        var mesh = pieces.Count == 1 ? pieces[0] : Mesh.Combine(pieces);
 
-        var clone = new SceneObject($"{target.Name} surface", mesh)
+        var clone = new SceneObject(pieces.Count == 1 ? $"{target.Name} surface" : $"{target.Name} surfaces", mesh)
         {
             Colour = target.Colour,
             Filament = target.Filament
@@ -115,7 +146,8 @@ public partial class MainViewModel
         // to move, to resize, to subtract.
         Undo.Execute(new AddObjectsCommand("Clone surface", [clone]));
         RefreshSelection();
-        Status = $"Cloned the face as {clone.Name}, {unit.From(cloneThickness):0.##} {unit.Label} thick - it is selected";
+        Status = (pieces.Count == 1 ? "Cloned the face" : $"Cloned {pieces.Count} faces")
+               + $" as {clone.Name}, {unit.From(cloneThickness):0.##} {unit.Label} thick - it is selected";
     }
 
     /// <summary>The face's triangle count, and how many points sit inside it rather than on its outline.</summary>
