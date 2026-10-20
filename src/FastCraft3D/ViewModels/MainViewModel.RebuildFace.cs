@@ -65,6 +65,20 @@ public partial class MainViewModel
     }
 
     private ICommand? cloneSurface;
+    private float cloneThickness = SurfaceClone.DefaultThicknessMm;
+
+    /// <summary>How thick Clone makes the face, in millimetres. Kept for the session.</summary>
+    public float CloneThickness
+    {
+        get => cloneThickness;
+        set
+        {
+            // Thinner than a hundredth is not a solid anything can print or a boolean can use.
+            if (!float.IsFinite(value) || value < 0.01f || cloneThickness == value) return;
+            cloneThickness = value;
+            Raise(nameof(CloneThickness));
+        }
+    }
 
     public ICommand CloneSurfaceCommand => cloneSurface ??= RelayCommand.Simple(CloneSurface,
         () => isSurfaceInfoMode && infoFace is not null && infoTarget is { } target && Scene.Objects.Contains(target));
@@ -85,7 +99,7 @@ public partial class MainViewModel
             return;
         }
 
-        if (SurfaceClone.Extrude(face) is not { } mesh)
+        if (SurfaceClone.Extrude(face, cloneThickness) is not { } mesh)
         {
             Status = "Could not clone that face - its outline does not close round it";
             return;
@@ -97,8 +111,11 @@ public partial class MainViewModel
             Filament = target.Filament
         }.Centred();
 
+        // Adding selects it, and the boxes are told: the clone is the thing to work on next -
+        // to move, to resize, to subtract.
         Undo.Execute(new AddObjectsCommand("Clone surface", [clone]));
-        Status = $"Cloned the face as {clone.Name}, {unit.From(SurfaceClone.DefaultThicknessMm):0.##} {unit.Label} thick";
+        RefreshSelection();
+        Status = $"Cloned the face as {clone.Name}, {unit.From(cloneThickness):0.##} {unit.Label} thick - it is selected";
     }
 
     /// <summary>The face's triangle count, and how many points sit inside it rather than on its outline.</summary>
