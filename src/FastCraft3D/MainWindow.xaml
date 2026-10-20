@@ -534,6 +534,12 @@
                     <Button Style="{StaticResource ToolButton}" Content="Smooth" Tag="{StaticResource IconSmooth}"
                             Command="{Binding SmoothCommand}"
                             ToolTip="Round the facets off, with the result shown as you set it" />
+                    <Button Style="{StaticResource ToolButton}" Content="Grow" Tag="{StaticResource IconGrow}"
+                            Command="{Binding GrowCommand}" AutomationProperties.AutomationId="GrowFaces"
+                            ToolTip="Move every face out by the same amount, along the axes you pick - walls thicker, gaps narrower. Not a scale." />
+                    <Button Style="{StaticResource ToolButton}" Content="Shrink" Tag="{StaticResource IconShrink}"
+                            Command="{Binding ShrinkCommand}" AutomationProperties.AutomationId="ShrinkFaces"
+                            ToolTip="Move every face in by the same amount, along the axes you pick - walls thinner, gaps wider. Leave Z out to keep the height." />
                     <Button Style="{StaticResource ToolButton}" Content="Hollow" Visibility="{Binding IsAdvancedMode, Converter={StaticResource BoolToVisibility}}" Tag="{StaticResource IconHollow}"
                             Command="{Binding HollowCommand}" MinWidth="78"
                             ToolTip="Turn a solid into a shell of a chosen wall thickness, to save material" />
