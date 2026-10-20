@@ -113,6 +113,7 @@ public partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
+        WindowPlacement.Restore(this);
         DataContext = viewModel;
 
         // Before the plate is first drawn, or it is drawn at the default size and then redrawn.
@@ -374,6 +375,9 @@ public partial class MainWindow : Window
             e.Cancel = !viewModel.ConfirmDiscardChanges();
         };
 
+        // After the close above has had its say, so a close that was called off keeps nothing.
+        WindowPlacement.Track(this);
+
         Closed += (_, _) =>
         {
             // The close was confirmed, so whatever is unsaved was meant to go. What is left in
@@ -396,9 +400,45 @@ public partial class MainWindow : Window
         var opening = App.Opening;
         Dispatcher.BeginInvoke(new Action(() =>
         {
-            if (!OfferRecovery() && opening.Count > 0) OpenOnStartup(opening);
+            if (OfferRecovery()) return;
+
+            if (opening.Count > 0) OpenOnStartup(opening);
+            else if (StartPage.ShowAtStartup) ShowStartPage();
         }));
     }
+
+    /// <summary>
+    /// The start page: a new project, a file to open, the favorites and the last three opened.
+    /// Shown when the app starts with nothing to open, and from the File tab.
+    /// </summary>
+    private void ShowStartPage()
+    {
+        // At startup this is asked for before the window has been drawn, and a dialog cannot
+        // belong to a window that has never been shown: it waits for the first frame.
+        if (!IsVisible)
+        {
+            void Once(object? sender, EventArgs e)
+            {
+                ContentRendered -= Once;
+                ShowStartPage();
+            }
+
+            ContentRendered += Once;
+            return;
+        }
+
+        // A favorite is listed once, under Favorites: the three recent are the three after them.
+        var favorites = viewModel.PinnedFiles;
+        var pinnedPaths = new HashSet<string>(favorites.Select(f => f.Path), StringComparer.OrdinalIgnoreCase);
+        var recentThree = viewModel.RecentFiles.Where(r => !pinnedPaths.Contains(r.Path)).Take(3).ToList();
+        var page = new StartDialog(favorites, recentThree) { Owner = this };
+        page.ShowDialog();
+
+        if (page.Project is { } path) viewModel.OpenRecentCommand.Execute(path);
+        else if (page.OpenAFile) viewModel.OpenCommand.Execute(null);
+    }
+
+    private void OnShowStartPage(object sender, RoutedEventArgs e) => ShowStartPage();
 
     /// <summary>How often the crash file is looked at. What it costs is decided in the view model.</summary>
     private readonly DispatcherTimer recoveryClock =
@@ -2631,8 +2671,29 @@ public partial class MainWindow : Window
             return;
         }
 
-        // The menu inherits the window's DataContext so its items can reach the command.
+        // Built here each time rather than bound: the list ends with Clear, which is not a project.
         menu.DataContext = viewModel;
+        menu.Items.Clear();
+        var tile = (DataTemplate)menu.Resources["RecentTile"];
+        foreach (var entry in viewModel.RecentFiles)
+        {
+            menu.Items.Add(new MenuItem
+            {
+                Header = entry,
+                HeaderTemplate = tile,
+                ToolTip = entry.Path,
+                Command = viewModel.OpenRecentCommand,
+                CommandParameter = entry.Path
+            });
+        }
+
+        menu.Items.Add(new Separator());
+        menu.Items.Add(new MenuItem
+        {
+            Header = "Clear the list",
+            ToolTip = "Forget the projects opened recently. Favorites stay.",
+            Command = viewModel.ClearRecentCommand
+        });
         // Beside the copy on the Custom tab when that is where it was clicked: the original may be on a tab that is not showing.
         menu.PlacementTarget = CustomTab.ClickedCopy ?? button;
         menu.Placement = System.Windows.Controls.Primitives.PlacementMode.Bottom;

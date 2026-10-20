@@ -69,6 +69,10 @@ public sealed partial class MainViewModel
     private static readonly Dictionary<string, string> RenamedButtons = new()
     {
         ["File/Settings"] = "File/Printer profile",
-        ["Tools/Surface info"] = "Tools/Surface"
+        ["Tools/Surface info"] = "Tools/Surface",
+        ["Edit/Subtract"] = "Tools/Subtract",
+        ["Edit/Intersect"] = "Tools/Intersect",
+        ["Edit/Merge"] = "Tools/Merge",
+        ["Edit/Split"] = "Tools/Split"
     };
 }

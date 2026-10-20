@@ -12,15 +12,35 @@ namespace FastCraft3D.Io;
 /// </summary>
 public sealed class RecentFiles
 {
-    private const int Limit = 8;
+    private readonly int limit;
 
     private readonly string storePath;
     private readonly List<string> paths = new();
 
-    public RecentFiles(string? storePath = null)
+    public RecentFiles(string? storePath = null, int limit = 8)
     {
         this.storePath = storePath ?? DefaultStorePath();
+        this.limit = limit;
         Load();
+    }
+
+    /// <summary>The projects pinned as favorites, kept the same way in a file of their own.</summary>
+    public static RecentFiles Pinned() => new(Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "3DFastCraft", "pinned.json"), 50);
+
+    public bool Contains(string path)
+    {
+        string full = SafeFullPath(path);
+        return paths.Any(p => string.Equals(p, full, StringComparison.OrdinalIgnoreCase));
+    }
+
+    /// <summary>Forgets every one of them, for privacy.</summary>
+    public void Clear()
+    {
+        if (paths.Count == 0) return;
+        paths.Clear();
+        Save();
+        Changed?.Invoke();
     }
 
     /// <summary>Most recent first.</summary>
@@ -41,7 +61,7 @@ public sealed class RecentFiles
         paths.RemoveAll(p => string.Equals(p, full, StringComparison.OrdinalIgnoreCase));
         paths.Insert(0, full);
 
-        while (paths.Count > Limit) paths.RemoveAt(paths.Count - 1);
+        while (paths.Count > limit) paths.RemoveAt(paths.Count - 1);
 
         Save();
         Changed?.Invoke();
@@ -64,7 +84,7 @@ public sealed class RecentFiles
             if (!File.Exists(storePath)) return;
 
             var stored = JsonSerializer.Deserialize<List<string>>(File.ReadAllText(storePath));
-            if (stored is not null) paths.AddRange(stored.Take(Limit));
+            if (stored is not null) paths.AddRange(stored.Take(limit));
         }
         catch
         {

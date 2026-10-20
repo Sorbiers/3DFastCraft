@@ -206,6 +206,7 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
     private bool snapRotation = true;
     private double snapStep;
     private readonly RecentFiles recent = new();
+    private readonly RecentFiles pinned = FastCraft3D.Io.RecentFiles.Pinned();
     private bool stickySelection = true;
 
     /// <summary>The last tool-launching command run, and what it was given, for RepeatLastCommand.</summary>
@@ -354,6 +355,11 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
 
         OpenRecentCommand = new RelayCommand(OpenRecent);
         recent.Changed += () => Raise(nameof(RecentFiles));
+        pinned.Changed += () =>
+        {
+            Raise(nameof(PinnedFiles));
+            Raise(nameof(IsFavorite));
+        };
         SaveVersionCommand = RelayCommand.Simple(SaveVersion, () => Scene.Objects.Count > 0);
         VersionsCommand = RelayCommand.Simple(ShowVersions, () => projectPath is not null);
         NewCommand = RelayCommand.Simple(NewScene);
@@ -520,6 +526,40 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
         .Select(p => recentEntries.TryGetValue(p, out var known) ? known : recentEntries[p] = new RecentEntry(p))
         .ToList();
 
+    /// <summary>The projects pinned as favorites, for the start page.</summary>
+    public IReadOnlyList<RecentEntry> PinnedFiles => pinned.Paths
+        .Select(p => recentEntries.TryGetValue(p, out var known) ? known : recentEntries[p] = new RecentEntry(p))
+        .ToList();
+
+    /// <summary>Whether the project has a file of its own, which is what a favorite is.</summary>
+    public bool CanFavorite => projectPath is not null;
+
+    /// <summary>The project pinned to the start page, or taken off it.</summary>
+    public bool IsFavorite
+    {
+        get => projectPath is not null && pinned.Contains(projectPath);
+        set
+        {
+            if (projectPath is null || value == IsFavorite) return;
+
+            if (value) pinned.Add(projectPath);
+            else pinned.Remove(projectPath);
+
+            Status = value ? $"{Path.GetFileNameWithoutExtension(projectPath)} is a favorite - it is on the start page"
+                           : $"{Path.GetFileNameWithoutExtension(projectPath)} is no longer a favorite";
+        }
+    }
+
+    /// <summary>Forgets the recent projects, for privacy. Favorites stay: they were chosen.</summary>
+    public System.Windows.Input.ICommand ClearRecentCommand => clearRecent ??= RelayCommand.Simple(() =>
+    {
+        recent.Clear();
+        foreach (var path in recentEntries.Keys.Where(p => !pinned.Contains(p)).ToList()) recentEntries.Remove(path);
+        Status = "The recent projects are forgotten";
+    });
+
+    private System.Windows.Input.ICommand? clearRecent;
+
     /// <summary>The same entry each time, so a picture read once is not read again.</summary>
     private readonly Dictionary<string, RecentEntry> recentEntries = new(StringComparer.OrdinalIgnoreCase);
 
@@ -544,6 +584,9 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
 
         /// <summary>The full path, shown as a tooltip and used to open it.</summary>
         public string Path { get; } = path;
+
+        /// <summary>The folder it is in, shown under its name on the start page.</summary>
+        public string Folder { get; } = System.IO.Path.GetDirectoryName(path) ?? "";
 
         /// <summary>The PNG saved in the project, once it has been read; null before, or for a file without one.</summary>
         public byte[]? Picture
@@ -1496,6 +1539,10 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
 
             Set(ref isDirty, value);
             Raise(nameof(WindowTitle));
+
+            // Saved, opened or new: the project's file may be another one now.
+            Raise(nameof(IsFavorite));
+            Raise(nameof(CanFavorite));
 
             if (value) Changed();
             else if (was) ForgetRecovery();

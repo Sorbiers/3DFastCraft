@@ -230,10 +230,16 @@ public static class OutlineRebuild
         var result = FaceRebuild.Compacted(points, built);
 
         var was = mesh.CheckHealth();
-        var now = result.CheckHealth();
-        if (now.BoundaryEdges > was.BoundaryEdges || now.NonManifoldEdges > was.NonManifoldEdges
-            || now.InconsistentEdges > was.InconsistentEdges)
-            return Keep("the result would not have been watertight");
+        if (Worse(result.CheckHealth(), was))
+        {
+            // Given a chance to be mended before it is turned down - a point dropped while a
+            // face beside it still used it leaves a hairline crack, which is the kind of thing
+            // Repair closes. Kept only if mending actually gets it back to no worse than it came;
+            // the volume and size checks below still have their say on what the mending did.
+            var mended = MeshHealer.Heal(result).Mesh;
+            if (Worse(mended.CheckHealth(), was)) return Keep("the result would not have been watertight");
+            result = mended;
+        }
 
         if (MeshStitch.Count(result) > MeshStitch.Count(mesh))
             return Keep("the result would have left edges meeting partway");
@@ -410,4 +416,8 @@ public static class OutlineRebuild
     }
 
     private static long Key(int a, int b) => a < b ? ((long)a << 32) | (uint)b : ((long)b << 32) | (uint)a;
+
+    private static bool Worse(MeshHealth now, MeshHealth was) =>
+        now.BoundaryEdges > was.BoundaryEdges || now.NonManifoldEdges > was.NonManifoldEdges
+        || now.InconsistentEdges > was.InconsistentEdges;
 }

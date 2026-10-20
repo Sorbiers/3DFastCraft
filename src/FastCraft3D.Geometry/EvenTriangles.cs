@@ -85,10 +85,16 @@ public static class EvenTriangles
         var result = FaceRebuild.Compacted(points, indices);
 
         var was = mesh.CheckHealth();
-        var now = result.CheckHealth();
-        if (now.BoundaryEdges > was.BoundaryEdges || now.NonManifoldEdges > was.NonManifoldEdges
-            || now.InconsistentEdges > was.InconsistentEdges)
-            return Keep("the result would not have been watertight");
+        if (Worse(result.CheckHealth(), was))
+        {
+            // Given a chance to be mended before it is turned down - a point dropped while a
+            // face beside it still used it leaves a hairline crack, which is the kind of thing
+            // Repair closes. Kept only if mending actually gets it back to no worse than it came;
+            // the volume and size checks below still have their say on what the mending did.
+            var mended = MeshHealer.Heal(result).Mesh;
+            if (Worse(mended.CheckHealth(), was)) return Keep("the result would not have been watertight");
+            result = mended;
+        }
 
         double before = mesh.ComputeSignedVolume(), after = result.ComputeSignedVolume();
         if (Math.Abs(after - before) > 1e-6 * Math.Abs(before) + 1e-3)
@@ -117,7 +123,10 @@ public static class EvenTriangles
 
             var edges = Edges(tris);
             var tooLong = edges
-                .Where(e => e.Value.Count is 1 or 2)
+                // Only an edge two triangles share. One on a crack - a triangle on one side only -
+                // split at its middle puts a point the other side of the crack never gets, and one
+                // open edge becomes two: a part already cracked was refused for being made worse.
+                .Where(e => e.Value.Count == 2)
                 .Select(e => (e.Key, e.Value, Length: Length(points, e.Key)))
                 .Where(e => e.Length > longest)
                 .OrderByDescending(e => e.Length).ThenBy(e => e.Key)
@@ -353,4 +362,8 @@ public static class EvenTriangles
     {
         public Vector3D Add(Vector3D o) => new(X + o.X, Y + o.Y, Z + o.Z);
     }
+
+    private static bool Worse(MeshHealth now, MeshHealth was) =>
+        now.BoundaryEdges > was.BoundaryEdges || now.NonManifoldEdges > was.NonManifoldEdges
+        || now.InconsistentEdges > was.InconsistentEdges;
 }
