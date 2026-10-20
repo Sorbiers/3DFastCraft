@@ -64,13 +64,16 @@ Almost all of it is written by [Claude Code](https://claude.com/claude-code) fro
 
 - **Undo, copy, paste** - paste lands where the copy came from, also between two app windows.
 - **Duplicate** - beside, or in place.
-- **Subtract / Intersect / Merge** (Ctrl+- / Ctrl+=) - with **Subtract**, the cutter is the last
-  one picked; a **tolerance** takes it out that much wider, so printed parts fit.
-- **Split** - with a plane you drag or type; keep either half or both.
 - **Set pivot** - turn and measure about a point you click (a shaft hole, a hinge line). Resizing
   grows a part away from its pivot, so the arrow on a face that lies on the pivot is left out
   (**One way only** keeps every arrow).
 - **Round edges**, **Twist / Taper / Bend**, **Simplify**, **Smooth**, **Hollow**.
+- **Grow / Shrink** - every face moved out or in by the same distance, not a scale: walls get
+  thicker or thinner and gaps narrower or wider, corners stay sharp. Untick **Z** to keep the
+  height. More than a part is wide would fold it through itself and is refused.
+- **Trim** - cuts a part back round its outer edge only, along the axes you pick: the outline seen
+  from above is drawn in by the amount (Z takes it off the top and bottom), and partitions and
+  floors inside the edge keep their thickness. For an insert that has to fit inside other walls.
 - **Fill up** - fills what the part would hold if liquid were poured in from above, to a level:
   the inside of a cup or a box, a recess, a sealed hollow; a pocket open to the side fills only up
   to its opening, and with *The plate is a floor* a tube or walls standing on the plate fill too.
@@ -105,9 +108,17 @@ Almost all of it is written by [Claude Code](https://claude.com/claude-code) fro
 
 ### Tools
 
+- **Subtract / Intersect / Merge** (Ctrl+- / Ctrl+=) - with **Subtract**, the cutter is the last
+  one picked; a **tolerance** takes it out that much wider, so printed parts fit.
+- **Split** - with a plane you drag or type; keep either half or both.
 - **Mold** - a silicone mold that comes apart: split at the widest section, keyed, with pour
   hole and vents.
-- **Repair / Rebuild** - mend an open mesh, or remake the surface from scratch.
+- **Repair** - mend an open mesh.
+- **Rebuild** - **Keep the shape**: only the corners stay - points in the middle of flat faces
+  and along straight edges go - and every flat face is filled again from its outline, so the web
+  of slivers a boolean leaves is gone and nothing moves. **Merge faces** within 0.01 mm takes walls
+  joined from parts as one; **Even triangles** cuts the result to about one size, for Smooth,
+  Deform or a texture. **From scratch** remakes the surface on a voxel grid and mends anything.
 - **Convex hull** - wrap parts in one skin (two cylinders into a slot).
 - **Voronoi** - cut a part into a web of struts; watertight by construction.
 - **Extrude down** - a flat base under a scan, a relief or a tilted part.
@@ -133,12 +144,24 @@ Almost all of it is written by [Claude Code](https://claude.com/claude-code) fro
   rubble, coursed stone and bark can have no groove at all.
 - **Engrave** - brick, tile, plank, grain and more, cut or raised, laid *around* openings.
 - **Repeat** - along a line, round a circle (with a rise, for spiral stairs) or in a grid.
-- **Measure**, **Fit check**, **Surface info** - distances, overlap or gap between parts, and a
-  face's middle, direction, size and area.
+- **Surface** - point at a face to light it, click to read its middle, direction, size, area and
+  triangles. **Rebuild face** lays that one face again from its outline. **Clone** adds it as a
+  thin solid standing on it - its thickness set, its outline grown or shrunk (a frame round an
+  opening, a gasket), several faces at once with Shift+click.
+- **Fit check** - how far two parts overlap, or the gap between them.
+- **Measure** - snaps to the corner or edge under the pointer nearest you, never one hidden behind
+  a face; the tape follows the pointer to the next point. **Several points** joins each click to
+  the last with the total read off (right click or Esc ends the run); **Legs and angles** reads
+  each stretch as its right triangle on the plate; earlier measurements stay until **Clear**.
+  **Shift** drags a point already down, **Ctrl** turns and pans the view over a part.
 
 ### File
 
-- **Settings** - printer profiles, one per printer and filament: nozzle, layer, and the fits the
+- **Start page** - comes up when the app starts with nothing to open: a new project, a file to
+  open, your **favorites** (the **Favorite** star on the File tab pins a project) and the last
+  three others, each with its picture. **Recent** shows the pictures too, and ends with **Clear**.
+- **Project** - a summary of what the project holds, and **notes** kept in the project file.
+- **Printer profile** - printer profiles, one per printer and filament: nozzle, layer, and the fits the
   tools start from - sliding clearance (lids, hinges), hole clearance (Hole), press fit (the pins of
   Split and Connect), brick fit and thread clearance. **Printer profile test** in the Library prints
   every fit at once, a few samples either side of the profile's number or up from nought.
@@ -154,8 +177,9 @@ Almost all of it is written by [Claude Code](https://claude.com/claude-code) fro
 
 ### View
 
-- Axis views, **Wireframe**, **X-ray** (X), **Outline**, **Overhangs** (faces that will need
-  support), **Grid**. A selected part of more than 200,000 triangles has no outline - tracing it
+- Axis views, **Orthographic** (no perspective; every part's edges drawn dark, so a plan from the
+  top reads), **Wireframe**, **X-ray** (X), **Outline**, **Overhangs** (faces that will need
+  support), **Grid**. The window comes back where it was, maximised if it was. A selected part of more than 200,000 triangles has no outline - tracing it
   would cost more than it is worth - so its color deepens instead.
 - **Units** - mm, cm, m, in or ft; every box and tool panel reads in them. Models are always
   stored and exported in millimeters.
@@ -166,7 +190,7 @@ Almost all of it is written by [Claude Code](https://claude.com/claude-code) fro
 - **Selection** - *Sticky* (default, as 3D Builder): a click toggles one object. Off: Explorer
   rules - Ctrl+click adds, Shift+click takes a range, clicking empty space clears. A click on a
   part of an assembly picks the whole assembly; **Alt**+click picks the one part. The objects
-  list can be dragged taller by its bottom edge.
+  list can be dragged taller by its bottom edge, and scrolls to a part as it is added.
 - **Handles** - **M** move, **R** rotate, **S** resize; **Snap** to 1 or 5 mm. **O** resizes one
   way only, the opposite face staying put. The resize strip reads mm or %; the box corners,
   dragged, resize in proportion. With several parts selected they move, turn and resize as one
@@ -181,7 +205,7 @@ Almost all of it is written by [Claude Code](https://claude.com/claude-code) fro
   key meanwhile is ignored.
 - **A tool in hand has the plate to itself** - only the selection is drawn until it is put down;
   **X-ray** shows the rest. Tools that pick a face on anything (align to face, center face to
-  face, surface info, measure) keep everything.
+  face, surface, measure) keep everything.
 - **Enter** applies the tool in hand, **Esc** puts it down, **Ctrl+Space** runs the last tool
   again. **H** / **L** hide or lock the selection. **F1** lists every key.
 
