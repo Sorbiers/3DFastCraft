@@ -497,6 +497,9 @@
                     <Button Style="{StaticResource ToolButton}" Content="Subtract" Tag="{StaticResource IconSubtract}"
                             Command="{Binding BeginSubtractCommand}" MinWidth="80"
                             ToolTip="Cut the last picked object out of the others; each stays a separate object. Options on the right: tolerance, keep the cutter. Select two or more, the cutter last. (Ctrl+-)" />
+                    <Button Style="{StaticResource ToolButton}" Content="Trim" Tag="{StaticResource IconTrim}"
+                            Command="{Binding TrimCommand}" AutomationProperties.AutomationId="TrimEdges"
+                            ToolTip="Cut a part back round its outer edge by a distance, along the axes you pick, leaving everything inside the edge as it is" />
                     <Button Style="{StaticResource ToolButton}" Content="Intersect" Tag="{StaticResource IconIntersect}"
                             Command="{Binding BooleanCommand}" CommandParameter="Intersect"
                             ToolTip="Keep only the overlapping volume. Needs two or more objects selected." />

@@ -1,0 +1,36 @@
+<view:ToolPanel x:Class="FastCraft3D.View.TrimDialog"
+                xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                xmlns:view="clr-namespace:FastCraft3D.View"
+                Title="Trim">
+
+    <StackPanel>
+        <TextBlock x:Name="SubjectText" TextWrapping="Wrap" Foreground="#FF3A4550" Margin="0,0,0,8" />
+
+        <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+            <TextBlock Text="Cut back by" Style="{DynamicResource FieldLabel}" Width="84" />
+            <TextBox x:Name="DistanceBox" Width="64" Style="{DynamicResource NumberBox}"
+                     AutomationProperties.AutomationId="TrimDistance" />
+            <TextBlock Text="mm" Foreground="#FF9AA0A8" VerticalAlignment="Center" Margin="5,0,0,0" />
+        </StackPanel>
+
+        <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+            <TextBlock Text="Along" Style="{DynamicResource FieldLabel}" Width="84"
+                       ToolTip="X and Y cut the outline seen from above; Z cuts the top and the bottom" />
+            <CheckBox x:Name="AlongX" Content="X" Margin="0,0,12,0" AutomationProperties.AutomationId="TrimX" />
+            <CheckBox x:Name="AlongY" Content="Y" Margin="0,0,12,0" AutomationProperties.AutomationId="TrimY" />
+            <CheckBox x:Name="AlongZ" Content="Z" AutomationProperties.AutomationId="TrimZ" />
+        </StackPanel>
+
+        <TextBlock TextWrapping="Wrap" Foreground="#FF5A5F66"
+                   Text="The outer edge seen from above is drawn in by the amount and the part keeps what stands inside it; Z takes the amount off the top and the bottom. Everything inside the edge stays as it is." />
+
+        <TextBlock x:Name="WarningText" TextWrapping="Wrap" Foreground="#FFB3261E" Margin="0,6,0,0" Visibility="Collapsed" />
+
+        <StackPanel Orientation="Horizontal" Margin="0,10,0,0">
+            <Button Content="Trim" Style="{DynamicResource PanelButton}" Click="OnAccept"
+                    AutomationProperties.AutomationId="AcceptButton" />
+            <Button Content="Cancel" Style="{DynamicResource PanelButton}" IsCancel="True" />
+        </StackPanel>
+    </StackPanel>
+</view:ToolPanel>

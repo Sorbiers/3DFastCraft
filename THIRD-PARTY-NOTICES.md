@@ -16,6 +16,7 @@ and bundled into the standalone executable produced by `build.bat`.
 | Microsoft.Extensions.Logging.Abstractions | MIT | https://github.com/dotnet/runtime |
 | ManifoldRust (a Rust port of the Manifold geometry library, with its native `manifold_rs.dll`) | Apache-2.0 | https://github.com/larsbrubaker/manifold-rust |
 | Microsoft Visual C++ Runtime (`vcruntime140.dll`, needed by `manifold_rs.dll`) | Microsoft Visual C++ Redistributable licence | https://learn.microsoft.com/cpp/windows/latest-supported-vc-redist |
+| Clipper2 (polygon offsetting and clipping, by Angus Johnson) | Boost Software License 1.0 | https://github.com/AngusJohnson/Clipper2 |
 | .NET runtime and `System.*` libraries | MIT | https://github.com/dotnet/runtime |
 
 The test project additionally uses:
