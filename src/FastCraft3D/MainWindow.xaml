@@ -647,26 +647,6 @@
                             Command="{Binding BooleanCommand}" CommandParameter="Union"
                             ToolTip="Fuse the selection into one solid. Needs two or more objects selected. (Ctrl+=)" />
                     <Separator Margin="8,0" />
-                    <Button Style="{StaticResource ToolButton}" Content="Mold" Visibility="{Binding IsAdvancedMode, Converter={StaticResource BoolToVisibility}}" Tag="{StaticResource IconMould}"
-                            Command="{Binding MouldCommand}" MinWidth="76"
-                            ToolTip="Make a silicone mold of the selected object: a block with the model taken out, cut to open, with a pour hole and air vents. Select one object." />
-                    <Button Style="{StaticResource ToolButton}" Content="Convex hull" Visibility="{Binding IsAdvancedMode, Converter={StaticResource BoolToVisibility}}" Tag="{StaticResource IconHull}"
-                            Command="{Binding HullCommand}"
-                            ToolTip="Wrap the selection in one tight skin - two cylinders become a slot, a row of spheres a rounded bar. Replaces the selection." />
-                    <Separator Margin="8,0" Visibility="{Binding IsAdvancedMode, Converter={StaticResource BoolToVisibility}}" />
-                    <Button Style="{StaticResource ToolButton}" Content="Repair" Tag="{StaticResource IconRepair}"
-                            Command="{Binding RepairCommand}"
-                            ToolTip="Mend objects that would not print: fill holes, drop slivers, turn faces the right way round" />
-                    <Button Style="{StaticResource ToolButton}" Content="Rebuild" Visibility="{Binding IsAdvancedMode, Converter={StaticResource BoolToVisibility}}" Tag="{StaticResource IconRebuild}"
-                            Command="{Binding RebuildCommand}" MinWidth="82"
-                            ToolTip="Rebuild the surface. Keep the shape and drop the points that add nothing, or rebuild from scratch to mend anything, including a model that passes through itself - at the cost of fine detail." />
-                    <Separator Margin="8,0" />
-                    <Button Style="{StaticResource ToolButton}" Content="Voronoi" Visibility="{Binding IsAdvancedMode, Converter={StaticResource BoolToVisibility}}" Tag="{StaticResource IconVoronoi}"
-                            Command="{Binding VoronoiCommand}" MinWidth="82"
-                            ToolTip="Beta. Cut the selection into a web of Voronoi struts - an openwork lamp or vase, or a lightweight core. Built on a voxel grid, so it is watertight; detail finer than a voxel is lost." />
-                    <Button Style="{StaticResource ToolButton}" Content="Extrude down" Tag="{StaticResource IconExtrudeDown}"
-                            Command="{Binding BeginExtrudeCommand}" MinWidth="90"
-                            ToolTip="Cut the model at a height and extend its outline straight down to a flat base - for a ragged scan, a relief skin or a tilted part." />
                     <Button Style="{StaticResource ToolButton}" Content="Split" Tag="{StaticResource IconSplit}"
                             Command="{Binding BeginSplitCommand}"
                             ToolTip="Cut the selected object in two with a plane, or with a face you pick" />
@@ -682,6 +662,32 @@
                     <Button Style="{StaticResource ToolButton}" Content="Keyhole" Visibility="{Binding IsAdvancedMode, Converter={StaticResource BoolToVisibility}}" Tag="{StaticResource IconWallMount}"
                             Command="{Binding BeginWallMountCommand}" MinWidth="76"
                             ToolTip="Keyhole slots to hang a part on a wall: click the back face, drag the keyholes into place, Apply. Optional printed wall studs and a drilling template." />
+                    <Button Style="{StaticResource ToolButton}" Content="Studs" Visibility="{Binding IsAdvancedMode, Converter={StaticResource BoolToVisibility}}" Tag="{StaticResource IconStuds}"
+                            Command="{Binding BeginEngraveCommand}" MinWidth="82"
+                            ToolTip="Legacy. One pattern - brick, tiles, planks, grain - on one flat face. Texture in Emboss does all this and more, and wraps around curves. Kept for older models." />
+                    <Separator Margin="8,0" />
+                    <Button Style="{StaticResource ToolButton}" Content="Repair" Tag="{StaticResource IconRepair}"
+                            Command="{Binding RepairCommand}"
+                            ToolTip="Mend objects that would not print: fill holes, drop slivers, turn faces the right way round" />
+                    <Button Style="{StaticResource ToolButton}" Content="Rebuild" Visibility="{Binding IsAdvancedMode, Converter={StaticResource BoolToVisibility}}" Tag="{StaticResource IconRebuild}"
+                            Command="{Binding RebuildCommand}" MinWidth="82"
+                            ToolTip="Rebuild the surface. Keep the shape and drop the points that add nothing, or rebuild from scratch to mend anything, including a model that passes through itself - at the cost of fine detail." />
+                    <Separator Margin="8,0" />
+                    <Button Style="{StaticResource ToolButton}" Content="Repeat" Visibility="{Binding IsAdvancedMode, Converter={StaticResource BoolToVisibility}}" Tag="{StaticResource IconRepeat}"
+                            Command="{Binding RepeatCommand}" MinWidth="76"
+                            ToolTip="Repeat the selection along a line or round a circle, growing as it goes - a flight of steps, a row of dowels, a ring of pins, a spiral stair" />
+                    <Button Style="{StaticResource ToolButton}" Content="Extrude down" Tag="{StaticResource IconExtrudeDown}"
+                            Command="{Binding BeginExtrudeCommand}" MinWidth="90"
+                            ToolTip="Cut the model at a height and extend its outline straight down to a flat base - for a ragged scan, a relief skin or a tilted part." />
+                    <Button Style="{StaticResource ToolButton}" Content="Convex hull" Visibility="{Binding IsAdvancedMode, Converter={StaticResource BoolToVisibility}}" Tag="{StaticResource IconHull}"
+                            Command="{Binding HullCommand}"
+                            ToolTip="Wrap the selection in one tight skin - two cylinders become a slot, a row of spheres a rounded bar. Replaces the selection." />
+                    <Button Style="{StaticResource ToolButton}" Content="Mold" Visibility="{Binding IsAdvancedMode, Converter={StaticResource BoolToVisibility}}" Tag="{StaticResource IconMould}"
+                            Command="{Binding MouldCommand}" MinWidth="76"
+                            ToolTip="Make a silicone mold of the selected object: a block with the model taken out, cut to open, with a pour hole and air vents. Select one object." />
+                    <Button Style="{StaticResource ToolButton}" Content="Voronoi" Visibility="{Binding IsAdvancedMode, Converter={StaticResource BoolToVisibility}}" Tag="{StaticResource IconVoronoi}"
+                            Command="{Binding VoronoiCommand}" MinWidth="82"
+                            ToolTip="Beta. Cut the selection into a web of Voronoi struts - an openwork lamp or vase, or a lightweight core. Built on a voxel grid, so it is watertight; detail finer than a voxel is lost." />
                     <Separator Margin="8,0" />
                     <Button Style="{StaticResource ToolButton}" Content="Emboss" Tag="{StaticResource IconText}"
                             Command="{Binding BeginEmbossCommand}" MinWidth="78"
@@ -694,24 +700,17 @@
                             Command="{Binding BeginMasonryCommand}" MinWidth="82"
                             AutomationProperties.AutomationId="Masonry"
                             ToolTip="Brick, stone, siding or log walls on the walls you pick, built the way the real thing is. Brick: each wall a whole number of bricks, every corner a whole corner brick, swapping faces course by course. Rubble and coursed stone walling: big cornerstones at every outside corner, long and short by turns. Siding: a post over the boards at every corner. Logs: crossing at the corners, their ends standing out. Click a wall, then Ctrl+click the walls either side. Brick and logs: square corners only." />
-                    <Button Style="{StaticResource ToolButton}" Content="Studs" Visibility="{Binding IsAdvancedMode, Converter={StaticResource BoolToVisibility}}" Tag="{StaticResource IconStuds}"
-                            Command="{Binding BeginEngraveCommand}" MinWidth="82"
-                            ToolTip="Legacy. One pattern - brick, tiles, planks, grain - on one flat face. Texture in Emboss does all this and more, and wraps around curves. Kept for older models." />
-                    <Separator Visibility="{Binding IsAdvancedMode, Converter={StaticResource BoolToVisibility}}" Margin="8,0" />
-                    <Button Style="{StaticResource ToolButton}" Content="Repeat" Visibility="{Binding IsAdvancedMode, Converter={StaticResource BoolToVisibility}}" Tag="{StaticResource IconRepeat}"
-                            Command="{Binding RepeatCommand}" MinWidth="76"
-                            ToolTip="Repeat the selection along a line or round a circle, growing as it goes - a flight of steps, a row of dowels, a ring of pins, a spiral stair" />
                     <Separator Margin="8,0" />
-                    <Button Style="{StaticResource ToolButton}" Content="Measure" Tag="{StaticResource IconMeasure}"
-                            Command="{Binding BeginMeasureCommand}"
-                            ToolTip="Click two points to measure between them, then drag either end to move it" />
-                    <Button Style="{StaticResource ToolButton}" Content="Fit check" Visibility="{Binding IsAdvancedMode, Converter={StaticResource BoolToVisibility}}" Tag="{StaticResource IconMeasure}"
-                            Command="{Binding FitCheckCommand}" MinWidth="72"
-                            ToolTip="Measure how far two parts overlap, or the gap between them, without changing either. Select two objects." />
                     <Button Style="{StaticResource ToolButton}" Content="Surface" Tag="{StaticResource IconSurfaceInfo}"
                             Command="{Binding BeginSurfaceInfoCommand}" MinWidth="70"
                             AutomationProperties.AutomationId="SurfaceInfo"
                             ToolTip="Point at a face to highlight it; click to read its middle, direction, size and area, lay it again, or clone it as a thin solid. Stays on until Cancel." />
+                    <Button Style="{StaticResource ToolButton}" Content="Fit check" Visibility="{Binding IsAdvancedMode, Converter={StaticResource BoolToVisibility}}" Tag="{StaticResource IconMeasure}"
+                            Command="{Binding FitCheckCommand}" MinWidth="72"
+                            ToolTip="Measure how far two parts overlap, or the gap between them, without changing either. Select two objects." />
+                    <Button Style="{StaticResource ToolButton}" Content="Measure" Tag="{StaticResource IconMeasure}"
+                            Command="{Binding BeginMeasureCommand}"
+                            ToolTip="Click two points to measure between them, then drag either end to move it" />
                 </WrapPanel>
             </TabItem>
 
