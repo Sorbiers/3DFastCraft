@@ -1,7 +1,8 @@
 # 3DFastCraft
 
-A WPF/.NET 8 replacement for the retired Microsoft 3D Builder. Millimetres, Z-up, 200 mm plate.
-Built entirely with the `dotnet` CLI - there is no Visual Studio on this machine.
+A WPF/.NET 10 replacement for the retired Microsoft 3D Builder. Millimetres, Z-up, 200 mm plate.
+Built with the `dotnet` CLI. Visual Studio 2022 is installed for laying out panels with Hot Reload;
+`global.json` pins the SDK so its newer SDKs do not change the build.
 
 ## Working rules
 

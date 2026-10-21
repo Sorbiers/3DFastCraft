@@ -162,30 +162,6 @@ public sealed class SceneRenderer : IDisposable
         SetFaceMarker(face, tint, ref faceHighlight2, ref faceOutline2);
     }
 
-    private readonly List<(MeshGeometryModel3D? Skin, LineGeometryModel3D? Line)> extraFaces = [];
-
-    /// <summary>Any number of faces marked at once, all in one colour: the faces Surface's Clone will take.</summary>
-    public void ShowExtraFaces(IReadOnlyList<FacePatch> faces, Color? tint = null)
-    {
-        Invalidate();
-
-        for (int i = 0; i < extraFaces.Count; i++)
-        {
-            var (skin, line) = extraFaces[i];
-            SetFaceMarker(null, null, ref skin, ref line);
-        }
-
-        extraFaces.Clear();
-
-        foreach (var face in faces)
-        {
-            MeshGeometryModel3D? skin = null;
-            LineGeometryModel3D? line = null;
-            SetFaceMarker(face, tint, ref skin, ref line);
-            extraFaces.Add((skin, line));
-        }
-    }
-
     /// <summary>Builds or clears the tinted skin and outline a face marker is drawn from.</summary>
     private void SetFaceMarker(
         FacePatch? face, Color? tint, ref MeshGeometryModel3D? highlight, ref LineGeometryModel3D? outline)

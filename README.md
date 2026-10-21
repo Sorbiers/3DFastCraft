@@ -147,7 +147,7 @@ Almost all of it is written by [Claude Code](https://claude.com/claude-code) fro
 - **Surface** - point at a face to light it, click to read its middle, direction, size, area and
   triangles. **Rebuild face** lays that one face again from its outline. **Clone** adds it as a
   thin solid standing on it - its thickness set, its outline grown or shrunk (a frame round an
-  opening, a gasket), several faces at once with Shift+click.
+  opening, a gasket).
 - **Fit check** - how far two parts overlap, or the gap between them.
 - **Measure** - snaps to the corner or edge under the pointer nearest you, never one hidden behind
   a face; the tape follows the pointer to the next point. **Several points** joins each click to
@@ -242,7 +242,7 @@ dotnet run --project src/FastCraft3D
 dotnet test
 ```
 
-Needs the .NET 8 SDK. `PublishTrimmed` is deliberately off: WPF resolves XAML types by
+Needs the .NET 10 SDK (`global.json` pins it). `PublishTrimmed` is deliberately off: WPF resolves XAML types by
 reflection, and trimming breaks the app at runtime.
 
 ## How it works

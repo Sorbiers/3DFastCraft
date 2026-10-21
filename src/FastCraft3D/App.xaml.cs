@@ -64,7 +64,19 @@ public partial class App : Application
             try { model.KeepRecovery(now: true); } catch { }
         }
 
+        // Written down whole, since the box shows only the message - and some exceptions carry
+        // none, which left "Something went wrong:" and nothing to go on.
+        string log = System.IO.Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "3DFastCraft", "crash.log");
+        try
+        {
+            System.IO.Directory.CreateDirectory(System.IO.Path.GetDirectoryName(log)!);
+            System.IO.File.WriteAllText(log, $"{DateTime.Now:yyyy-MM-dd HH:mm:ss}{Environment.NewLine}{e.Exception}");
+        }
+        catch { /* the box still says what it can */ }
+
         bool graphics = LooksLikeGraphics(e.Exception);
+        string what = string.IsNullOrWhiteSpace(e.Exception.Message) ? e.Exception.GetType().Name : e.Exception.Message;
 
         string message = graphics
             ? "3DFastCraft could not start its 3D view.\n\n"
@@ -73,8 +85,10 @@ public partial class App : Application
               + "missing on a virtual machine with no display driver, over some remote desktop "
               + "connections, or on a fresh Windows install still using the Basic Display "
               + "Adapter. Installing the graphics driver for the machine normally fixes it.\n\n"
-              + e.Exception.Message
-            : "Something went wrong:\n\n" + e.Exception.Message;
+              + what
+            : "Something went wrong:\n\n" + what;
+
+        message += $"\n\nThe details are in {log}";
 
         MessageBox.Show(message, "3DFastCraft", MessageBoxButton.OK, MessageBoxImage.Error);
 

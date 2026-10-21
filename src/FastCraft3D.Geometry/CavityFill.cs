@@ -190,9 +190,17 @@ public sealed class CavityFill
 
         var cut = PlaneClip.Keep(surface, Matrix4x4.Identity, -Vector3.UnitZ, -level);
 
-        // Standing on the plate, flat on it rather than a voxel's steps below it.
-        if (PlateFloor && cut.TriangleCount > 0 && cut.ComputeBounds().Min.Z < 0f)
+        // Standing on the plate, flat on it rather than a voxel's steps below it. Only when it
+        // really goes below: a bottom a rounding error under the plate - -1e-8, as .NET 10's vector
+        // arithmetic left it where .NET 8's had left it on - cut through nothing and came back torn.
+        if (PlateFloor && cut.TriangleCount > 0 && cut.ComputeBounds().Min.Z < -1e-4f)
             cut = PlaneClip.Keep(cut, Matrix4x4.Identity, Vector3.UnitZ, 0f);
+
+        // And exactly on it: a bottom a few billionths off the plate meets the part's own bottom
+        // almost in one plane, and the boolean left edges four faces meet at.
+        if (PlateFloor)
+            for (int i = 0; i < cut.Positions.Count; i++)
+                if (MathF.Abs(cut.Positions[i].Z) < 1e-4f) cut.Positions[i] = cut.Positions[i] with { Z = 0f };
 
         return cut.TriangleCount > 0 ? cut : null;
     }

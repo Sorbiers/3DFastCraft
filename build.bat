@@ -6,7 +6,7 @@ where dotnet >nul 2>&1
 if errorlevel 1 (
     echo.
     echo The .NET SDK was not found on PATH.
-    echo Install the .NET 8 SDK from https://dotnet.microsoft.com/download and try again.
+    echo Install the .NET 10 SDK from https://dotnet.microsoft.com/download and try again.
     echo.
     exit /b 1
 )

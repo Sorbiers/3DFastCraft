@@ -3181,11 +3181,11 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
             string bevel = embossBevel > 0 ? $", {embossBevel:0.##} mm bevel" : "";
 
             var (across, up) = EmbossField();
-            string field = across > 1 || up > 1
+            string grid = across > 1 || up > 1
                 ? $"{across} x {up}, {embossGap:0.##} mm apart, "
                 : "";
 
-            return $"{field}{shapes.Count} shape(s), {embossHeight:0.#} mm tall, {what}{wrapped}{bevel}";
+            return $"{grid}{shapes.Count} shape(s), {embossHeight:0.#} mm tall, {what}{wrapped}{bevel}";
         }
     }
 

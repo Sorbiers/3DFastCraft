@@ -2,7 +2,7 @@
 
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
-    <TargetFramework>net8.0-windows10.0.19041.0</TargetFramework>
+    <TargetFramework>net10.0-windows10.0.19041.0</TargetFramework>
     <!-- The Windows 10 target framework is what turns on the WinRT projections, and the mesh
          repair engine the app falls back on lives there (Geometry/WindowsRepair.cs). It is only
          which headers are visible: the floor below keeps the app running on 1809, where that
@@ -11,6 +11,10 @@
     <RootNamespace>FastCraft3D</RootNamespace>
     <AssemblyName>3DFastCraft</AssemblyName>
     <UseWPF>true</UseWPF>
+    <!-- Not for any Windows Forms of our own: HelixToolkit's viewport loads WindowsFormsIntegration
+         when it is shown, and from .NET 10 a WPF-only project no longer ships that assembly - the
+         viewport stayed black and the app died with a bare FileNotFoundException. -->
+    <UseWindowsForms>true</UseWindowsForms>
     <Nullable>enable</Nullable>
     <LangVersion>latest</LangVersion>
     <ImplicitUsings>enable</ImplicitUsings>
@@ -21,6 +25,13 @@
     <Version>4.6.0</Version>
     <Product>3DFastCraft</Product>
   </PropertyGroup>
+
+  <!-- Windows Forms is on only for the assembly above; its global usings would make MessageBox,
+       Application and the rest ambiguous with WPF's. -->
+  <ItemGroup>
+    <Using Remove="System.Windows.Forms" />
+    <Using Remove="System.Drawing" />
+  </ItemGroup>
 
   <ItemGroup>
     <PackageReference Include="HelixToolkit.SharpDX.Core.Wpf" Version="2.27.3" />

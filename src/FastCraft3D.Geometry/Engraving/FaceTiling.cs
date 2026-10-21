@@ -510,10 +510,10 @@ internal static class FaceTiling
     private static List<Vector2>[] Sides(float[] us, float[][] breaks, Rect2 area)
     {
         var bottom = us.Select(u => new Vector2(u, area.MinV)).ToList();
-        var top = us.Reverse().Select(u => new Vector2(u, area.MaxV)).ToList();
+        var top = Enumerable.Reverse(us).Select(u => new Vector2(u, area.MaxV)).ToList();
 
         var right = breaks[^1].Select(v => new Vector2(area.MaxU, v)).ToList();
-        var left = breaks[0].Reverse().Select(v => new Vector2(area.MinU, v)).ToList();
+        var left = Enumerable.Reverse(breaks[0]).Select(v => new Vector2(area.MinU, v)).ToList();
 
         return [bottom, right, top, left];
     }

@@ -193,8 +193,8 @@ public static class FaceRelief
         [
             us.Select(u => new Vector2(u, vs[0])).ToList(),
             vs.Select(v => new Vector2(us[^1], v)).ToList(),
-            us.Reverse().Select(u => new Vector2(u, vs[^1])).ToList(),
-            vs.Reverse().Select(v => new Vector2(us[0], v)).ToList()
+            Enumerable.Reverse(us).Select(u => new Vector2(u, vs[^1])).ToList(),
+            Enumerable.Reverse(vs).Select(v => new Vector2(us[0], v)).ToList()
         ];
 
         return true;

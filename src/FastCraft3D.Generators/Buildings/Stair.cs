@@ -307,7 +307,10 @@ public sealed class Stair : Generator<Stair.Settings>
             Vector3 from = At((i + 0.5f) * step), to = At((i + 1.5f) * step);
             var along = Vector3.Normalize(to - from);
             float length = Vector3.Distance(from, to) + w;
-            yield return MeshTransform.Transformed(Shapes.Cylinder(w / 2f, 0, length, default, 10),
+            // A shade thinner than the posts. Exactly as thick, its sides grazed theirs, the union
+            // cut them along a line with points a ten-thousandth apart, and those points welded into
+            // edges three faces met at - which arithmetic a hair different under .NET 10 showed.
+            yield return MeshTransform.Transformed(Shapes.Cylinder(w * 0.45f, 0, length, default, 10),
                 MeshTransform.RotationBetween(Vector3.UnitZ, along) * Matrix4x4.CreateTranslation(from - along * (w / 2f)));
         }
 

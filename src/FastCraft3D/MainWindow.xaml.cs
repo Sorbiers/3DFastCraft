@@ -221,7 +221,6 @@ public partial class MainWindow : Window
         viewModel.SurfaceInfoChanged += () =>
         {
             renderer?.ShowFace(viewModel.SurfaceInfoFace, tint: viewModel.SurfaceInfoShowsPicked ? AlignFacePickedColour : null);
-            renderer?.ShowExtraFaces(viewModel.SurfaceExtraFaces, AlignFacePickedColour);
             ShowAnchors(viewModel.SurfaceInfoAnchors);
         };
         viewModel.CentreFaceChanged += () =>
@@ -1383,7 +1382,7 @@ public partial class MainWindow : Window
 
         // Surface info reads any face, selected or not, and leaves the selection alone.
         if (viewModel.IsSurfaceInfoMode && viewModel.PickSurfaceInfo(
-                target, ToVector3(hit!.PointHit), ToVector3(hit.NormalAtHit), add: IsShiftDown))
+                target, ToVector3(hit!.PointHit), ToVector3(hit.NormalAtHit)))
         {
             e.Handled = true;
             return;

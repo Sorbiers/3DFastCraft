@@ -704,7 +704,7 @@
                     <Button Style="{StaticResource ToolButton}" Content="Surface" Tag="{StaticResource IconSurfaceInfo}"
                             Command="{Binding BeginSurfaceInfoCommand}" MinWidth="70"
                             AutomationProperties.AutomationId="SurfaceInfo"
-                            ToolTip="Point at a face to highlight it; click to read its middle, direction, size and area, lay it again, or clone it as a thin solid. Stays on until Cancel." />
+                            ToolTip="Point at a face to highlight it; click to read its middle, direction, size and area, lay it again, or clone it as a thin solid. Stays on until Close." />
                     <Button Style="{StaticResource ToolButton}" Content="Fit check" Visibility="{Binding IsAdvancedMode, Converter={StaticResource BoolToVisibility}}" Tag="{StaticResource IconMeasure}"
                             Command="{Binding FitCheckCommand}" MinWidth="72"
                             ToolTip="Measure how far two parts overlap, or the gap between them, without changing either. Select two objects." />
@@ -1279,34 +1279,46 @@
                                 </DataTemplate>
                             </ItemsControl.ItemTemplate>
                         </ItemsControl>
-                        <StackPanel Orientation="Horizontal" Margin="0,0,0,8"
-                                    Visibility="{Binding HasSurfaceInfo, Converter={StaticResource BoolToVisibility}}">
-                            <TextBlock Text="Clone thickness" Style="{StaticResource FieldLabel}" Width="96"
-                                       ToolTip="How thick Clone makes the face" />
-                            <TextBox Width="64" Style="{StaticResource NumberBox}" Tag="number" AutomationProperties.AutomationId="CloneThickness"
-                                     Text="{Binding CloneThickness, StringFormat=N2, UpdateSourceTrigger=LostFocus, Converter={StaticResource Length}}" />
-                            <TextBlock Text="{Binding DataContext.UnitLabel, RelativeSource={RelativeSource AncestorType=Window}}" Foreground="#FF9AA0A8" VerticalAlignment="Center" Margin="5,0,0,0" />
-                        </StackPanel>
-                        <StackPanel Orientation="Horizontal" Margin="0,0,0,8"
-                                    Visibility="{Binding HasSurfaceInfo, Converter={StaticResource BoolToVisibility}}">
-                            <TextBlock Text="Grow outline" Style="{StaticResource FieldLabel}" Width="96"
-                                       ToolTip="Move the clone's outline out by this much - in, below zero - and its holes the other way: a frame round an opening, a gasket" />
-                            <TextBox Width="64" Style="{StaticResource NumberBox}" Tag="number" AutomationProperties.AutomationId="CloneGrow"
-                                     Text="{Binding CloneGrow, StringFormat=N2, UpdateSourceTrigger=LostFocus, Converter={StaticResource Length}}" />
-                            <TextBlock Text="{Binding DataContext.UnitLabel, RelativeSource={RelativeSource AncestorType=Window}}" Foreground="#FF9AA0A8" VerticalAlignment="Center" Margin="5,0,0,0" />
-                        </StackPanel>
-                        <StackPanel Orientation="Horizontal">
-                            <Button Content="Rebuild face" Style="{StaticResource PanelButton}" Margin="0,0,6,0"
-                                    Command="{Binding RebuildFaceCommand}" AutomationProperties.AutomationId="RebuildFace"
-                                    ToolTip="Lay this face again with as few triangles as its outline needs. The points inside it go; its outline and the shape stay exactly as they are."
-                                    Visibility="{Binding HasSurfaceInfo, Converter={StaticResource BoolToVisibility}}" />
-                            <Button Content="Clone" Style="{StaticResource PanelButton}" Margin="0,0,6,0"
-                                    Command="{Binding CloneSurfaceCommand}" AutomationProperties.AutomationId="CloneSurface"
-                                    ToolTip="Add the face read as an object of its own, as thick as set below, standing on the face - where it is, as copy and paste would put it - and select it"
-                                    Visibility="{Binding HasSurfaceInfo, Converter={StaticResource BoolToVisibility}}" />
-                            <Button Content="Cancel" Style="{StaticResource PanelButton}"
-                                    Command="{Binding CancelSurfaceInfoCommand}" />
-                        </StackPanel>
+                        <Button Content="Rebuild face" Style="{StaticResource PanelButton}" HorizontalAlignment="Left" Margin="0,0,0,10"
+                                Command="{Binding RebuildFaceCommand}" AutomationProperties.AutomationId="RebuildFace"
+                                ToolTip="Lay this face again with as few triangles as its outline needs. The points inside it go; its outline and the shape stay exactly as they are."
+                                Visibility="{Binding HasSurfaceInfo, Converter={StaticResource BoolToVisibility}}" />
+                        <!-- Clone and the two settings only it reads, together under a title of their own. -->
+                        <Border Margin="0,0,0,10"
+                                Visibility="{Binding HasSurfaceInfo, Converter={StaticResource BoolToVisibility}}">
+                            <Grid>
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto" />
+                                    <RowDefinition Height="Auto" />
+                                    <RowDefinition Height="Auto" />
+                                </Grid.RowDefinitions>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Text="Clone the surface" FontWeight="SemiBold" Margin="0,0,0,8" Grid.ColumnSpan="2" />
+                                <StackPanel Grid.Row="1" Orientation="Horizontal" Margin="0,0,0,6">
+                                    <TextBlock Text="Thickness" Style="{StaticResource FieldLabel}" Width="86"
+                                               ToolTip="How thick Clone makes the face" />
+                                    <TextBox Width="64" Style="{StaticResource NumberBox}" Tag="number" AutomationProperties.AutomationId="CloneThickness"
+                                             Text="{Binding CloneThickness, StringFormat=N2, UpdateSourceTrigger=LostFocus, Converter={StaticResource Length}}" />
+                                    <TextBlock Text="{Binding DataContext.UnitLabel, RelativeSource={RelativeSource AncestorType=Window}}" Foreground="#FF9AA0A8" VerticalAlignment="Center" Margin="5,0,0,0" />
+                                </StackPanel>
+                                <StackPanel Grid.Row="2" Orientation="Horizontal" Margin="0,0,0,2">
+                                    <TextBlock Text="Grow outline" Style="{StaticResource FieldLabel}" Width="86"
+                                               ToolTip="Move the clone's outline out by this much - in, below zero - and its holes the other way: a frame round an opening, a gasket" />
+                                    <TextBox Width="64" Style="{StaticResource NumberBox}" Tag="number" AutomationProperties.AutomationId="CloneGrow"
+                                             Text="{Binding CloneGrow, StringFormat=N2, UpdateSourceTrigger=LostFocus, Converter={StaticResource Length}}" />
+                                    <TextBlock Text="{Binding DataContext.UnitLabel, RelativeSource={RelativeSource AncestorType=Window}}" Foreground="#FF9AA0A8" VerticalAlignment="Center" Margin="5,0,0,0" />
+                                </StackPanel>
+                                <Button Grid.Row="2" Grid.Column="1" Content="Clone" Style="{StaticResource PanelButton}"
+                                        VerticalAlignment="Center" Margin="16,0,0,0"
+                                        Command="{Binding CloneSurfaceCommand}" AutomationProperties.AutomationId="CloneSurface"
+                                        ToolTip="Add the face read as an object of its own, as thick as set here, standing on the face - where it is, as copy and paste would put it - and select it" />
+                            </Grid>
+                        </Border>
+                        <Button Content="Close" Style="{StaticResource PanelButton}" HorizontalAlignment="Left"
+                                Command="{Binding CancelSurfaceInfoCommand}" />
                     </view:ColumnFlow>
                 </Border>
 
