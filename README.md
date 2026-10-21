@@ -1,9 +1,9 @@
-# 3DFastCraft
+﻿# 3DFastCraft
 
 A lightweight Windows app for 3D printing: shapes at exact sizes, cut and combine, a library of
 parts made to your numbers, watertight STL and 3MF.
 
-**Website: [3dfastcraft.com](https://3dfastcraft.com/)** · [Download the latest release](https://github.com/Sorbiers/3DFastCraft/releases/latest)
+**Website: [3dfastcraft.com](https://3dfastcraft.com/)** Â· [Download the latest release](https://github.com/Sorbiers/3DFastCraft/releases/latest)
 
 > **In active testing.** Tools marked **beta** are new and still being proved in real prints -
 > check what they give you before a long print. Releases come often.
@@ -198,7 +198,7 @@ Almost all of it is written by [Claude Code](https://claude.com/claude-code) fro
 - **Stop on contact** (**C**) - a dragged part stops where its *shape* meets another, not its
   box. Parts that already overlap move freely.
 - **Number boxes** - every one, in every panel - take `+=5`, `-=5`, `*=1.5`, `/=2`; the wheel and
-  arrows nudge (Shift ×10, Ctrl ×0.1), and a count stays whole. **Enter** applies, **Esc** takes
+  arrows nudge (Shift Ã—10, Ctrl Ã—0.1), and a count stays whole. **Enter** applies, **Esc** takes
   back what was typed, and a box left holding something that is not a number goes back.
 - **Slow jobs say so** - opening or saving a big project, undo, redo and restoring a version put
   "Opening...", "Saving...", "Undoing..." over the window while they run, and a second click or
@@ -231,8 +231,9 @@ Almost all of it is written by [Claude Code](https://claude.com/claude-code) fro
 build.bat
 ```
 
-A self-contained `build\3DFastCraft.exe` (~190 MB), no .NET needed. `run.bat` starts it, or runs
-from source if nothing is built. From a shell:
+A self-contained `build\3DFastCraft.exe` (~200 MB), no .NET needed. `run.bat` starts it, or runs
+from source if nothing is built. If it ever fails, the full error is in
+`%LOCALAPPDATA%\3DFastCraft\crash.log`. From a shell:
 
 ```bash
 dotnet run --project src/FastCraft3D

@@ -31,7 +31,7 @@ if ($updated -ne $text) { [IO.File]::WriteAllText($csproj, $updated); Step "vers
 
 if ($Prepare) {
     if (-not $SkipTests) { Step "tests"; & "$PSScriptRoot\check.ps1" -All; Check "tests" }
-    Step "build"; cmd /c build.bat | Select-Object -Last 3; Check "build"
+    Step "build"; & (Join-Path $root "build.bat") | Select-Object -Last 3; Check "build"
     $exe = Get-Item build\3DFastCraft.exe
     Write-Output ("size {0} bytes ({1} MB)" -f $exe.Length, [math]::Round($exe.Length / 1MB))
     Write-Output ("sha256 " + (Get-FileHash $exe -Algorithm SHA256).Hash.ToLower())
