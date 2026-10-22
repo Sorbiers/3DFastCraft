@@ -1639,7 +1639,7 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
         }
         catch (Exception ex)
         {
-            MessageBox.Show(ex.Message, "Could not recover the model", MessageBoxButton.OK, MessageBoxImage.Error);
+            Prompt.Show(ex.Message, "Could not recover the model", MessageBoxButton.OK, MessageBoxImage.Error);
             return false;
         }
     }
@@ -3707,7 +3707,7 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
             {
                 Status = $"The texture came out unprintable - {joined.CheckHealth().Describe()}. "
                        + "Nothing was changed.";
-                MessageBox.Show(
+                Prompt.Show(
                     "The texture could not be added cleanly, so the object has been left as it "
                     + "was." + Environment.NewLine + Environment.NewLine + WayRound(),
                     "3DFastCraft", MessageBoxButton.OK, MessageBoxImage.Warning);
@@ -3776,7 +3776,7 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
         if (!parts.Body.CheckHealth().IsWatertight || !parts.Lettering.CheckHealth().IsWatertight)
         {
             Status = "Lettering that face came out unprintable. Nothing was changed.";
-            MessageBox.Show(
+            Prompt.Show(
                 "The lettering could not be made cleanly, so the object has been left as it was."
                 + Environment.NewLine + Environment.NewLine + WayRound(),
                 "3DFastCraft", MessageBoxButton.OK, MessageBoxImage.Warning);
@@ -4802,7 +4802,7 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
             if (!result.CheckHealth().IsWatertight)
             {
                 Status = $"Lettering that face came out unprintable - {result.CheckHealth().Describe()}. Nothing was changed.";
-                MessageBox.Show(
+                Prompt.Show(
                     "The lettering could not be applied cleanly, so the object has been left as "
                     + "it was." + Environment.NewLine + Environment.NewLine + WayRound(),
                     "3DFastCraft", MessageBoxButton.OK, MessageBoxImage.Warning);
@@ -4827,7 +4827,7 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
         catch (Exception ex)
         {
             Status = $"Lettering failed: {ex.Message}";
-            MessageBox.Show(ex.Message, "3DFastCraft", MessageBoxButton.OK, MessageBoxImage.Error);
+            Prompt.Show(ex.Message, "3DFastCraft", MessageBoxButton.OK, MessageBoxImage.Error);
         }
         finally
         {
@@ -5117,7 +5117,7 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
             if (added.Count == 0)
             {
                 Status = "Extrude down changed nothing";
-                MessageBox.Show(
+                Prompt.Show(
                     "Nothing could be extruded down at that height.\n\n"
                     + "The height has to cross the model - above its lowest point and below its top - "
                     + "and the model has to be closed where it is cut, or the walls would have nothing "
@@ -7121,7 +7121,7 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
         catch (Exception ex)
         {
             Status = $"Could not study {source.Name}: {ex.Message}";
-            MessageBox.Show(ex.Message, "3DFastCraft", MessageBoxButton.OK, MessageBoxImage.Error);
+            Prompt.Show(ex.Message, "3DFastCraft", MessageBoxButton.OK, MessageBoxImage.Error);
             return;
         }
         finally
@@ -7163,7 +7163,7 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
             Status = result.Summary;
 
             if (result.Parts.Any(p => !p.Watertight))
-                MessageBox.Show(
+                Prompt.Show(
                     result.Summary + "\n\nA piece that is not watertight will not slice. Select it "
                     + "and use Rebuild on the Tools tab, which remakes a shape the boolean has "
                     + "given up on.",
@@ -7176,7 +7176,7 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
         catch (Exception ex)
         {
             Status = $"The mold failed: {ex.Message}";
-            MessageBox.Show(ex.Message, "3DFastCraft", MessageBoxButton.OK, MessageBoxImage.Error);
+            Prompt.Show(ex.Message, "3DFastCraft", MessageBoxButton.OK, MessageBoxImage.Error);
         }
         finally
         {
@@ -9039,7 +9039,7 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
                     // its own centre - a gear about its axis, say - since most of the surface
                     // then sits at much the same distance from the middle. Asked rather than
                     // assumed, because on an eccentric shape it is a poor one.
-                    var sure = MessageBox.Show(
+                    var sure = Prompt.Show(
                         $"\"{awkward.Name}\" is not a cube, a cylinder or a sphere, so growing it "
                         + "by a clearance is not exact.\n\n"
                         + "On a sloped or off-axis face - a cone, a pyramid, a wedge - it delivers "
@@ -9086,7 +9086,7 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
             if (result.TriangleCount == 0)
             {
                 Status = $"{op} removed everything - nothing left to keep";
-                MessageBox.Show(
+                Prompt.Show(
                     "That operation left no geometry behind.",
                     "3DFastCraft", MessageBoxButton.OK, MessageBoxImage.Information);
                 return;
@@ -9112,7 +9112,7 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
         catch (Exception ex)
         {
             Status = $"{op} failed: {ex.Message}";
-            MessageBox.Show(ex.Message, "3DFastCraft", MessageBoxButton.OK, MessageBoxImage.Error);
+            Prompt.Show(ex.Message, "3DFastCraft", MessageBoxButton.OK, MessageBoxImage.Error);
         }
         finally
         {
@@ -9201,7 +9201,7 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
         if (kept.Count == 0)
         {
             Status = "Subtract removed everything - nothing left to keep";
-            MessageBox.Show(
+            Prompt.Show(
                 "Subtracting left nothing behind: every part was inside the cutter.\n\n"
                 + "The last object you click is the cutter; everything picked before it is what "
                 + "gets cut.",
@@ -9361,7 +9361,7 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
             {
                 Status = webs.Select(w => w.Refusal).FirstOrDefault(r => r is not null)
                          ?? "Nothing came out of it";
-                MessageBox.Show(Status, "3DFastCraft", MessageBoxButton.OK, MessageBoxImage.Information);
+                Prompt.Show(Status, "3DFastCraft", MessageBoxButton.OK, MessageBoxImage.Information);
                 return;
             }
 
@@ -9513,7 +9513,7 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
         catch (Exception ex)
         {
             Status = $"Rebuild failed: {ex.Message}";
-            MessageBox.Show(ex.Message, "3DFastCraft", MessageBoxButton.OK, MessageBoxImage.Error);
+            Prompt.Show(ex.Message, "3DFastCraft", MessageBoxButton.OK, MessageBoxImage.Error);
         }
         finally
         {
@@ -9783,7 +9783,7 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
                           + Environment.NewLine + Environment.NewLine
                         : "";
 
-                MessageBox.Show(
+                Prompt.Show(
                     $"This model has {worst.Describe().ToLowerInvariant()}, and repairing it would "
                     + "leave it worse than it is, so nothing has been changed." + Environment.NewLine + Environment.NewLine
                     + "Filling holes and turning faces round only works when the damage is local. "
@@ -9914,7 +9914,7 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
             if (!result.IsPrintable)
             {
                 Status = $"Engraving that face came out unprintable - {result.Health.Describe()}. Nothing was changed.";
-                MessageBox.Show(
+                Prompt.Show(
                     "The pattern could not be cut into that face cleanly, so the object has been "
                     + "left as it was." + Environment.NewLine + Environment.NewLine
                     + $"The result would have had {result.Health.Describe().ToLowerInvariant()}."
@@ -9965,7 +9965,7 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
         catch (Exception ex)
         {
             Status = $"Engrave failed: {ex.Message}";
-            MessageBox.Show(ex.Message, "3DFastCraft", MessageBoxButton.OK, MessageBoxImage.Error);
+            Prompt.Show(ex.Message, "3DFastCraft", MessageBoxButton.OK, MessageBoxImage.Error);
         }
         finally
         {
@@ -10028,7 +10028,7 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
             string which = options.Direction == ConnectorDirection.Vertical ? "Vertical" : "Horizontal";
             string runs = options.Direction == ConnectorDirection.Vertical ? "upright" : "level";
             Status = $"{which} connectors cannot cross this cut";
-            MessageBox.Show(
+            Prompt.Show(
                 $"{which} connectors cannot cross this cut.\n\n"
                 + $"The cut is too near {runs} itself, so they would lie along it rather than go through it. "
                 + "Choose Square to cut, or turn the plane.",
@@ -10074,7 +10074,7 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
                 {
                     float needs = BrickStuds.StudDiameter + 2 * BrickStuds.Wall(options.BrickFit);
                     Status = "No brick stud fits on the cut face - nothing was split";
-                    MessageBox.Show(
+                    Prompt.Show(
                         "No brick stud fits on this cut face, so nothing was split.\n\n"
                         + $"A stud keeps the upper half's wall clear of it, so it needs a circle about {needs:0.#} mm across "
                         + "inside the cut face of both halves, on the 8 mm grid. A thin wall above a wide ledge "
@@ -10089,7 +10089,7 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
                 float wall = MathF.Max(options.EdgeDistance, Connectors.MinimumWall);
 
                 Status = "No room for connectors on the cut face - nothing was split";
-                MessageBox.Show(
+                Prompt.Show(
                     "No connector fits on this cut face, so nothing was split.\n\n"
                     + $"A {options.Diameter:0.##} mm connector with {options.Clearance:0.##} mm clearance and "
                     + $"{wall:0.##} mm of wall either side needs solid at least {needed:0.#} mm thick. "
@@ -10271,7 +10271,7 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
         if (Connectors.SharedFace(picked[0].ToWorldMesh(), picked[1].ToWorldMesh()) is not { } contact)
         {
             Status = "Those two do not rest against each other";
-            MessageBox.Show(
+            Prompt.Show(
                 $"\"{picked[0].Name}\" and \"{picked[1].Name}\" do not rest against each other on a flat face.\n\n"
                 + $"Connect objects joins two parts that touch face to face - one standing on the other, or side by side - "
                 + $"square to the plate and no more than {Connectors.ContactGap:0.#} mm apart. "
@@ -10323,7 +10323,7 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
             if (done.Studs == 0)
             {
                 Status = "No brick stud fits where the two meet - nothing was changed";
-                MessageBox.Show(
+                Prompt.Show(
                     "No brick stud fits where these two meet, so nothing was changed.\n\n"
                     + "A stud needs room for itself and the upper part's wall round it, on the 8 mm grid. "
                     + "Use pins or pegs for a narrow joint.",
@@ -10375,7 +10375,7 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
         if (Connectors.Axis(contact.Normal, options.Direction) is null)
         {
             string which = options.Direction == ConnectorDirection.Vertical ? "Vertical" : "Horizontal";
-            MessageBox.Show(
+            Prompt.Show(
                 $"{which} connectors cannot cross the face these two share - they would run along it. Choose Square to cut.",
                 "3DFastCraft", MessageBoxButton.OK, MessageBoxImage.Information);
             return;
@@ -10401,7 +10401,7 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
             {
                 float wall = MathF.Max(options.EdgeDistance, Connectors.MinimumWall);
                 Status = "No room for connectors where the two meet - nothing was changed";
-                MessageBox.Show(
+                Prompt.Show(
                     "No connector fits where these two meet, so nothing was changed.\n\n"
                     + $"A {options.Diameter:0.##} mm connector with {options.Clearance:0.##} mm clearance and "
                     + $"{wall:0.##} mm of wall either side needs both parts to be at least {layout.WallNeeded:0.#} mm thick "
@@ -10478,7 +10478,7 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
             ? "the holes will show on its far side"
             : "the pegs will stand out of its far side, and the sockets go right through";
 
-        return MessageBox.Show(
+        return Prompt.Show(
             $"The {what} are {options.Depth:0.##} mm deep, which goes right through part of the model - {shows}.\n\n"
             + "Go ahead?",
             "3DFastCraft", MessageBoxButton.YesNo, MessageBoxImage.Question) == MessageBoxResult.Yes;
@@ -10501,7 +10501,7 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
         if (!IsDirty || Scene.Objects.Count == 0) return true;
 
         string name = projectPath is null ? "this model" : Path.GetFileName(projectPath);
-        var answer = MessageBox.Show(
+        var answer = Prompt.Show(
             $"Save changes to {name} before continuing?",
             "3DFastCraft", MessageBoxButton.YesNoCancel, MessageBoxImage.Warning);
 
@@ -10595,7 +10595,7 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
         {
             // Before the message box, not behind it: the dimmed window is not what to look at then.
             StopWaiting(now: true);
-            MessageBox.Show(ex.Message, "Could not open project", MessageBoxButton.OK, MessageBoxImage.Error);
+            Prompt.Show(ex.Message, "Could not open project", MessageBoxButton.OK, MessageBoxImage.Error);
         }
     }
 
@@ -10660,7 +10660,7 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
         catch (Exception ex)
         {
             StopWaiting(now: true);
-            MessageBox.Show(ex.Message, "Could not save project", MessageBoxButton.OK, MessageBoxImage.Error);
+            Prompt.Show(ex.Message, "Could not save project", MessageBoxButton.OK, MessageBoxImage.Error);
         }
     }
 
@@ -10705,7 +10705,7 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
         catch (Exception ex)
         {
             StopWaiting(now: true);
-            MessageBox.Show(ex.Message, "Could not save the version", MessageBoxButton.OK, MessageBoxImage.Error);
+            Prompt.Show(ex.Message, "Could not save the version", MessageBoxButton.OK, MessageBoxImage.Error);
         }
     }
 
@@ -10715,7 +10715,7 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
 
         if (!File.Exists(path))
         {
-            MessageBox.Show(
+            Prompt.Show(
                 $"{path}" + Environment.NewLine + Environment.NewLine +
                 "That file is no longer there, so it has been removed from the list.",
                 "Cannot open", MessageBoxButton.OK, MessageBoxImage.Information);
@@ -10754,7 +10754,7 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
         catch (Exception ex)
         {
             StopWaiting(now: true);
-            MessageBox.Show(ex.Message, "Could not restore that version", MessageBoxButton.OK, MessageBoxImage.Error);
+            Prompt.Show(ex.Message, "Could not restore that version", MessageBoxButton.OK, MessageBoxImage.Error);
         }
     }
 
@@ -10858,7 +10858,7 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
         }
         catch (Exception ex)
         {
-            MessageBox.Show(ex.Message, "Could not import", MessageBoxButton.OK, MessageBoxImage.Error);
+            Prompt.Show(ex.Message, "Could not import", MessageBoxButton.OK, MessageBoxImage.Error);
         }
     }
 
@@ -10878,7 +10878,7 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
 
         if (aspect <= 0f)
         {
-            MessageBox.Show(
+            Prompt.Show(
                 $"{Path.GetFileName(path)} has no filled shape in it, so there is nothing to make solid.\n\n"
                 + "Lines on their own have no area. Give them a fill, or turn strokes and text into paths, in the drawing program.",
                 "Import drawing", MessageBoxButton.OK, MessageBoxImage.Information);
@@ -10902,7 +10902,7 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
         var torn = objects.Where(o => !o.Mesh.CheckHealth().IsWatertight).Select(o => o.Name).ToList();
         if (torn.Count > 0)
         {
-            MessageBox.Show(
+            Prompt.Show(
                 $"Part of {Path.GetFileName(path)} did not come out as a closed solid: {string.Join(", ", torn)}.\n\n"
                 + "It is imported anyway so it can be seen; Repair or Rebuild on the Tools tab can close it. "
                 + "Shapes that cross themselves in the drawing are the usual cause.",
@@ -11028,7 +11028,7 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
         }
         catch (Exception ex)
         {
-            MessageBox.Show(ex.Message, "Could not export", MessageBoxButton.OK, MessageBoxImage.Error);
+            Prompt.Show(ex.Message, "Could not export", MessageBoxButton.OK, MessageBoxImage.Error);
         }
     }
 
@@ -11085,7 +11085,7 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
         }
         catch (Exception ex)
         {
-            MessageBox.Show(ex.Message, "Could not export session", MessageBoxButton.OK, MessageBoxImage.Error);
+            Prompt.Show(ex.Message, "Could not export session", MessageBoxButton.OK, MessageBoxImage.Error);
         }
         finally
         {
@@ -11188,7 +11188,7 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
         var health = mesh.CheckHealth();
         if (health.IsWatertight && !health.IsInsideOut) return;
 
-        MessageBox.Show(
+        Prompt.Show(
             $"The exported mesh may not print cleanly:\n\n{health.Describe()}\n\n" +
             "The file has been written. Most slicers can repair minor problems, " +
             "but you may want to check it before printing.",

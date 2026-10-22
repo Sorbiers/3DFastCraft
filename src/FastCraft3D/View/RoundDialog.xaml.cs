@@ -224,7 +224,7 @@ public partial class RoundDialog : ToolPanel
         var edges = SelectedEdges();
         if (edges == RoundEdges.None)
         {
-            MessageBox.Show("Choose at least one group of edges to round.",
+            Prompt.Show("Choose at least one group of edges to round.",
                 "Round edges", MessageBoxButton.OK, MessageBoxImage.Information);
             return;
         }

@@ -1,4 +1,4 @@
-﻿using System.ComponentModel;
+using System.ComponentModel;
 using System.Diagnostics;
 using System.Globalization;
 using System.IO;
@@ -1316,7 +1316,7 @@ public partial class MainWindow : Window
 
         if (viewModel.IsLayMode)
         {
-            viewModel.LayOnFace(target, ToVector3(hit!.PointHit), ToVector3(hit.NormalAtHit));
+            viewModel.LayOnFace(target, ToVector3(hit!.PointHit), NormalAt(hit));
             e.Handled = true;
             return;
         }
@@ -1339,13 +1339,13 @@ public partial class MainWindow : Window
                 viewModel.RefreshSelection();
             }
 
-            viewModel.PickWallMountFace(target, ToVector3(hit!.PointHit), ToVector3(hit.NormalAtHit));
+            viewModel.PickWallMountFace(target, ToVector3(hit!.PointHit), NormalAt(hit));
             e.Handled = true;
             return;
         }
 
         // A cutter's panel is open on a part: a click on one of its faces puts the cutter there.
-        if (viewModel.GeneratorFacePick is { } pickFace && pickFace(target, ToVector3(hit!.PointHit), ToVector3(hit.NormalAtHit)))
+        if (viewModel.GeneratorFacePick is { } pickFace && pickFace(target, ToVector3(hit!.PointHit), NormalAt(hit)))
         {
             e.Handled = true;
             return;
@@ -1354,7 +1354,7 @@ public partial class MainWindow : Window
         if (viewModel.IsEmbossMode)
         {
             // Ctrl+click carries a texture round the walls on to the next one, or lets an end one go.
-            if (IsControlDown && viewModel.AddEmbossWall(target, ToVector3(hit!.PointHit), ToVector3(hit.NormalAtHit)))
+            if (IsControlDown && viewModel.AddEmbossWall(target, ToVector3(hit!.PointHit), NormalAt(hit)))
             {
                 e.Handled = true;
                 return;
@@ -1366,7 +1366,7 @@ public partial class MainWindow : Window
                 viewModel.RefreshSelection();
             }
 
-            viewModel.PickEmbossFace(target, ToVector3(hit!.PointHit), ToVector3(hit.NormalAtHit));
+            viewModel.PickEmbossFace(target, ToVector3(hit!.PointHit), NormalAt(hit));
             e.Handled = true;
             return;
         }
@@ -1374,7 +1374,7 @@ public partial class MainWindow : Window
         // Splitting on a picked face: the click sets the plane rather than the selection. The
         // gizmo handles its own drags before this, so only a click on the model itself lands here.
         if (viewModel.IsSplitMode && viewModel.PickSplitPlane(
-                target, ToVector3(hit!.PointHit), ToVector3(hit.NormalAtHit)))
+                target, ToVector3(hit!.PointHit), NormalAt(hit)))
         {
             e.Handled = true;
             return;
@@ -1382,7 +1382,7 @@ public partial class MainWindow : Window
 
         // Surface info reads any face, selected or not, and leaves the selection alone.
         if (viewModel.IsSurfaceInfoMode && viewModel.PickSurfaceInfo(
-                target, ToVector3(hit!.PointHit), ToVector3(hit.NormalAtHit)))
+                target, ToVector3(hit!.PointHit), NormalAt(hit)))
         {
             e.Handled = true;
             return;
@@ -1391,7 +1391,7 @@ public partial class MainWindow : Window
         // Align to face: the click picks the reference, not necessarily on a selected object, so
         // the selection is left alone exactly as Split leaves it.
         if (viewModel.IsAlignFaceMode && viewModel.PickAlignFace(
-                target, ToVector3(hit!.PointHit), ToVector3(hit.NormalAtHit)))
+                target, ToVector3(hit!.PointHit), NormalAt(hit)))
         {
             e.Handled = true;
             return;
@@ -1400,7 +1400,7 @@ public partial class MainWindow : Window
         // Centre face to face: which of the two faces a click sets follows the object clicked,
         // not the order clicked in, so the selection is left alone here too.
         if (viewModel.IsCentreFaceMode && viewModel.PickCentreFace(
-                target, ToVector3(hit!.PointHit), ToVector3(hit.NormalAtHit)))
+                target, ToVector3(hit!.PointHit), NormalAt(hit)))
         {
             e.Handled = true;
             return;
@@ -1417,7 +1417,7 @@ public partial class MainWindow : Window
                 viewModel.RefreshSelection();
             }
 
-            viewModel.PickEngraveFace(target, ToVector3(hit!.PointHit), ToVector3(hit.NormalAtHit));
+            viewModel.PickEngraveFace(target, ToVector3(hit!.PointHit), NormalAt(hit));
             e.Handled = true;
             return;
         }
@@ -1723,7 +1723,7 @@ public partial class MainWindow : Window
         {
             var faceHit = FirstHit(e.GetPosition(View), selectable: true);
             if (faceHit is not null && renderer?.Resolve(faceHit.ModelHit) is { } hovered)
-                viewModel.HoverAlignFace(hovered, ToVector3(faceHit.PointHit), ToVector3(faceHit.NormalAtHit));
+                viewModel.HoverAlignFace(hovered, ToVector3(faceHit.PointHit), NormalAt(faceHit));
             else
                 viewModel.HoverAlignFace(null, Vector3.Zero, Vector3.Zero);
         }
@@ -1732,7 +1732,7 @@ public partial class MainWindow : Window
         {
             var faceHit = FirstHit(e.GetPosition(View), selectable: true);
             if (faceHit is not null && renderer?.Resolve(faceHit.ModelHit) is { } hovered)
-                viewModel.HoverSurfaceInfo(hovered, ToVector3(faceHit.PointHit), ToVector3(faceHit.NormalAtHit));
+                viewModel.HoverSurfaceInfo(hovered, ToVector3(faceHit.PointHit), NormalAt(faceHit));
             else
                 viewModel.HoverSurfaceInfo(null, Vector3.Zero, Vector3.Zero);
         }
@@ -1741,7 +1741,7 @@ public partial class MainWindow : Window
         {
             var faceHit = FirstHit(e.GetPosition(View), selectable: true);
             if (faceHit is not null && renderer?.Resolve(faceHit.ModelHit) is { } hovered)
-                viewModel.HoverCentreFace(hovered, ToVector3(faceHit.PointHit), ToVector3(faceHit.NormalAtHit));
+                viewModel.HoverCentreFace(hovered, ToVector3(faceHit.PointHit), NormalAt(faceHit));
             else
                 viewModel.HoverCentreFace(null, Vector3.Zero, Vector3.Zero);
         }
@@ -2014,6 +2014,20 @@ public partial class MainWindow : Window
     }
 
     private static Vector3 ToVector3(SharpDXVector3 v) => new(v.X, v.Y, v.Z);
+
+    /// <summary>
+    /// The outward normal of the face hit.
+    ///
+    /// The renderer works it out from the triangle as stored and then transformed, and a mirrored
+    /// part keeps its triangles wound the old way round - so on one the normal pointed in. Every
+    /// tool that finds a face by it then threw out the face clicked, or on a thin wall took the
+    /// one on the far side: a mirrored wall could not be read by Surface at all.
+    /// </summary>
+    private Vector3 NormalAt(HitTestResult hit)
+    {
+        var normal = ToVector3(hit.NormalAtHit);
+        return renderer?.Resolve(hit.ModelHit) is { } o && o.Transform.GetDeterminant() < 0 ? -normal : normal;
+    }
 
     /// <summary>The line from the eye through a point on the screen, in world space.</summary>
     private (Vector3 Origin, Vector3 Direction)? SightLine(Point screen)
