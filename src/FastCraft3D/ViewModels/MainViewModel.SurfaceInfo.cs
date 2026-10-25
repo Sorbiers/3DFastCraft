@@ -69,6 +69,9 @@ public partial class MainViewModel
     /// <summary>The middle of the face read, where the numbers are measured from.</summary>
     public IReadOnlyList<Vector3> SurfaceInfoAnchors => infoFace is { } f ? [f.ToLocal((f.Min + f.Max) * 0.5f)] : [];
 
+    /// <summary>The smaller side of the face read, so its marker stays smaller than it.</summary>
+    public float? SurfaceInfoAcross => infoFace is { } f ? MathF.Min(f.Size.X, f.Size.Y) : null;
+
     private void RaiseSurfaceInfo()
     {
         Raise(nameof(HasSurfaceInfo));

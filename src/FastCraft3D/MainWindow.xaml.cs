@@ -231,7 +231,7 @@ public partial class MainWindow : Window
         viewModel.SurfaceInfoChanged += () =>
         {
             renderer?.ShowFace(viewModel.SurfaceInfoFace, tint: viewModel.SurfaceInfoShowsPicked ? AlignFacePickedColour : null);
-            ShowAnchors(viewModel.SurfaceInfoAnchors);
+            ShowAnchors(viewModel.SurfaceInfoAnchors, face: viewModel.SurfaceInfoAcross);
         };
         viewModel.CentreFaceChanged += () =>
         {
@@ -1071,6 +1071,7 @@ public partial class MainWindow : Window
         // size. Those inputs miss a resize that the viewport has not finished applying yet -
         // which is what left the handles stranded in a corner.
         LightTheView();
+        SettleAnchors();
 
         if (gizmo is null) return;
         if (gizmo.NeedsReposition || gizmo.IsStale()) gizmo.Reposition();
@@ -2587,12 +2588,62 @@ public partial class MainWindow : Window
     private void OnSidePanelResized(object sender, DragCompletedEventArgs e) => viewModel.SidePanelWidth = (float)SidePanel.Width;
 
     /// <summary>The anchor spheres, sized to the plate's contents as the pivot's is to its part.</summary>
-    private void ShowAnchors(IReadOnlyList<Vector3> points, IReadOnlyList<Vector3>? linked = null)
+    private (IReadOnlyList<Vector3> Points, IReadOnlyList<Vector3>? Linked, float? Face)? anchorsShown;
+    private float anchorsRadius;
+
+    /// <param name="face">The smaller side of the face the marker stands on, so it does not swallow it.</param>
+    private void ShowAnchors(IReadOnlyList<Vector3> points, IReadOnlyList<Vector3>? linked = null, float? face = null)
     {
         if (renderer is null) return;
-        var reach = BedPlacement.Reach(viewModel.Scene.Objects.Where(o => !o.IsHidden));
-        float radius = reach.IsEmpty ? 1f : Math.Clamp(reach.Size.Length() * 0.008f, 0.4f, 2.5f);
-        renderer.ShowAnchors(points, radius, linked);
+        anchorsShown = points.Count > 0 ? (points, linked, face) : null;
+        anchorsRadius = AnchorRadius(points, face);
+        renderer.ShowAnchors(points, anchorsRadius, linked);
+    }
+
+    /// <summary>
+    /// How big the marker on a face is drawn.
+    ///
+    /// It was sized from the whole scene, so on a house it was a 5 mm ball whether the view was on
+    /// the whole plate or a brick, and on a sliver of face it hid what it marked. Now it is a set
+    /// number of pixels across wherever the camera is, and no more than a fraction of the face.
+    /// </summary>
+    private float AnchorRadius(IReadOnlyList<Vector3> points, float? face)
+    {
+        if (points.Count == 0 || PixelSize(points[0]) is not { } pixel)
+        {
+            var reach = BedPlacement.Reach(viewModel.Scene.Objects.Where(o => !o.IsHidden));
+            return reach.IsEmpty ? 1f : Math.Clamp(reach.Size.Length() * 0.008f, 0.4f, 2.5f);
+        }
+
+        float radius = 7f * pixel;
+        if (face is > 0f and { } across) radius = MathF.Min(radius, across * 0.3f);
+        return MathF.Max(radius, 3f * pixel);
+    }
+
+    /// <summary>How many millimetres one pixel of the viewport spans at a point in the scene.</summary>
+    private float? PixelSize(Vector3 at)
+    {
+        if (View.ActualHeight < 1 || View.ActualWidth < 1) return null;
+
+        if (View.Camera is OrthographicCamera ortho) return (float)(ortho.Width / View.ActualWidth);
+        if (View.Camera is not PerspectiveCamera perspective) return null;
+
+        var look = perspective.LookDirection;
+        if (look.Length < 1e-9) return null;
+        look.Normalize();
+        var from = perspective.Position;
+        double distance = (at.X - from.X) * look.X + (at.Y - from.Y) * look.Y + (at.Z - from.Z) * look.Z;
+        if (distance <= 0) return null;
+
+        return (float)(2 * distance * Math.Tan(perspective.FieldOfView * Math.PI / 360.0) / View.ActualHeight);
+    }
+
+    /// <summary>Redraws the face marker once a zoom has changed its size on screen by a tenth.</summary>
+    private void SettleAnchors()
+    {
+        if (anchorsShown is not { } shown) return;
+        float radius = AnchorRadius(shown.Points, shown.Face);
+        if (MathF.Abs(radius - anchorsRadius) > 0.1f * anchorsRadius) ShowAnchors(shown.Points, shown.Linked, shown.Face);
     }
 
     /// <summary>Shows the way of lining up the tool chose on picking a face, on the radio buttons.</summary>
