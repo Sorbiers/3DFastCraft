@@ -2149,6 +2149,10 @@
                                          AutomationProperties.AutomationId="ConnectCount"
                                          Text="{Binding ConnectorCount, UpdateSourceTrigger=LostFocus}" />
                             </StackPanel>
+                            <CheckBox Content="Manual placement" Margin="0,2,0,6"
+                                      IsChecked="{Binding ConnectorsByHand}"
+                                      AutomationProperties.AutomationId="ConnectorsByHand"
+                                      ToolTip="Click on the face where each connector goes; click one again to take it off. The part on top is hidden while you do. Not for brick studs, which keep their grid." />
                             <StackPanel Orientation="Horizontal" Margin="0,0,0,2">
                                 <TextBlock Text="{Binding ConnectorSizeLabel}" Style="{StaticResource FieldLabel}" Width="76" />
                                 <TextBox Width="64" Style="{StaticResource NumberBox}" Tag="number"

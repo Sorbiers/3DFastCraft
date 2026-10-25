@@ -376,6 +376,60 @@ public sealed class SceneRenderer : IDisposable
     /// the width of each one, lying in the plane. Without them the panel asked for a diameter and
     /// a count with nothing on the model to say where any of it was going.
     /// </summary>
+    private MeshGeometryModel3D? handFace;
+    private MeshGeometryModel3D? handCursor;
+
+    /// <summary>Where two parts meet, drawn over the one left showing while connectors are placed by hand.</summary>
+    public void ShowHandFace(Mesh? face) =>
+        Swap(ref handFace, face, new SharpDX.Color4(0.35f, 0.75f, 0.45f, 0.45f));
+
+    /// <summary>
+    /// The connector under the pointer while placing by hand: green where it fits, red where it
+    /// does not, grey over one already placed, which a click takes off.
+    /// </summary>
+    public void ShowHandCursor(Connectors.Mark? mark, bool fits, bool removes, Vector3 normal)
+    {
+        Mesh? disc = null;
+        if (mark is { } m && normal.LengthSquared() > 1e-6f)
+        {
+            var lying = MeshTransform.RotationBetween(Vector3.UnitZ, Vector3.Normalize(normal));
+            disc = MeshTransform.Transformed(Primitives.Prism(m.Radius, 0.7f, 28), lying * Matrix4x4.CreateTranslation(m.At));
+        }
+
+        var colour = removes ? new SharpDX.Color4(0.55f, 0.57f, 0.6f, 0.8f)
+                   : fits ? new SharpDX.Color4(0.2f, 0.8f, 0.3f, 0.8f)
+                   : new SharpDX.Color4(0.9f, 0.2f, 0.2f, 0.8f);
+        Swap(ref handCursor, disc, colour);
+    }
+
+    private void Swap(ref MeshGeometryModel3D? slot, Mesh? mesh, SharpDX.Color4 colour)
+    {
+        Invalidate();
+
+        if (slot is not null)
+        {
+            root.Children.Remove(slot);
+            slot.Dispose();
+            slot = null;
+        }
+
+        if (mesh is not { TriangleCount: > 0 }) return;
+
+        slot = new MeshGeometryModel3D
+        {
+            Geometry = MeshConverter.ToGeometry(mesh),
+            Material = new PhongMaterial
+            {
+                DiffuseColor = colour,
+                AmbientColor = new SharpDX.Color4(colour.Red * 0.4f, colour.Green * 0.4f, colour.Blue * 0.4f, 1f),
+                SpecularColor = new SharpDX.Color4(0, 0, 0, 1)
+            },
+            IsTransparent = true,
+            IsHitTestVisible = false
+        };
+        root.Children.Add(slot);
+    }
+
     public void ShowConnectorMarks(IReadOnlyList<Connectors.Mark> marks, Vector3 normal)
     {
         Invalidate();

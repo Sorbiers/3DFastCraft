@@ -6710,7 +6710,150 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
     public int ConnectorCount
     {
         get => connectors.Count;
-        set { connectors = connectors with { Count = Math.Clamp(value, 1, 6) }; Raise(nameof(ConnectorCount)); }
+        set { connectors = connectors with { Count = Math.Clamp(value, 1, MaxConnectors) }; Raise(nameof(ConnectorCount)); }
+    }
+
+    // It was six. Nothing in the cutting needs a limit; the layout is redone on every setting
+    // change, and its cost grows with the count, so it is kept to what still follows at once.
+    private const int MaxConnectors = 24;
+
+    private readonly List<Vector3> connectorPoints = [];
+    private bool connectorsByHand;
+
+    /// <summary>
+    /// Connectors where the user clicks rather than where the layout puts them. The layout spreads
+    /// them over the whole face both parts share, which on a house is every wall at once - and
+    /// not always the walls that want them.
+    /// </summary>
+    public bool ConnectorsByHand
+    {
+        get => connectorsByHand;
+        set
+        {
+            if (connectorsByHand == value) return;
+            Set(ref connectorsByHand, value);
+            HandCursor = null;
+            HandCursorChanged?.Invoke();
+            Status = value ? "Click on the face where each connector goes; click one again to take it off" : ConnectSummary;
+        }
+    }
+
+    private IReadOnlyList<Vector3>? ChosenConnectors =>
+        connectorsByHand && connectors.Style != ConnectorStyle.Bricks ? connectorPoints : null;
+
+    /// <summary>
+    /// A click while placing connectors by hand, as the line from the eye through the pointer: a
+    /// connector where it meets the shared face, or off again if it lands on one.
+    ///
+    /// Read off the plane rather than a hit on a part: whichever part is on top is hidden to show
+    /// the face, and the face is what the click means.
+    /// </summary>
+    public void ClickConnector(Vector3 eye, Vector3 direction)
+    {
+        if (HandJoint() is not { } joint || joint.OnFace(eye, direction) is not { } at) return;
+
+        int near = NearConnector(at);
+        if (near >= 0)
+        {
+            connectorPoints.RemoveAt(near);
+            Status = $"{connectorPoints.Count} connector(s)";
+        }
+        else if (joint.NearestFit(at, connectorPoints) is { } fit)
+        {
+            connectorPoints.Add(fit);
+            Status = $"{connectorPoints.Count} connector(s)";
+        }
+        else
+        {
+            float thickest = joint.ThickestNear(at);
+            Status = thickest <= 0f
+                ? "No room there: a connector goes only where both parts meet - the green face"
+                : $"No room there: both parts are at most {thickest:0.#} mm thick here, and a {connectors.Diameter:0.##} mm connector "
+                  + $"needs {joint.WallNeeded:0.#} mm, clear of the others. Make the diameter or From edge smaller";
+            return;
+        }
+
+        HoverConnector(eye, direction);
+        Raise("ConnectorPoints");
+    }
+
+    private int NearConnector(Vector3 at)
+    {
+        float grab = connectors.Radius + MathF.Max(0f, connectors.Clearance) + 0.5f;
+        return connectorPoints.FindIndex(p => Vector3.Distance(p, at) <= grab);
+    }
+
+    // The shared face read once for placing by hand, with the settings it was read for: the
+    // pointer asks about it on every move, and reading it costs a section of each part.
+    private (Connectors.Joint Joint, ConnectorOptions Options, Connectors.Contact Contact)? handJoint;
+
+    private Connectors.Joint? HandJoint()
+    {
+        if (!isConnectMode || ChosenConnectors is null || Contact() is not { } contact) return null;
+        if (handJoint is { } kept && kept.Options == connectors && ReferenceEquals(kept.Contact, contact)) return kept.Joint;
+
+        var picked = Scene.SelectionInPickOrder;
+        var front = contact.SecondIsFront ? picked[1] : picked[0];
+        var back = contact.SecondIsFront ? picked[0] : picked[1];
+        var joint = new Connectors.Joint(front.ToWorldMesh(), back.ToWorldMesh(), contact, connectors);
+        handJoint = (joint, connectors, contact);
+        return joint;
+    }
+
+    /// <summary>
+    /// Where a connector would go under the pointer, and whether it fits - or, over one already
+    /// placed, that one, to say a click takes it off. Null off the face.
+    /// </summary>
+    public (Connectors.Mark Mark, bool Fits, bool Removes)? HandCursor { get; private set; }
+
+    public event Action? HandCursorChanged;
+
+    public void HoverConnector(Vector3 eye, Vector3 direction)
+    {
+        (Connectors.Mark, bool, bool)? next = null;
+        if (HandJoint() is { } joint && joint.OnFace(eye, direction) is { } at)
+        {
+            int near = NearConnector(at);
+            var fit = near >= 0 ? connectorPoints[near] : joint.NearestFit(at, connectorPoints);
+            var mark = new Connectors.Mark(fit ?? at, connectors.Radius + MathF.Max(0f, connectors.Clearance));
+            next = (mark, fit is not null, near >= 0);
+        }
+
+        if (next is null && HandCursor is null) return;
+        HandCursor = next;
+        HandCursorChanged?.Invoke();
+    }
+
+    /// <summary>
+    /// The part left showing while connectors are placed by hand - the one under the shared face,
+    /// or behind it on a side join - and the face itself, for the viewport to draw over it.
+    /// </summary>
+    public (SceneObject Shown, Mesh Face)? HandView
+    {
+        get
+        {
+            if (HandJoint() is not { } joint || Contact() is not { } contact || HandShown is not { } shown) return null;
+
+            // A hair off the face towards the hidden part, so it is drawn over the shown one's top
+            // rather than fighting it for the same depth.
+            bool below = contact.Normal.Z >= 0f;
+            var lift = Matrix4x4.CreateTranslation(Vector3.Normalize(contact.Normal) * (below ? 0.02f : -0.02f));
+            return (shown, MeshTransform.Transformed(joint.Patch(), lift));
+        }
+    }
+
+    /// <summary>The part left showing while connectors are placed by hand; null otherwise.</summary>
+    public SceneObject? HandShown
+    {
+        get
+        {
+            if (!isConnectMode || ChosenConnectors is null || Contact() is not { } contact) return null;
+
+            var picked = Scene.SelectionInPickOrder;
+            var front = contact.SecondIsFront ? picked[1] : picked[0];
+            var back = contact.SecondIsFront ? picked[0] : picked[1];
+            return contact.Normal.Z >= 0f ? back : front;
+        }
     }
 
     /// <summary>The pin or peg, in millimetres - a size to print, not a reading at the scene's scale.</summary>
@@ -10206,7 +10349,14 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
             if (isConnectMode == value) return;
 
             Set(ref isConnectMode, value);
-            if (!value) connectContact = null;
+            if (!value)
+            {
+                connectContact = null;
+                connectorPoints.Clear();
+                handJoint = null;
+                HandCursor = null;
+                HandCursorChanged?.Invoke();
+            }
             Raise(nameof(IsToolRunning));
             Raise(nameof(ShowManipulatorBar));
             RaiseToolInHand();
@@ -10227,7 +10377,7 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
             var picked = Scene.SelectionInPickOrder;
             var front = contact.SecondIsFront ? picked[1] : picked[0];
             var back = contact.SecondIsFront ? picked[0] : picked[1];
-            return Connectors.Preview(front.ToWorldMesh(), back.ToWorldMesh(), contact, connectors);
+            return Connectors.Preview(front.ToWorldMesh(), back.ToWorldMesh(), contact, connectors, ChosenConnectors);
         }
 
         return [];
@@ -10381,6 +10531,13 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
             return;
         }
 
+        var chosen = ChosenConnectors?.ToList();
+        if (chosen is { Count: 0 })
+        {
+            Status = "Click on the face where each connector goes first";
+            return;
+        }
+
         var front = contact.SecondIsFront ? picked[1] : picked[0];
         var back = contact.SecondIsFront ? picked[0] : picked[1];
         var frontMesh = front.ToWorldMesh();
@@ -10391,7 +10548,7 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
         {
             var (layout, joined) = await Task.Run(() =>
             {
-                var survey = Connectors.Survey(frontMesh, backMesh, contact, options);
+                var survey = Connectors.Survey(frontMesh, backMesh, contact, options, chosen);
                 return survey.Points.Count == 0
                     ? (survey, null)
                     : (survey, Connectors.Join(frontMesh, backMesh, survey.Points, contact.Normal, options, token));
@@ -10452,7 +10609,7 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
 
             Status = $"Connected {front.Name} and {back.Name} with {layout.Points.Count} "
                    + (options.Style switch { ConnectorStyle.Pins => "pin(s), made beside them", ConnectorStyle.Bricks => "brick stud(s)", _ => "peg(s)" })
-                   + (layout.Points.Count < options.Count ? " - fewer than asked, there is no room for more" : "");
+                   + (chosen is null && layout.Points.Count < options.Count ? " - fewer than asked, there is no room for more" : "");
         }
         catch (Exception abort) when (WasAborted(abort))
         {

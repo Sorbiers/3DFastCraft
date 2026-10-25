@@ -168,7 +168,8 @@ public static class Connectors
     }
 
     /// <summary>The same for two parts that rest against each other.</summary>
-    public static List<Mark> Preview(Mesh front, Mesh back, Contact contact, ConnectorOptions options)
+    public static List<Mark> Preview(Mesh front, Mesh back, Contact contact, ConnectorOptions options,
+                                     IReadOnlyList<Vector3>? chosen = null)
     {
         var normal = Vector3.Normalize(contact.Normal);
         var up = normal.Z >= 0f ? normal : -normal;
@@ -181,7 +182,7 @@ public static class Connectors
         return options.Style == ConnectorStyle.Bricks
             ? BrickMarks([(front, contact.Offset + inset), (back, contact.Offset - inset)],
                          upper, normal, contact.Offset, up, options)
-            : Round(Survey(front, back, contact, options), normal, options);
+            : Round(Survey(front, back, contact, options, chosen), normal, options);
     }
 
     private static List<Mark> Round(Layout layout, Vector3 normal, ConnectorOptions options)
@@ -371,7 +372,9 @@ public static class Connectors
     }
 
     /// <summary>Where connectors go through the face two parts share: inside both, with room in both.</summary>
-    public static Layout Survey(Mesh front, Mesh back, Contact contact, ConnectorOptions options)
+    /// <param name="chosen">Points picked by hand, kept where they fit, instead of the layout's own.</param>
+    public static Layout Survey(Mesh front, Mesh back, Contact contact, ConnectorOptions options,
+                                IReadOnlyList<Vector3>? chosen = null)
     {
         float reach = contact.Gap / 2f + SectionInset;
         float deep = Reach(contact.Normal, options);
@@ -379,7 +382,7 @@ public static class Connectors
         return Survey(
             [(front, contact.Offset + reach), (back, contact.Offset - reach)],
             [(front, contact.Offset + reach + deep), (back, contact.Offset - reach - deep)],
-            contact.Normal, contact.Offset, options);
+            contact.Normal, contact.Offset, options, chosen);
     }
 
     // --- The same question asked of the faces ------------------------------------------
@@ -492,6 +495,39 @@ public static class Connectors
         MathF.Max(0f, MathF.Min(a.MaxU, b.MaxU) - MathF.Max(a.MinU, b.MinU))
       * MathF.Max(0f, MathF.Min(a.MaxV, b.MaxV) - MathF.Max(a.MinV, b.MinV));
 
+    /// <summary>
+    /// A part's section near the shared face, read a little further into the part when the first
+    /// reading comes back wrong.
+    ///
+    /// A plane through a row of vertices can lose a loop: on a brick-clad wall, read 0.1 mm above
+    /// the join, the outer outline went missing and only the inner one came back, so the wall read
+    /// as empty and the room inside it as solid - no connector fitted anywhere, on a 5 mm wall
+    /// with room for one. Outlines run anticlockwise about the normal and holes clockwise, so what
+    /// is left adding up to less than nothing is a section that lost its outline.
+    /// </summary>
+    private static List<List<Vector3>> Rings(Mesh mesh, Vector3 normal, float section, float offset)
+    {
+        float into = section >= offset ? 1f : -1f;
+        List<List<Vector3>>? first = null;
+
+        foreach (float nudge in (ReadOnlySpan<float>)[0f, 0.07f, 0.19f, 0.31f, 0.43f])
+        {
+            var (_, rings) = PlaneClip.KeepOpen(mesh, Matrix4x4.Identity, normal, section + into * nudge);
+            first ??= rings;
+            if (rings.Count > 0 && Enclosed(rings, normal) > 0f) return rings;
+        }
+
+        return first!;
+    }
+
+    private static float Enclosed(List<List<Vector3>> rings, Vector3 normal)
+    {
+        float total = 0f;
+        foreach (var ring in rings)
+            for (int i = 0; i < ring.Count; i++)
+                total += Vector3.Dot(Vector3.Cross(ring[i], ring[(i + 1) % ring.Count]), normal);
+        return total / 2f;
+    }
     private static float Overlap(Bounds a, Bounds b, int axis)
     {
         float Span(int k) => MathF.Max(0f, MathF.Min(Along(a.Max, k), Along(b.Max, k)) - MathF.Max(Along(a.Min, k), Along(b.Min, k)));
@@ -508,7 +544,7 @@ public static class Connectors
     /// </summary>
     private static Layout Survey(
         IReadOnlyList<(Mesh Mesh, float Section)> solids, IReadOnlyList<(Mesh Mesh, float Section)> deep,
-        Vector3 normal, float offset, ConnectorOptions options)
+        Vector3 normal, float offset, ConnectorOptions options, IReadOnlyList<Vector3>? chosen = null)
     {
         normal = Vector3.Normalize(normal);
         var axis = Axis(normal, options.Direction);
@@ -533,7 +569,7 @@ public static class Connectors
 
         foreach (var (mesh, section) in solids)
         {
-            var (_, rings) = PlaneClip.KeepOpen(mesh, Matrix4x4.Identity, normal, section);
+            var rings = Rings(mesh, normal, section, offset);
             if (rings.Count == 0) return new([], true, 0f, 2f * needed);
 
             // Flattened into the one frame on the shared plane: reading a part a little way in
@@ -608,7 +644,17 @@ public static class Connectors
         float apart = 2f * hole + wall;
         var placed = new List<Vector2>();
 
-        foreach (var centre in Spread(area, room, middle, options.Count))
+        // Picked by hand: each where it was put, if there is room for it there and it is clear of
+        // the ones before it. Not pushed out towards the edge - where it was put is the point.
+        if (chosen is not null)
+        {
+            foreach (var w in chosen)
+            {
+                var p = new Vector2(Vector3.Dot(w - origin, u), Vector3.Dot(w - origin, v));
+                if (Clear(p) >= needed && placed.All(q => Vector2.Distance(q, p) >= apart)) placed.Add(p);
+            }
+        }
+        else foreach (var centre in Spread(area, room, middle, options.Count))
         {
             var start = Clear(centre) >= needed ? centre : room.MinBy(r => Vector2.DistanceSquared(r, centre));
             var at = TowardsEdge(start, centre - middle, p => Clear(p) >= needed, step);
@@ -626,7 +672,7 @@ public static class Connectors
         {
             if (breaksOut || placed.Count == 0) break;
 
-            var (_, rings) = PlaneClip.KeepOpen(mesh, Matrix4x4.Identity, normal, section);
+            var rings = Rings(mesh, normal, section, offset);
             var loops = rings
                 .Select(r => r.Select(q => new Vector2(Vector3.Dot(q - origin, u), Vector3.Dot(q - origin, v))).ToList())
                 .ToList();
@@ -1053,5 +1099,145 @@ public static class Connectors
     {
         var other = MathF.Abs(n.Z) < 0.9f ? Vector3.UnitZ : Vector3.UnitX;
         return Vector3.Normalize(Vector3.Cross(other, n));
+    }
+
+    /// <summary>
+    /// The face two parts share, read once, for placing connectors by hand: whether one fits under
+    /// the pointer, and the shape of the face to draw.
+    ///
+    /// The survey reads both sections and walks a grid over the whole face, which is fine on a
+    /// click and far too slow to follow the pointer; this keeps the sections and asks about one
+    /// point at a time.
+    /// </summary>
+    public sealed class Joint
+    {
+        private readonly List<(List<List<Vector2>> Loops, List<(List<Vector2> Outline, List<List<Vector2>> Holes)> Shapes)> sections = [];
+        private readonly Vector3 u, v, origin, normal;
+        private readonly float needed, apart;
+
+        public Joint(Mesh front, Mesh back, Contact contact, ConnectorOptions options)
+        {
+            normal = Vector3.Normalize(contact.Normal);
+            u = Perpendicular(normal);
+            v = Vector3.Cross(normal, u);
+            origin = normal * contact.Offset;
+
+            var axis = Axis(normal, options.Direction);
+            float cosine = axis is { } way ? Vector3.Dot(way, normal) : 1f;
+            float hole = (options.Radius + MathF.Max(0f, options.Clearance)) * options.Footprint / cosine;
+            float wall = MathF.Max(options.EdgeDistance, MinimumWall);
+            needed = axis is null ? float.MaxValue : hole + wall;
+            apart = 2f * hole + wall;
+            WallNeeded = 2f * (hole + wall);
+
+            float reach = contact.Gap / 2f + SectionInset;
+            foreach (var (mesh, at) in new[] { (front, contact.Offset + reach), (back, contact.Offset - reach) })
+            {
+                var loops = Rings(mesh, normal, at, contact.Offset).Select(r => r.Select(Flat).ToList()).ToList();
+                sections.Add((loops, Polygon2.Nest(loops)));
+            }
+        }
+
+        /// <summary>How thick both parts have to be where a connector goes.</summary>
+        public float WallNeeded { get; }
+
+        /// <summary>The point on the shared face the line from the eye meets, or null.</summary>
+        public Vector3? OnFace(Vector3 eye, Vector3 direction)
+        {
+            float across = Vector3.Dot(direction, normal);
+            if (MathF.Abs(across) < 1e-6f) return null;
+            float t = Vector3.Dot(origin - eye, normal) / across;
+            return t < 0f ? null : eye + direction * t;
+        }
+
+        /// <summary>Whether a connector fits here: solid enough round it in both parts, clear of the others.</summary>
+        public bool Fits(Vector3 at, IEnumerable<Vector3> others)
+        {
+            var p = Flat(at);
+            foreach (var (loops, shapes) in sections)
+                if (!Inside(shapes, p) || NearestEdge(loops, p) < needed) return false;
+
+            return others.All(o => Vector2.Distance(Flat(o), p) >= apart);
+        }
+
+        /// <summary>
+        /// The nearest place to the pointer a connector fits, no further off than a wall's width.
+        ///
+        /// On a wall a few millimetres thick the room is a line down its middle, a pointer is
+        /// never quite on it, and the cursor sat red over a wall that plainly had room - so it is
+        /// pulled onto the line rather than asking for a steadier hand.
+        /// </summary>
+        public Vector3? NearestFit(Vector3 at, IReadOnlyList<Vector3> others)
+        {
+            if (Fits(at, others)) return at;
+
+            float within = WallNeeded, step = MathF.Max(0.1f, within / 30f);
+            for (float r = step; r <= within; r += step)
+            {
+                int around = Math.Max(8, (int)(2f * MathF.PI * r / step));
+                for (int k = 0; k < around; k++)
+                {
+                    float angle = 2f * MathF.PI * k / around;
+                    var p = at + u * (r * MathF.Cos(angle)) + v * (r * MathF.Sin(angle));
+                    if (Fits(p, others)) return p;
+                }
+            }
+
+            return null;
+        }
+
+        /// <summary>The thickest the two parts both are anywhere within a wall's width of here.</summary>
+        public float ThickestNear(Vector3 at)
+        {
+            float best = WallAt(at), within = WallNeeded, step = MathF.Max(0.1f, within / 30f);
+            for (float x = -within; x <= within; x += step)
+                for (float y = -within; y <= within; y += step)
+                    best = MathF.Max(best, WallAt(at + u * x + v * y));
+            return best;
+        }
+
+        /// <summary>How thick the thinner of the two parts is here, or 0 where they do not both reach.</summary>
+        private float WallAt(Vector3 at)
+        {
+            var p = Flat(at);
+            float least = float.MaxValue;
+            foreach (var (loops, shapes) in sections)
+            {
+                if (!Inside(shapes, p)) return 0f;
+                least = MathF.Min(least, NearestEdge(loops, p));
+            }
+
+            return sections.Count == 0 ? 0f : 2f * least;
+        }
+
+        /// <summary>Where the two parts meet, as a flat patch on the face - both windings, so it shows from either side.</summary>
+        public Mesh Patch()
+        {
+            if (sections.Count != 2 || sections.Any(s => s.Loops.Count == 0)) return new Mesh();
+
+            Clipper2Lib.PathsD Paths(List<List<Vector2>> loops) =>
+                new(loops.Select(l => new Clipper2Lib.PathD(l.Select(p => new Clipper2Lib.PointD(p.X, p.Y)))));
+
+            var shared = Clipper2Lib.Clipper.Intersect(Paths(sections[0].Loops), Paths(sections[1].Loops), Clipper2Lib.FillRule.EvenOdd, 4);
+            var loops = shared.Select(path => path.Select(p => new Vector2((float)p.x, (float)p.y)).ToList()).ToList();
+
+            var positions = new List<Vector3>();
+            var indices = new List<int>();
+            foreach (var (outline, holes) in Polygon2.Nest(loops))
+            {
+                var (points, triangles) = Polygon2.Triangulate(outline, holes.Cast<IReadOnlyList<Vector2>>().ToList());
+                int first = positions.Count;
+                positions.AddRange(points.Select(p => origin + u * p.X + v * p.Y));
+                for (int i = 0; i + 2 < triangles.Count; i += 3)
+                {
+                    indices.AddRange([first + triangles[i], first + triangles[i + 1], first + triangles[i + 2]]);
+                    indices.AddRange([first + triangles[i], first + triangles[i + 2], first + triangles[i + 1]]);
+                }
+            }
+
+            return new Mesh(positions, indices);
+        }
+
+        private Vector2 Flat(Vector3 p) => new(Vector3.Dot(p - origin, u), Vector3.Dot(p - origin, v));
     }
 }

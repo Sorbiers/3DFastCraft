@@ -129,6 +129,9 @@ public partial class MainWindow : Window
 
         EffectsManager = new DefaultEffectsManager();
         View.EffectsManager = EffectsManager;
+        View.RenderExceptionOccurred += OnRenderFault;
+        Microsoft.Win32.SystemEvents.SessionSwitch += OnSessionSwitch;
+        Activated += (_, _) => { if (renderBroken) RestartRendering(); };
         View.Camera = CreateCamera();
         ConfigureCameraGestures();
 
@@ -218,6 +221,13 @@ public partial class MainWindow : Window
             renderer?.ShowFace(viewModel.AlignFace, tint: viewModel.HasAlignFaceTarget ? AlignFacePickedColour : null);
             ShowAnchors(viewModel.AlignFaceAnchors, viewModel.AlignFaceLinkPoints);
         };
+        viewModel.HandCursorChanged += () =>
+        {
+            var cursor = viewModel.HandCursor;
+            renderer?.ShowHandCursor(cursor?.Mark, cursor?.Fits ?? false, cursor?.Removes ?? false,
+                                     viewModel.ConnectorPlane?.Normal ?? Vector3.UnitZ);
+        };
+
         viewModel.SurfaceInfoChanged += () =>
         {
             renderer?.ShowFace(viewModel.SurfaceInfoFace, tint: viewModel.SurfaceInfoShowsPicked ? AlignFacePickedColour : null);
@@ -385,6 +395,7 @@ public partial class MainWindow : Window
             if (!App.Crashed) Recovery.Clear();
 
             CompositionTarget.Rendering -= OnFrame;
+            Microsoft.Win32.SystemEvents.SessionSwitch -= OnSessionSwitch;
             listSync?.Dispose();
             renderer?.Dispose();
             (EffectsManager as IDisposable)?.Dispose();
@@ -1094,6 +1105,69 @@ public partial class MainWindow : Window
 
     public IEffectsManager EffectsManager { get; }
 
+    // Whether the 3D view lost its graphics device and has not been brought back yet.
+    private bool renderBroken;
+    private bool restartQueued;
+    private DateTime lastRestart;
+
+    /// <summary>
+    /// The 3D view losing its graphics device - after a screen lock, a switch of user, a remote
+    /// session, a driver update.
+    ///
+    /// Left to itself the viewport printed the exception over a black view and stayed that way
+    /// until the app was restarted. The device can be had again; it only cannot be had while the
+    /// session is locked, so a restart that fails there waits for the unlock or the next time the
+    /// window comes to the front.
+    /// </summary>
+    private void OnRenderFault(object? sender, HelixToolkit.SharpDX.Core.Utilities.RelayExceptionEventArgs e)
+    {
+        e.Handled = true;
+        renderBroken = true;
+
+        // A fault straight after a restart means the device is not to be had yet; trying again
+        // at once would only fault again, round and round, for as long as the screen is locked.
+        if (restartQueued || DateTime.UtcNow - lastRestart < TimeSpan.FromSeconds(3)) return;
+        restartQueued = true;
+        Dispatcher.BeginInvoke(DispatcherPriority.ApplicationIdle, () => { restartQueued = false; RestartRendering(); });
+    }
+
+    private void OnSessionSwitch(object? sender, Microsoft.Win32.SessionSwitchEventArgs e)
+    {
+        if (e.Reason is Microsoft.Win32.SessionSwitchReason.SessionUnlock
+            or Microsoft.Win32.SessionSwitchReason.ConsoleConnect
+            or Microsoft.Win32.SessionSwitchReason.RemoteConnect)
+            Dispatcher.BeginInvoke(DispatcherPriority.ApplicationIdle, () => { if (renderBroken) RestartRendering(); });
+    }
+
+    /// <summary>
+    /// Builds the device and everything on it again, then takes the viewport out of the window
+    /// and puts it back: unloading and loading it is what makes it drop its old surface and ask
+    /// the new device for one. Fails quietly while the session is still locked.
+    /// </summary>
+    private void RestartRendering()
+    {
+        renderBroken = false;
+        lastRestart = DateTime.UtcNow;
+        try
+        {
+            EffectsManager.DisposeAllResources();
+            EffectsManager.Reinitialize();
+
+            if (View.Parent is Panel panel)
+            {
+                int at = panel.Children.IndexOf(View);
+                panel.Children.RemoveAt(at);
+                panel.Children.Insert(at, View);
+            }
+
+            View.InvalidateRender();
+        }
+        catch
+        {
+            renderBroken = true;
+        }
+    }
+
     /// <summary>
     /// Left drag orbits, right drag pans, the wheel zooms.
     ///
@@ -1241,6 +1315,9 @@ public partial class MainWindow : Window
         pendingExclusive = false;
         pendingClear = false;
         pressScreen = screen;
+
+        // Placing connectors by hand: the click is read on release, so a drag still turns the view.
+        if (viewModel.IsConnectMode && viewModel.ConnectorsByHand) return;
 
         // A tool's panel leaves the viewport live for looking round its preview, not for picking:
         // a click that changed the selection would change what the tool is working on.
@@ -1728,6 +1805,9 @@ public partial class MainWindow : Window
                 viewModel.HoverAlignFace(null, Vector3.Zero, Vector3.Zero);
         }
 
+        if (viewModel.IsConnectMode && viewModel.ConnectorsByHand && SightLine(e.GetPosition(View)) is { } handSight)
+            viewModel.HoverConnector(handSight.Origin, handSight.Direction);
+
         if (viewModel.IsSurfaceInfoMode)
         {
             var faceHit = FirstHit(e.GetPosition(View), selectable: true);
@@ -1816,6 +1896,13 @@ public partial class MainWindow : Window
 
     private void OnViewportLeftUp(object sender, MouseButtonEventArgs e)
     {
+        if (viewModel.IsConnectMode && viewModel.ConnectorsByHand)
+        {
+            if (IsClick(e.GetPosition(View), pressScreen) && SightLine(e.GetPosition(View)) is { } sight)
+                viewModel.ClickConnector(sight.Origin, sight.Direction);
+            return;
+        }
+
         if (viewModel.IsSketchMode)
         {
             if (View.IsMouseCaptured) View.ReleaseMouseCapture();
@@ -2371,6 +2458,7 @@ public partial class MainWindow : Window
         {
             connectorMarksStale = true;
             if (e.PropertyName?.StartsWith("Connector") == true) RefreshSplitPreview();
+            if (e.PropertyName != "ConnectorPoints") renderer?.ShowHandFace(viewModel.HandView?.Face);
         }
 
         if (e.PropertyName is nameof(MainViewModel.SplitGizmoMode) && splitGizmo is not null)
@@ -2571,6 +2659,7 @@ public partial class MainWindow : Window
         // anything standing on it is in the way of both the drawing and the clicks.
         if (viewModel.IsSketchMode) working = [];
         else if (viewModel.PreviewOnly is { Count: > 0 } previewing) working = previewing;
+        else if (viewModel.HandShown is { } shown) working = [shown];
         else if (viewModel.IsSplitMode || viewModel.ConnectorPlane is not null) working = viewModel.Scene.Selection;
 
         // Any other tool that works on the selection has the plate to itself as well - Hole,
@@ -2617,6 +2706,14 @@ public partial class MainWindow : Window
 
         splitPreviewStale = false;
 
+        // Placing by hand, the part on top is not drawn at all - see RefreshFocus - and the face
+        // the two share is drawn in its place, so there is no half to fade.
+        if (viewModel.HandShown is not null)
+        {
+            renderer.ClearSplit();
+            return;
+        }
+
         // Connectors keep both halves, so nothing is being thrown away to fade - but the marks on
         // the cut face are inside the model, and the half above them has to come off to see any of
         // it. The upper half is the one faded, whichever way the plane faces.
@@ -2625,7 +2722,9 @@ public partial class MainWindow : Window
         float offset = plane?.Offset ?? viewModel.SplitOffset;
         var keep = plane is null ? viewModel.SplitKeep
             : normal.Z >= 0f ? SplitKeep.Back : SplitKeep.Front;
-        var offcut = plane is null ? viewModel.SplitOffcut : SplitOffcut.Faded;
+        var offcut = plane is null ? viewModel.SplitOffcut
+            : viewModel.IsConnectMode && viewModel.ConnectorsByHand ? SplitOffcut.Hidden
+            : SplitOffcut.Faded;
 
         long started = Stopwatch.GetTimestamp();
         renderer.ShowSplit(viewModel.Scene.Selection, normal, offset, keep, offcut,

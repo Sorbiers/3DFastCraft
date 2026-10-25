@@ -487,4 +487,43 @@ public class ConnectorTests
         Assert.True(SignedVolume(socketed) < SignedVolume(upper!) - 1f, "no sockets in the upper part");
         Assert.True(pegged.ComputeBounds().Max.Z > 1f, "the pegs do not stand up above the cut");
     }
+
+    [Fact]
+    public void ConnectorsPlacedByHandStayWherePutAndAreDroppedWhereTheyDoNotFit()
+    {
+        var below = MeshTransform.Transformed(Primitives.Box(80f, 80f, 30f), Matrix4x4.CreateTranslation(0, 0, 15f));
+        var above = MeshTransform.Transformed(Primitives.Box(80f, 80f, 30f), Matrix4x4.CreateTranslation(0, 0, 45f));
+        var contact = Connectors.SharedFace(above.ComputeBounds(), below.ComputeBounds());
+        Assert.NotNull(contact);
+
+        // One well inside, one off the edge, one on top of the first.
+        Vector3[] chosen = [new(-20f, 10f, 30f), new(39f, 0f, 30f), new(-19f, 10f, 30f)];
+        var layout = Connectors.Survey(above, below, contact, Pins(1), chosen);
+
+        var only = Assert.Single(layout.Points);
+        Assert.Equal(-20f, only.X, 0.01f);
+        Assert.Equal(10f, only.Y, 0.01f);
+    }
+
+    [Fact]
+    public void TheSharedFaceIsWhereBothPartsMeetAndAnswersForOnePointAtATime()
+    {
+        // A 40 mm block resting on one corner of an 80 mm one: they share a 40 by 40 square.
+        var below = MeshTransform.Transformed(Primitives.Box(80f, 80f, 30f), Matrix4x4.CreateTranslation(0, 0, 15f));
+        var above = MeshTransform.Transformed(Primitives.Box(40f, 40f, 30f), Matrix4x4.CreateTranslation(20f, 20f, 45f));
+        var contact = Connectors.SharedFace(above.ComputeBounds(), below.ComputeBounds());
+        Assert.NotNull(contact);
+
+        var joint = new Connectors.Joint(above, below, contact, Pins(1));
+
+        var face = joint.Patch().ComputeBounds();
+        Assert.Equal(0f, face.Min.X, 0.01f);
+        Assert.Equal(40f, face.Max.X, 0.01f);
+        Assert.Equal(30f, face.Min.Z, 0.01f);
+
+        Assert.True(joint.Fits(new Vector3(20f, 20f, 30f), []));
+        Assert.False(joint.Fits(new Vector3(-20f, -20f, 30f), []), "only the lower part is there");
+        Assert.False(joint.Fits(new Vector3(20f, 20f, 30f), [new Vector3(21f, 20f, 30f)]), "on top of another");
+        Assert.Equal(new Vector3(20f, 20f, 30f), joint.OnFace(new Vector3(20f, 20f, 100f), -Vector3.UnitZ));
+    }
 }
