@@ -1749,6 +1749,32 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
     /// clicking empty space clears the selection. The viewer's own, like the grid: remembered
     /// between sessions, but not a change to the project.
     /// </summary>
+    private bool lockFreeMove;
+
+    /// <summary>
+    /// Parts are moved by dragging their bodies only while Move is chosen in the bar under the view.
+    ///
+    /// A click to select that slipped a few pixels moved the part with it - on a model of fitted
+    /// parts, out of the place it had been fitted to - and in Rotate or Scale nothing on screen
+    /// suggested the body could be dragged at all.
+    /// </summary>
+    public bool LockFreeMove
+    {
+        get => lockFreeMove;
+        set
+        {
+            if (lockFreeMove == value) return;
+            Set(ref lockFreeMove, value);
+            Status = value
+                ? "Move lock on - parts are dragged only while Move is chosen in the bar below"
+                : "Move lock off - a part can be dragged by its body at any time";
+            SettingsChanged?.Invoke();
+        }
+    }
+
+    /// <summary>Whether dragging a part by its body moves it just now.</summary>
+    public bool CanDragParts => !lockFreeMove || gizmoMode == GizmoMode.Move;
+
     public bool StickySelection
     {
         get => stickySelection;
@@ -5661,6 +5687,7 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
         ShowShadows = settings.ShowShadows;
         ShowReflections = settings.ShowReflections;
         StickySelection = !settings.SingleSelection;
+        LockFreeMove = settings.LockFreeMove;
         sidePanelWidth = settings.SidePanelWidth;
         RestoreCustomButtons(settings.CustomButtons);
         RestoreLightPresets(settings.LightPresets);
@@ -5670,7 +5697,7 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
     public RememberedSettings Remembered =>
         new(plateWidth, plateDepth, plateHeight, unit.Label, showAxes, showZAxis, showGridLabels, !showProperties,
             uiLevel == UiLevel.Classic, showShadows, showReflections, !stickySelection,
-            sidePanelWidth, customButtons.ToArray(), light, OwnLightPresets);
+            sidePanelWidth, customButtons.ToArray(), light, OwnLightPresets, lockFreeMove);
 
     private float sidePanelWidth;
 

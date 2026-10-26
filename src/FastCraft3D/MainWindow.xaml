@@ -927,6 +927,11 @@
                                     ToolTip="Split the selection into its separate pieces (Ctrl+Shift+G). With an assembly picked by its name, remove the assembly instead: its parts stay where they are, as they are." />
                         </WrapPanel>
                         <WrapPanel>
+                            <ToggleButton Style="{StaticResource SideToolToggle}" Content="Lock move" Tag="{StaticResource IconLockMove}"
+                                          IsChecked="{Binding LockFreeMove, Mode=TwoWay}" AutomationProperties.Name="Lock move"
+                                          ToolTip="Lock move - on: a part is moved by dragging it only while Move is chosen in the bar under the view. In Rotate and Scale, dragging a part does nothing; its rings and handles still work." />
+                        </WrapPanel>
+                        <WrapPanel>
                             <Button Style="{StaticResource SideToolButton}" Content="Select all" Tag="{StaticResource IconSelectAll}"
                                     Command="{Binding SelectAllCommand}" AutomationProperties.Name="Select all"
                                     ToolTip="Select every object (Ctrl+A)" />

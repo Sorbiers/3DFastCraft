@@ -124,6 +124,8 @@
     <StreamGeometry x:Key="IconSelectAll">M3,3 L21,3 L21,21 L3,21 Z M8,8 L16,8 L16,16 L8,16 Z</StreamGeometry>
     <StreamGeometry x:Key="IconDeselectAll">M12,3 A9,9 0 1 1 11.9,3 Z</StreamGeometry>
     <StreamGeometry x:Key="IconInvertSelection">M12,3 A9,9 0 1 1 11.9,3 Z M12,3 L12,21 M12,7 L17,4.5 M12,11 L20.2,6.9 M12,15 L21,10.5 M12,19 L19.5,15.2</StreamGeometry>
+    <!-- A padlock: parts held where they are unless Move is chosen. -->
+    <StreamGeometry x:Key="IconLockMove">M8,11 L8,8 A4,4 0 0 1 16,8 L16,11 M5.5,11 L18.5,11 L18.5,21 L5.5,21 Z M12,14.5 L12,17.5</StreamGeometry>
     <StreamGeometry x:Key="IconSticky">M12,3 A9,9 0 1 1 11.9,3 Z M12,7.5 L17,16 L7,16 Z</StreamGeometry>
 
     <!-- Alignment -->

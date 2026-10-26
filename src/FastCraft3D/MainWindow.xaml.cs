@@ -1955,7 +1955,13 @@ public partial class MainWindow : Window
             // A few pixels of slop so a click with a shaky hand is still a click.
             if (IsClick(screen, dragStartScreen)) return;
             dragMoved = true;
+
+            if (!viewModel.CanDragParts)
+                viewModel.Status = "Move lock is on - choose Move in the bar below to drag a part, or use its arrows";
         }
+
+        // Held: the press still selected, and the release ends it without a move to undo.
+        if (!viewModel.CanDragParts) return;
 
         // Objects slide on the horizontal plane through the point originally grabbed.
         if (!TryIntersectPlane(screen, dragStartHit.Z, out var current)) return;

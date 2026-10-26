@@ -28,12 +28,13 @@ namespace FastCraft3D.Io;
 /// <param name="CustomButtons">The ribbon buttons on the Custom tab, in order, as the tab and the label name them; none, as a file from before it reads.</param>
 /// <param name="Light">How the scene is lit; none, as a file from before it reads, for the standard light.</param>
 /// <param name="LightPresets">The light presets saved by name; the built-in ones are not stored.</param>
+/// <param name="LockFreeMove">Parts are moved by dragging them only while Move is chosen in the bar under the view.</param>
 public readonly record struct RememberedSettings(
     float PlateWidth, float PlateDepth, float PlateHeight, string Unit,
     bool ShowAxes = true, bool ShowZAxis = false, bool ShowGridLabels = false, bool FoldProperties = false,
     bool ClassicMode = false, bool ShowShadows = false, bool ShowReflections = false,
     bool SingleSelection = false, float SidePanelWidth = 0f, string[]? CustomButtons = null,
-    LightSettings? Light = null, LightPreset[]? LightPresets = null);
+    LightSettings? Light = null, LightPreset[]? LightPresets = null, bool LockFreeMove = false);
 
 /// <summary>A light kept under a name, to be picked from the Light section.</summary>
 public sealed record LightPreset(string Name, LightSettings Light)
