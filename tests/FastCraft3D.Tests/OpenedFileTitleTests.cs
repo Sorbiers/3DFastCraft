@@ -62,7 +62,9 @@ public class OpenedFileTitleTests : IDisposable
             Assert.DoesNotContain("*", model.WindowTitle);
             Assert.Single(model.Scene.Objects);
 
-            // And a new scene is a new project, with a name of its own again.
+            // And a new scene is a new project, with a name of its own again. Answered beforehand,
+            // or New stops to ask about a project file.
+            model.ProjectFileDefault = false;
             model.NewCommand.Execute(null);
             Assert.Matches(Named, model.WindowTitle);
         });

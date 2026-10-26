@@ -12,7 +12,7 @@ namespace FastCraft3D.Io;
 /// </summary>
 public static class IncomingFiles
 {
-    private static readonly string[] Known = [".stl", ".obj", ".3mf", ".svg", SceneSerializer.LegacyExtension];
+    private static readonly string[] Known = [".stl", ".obj", ".3mf", ".svg", SceneSerializer.LegacyExtension, ProjectFile.Extension];
 
     /// <summary>Whether this app has anything to say about a file with this name.</summary>
     public static bool Understood(string path) =>
@@ -25,7 +25,8 @@ public static class IncomingFiles
     /// before 4.3 is imported, as a model is.
     /// </summary>
     public static bool IsProject(string path) =>
-        Path.GetExtension(path).Equals(SceneSerializer.Extension, StringComparison.OrdinalIgnoreCase) && SceneSerializer.IsProject(path);
+        Path.GetExtension(path).Equals(ProjectFile.Extension, StringComparison.OrdinalIgnoreCase)
+        || Path.GetExtension(path).Equals(SceneSerializer.Extension, StringComparison.OrdinalIgnoreCase) && SceneSerializer.IsProject(path);
 
     /// <summary>
     /// Whether a drop has two things it could mean, and so has to be asked about: a single project,

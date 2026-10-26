@@ -1,4 +1,4 @@
-﻿using System.IO;
+using System.IO;
 using System.IO.Compression;
 using System.Numerics;
 using System.Text.Json;
@@ -55,8 +55,8 @@ public static class SceneSerializer
     /// <summary>The project on its own, GZip JSON: the crash file, and projects from before 4.3, which are imported.</summary>
     public const string LegacyExtension = ".3dfc";
 
-    /// <summary>Where a 3MF keeps the project.</summary>
-    private const string PartPath = "3DFastCraft/project.json";
+    /// <summary>Where a 3MF keeps the project - and a .3dfp its copy of it, so either reads as a project.</summary>
+    internal const string PartPath = "3DFastCraft/project.json";
 
     /// <summary>Version 1 held only a scene; version 2 added the kept versions beside it.</summary>
     private const int CurrentVersion = 2;
@@ -70,10 +70,12 @@ public static class SceneSerializer
     /// <summary>Writes the scene as the current state, leaving any kept versions untouched.</summary>
     /// <param name="versionsFrom">The project this was opened from, when it is saved under another
     /// name, so its versions go with it.</param>
-    public static void Save(string path, Scene scene, ProjectSettings? settings = null, string? versionsFrom = null)
+    /// <param name="projectFile">The id of the .3dfp kept beside it, or null for none.</param>
+    public static void Save(string path, Scene scene, ProjectSettings? settings = null, string? versionsFrom = null, string? projectFile = null)
     {
         var dto = ReadIfPresent(versionsFrom ?? path) ?? new SceneDto();
         dto.Version = CurrentVersion;
+        dto.ProjectFile = projectFile;
         (dto.Objects, dto.Assemblies) = Contents(scene);
         Keep(dto, settings);
         Write(path, dto, scene);
@@ -200,6 +202,20 @@ public static class SceneSerializer
         dto.Unit = s.Unit;
         dto.ModelScale = s.ModelScale;
         dto.Notes = string.IsNullOrWhiteSpace(s.Notes) ? null : s.Notes;
+    }
+
+    /// <summary>The id of the .3dfp a project is kept with, or null for one kept without, or no project at all.</summary>
+    public static string? ReadProjectFileId(string path) => ReadIfPresent(path)?.ProjectFile;
+
+    /// <summary>The project part of a 3MF exactly as written, for the .3dfp to keep a copy of.</summary>
+    public static byte[] ReadProjectPart(string path)
+    {
+        using var zip = ZipFile.OpenRead(path);
+        var part = zip.GetEntry(PartPath) ?? throw new InvalidDataException("This file holds no 3DFastCraft project.");
+        using var stream = part.Open();
+        using var copy = new MemoryStream();
+        stream.CopyTo(copy);
+        return copy.ToArray();
     }
 
     /// <summary>The picture saved in a project, for the Recent list, or null for a file without one.</summary>
@@ -530,6 +546,9 @@ public static class SceneSerializer
         public string? Unit { get; set; }
         public float? ModelScale { get; set; }
         public string? Notes { get; set; }
+
+        /// <summary>The id of the .3dfp kept beside the file. Dropped, like all of this, by a slicer that saves over it.</summary>
+        public string? ProjectFile { get; set; }
     }
 
     private sealed class VersionDto

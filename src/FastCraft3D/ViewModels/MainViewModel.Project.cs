@@ -36,8 +36,15 @@ public partial class MainViewModel
     private void ShowProject()
     {
         string name = projectPath is not null ? Path.GetFileNameWithoutExtension(projectPath) : "Untitled project";
-        var dialog = new ProjectDialog(name, ProjectSummary(), projectNotes) { Owner = Application.Current?.MainWindow };
+        string projectFile = projectPath is not null ? Path.GetFileName(ProjectFile.Beside(projectPath)) : name + ProjectFile.Extension;
+        var dialog = new ProjectDialog(name, ProjectSummary(), projectNotes, projectFile, KeepsProjectFile, ProjectFileDefault)
+        {
+            Owner = Application.Current?.MainWindow
+        };
         if (dialog.ShowDialog() != true) return;
+
+        ProjectFileDefault = dialog.NewProjects;
+        if (dialog.KeepsProjectFile != KeepsProjectFile) SetKeepsProjectFile(dialog.KeepsProjectFile);
 
         string notes = dialog.Notes.TrimEnd();
         if (notes == projectNotes) return;

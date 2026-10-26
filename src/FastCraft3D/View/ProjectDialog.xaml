@@ -12,6 +12,7 @@
             <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
             <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
 
         <TextBlock x:Name="NameText" FontSize="15" FontWeight="SemiBold" Foreground="#FF23303C" Margin="0,0,0,8" />
@@ -29,7 +30,22 @@
                  VerticalScrollBarVisibility="Auto" Padding="4" AutomationProperties.AutomationId="ProjectNotes"
                  ToolTip="Kept in the project file: what it is for, what is left to do, which filament, anything" />
 
-        <StackPanel Grid.Row="4" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,12,0,0">
+        <!-- The .3dfp: see docs/plan-project-mode.md. -->
+        <StackPanel Grid.Row="4" Margin="0,12,0,0">
+            <CheckBox x:Name="KeepBox" AutomationProperties.AutomationId="ProjectFileKeep"
+                      ToolTip="A second copy of the project beside the .3mf that no slicer opens: if a slicer saves over the .3mf and drops the project, this brings it back. It also keeps the view. Written when the project is saved." />
+            <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
+                <TextBlock Text="New projects" VerticalAlignment="Center" Foreground="#FF3A4550" Margin="0,0,8,0" />
+                <ComboBox x:Name="DefaultBox" Width="180" AutomationProperties.AutomationId="ProjectFileDefault"
+                          ToolTip="What a new project does about a project file">
+                    <ComboBoxItem Content="Ask each time" />
+                    <ComboBoxItem Content="Keep a project file" />
+                    <ComboBoxItem Content="Just the .3mf" />
+                </ComboBox>
+            </StackPanel>
+        </StackPanel>
+
+        <StackPanel Grid.Row="5" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,12,0,0">
             <Button Content="OK" MinWidth="80" Margin="0,0,8,0" Padding="10,4" Click="OnAccept"
                     AutomationProperties.AutomationId="AcceptButton" />
             <Button Content="Cancel" MinWidth="80" Padding="10,4" IsCancel="True" />

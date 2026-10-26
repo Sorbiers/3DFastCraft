@@ -316,6 +316,11 @@ public partial class MainWindow : Window
         };
 
         viewModel.ZoomExtentsRequested += () => Dispatcher.BeginInvoke(new Action(ZoomExtents));
+
+        // The view kept in a project's .3dfp. After the zoom asked for on opening, not instead of
+        // it: queued behind it, so it is the one left standing.
+        viewModel.CaptureView = CaptureView;
+        viewModel.ProjectViewRestoreRequested += view => Dispatcher.BeginInvoke(new Action(() => RestoreView(view)));
         viewModel.PropertyChanged += OnViewModelChanged;
 
         // One undo entry per field edit rather than one per keystroke.
@@ -450,6 +455,7 @@ public partial class MainWindow : Window
 
         if (page.Project is { } path) viewModel.OpenRecentCommand.Execute(path);
         else if (page.OpenAFile) viewModel.OpenCommand.Execute(null);
+        else viewModel.BeginNewProject();
     }
 
     private void OnShowStartPage(object sender, RoutedEventArgs e) => ShowStartPage();
@@ -3204,6 +3210,31 @@ public partial class MainWindow : Window
 
         litFrom = wanted;
         KeyLight.Direction = wanted;
+    }
+
+    private ViewState? CaptureView()
+    {
+        if (View.Camera is not ProjectionCamera camera) return null;
+
+        static double[] Of(Media3D.Vector3D v) => [v.X, v.Y, v.Z];
+        var at = camera.Position;
+        return new ViewState([at.X, at.Y, at.Z], Of(camera.LookDirection), Of(camera.UpDirection),
+            camera is OrthographicCamera, camera is OrthographicCamera ortho ? ortho.Width : 0);
+    }
+
+    private void RestoreView(ViewState view)
+    {
+        if (view.Position is not { Length: 3 } at || view.Look is not { Length: 3 } look || view.Up is not { Length: 3 } up) return;
+
+        // The projection first: switching it makes a new camera, which would take no notice of
+        // anything set on the old one.
+        if (viewModel.ShowOrthographic != view.Orthographic) viewModel.ShowOrthographic = view.Orthographic;
+        if (View.Camera is not ProjectionCamera camera) return;
+
+        camera.Position = new Media3D.Point3D(at[0], at[1], at[2]);
+        camera.LookDirection = new Media3D.Vector3D(look[0], look[1], look[2]);
+        camera.UpDirection = new Media3D.Vector3D(up[0], up[1], up[2]);
+        if (camera is OrthographicCamera ortho && view.Width > 0) ortho.Width = view.Width;
     }
 
     /// <summary>The way from the model to the key light, in the scene, for the light as set.</summary>

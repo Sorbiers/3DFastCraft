@@ -1642,6 +1642,8 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
             Undo.Clear();
             projectPath = point.ProjectPath;
             openedFrom = null;
+            projectFileId = point.ProjectPath is { } original ? SceneSerializer.ReadProjectFileId(original) : null;
+            keepProjectFile = projectFileId is not null ? true : null;
             RefreshSelection();
             ZoomExtentsRequested?.Invoke();
 
@@ -5692,12 +5694,13 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
         RestoreCustomButtons(settings.CustomButtons);
         RestoreLightPresets(settings.LightPresets);
         Light = settings.Light ?? LightSettings.Standard;
+        projectFileDefault = settings.ProjectFileDefault;
     }
 
     public RememberedSettings Remembered =>
         new(plateWidth, plateDepth, plateHeight, unit.Label, showAxes, showZAxis, showGridLabels, !showProperties,
             uiLevel == UiLevel.Classic, showShadows, showReflections, !stickySelection,
-            sidePanelWidth, customButtons.ToArray(), light, OwnLightPresets, lockFreeMove);
+            sidePanelWidth, customButtons.ToArray(), light, OwnLightPresets, lockFreeMove, projectFileDefault);
 
     private float sidePanelWidth;
 
@@ -10738,6 +10741,7 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
         projectNotes = ""; // and so were the notes
         IsDirty = false;
         RefreshSelection();
+        BeginNewProject();
         Status = "New scene";
     }
 
@@ -10749,7 +10753,7 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
         {
             // A plain 3MF chosen here opens as a model on a new plate: nothing but its contents
             // says which kind it is. A .3dfc is imported, from Import.
-            Filter = $"3DFastCraft project (*{SceneSerializer.Extension})|*{SceneSerializer.Extension}",
+            Filter = $"3DFastCraft project (*{SceneSerializer.Extension};*{ProjectFile.Extension})|*{SceneSerializer.Extension};*{ProjectFile.Extension}",
             Title = "Open project"
         };
         if (dialog.ShowDialog() != true) return;
@@ -10768,8 +10772,15 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
     {
         try
         {
+            if (Path.GetExtension(path).Equals(ProjectFile.Extension, StringComparison.OrdinalIgnoreCase))
+            {
+                OpenProjectFile(path);
+                return;
+            }
+
             if (!SceneSerializer.IsProject(path))
             {
+                if (OfferRestore(path)) return;
                 OpenModel(path);
                 return;
             }
@@ -10793,6 +10804,7 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
             RefreshSelection();
             ZoomExtentsRequested?.Invoke();
             Status = $"Opened {Path.GetFileName(path)}";
+            CheckProjectFile(path);
         }
         catch (Exception ex)
         {
@@ -10812,6 +10824,9 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
         Scene.Objects.Clear();
         Undo.Clear();
         projectPath = null;
+        keepProjectFile = null;
+        projectFileId = null;
+        versionsSource = null;
         projectNotes = "";
         ImportFiles([path]);
         Undo.Clear();
@@ -10842,7 +10857,8 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
         }
 
         string path = target;
-        Run(!onTheSpot && SaveIsSlow(), "Saving...", () => WriteProject(path));
+        string? projectFile = ProjectFileIdForSave(path);
+        Run(!onTheSpot && SaveIsSlow(), "Saving...", () => WriteProject(path, projectFile));
     }
 
     /// <summary>Whether writing the project will take a moment: a lot of geometry, or a file already big with versions.</summary>
@@ -10850,15 +10866,17 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
         (projectPath is not null && IsBig(projectPath))
         || Scene.Objects.Sum(o => (long)o.Mesh.Positions.Count * 12 + (long)o.Mesh.Indices.Count * 4) >= SlowFromBytes;
 
-    private void WriteProject(string target)
+    private void WriteProject(string target, string? projectFile)
     {
         try
         {
-            SceneSerializer.Save(target, Scene, ViewSettings, versionsFrom: projectPath);
+            SceneSerializer.Save(target, Scene, ViewSettings, versionsFrom: versionsSource ?? projectPath, projectFile: projectFile);
             projectPath = target;
+            versionsSource = null;
             IsDirty = false;
             recent.Add(target);
             Status = $"Saved {Path.GetFileName(target)}";
+            UpdateProjectFile(target);
         }
         catch (Exception ex)
         {
@@ -10898,6 +10916,7 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
         try
         {
             SceneSerializer.SaveVersion(path, Scene, label, ViewSettings);
+            UpdateProjectFile(path);
             IsDirty = false;
 
             // There is a way back again, so the notice has done its job.
@@ -11001,7 +11020,9 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
                 // settings. Only its versions stay behind. Taking the mesh and colour alone, as
                 // this did, put every part at the origin, unturned. A project saved as a 3MF comes
                 // in through the 3MF's own model below, as any 3MF.
-                if (extension.Equals(SceneSerializer.LegacyExtension, StringComparison.OrdinalIgnoreCase))
+                // A .3dfp the same way: it holds the project, and has no model of its own to read.
+                if (extension.Equals(SceneSerializer.LegacyExtension, StringComparison.OrdinalIgnoreCase)
+                    || extension.Equals(ProjectFile.Extension, StringComparison.OrdinalIgnoreCase))
                 {
                     foreach (var loaded in SceneSerializer.Load(path))
                     {
