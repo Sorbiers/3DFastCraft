@@ -23,6 +23,74 @@
                 </StackPanel>
             </Button>
         </DataTemplate>
+        <!-- The pushpin of the ribbon's Pin button, drawn here because a dialog does not see the
+             ribbon's icons. -->
+        <StreamGeometry x:Key="PinGlyph">M8,3 L16,3 M9.5,3 L9.5,9 L6,13 L18,13 L14.5,9 L14.5,3 M12,13 L12,21</StreamGeometry>
+
+        <!-- A pinned project: the same tile, with its pin in the corner to pull out. The pin is
+             faint until the pointer is on the tile, and turns red and struck through over itself,
+             so it reads as what a click will do rather than as a label. Laid over the tile rather
+             than inside it: a button inside the tile's own button would open the project too. -->
+        <DataTemplate x:Key="PinnedTile">
+            <Grid x:Name="Root" Background="Transparent">
+                <ContentPresenter Content="{Binding}" ContentTemplate="{StaticResource ProjectTile}" />
+                <Button x:Name="UnpinButton" Width="34" Height="34" Margin="0,0,14,6"
+                        HorizontalAlignment="Right" VerticalAlignment="Center" Cursor="Hand" Opacity="0.45"
+                        Click="OnUnpin" Tag="{Binding Path}"
+                        AutomationProperties.Name="{Binding Name, StringFormat=Unpin {0}}"
+                        ToolTip="Unpin - take it off the start page. The file stays where it is.">
+                    <Button.Template>
+                        <ControlTemplate TargetType="Button">
+                            <Grid>
+                                <Ellipse x:Name="Disc" Fill="#FFEFF5FF" Stroke="#FFB8D2F0" StrokeThickness="1" />
+                                <Path x:Name="Pin" Data="{StaticResource PinGlyph}" Width="16" Height="16" Stretch="Uniform"
+                                      Stroke="#FF2F6FD0" StrokeThickness="1.6" StrokeLineJoin="Round"
+                                      StrokeStartLineCap="Round" StrokeEndLineCap="Round"
+                                      RenderTransformOrigin="0.5,0.5">
+                                    <Path.RenderTransform>
+                                        <RotateTransform x:Name="Tilt" Angle="35" />
+                                    </Path.RenderTransform>
+                                </Path>
+                                <Line x:Name="Slash" X1="10" Y1="24" X2="24" Y2="10" Opacity="0"
+                                      Stroke="#FFD0453A" StrokeThickness="2" StrokeStartLineCap="Round" StrokeEndLineCap="Round" />
+                            </Grid>
+                            <ControlTemplate.Triggers>
+                                <Trigger Property="IsMouseOver" Value="True">
+                                    <Setter TargetName="Disc" Property="Fill" Value="#FFFDECEA" />
+                                    <Setter TargetName="Disc" Property="Stroke" Value="#FFE8A49C" />
+                                    <Setter TargetName="Pin" Property="Stroke" Value="#FFD0453A" />
+                                    <Setter TargetName="Slash" Property="Opacity" Value="1" />
+                                    <Trigger.EnterActions>
+                                        <BeginStoryboard>
+                                            <Storyboard>
+                                                <DoubleAnimation Storyboard.TargetName="Tilt" Storyboard.TargetProperty="Angle"
+                                                                 To="0" Duration="0:0:0.15" />
+                                            </Storyboard>
+                                        </BeginStoryboard>
+                                    </Trigger.EnterActions>
+                                    <Trigger.ExitActions>
+                                        <BeginStoryboard>
+                                            <Storyboard>
+                                                <DoubleAnimation Storyboard.TargetName="Tilt" Storyboard.TargetProperty="Angle"
+                                                                 To="35" Duration="0:0:0.15" />
+                                            </Storyboard>
+                                        </BeginStoryboard>
+                                    </Trigger.ExitActions>
+                                </Trigger>
+                                <Trigger Property="IsPressed" Value="True">
+                                    <Setter TargetName="Disc" Property="Fill" Value="#FFF8D3CE" />
+                                </Trigger>
+                            </ControlTemplate.Triggers>
+                        </ControlTemplate>
+                    </Button.Template>
+                </Button>
+            </Grid>
+            <DataTemplate.Triggers>
+                <Trigger SourceName="Root" Property="IsMouseOver" Value="True">
+                    <Setter TargetName="UnpinButton" Property="Opacity" Value="1" />
+                </Trigger>
+            </DataTemplate.Triggers>
+        </DataTemplate>
     </Window.Resources>
 
     <StackPanel Margin="20,16,20,16">
@@ -35,8 +103,8 @@
                     AutomationProperties.AutomationId="StartOpen" />
         </StackPanel>
 
-        <TextBlock x:Name="PinnedHeader" Text="Favorites" FontWeight="SemiBold" Foreground="#FF33383F" Margin="0,0,0,6" />
-        <ItemsControl x:Name="PinnedList" ItemTemplate="{StaticResource ProjectTile}" AutomationProperties.AutomationId="StartPinned" />
+        <TextBlock x:Name="PinnedHeader" Text="Pinned" FontWeight="SemiBold" Foreground="#FF33383F" Margin="0,0,0,6" />
+        <ItemsControl x:Name="PinnedList" ItemTemplate="{StaticResource PinnedTile}" AutomationProperties.AutomationId="StartPinned" />
 
         <TextBlock x:Name="RecentHeader" Text="Recent" FontWeight="SemiBold" Foreground="#FF33383F" Margin="0,8,0,6" />
         <ItemsControl x:Name="RecentList" ItemTemplate="{StaticResource ProjectTile}" AutomationProperties.AutomationId="StartRecent" />

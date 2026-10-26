@@ -420,7 +420,7 @@ public partial class MainWindow : Window
     }
 
     /// <summary>
-    /// The start page: a new project, a file to open, the favorites and the last three opened.
+    /// The start page: a new project, a file to open, the pinned projects and the last three opened.
     /// Shown when the app starts with nothing to open, and from the File tab.
     /// </summary>
     private void ShowStartPage()
@@ -439,11 +439,13 @@ public partial class MainWindow : Window
             return;
         }
 
-        // A favorite is listed once, under Favorites: the three recent are the three after them.
-        var favorites = viewModel.PinnedFiles;
-        var pinnedPaths = new HashSet<string>(favorites.Select(f => f.Path), StringComparer.OrdinalIgnoreCase);
-        var recentThree = viewModel.RecentFiles.Where(r => !pinnedPaths.Contains(r.Path)).Take(3).ToList();
-        var page = new StartDialog(favorites, recentThree) { Owner = this };
+        // A pinned project is listed once, under Pinned: the three recent are the three after them.
+        var pinnedFiles = viewModel.PinnedFiles;
+        var pinnedPaths = new HashSet<string>(pinnedFiles.Select(f => f.Path), StringComparer.OrdinalIgnoreCase);
+        // Only files still there: a recent file dropped from a temporary folder, or on a drive that
+        // is not plugged in, took a place among the three and could only fail to open.
+        var recentThree = viewModel.RecentFiles.Where(r => !pinnedPaths.Contains(r.Path) && File.Exists(r.Path)).Take(3).ToList();
+        var page = new StartDialog(pinnedFiles, recentThree, viewModel.Unpin) { Owner = this };
         page.ShowDialog();
 
         if (page.Project is { } path) viewModel.OpenRecentCommand.Execute(path);
@@ -2955,7 +2957,7 @@ public partial class MainWindow : Window
         menu.Items.Add(new MenuItem
         {
             Header = "Clear the list",
-            ToolTip = "Forget the projects opened recently. Favorites stay.",
+            ToolTip = "Forget the projects opened recently. Pinned ones stay.",
             Command = viewModel.ClearRecentCommand
         });
         // Beside the copy on the Custom tab when that is where it was clicked: the original may be on a tab that is not showing.

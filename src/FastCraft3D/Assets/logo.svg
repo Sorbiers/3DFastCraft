@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-48 -48 96 96">
+  <!-- 3DFastCraft: a cube with its printed layers showing on one side. app.ico is drawn from
+       this at each size, with fewer layer lines the smaller it gets: two at 16 and 24, three
+       at 32, four at 48, five from 64 up. -->
+  <polygon points="0,-46 40,-23 0,0 -40,-23" fill="#6FA8F5"/>
+  <polygon points="0,0 40,-23 40,23 0,46" fill="#2F6FD0"/>
+  <polygon points="-40,-23 0,0 0,46 -40,23" fill="#E3EEFC"/>
+  <g stroke="#1D4E9E" stroke-width="2.5" stroke-linecap="round">
+    <line x1="-36" y1="-13.03" x2="-4" y2="5.37"/>
+    <line x1="-36" y1="-5.37" x2="-4" y2="13.03"/>
+    <line x1="-36" y1="2.3" x2="-4" y2="20.7"/>
+    <line x1="-36" y1="9.97" x2="-4" y2="28.37"/>
+    <line x1="-36" y1="17.63" x2="-4" y2="36.03"/>
+  </g>
+</svg>

@@ -7,15 +7,20 @@ namespace FastCraft3D.View;
 
 /// <summary>
 /// What comes up when the app starts with nothing to open: a new project, a file to open, the
-/// projects pinned as favorites and the last few opened, each with its picture.
+/// projects pinned to it and the last few opened, each with its picture.
 /// </summary>
 public partial class StartDialog : Window
 {
-    public StartDialog(IReadOnlyList<MainViewModel.RecentEntry> pinned, IReadOnlyList<MainViewModel.RecentEntry> recent)
+    private readonly System.Collections.ObjectModel.ObservableCollection<MainViewModel.RecentEntry> pinnedShown;
+    private readonly Action<string> unpin;
+
+    public StartDialog(IReadOnlyList<MainViewModel.RecentEntry> pinned, IReadOnlyList<MainViewModel.RecentEntry> recent, Action<string> unpin)
     {
         InitializeComponent();
 
-        PinnedList.ItemsSource = pinned;
+        this.unpin = unpin;
+        pinnedShown = new(pinned);
+        PinnedList.ItemsSource = pinnedShown;
         RecentList.ItemsSource = recent;
 
         // Shown only when there is something under them.
@@ -51,6 +56,32 @@ public partial class StartDialog : Window
     {
         OpenAFile = true;
         Close();
+    }
+
+    private void OnUnpin(object sender, RoutedEventArgs e)
+    {
+        if (sender is not Button { Tag: string path } button) return;
+        e.Handled = true;
+        button.IsEnabled = false;
+        unpin(path);
+
+        // Faded out before it goes, so the tiles below closing up reads as the one pulled out.
+        var entry = pinnedShown.First(p => p.Path == path);
+        void Gone()
+        {
+            pinnedShown.Remove(entry);
+            if (pinnedShown.Count == 0) PinnedHeader.Visibility = PinnedList.Visibility = Visibility.Collapsed;
+        }
+
+        if (PinnedList.ItemContainerGenerator.ContainerFromItem(entry) is not FrameworkElement tile)
+        {
+            Gone();
+            return;
+        }
+
+        var fade = new System.Windows.Media.Animation.DoubleAnimation(0, TimeSpan.FromMilliseconds(180));
+        fade.Completed += (_, _) => Gone();
+        tile.BeginAnimation(OpacityProperty, fade);
     }
 
     private void OnProject(object sender, RoutedEventArgs e)

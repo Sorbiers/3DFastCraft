@@ -358,7 +358,7 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
         pinned.Changed += () =>
         {
             Raise(nameof(PinnedFiles));
-            Raise(nameof(IsFavorite));
+            Raise(nameof(IsPinned));
         };
         SaveVersionCommand = RelayCommand.Simple(SaveVersion, () => Scene.Objects.Count > 0);
         VersionsCommand = RelayCommand.Simple(ShowVersions, () => projectPath is not null);
@@ -526,31 +526,49 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
         .Select(p => recentEntries.TryGetValue(p, out var known) ? known : recentEntries[p] = new RecentEntry(p))
         .ToList();
 
-    /// <summary>The projects pinned as favorites, for the start page.</summary>
+    /// <summary>The projects pinned to the start page.</summary>
     public IReadOnlyList<RecentEntry> PinnedFiles => pinned.Paths
         .Select(p => recentEntries.TryGetValue(p, out var known) ? known : recentEntries[p] = new RecentEntry(p))
         .ToList();
 
-    /// <summary>Whether the project has a file of its own, which is what a favorite is.</summary>
-    public bool CanFavorite => projectPath is not null;
-
-    /// <summary>The project pinned to the start page, or taken off it.</summary>
-    public bool IsFavorite
+    /// <summary>
+    /// The project pinned to the start page, or taken off it.
+    ///
+    /// What is pinned is a file, so a project not yet saved is saved first. The button used to be
+    /// turned off until then, and as it looked no different it simply ignored the click.
+    /// </summary>
+    public bool IsPinned
     {
         get => projectPath is not null && pinned.Contains(projectPath);
         set
         {
-            if (projectPath is null || value == IsFavorite) return;
+            if (value == IsPinned) return;
+
+            if (projectPath is null && value) SaveProject(saveAs: true);
+            if (projectPath is null)
+            {
+                // Not saved after all: the button goes back up.
+                Raise(nameof(IsPinned));
+                return;
+            }
 
             if (value) pinned.Add(projectPath);
             else pinned.Remove(projectPath);
+            Raise(nameof(IsPinned));
 
-            Status = value ? $"{Path.GetFileNameWithoutExtension(projectPath)} is a favorite - it is on the start page"
-                           : $"{Path.GetFileNameWithoutExtension(projectPath)} is no longer a favorite";
+            Status = value ? $"{Path.GetFileNameWithoutExtension(projectPath)} is pinned to the start page"
+                           : $"{Path.GetFileNameWithoutExtension(projectPath)} is no longer pinned";
         }
     }
 
-    /// <summary>Forgets the recent projects, for privacy. Favorites stay: they were chosen.</summary>
+    /// <summary>Takes a project off the start page, whether or not it is the one open.</summary>
+    public void Unpin(string path)
+    {
+        pinned.Remove(path);
+        Raise(nameof(IsPinned));
+    }
+
+    /// <summary>Forgets the recent projects, for privacy. Pinned ones stay: they were chosen.</summary>
     public System.Windows.Input.ICommand ClearRecentCommand => clearRecent ??= RelayCommand.Simple(() =>
     {
         recent.Clear();
@@ -1541,8 +1559,7 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
             Raise(nameof(WindowTitle));
 
             // Saved, opened or new: the project's file may be another one now.
-            Raise(nameof(IsFavorite));
-            Raise(nameof(CanFavorite));
+            Raise(nameof(IsPinned));
 
             if (value) Changed();
             else if (was) ForgetRecovery();

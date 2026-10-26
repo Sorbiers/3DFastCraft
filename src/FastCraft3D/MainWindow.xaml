@@ -188,6 +188,12 @@
                                 <Setter TargetName="Chrome" Property="Background" Value="#FFD3E0EF" />
                                 <Setter TargetName="Chrome" Property="BorderBrush" Value="#FF8FAFD0" />
                             </Trigger>
+                            <!-- Faded as the plain buttons are: without it a toggle that could not be
+                                 pressed looked exactly like one that could, and simply ignored clicks. -->
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter Property="Opacity" Value="0.35" />
+                                <Setter Property="Cursor" Value="Arrow" />
+                            </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
                 </Setter.Value>
@@ -739,10 +745,10 @@
                             </ContextMenu>
                         </Button.ContextMenu>
                     </Button>
-                    <ToggleButton Style="{StaticResource ToolToggle}" Content="Favorite" Tag="{StaticResource IconFavorite}"
-                                  IsChecked="{Binding IsFavorite, Mode=TwoWay}" IsEnabled="{Binding CanFavorite}"
-                                  AutomationProperties.AutomationId="Favorite"
-                                  ToolTip="Pin this project to the start page. Needs the project saved to a file." />
+                    <ToggleButton Style="{StaticResource ToolToggle}" Content="Pin" Tag="{StaticResource IconPin}"
+                                  IsChecked="{Binding IsPinned, Mode=TwoWay}"
+                                  AutomationProperties.AutomationId="Pin"
+                                  ToolTip="Pin this project to the start page. A project not yet saved is saved first." />
                     <Button Style="{StaticResource ToolButton}" Content="Start page" Tag="{StaticResource IconNew}"
                             Click="OnShowStartPage" MinWidth="76" AutomationProperties.AutomationId="StartPage"
                             ToolTip="The page the app starts with: a new project, a file to open, favorites and recent projects" />

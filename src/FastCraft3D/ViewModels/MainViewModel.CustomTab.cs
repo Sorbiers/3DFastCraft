@@ -74,6 +74,7 @@ public sealed partial class MainViewModel
         ["Edit/Intersect"] = "Tools/Intersect",
         ["Edit/Merge"] = "Tools/Merge",
         ["Edit/Split"] = "Tools/Split",
-        ["View/Grid"] = "View/Scene"
+        ["View/Grid"] = "View/Scene",
+        ["File/Favorite"] = "File/Pin"
     };
 }
