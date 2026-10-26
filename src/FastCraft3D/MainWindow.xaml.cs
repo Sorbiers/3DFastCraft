@@ -97,8 +97,8 @@ public partial class MainWindow : Window
     private List<TransformState> editBefore = [];
 
     /// <summary>The viewport behind the plate: as it sits normally, and while a tool is running.</summary>
-    private static readonly Color PlainBackground = Color.FromRgb(0xB8, 0xBC, 0xC2);
-    private static readonly Color ToolBackground = Color.FromRgb(0xA6, 0xB2, 0xC4);
+    private static readonly Color PlainBackground = Color.FromRgb(0xD8, 0xDA, 0xDD);
+    private static readonly Color ToolBackground = Color.FromRgb(0xC6, 0xD0, 0xDE);
 
     /// <summary>
     /// Align to face's own colour for a face once it is picked, so it reads differently from the
@@ -131,7 +131,7 @@ public partial class MainWindow : Window
         View.EffectsManager = EffectsManager;
         View.RenderExceptionOccurred += OnRenderFault;
         Microsoft.Win32.SystemEvents.SessionSwitch += OnSessionSwitch;
-        Activated += (_, _) => { if (renderBroken) RestartRendering(); };
+        Activated += (_, _) => { if (renderBroken && !sessionLocked) RestartRendering(); };
         View.Camera = CreateCamera();
         ConfigureCameraGestures();
 
@@ -1106,53 +1106,120 @@ public partial class MainWindow : Window
 
     public IEffectsManager EffectsManager { get; }
 
-    // Whether the 3D view lost its graphics device and has not been brought back yet.
+    // Whether the 3D view lost its graphics device and has not drawn a frame since.
     private bool renderBroken;
-    private bool restartQueued;
-    private DateTime lastRestart;
+    private bool sessionLocked;
+    private int restartAttempts;
+    private DispatcherTimer? restartClock;
+    private HelixToolkit.SharpDX.Core.IRenderHost? watchedHost;
 
     /// <summary>
     /// The 3D view losing its graphics device - after a screen lock, a switch of user, a remote
     /// session, a driver update.
     ///
     /// Left to itself the viewport printed the exception over a black view and stayed that way
-    /// until the app was restarted. The device can be had again; it only cannot be had while the
-    /// session is locked, so a restart that fails there waits for the unlock or the next time the
-    /// window comes to the front.
+    /// until the app was restarted. The first answer restarted it once, at once, and then waited
+    /// for the unlock - but the restart ran while the screen was still locked, did not throw, drew
+    /// nothing, and so nothing ever tried again: black, now without the message. So it keeps
+    /// trying every couple of seconds, not while the session is locked, until a frame is actually
+    /// drawn - the one thing that says it worked.
     /// </summary>
     private void OnRenderFault(object? sender, HelixToolkit.SharpDX.Core.Utilities.RelayExceptionEventArgs e)
     {
         e.Handled = true;
-        renderBroken = true;
+        MarkRenderBroken();
+    }
 
-        // A fault straight after a restart means the device is not to be had yet; trying again
-        // at once would only fault again, round and round, for as long as the screen is locked.
-        if (restartQueued || DateTime.UtcNow - lastRestart < TimeSpan.FromSeconds(3)) return;
-        restartQueued = true;
-        Dispatcher.BeginInvoke(DispatcherPriority.ApplicationIdle, () => { restartQueued = false; RestartRendering(); });
+    private void MarkRenderBroken()
+    {
+        renderBroken = true;
+        if (restartClock is not null) return;
+
+        restartClock = new DispatcherTimer(DispatcherPriority.Background) { Interval = TimeSpan.FromSeconds(2) };
+        restartClock.Tick += (_, _) =>
+        {
+            if (!renderBroken)
+            {
+                restartClock?.Stop();
+                restartClock = null;
+                restartAttempts = 0;
+                return;
+            }
+
+            if (!sessionLocked) RestartRendering();
+        };
+        restartClock.Start();
     }
 
     private void OnSessionSwitch(object? sender, Microsoft.Win32.SessionSwitchEventArgs e)
     {
-        if (e.Reason is Microsoft.Win32.SessionSwitchReason.SessionUnlock
-            or Microsoft.Win32.SessionSwitchReason.ConsoleConnect
-            or Microsoft.Win32.SessionSwitchReason.RemoteConnect)
-            Dispatcher.BeginInvoke(DispatcherPriority.ApplicationIdle, () => { if (renderBroken) RestartRendering(); });
+        switch (e.Reason)
+        {
+            case Microsoft.Win32.SessionSwitchReason.SessionLock:
+            case Microsoft.Win32.SessionSwitchReason.ConsoleDisconnect:
+            case Microsoft.Win32.SessionSwitchReason.RemoteDisconnect:
+                sessionLocked = true;
+                break;
+
+            // Back again: assumed broken until a frame says otherwise, since the view can come back
+            // black without anything throwing.
+            case Microsoft.Win32.SessionSwitchReason.SessionUnlock:
+            case Microsoft.Win32.SessionSwitchReason.ConsoleConnect:
+            case Microsoft.Win32.SessionSwitchReason.RemoteConnect:
+                sessionLocked = false;
+                Dispatcher.BeginInvoke(DispatcherPriority.Background, () =>
+                {
+                    WatchFrames();
+                    MarkRenderBroken();
+                    View.InvalidateRender();
+                });
+                break;
+        }
     }
 
     /// <summary>
-    /// Builds the device and everything on it again, then takes the viewport out of the window
-    /// and puts it back: unloading and loading it is what makes it drop its old surface and ask
-    /// the new device for one. Fails quietly while the session is still locked.
+    /// Listens for the next frame the viewport draws. The render host sits inside the viewport's
+    /// template and is made again when the viewport is reloaded, so it is found again each time.
+    /// </summary>
+    private void WatchFrames()
+    {
+        var host = FindCanvas(View)?.RenderHost;
+        if (ReferenceEquals(host, watchedHost)) return;
+
+        if (watchedHost is not null) watchedHost.Rendered -= OnFrameDrawn;
+        watchedHost = host;
+        if (host is not null) host.Rendered += OnFrameDrawn;
+    }
+
+    private void OnFrameDrawn(object? sender, EventArgs e) => renderBroken = false;
+
+    private static HelixToolkit.Wpf.SharpDX.DPFCanvas? FindCanvas(DependencyObject root)
+    {
+        for (int i = 0; i < VisualTreeHelper.GetChildrenCount(root); i++)
+        {
+            var child = VisualTreeHelper.GetChild(root, i);
+            if (child is HelixToolkit.Wpf.SharpDX.DPFCanvas canvas) return canvas;
+            if (FindCanvas(child) is { } inner) return inner;
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// Takes the viewport out of the window and puts it back: unloading and loading it is what
+    /// makes it drop its old surface and ask the device for a new one. From the third try on, the
+    /// device and everything on it are built again as well, for when it is the device that went.
     /// </summary>
     private void RestartRendering()
     {
-        renderBroken = false;
-        lastRestart = DateTime.UtcNow;
+        restartAttempts++;
         try
         {
-            EffectsManager.DisposeAllResources();
-            EffectsManager.Reinitialize();
+            if (restartAttempts >= 3)
+            {
+                EffectsManager.DisposeAllResources();
+                EffectsManager.Reinitialize();
+            }
 
             if (View.Parent is Panel panel)
             {
@@ -1161,11 +1228,15 @@ public partial class MainWindow : Window
                 panel.Children.Insert(at, View);
             }
 
-            View.InvalidateRender();
+            Dispatcher.BeginInvoke(DispatcherPriority.Loaded, () =>
+            {
+                WatchFrames();
+                View.InvalidateRender();
+            });
         }
         catch
         {
-            renderBroken = true;
+            // Tried again on the next tick.
         }
     }
 

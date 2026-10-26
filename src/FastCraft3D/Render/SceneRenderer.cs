@@ -767,7 +767,7 @@ public sealed class SceneRenderer : IDisposable
     /// <summary>A dimmer, part-see-through version of the object's own colour.</summary>
     private static PhongMaterial MirrorMaterial(SceneObject o) => new()
     {
-        DiffuseColor = new SharpDX.Color4(o.ShownColour.X, o.ShownColour.Y, o.ShownColour.Z, 0.22f),
+        DiffuseColor = new SharpDX.Color4(o.ShownColour.X, o.ShownColour.Y, o.ShownColour.Z, 0.09f),
         SpecularColor = new SharpDX.Color4(0, 0, 0, 1),
         AmbientColor = new SharpDX.Color4(o.ShownColour.X * 0.3f, o.ShownColour.Y * 0.3f, o.ShownColour.Z * 0.3f, 1f)
     };
@@ -1155,7 +1155,23 @@ public sealed class SceneRenderer : IDisposable
 
         visual.RenderWireframe = wireframe;
         visual.WireframeColor = Color.FromArgb(0x99, 0x1E, 0x26, 0x30);
+        visual.CullMode = Culling(o);
     }
+
+    /// <summary>
+    /// Which side of a part's faces is left undrawn: the inside, for a solid seen solid.
+    ///
+    /// Both sides were drawn, and the inside of a part is unlit - so wherever the surface had a
+    /// hairline gap a pixel wide, from a boolean's T-junctions or a sliver, the dark inside showed
+    /// through it, and flat walls were scored with dashed black lines. 3D Builder draws only the
+    /// outside, and a gap there shows whatever is behind the part. Drawn through (x-ray), the
+    /// inside is wanted. A part mirrored by its transform has its triangles wound the other way
+    /// round on screen, so for it the other side is the inside.
+    /// </summary>
+    private SharpDX.Direct3D11.CullMode Culling(SceneObject o) =>
+        Faded(o) ? SharpDX.Direct3D11.CullMode.None
+        : o.Transform.GetDeterminant() < 0 ? SharpDX.Direct3D11.CullMode.Front
+        : SharpDX.Direct3D11.CullMode.Back;
 
     /// <summary>Maps a hit-tested model back to the object it represents.</summary>
     public SceneObject? Resolve(object? model)
@@ -1242,6 +1258,7 @@ public sealed class SceneRenderer : IDisposable
 
             case nameof(SceneObject.Transform):
                 visual.Transform = MeshConverter.ToTransform(o.Transform);
+                visual.CullMode = Culling(o);
                 if (outlines.TryGetValue(o, out var line))
                     line.Transform = visual.Transform;
                 if (mirrors.TryGetValue(o, out var mirror))
