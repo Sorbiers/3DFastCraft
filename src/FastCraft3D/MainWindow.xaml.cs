@@ -97,8 +97,8 @@ public partial class MainWindow : Window
     private List<TransformState> editBefore = [];
 
     /// <summary>The viewport behind the plate: as it sits normally, and while a tool is running.</summary>
-    private static readonly Color PlainBackground = Color.FromRgb(0xD8, 0xDA, 0xDD);
-    private static readonly Color ToolBackground = Color.FromRgb(0xC6, 0xD0, 0xDE);
+    private static readonly Color PlainBackground = Color.FromRgb(0xB8, 0xBC, 0xC2);
+    private static readonly Color ToolBackground = Color.FromRgb(0xA6, 0xB2, 0xC4);
 
     /// <summary>
     /// Align to face's own colour for a face once it is picked, so it reads differently from the
@@ -141,6 +141,8 @@ public partial class MainWindow : Window
         viewModel.ViewChanged += ApplyViewSettings;
 
         renderer = new SceneRenderer(ContentGroup, viewModel.Scene, repaint);
+        ApplyLight();
+        viewModel.Reframe = ReframeLight;
 
         // A setting remembered from last time was applied to the view model above, before there
         // was a renderer to hear ViewChanged - Reflections restored checked but undrawn, since
@@ -1798,7 +1800,18 @@ public partial class MainWindow : Window
         viewModel.RefreshSelection();
     }
 
-    private void OnViewportRightDown(object sender, MouseButtonEventArgs e) => rightPressScreen = e.GetPosition(View);
+    private void OnViewportRightDown(object sender, MouseButtonEventArgs e)
+    {
+        rightPressScreen = e.GetPosition(View);
+
+        // Alt with the right button swings the light. Not the left: Alt and a click there already
+        // picks one part of an assembly, and a drag would pick whatever it started on.
+        if (IsAltDown)
+        {
+            BeginLightSwing(rightPressScreen);
+            e.Handled = true;
+        }
+    }
 
     /// <summary>
     /// The right button, clicked rather than dragged, finishes the outline being sketched: the
@@ -1807,6 +1820,13 @@ public partial class MainWindow : Window
     /// </summary>
     private void OnViewportRightUp(object sender, MouseButtonEventArgs e)
     {
+        if (lightSwing is not null)
+        {
+            EndLightSwing();
+            e.Handled = true;
+            return;
+        }
+
         // The same for a run of measured points: a right click ends it, and leaves it to be read.
         if (viewModel.IsMeasureMode && IsClick(e.GetPosition(View), rightPressScreen))
         {
@@ -1857,6 +1877,14 @@ public partial class MainWindow : Window
 
     private void OnViewportMove(object sender, MouseEventArgs e)
     {
+        if (lightSwing is not null)
+        {
+            if (e.RightButton == MouseButtonState.Pressed) SwingLight(e.GetPosition(View));
+            else EndLightSwing();
+            e.Handled = true;
+            return;
+        }
+
         if (viewModel.IsMeasureMode && heldMeasure is null && measure is not null)
         {
             measure.Editing = IsShiftDown;
@@ -2520,6 +2548,8 @@ public partial class MainWindow : Window
 
         // A tool has the object: the plate goes a shade cooler, so which mode the window is in
         // can be seen rather than worked out from which buttons have gone grey.
+        if (e.PropertyName is nameof(MainViewModel.Light)) ApplyLight();
+
         if (e.PropertyName is nameof(MainViewModel.IsToolInHand))
             View.BackgroundColor = viewModel.IsToolInHand ? ToolBackground : PlainBackground;
 
@@ -3123,25 +3153,42 @@ public partial class MainWindow : Window
     /// The fill stays fixed in the world and comes from below, which is what keeps a sense of
     /// which way up the model is now that the key no longer says.
     /// </summary>
+    /// <summary>
+    /// Hands the Light section's settings to the lamps and the parts.
+    ///
+    /// The ambient lamp itself is left as it always was, and its share is set on the parts instead
+    /// - see SceneRenderer.SetSurface; its colour, a third of white, is what that share is measured
+    /// against. The fill keeps its faint blue.
+    /// </summary>
+    private void ApplyLight()
+    {
+        var light = viewModel.Light;
+        const float AmbientLamp = 0x52 / 255f;
+
+        KeyLight.Color = Grey(light.Key);
+        FillLight.Color = Color.FromRgb(Channel(0x4E, light.Fill), Channel(0x52, light.Fill), Channel(0x58, light.Fill));
+        ShadowMap.Intensity = 1 - light.Shadow;
+        renderer?.SetSurface(light.Ambient / AmbientLamp, light.Shine);
+
+        static Color Grey(float level)
+        {
+            byte b = (byte)Math.Clamp(MathF.Round(level * 255f), 0f, 255f);
+            return Color.FromRgb(b, b, b);
+        }
+
+        // The fill as it was drawn at its standard 32 per cent, scaled to the level asked for.
+        static byte Channel(int standard, float level) =>
+            (byte)Math.Clamp(MathF.Round(standard * level / 0.32f), 0f, 255f);
+    }
+
     private void LightTheView()
     {
         // The frame tick can arrive before the window has finished putting itself together, and
         // this runs ahead of the gizmo check that used to be the guard for everything below it.
         if (KeyLight is null || View?.Camera is not ProjectionCamera camera) return;
 
-        var forward = camera.LookDirection;
-        if (forward.Length < 1e-6) return;
-
-        forward.Normalize();
-
-        var up = Upright(forward, camera.UpDirection);
-        var right = Media3D.Vector3D.CrossProduct(forward, up);
-        if (right.Length < 1e-6) return;
-
-        right.Normalize();
-
-        var wanted = forward - up * 0.45 + right * 0.3;
-        wanted.Normalize();
+        if (LightSource(viewModel.Light, camera) is not { } source) return;
+        var wanted = -source;
 
         // Only when it has actually moved: setting a light asks the viewport to redraw, and an
         // orbit that has come to rest should stop costing frames.
@@ -3149,6 +3196,125 @@ public partial class MainWindow : Window
 
         litFrom = wanted;
         KeyLight.Direction = wanted;
+    }
+
+    /// <summary>The way from the model to the key light, in the scene, for the light as set.</summary>
+    /// <remarks>
+    /// Following the view, it is measured in the camera's own frame - back towards the viewer,
+    /// right, and up - with up as the camera holds it rather than squared to the view: that is the
+    /// frame the light always used, at back 1, up 0.45 and left 0.3, which the standard angles are.
+    /// </remarks>
+    private static Media3D.Vector3D? LightSource(LightSettings light, ProjectionCamera camera)
+    {
+        double turn = light.Turn * Math.PI / 180, height = light.Height * Math.PI / 180;
+        double back = Math.Cos(height) * Math.Cos(turn), side = Math.Cos(height) * Math.Sin(turn), up = Math.Sin(height);
+
+        Media3D.Vector3D source;
+        if (light.FixedInScene)
+        {
+            // Nought in front of the plate, looking from -Y, as the Front view does.
+            source = new Media3D.Vector3D(side, -back, up);
+        }
+        else
+        {
+            if (ViewFrame(camera) is not { } frame) return null;
+            source = -frame.Forward * back + frame.Right * side + frame.Up * up;
+        }
+
+        if (source.Length < 1e-9) return null;
+        source.Normalize();
+        return source;
+    }
+
+    private static (Media3D.Vector3D Forward, Media3D.Vector3D Right, Media3D.Vector3D Up)? ViewFrame(ProjectionCamera camera)
+    {
+        var forward = camera.LookDirection;
+        if (forward.Length < 1e-6) return null;
+        forward.Normalize();
+
+        var up = Upright(forward, camera.UpDirection);
+        var right = Media3D.Vector3D.CrossProduct(forward, up);
+        if (right.Length < 1e-6) return null;
+        right.Normalize();
+
+        return (forward, right, up);
+    }
+
+    /// <summary>
+    /// The same light, measured the other way: in the scene when it is to stay put, or against the
+    /// view when it is to follow - so switching leaves it where it is at that moment rather than
+    /// jumping to wherever its angles happen to point in the other frame.
+    /// </summary>
+    private LightSettings ReframeLight(LightSettings light, bool fixedInScene)
+    {
+        var moved = light with { FixedInScene = fixedInScene };
+        if (View.Camera is not ProjectionCamera camera || LightSource(light, camera) is not { } s) return moved;
+
+        double back, side, up;
+        if (fixedInScene)
+        {
+            (back, side, up) = (-s.Y, s.X, s.Z);
+        }
+        else
+        {
+            if (ViewFrame(camera) is not { } frame) return moved;
+
+            // Up is not square to the view, so back and up are found together from the part of the
+            // way to the light that is not to the side.
+            side = Media3D.Vector3D.DotProduct(s, frame.Right);
+            var rest = s - frame.Right * side;
+            double k = Media3D.Vector3D.DotProduct(frame.Forward, frame.Up);
+            double p = Media3D.Vector3D.DotProduct(rest, frame.Forward), q = Media3D.Vector3D.DotProduct(rest, frame.Up);
+            if (1 - k * k < 1e-9) return moved;
+            up = (q - p * k) / (1 - k * k);
+            back = up * k - p;
+        }
+
+        double turn = Math.Atan2(side, back) * 180 / Math.PI;
+        double height = Math.Atan2(up, Math.Sqrt(back * back + side * side)) * 180 / Math.PI;
+        return moved with { Turn = (float)turn, Height = (float)Math.Clamp(height, 0, 90) };
+    }
+
+    // The light being swung round with Alt and the right button: where the drag began, and the
+    // angles the light had then.
+    private (Point From, double Turn, double Height)? lightSwing;
+
+    private void BeginLightSwing(Point at)
+    {
+        lightSwing = (at, viewModel.Light.Turn, viewModel.Light.Height);
+        View.CaptureMouse();
+        ShowLightArrow();
+        viewModel.Status = "Swinging the light - across turns it round, up and down raises it";
+    }
+
+    private void SwingLight(Point at)
+    {
+        if (lightSwing is not { } swing) return;
+
+        // A third of a degree a pixel across, a quarter up: a drag across the view is about a
+        // half turn, which is as far as anyone swings a light in one go.
+        viewModel.SwingLight(swing.Turn + (at.X - swing.From.X) / 3, swing.Height - (at.Y - swing.From.Y) / 4);
+        ShowLightArrow();
+    }
+
+    private void EndLightSwing()
+    {
+        lightSwing = null;
+        if (View.IsMouseCaptured) View.ReleaseMouseCapture();
+        renderer?.ShowLightArrow(null, default);
+        viewModel.Status = $"Light from {viewModel.Light.Turn:0}° round, {viewModel.Light.Height:0}° up";
+    }
+
+    /// <summary>A sun where the light is, out past the model, and a line from it to the model's middle.</summary>
+    private void ShowLightArrow()
+    {
+        if (renderer is null || View.Camera is not ProjectionCamera camera || LightSource(viewModel.Light, camera) is not { } s) return;
+
+        var reach = BedPlacement.Reach(viewModel.Scene.Objects.Where(o => !o.IsHidden));
+        var middle = reach.Center;
+        float distance = reach.IsEmpty ? 60f : MathF.Max(reach.Size.Length() * 0.75f, 40f);
+        var sun = middle + new Vector3((float)s.X, (float)s.Y, (float)s.Z) * distance;
+        renderer.ShowLightArrow(sun, middle);
     }
 
     /// <summary>

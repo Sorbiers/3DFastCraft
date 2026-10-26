@@ -1,4 +1,4 @@
-﻿namespace FastCraft3D.ViewModels;
+namespace FastCraft3D.ViewModels;
 
 /// <summary>
 /// The Custom tab: whichever ribbon buttons somebody uses most, gathered on a tab of their own.
@@ -73,6 +73,7 @@ public sealed partial class MainViewModel
         ["Edit/Subtract"] = "Tools/Subtract",
         ["Edit/Intersect"] = "Tools/Intersect",
         ["Edit/Merge"] = "Tools/Merge",
-        ["Edit/Split"] = "Tools/Split"
+        ["Edit/Split"] = "Tools/Split",
+        ["View/Grid"] = "View/Scene"
     };
 }

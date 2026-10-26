@@ -376,6 +376,52 @@ public sealed class SceneRenderer : IDisposable
     /// the width of each one, lying in the plane. Without them the panel asked for a diameter and
     /// a count with nothing on the model to say where any of it was going.
     /// </summary>
+    private GroupModel3D? lightArrow;
+
+    /// <summary>
+    /// Where the key light is coming from, while it is being swung round: a sun out at the light
+    /// and a line from it to the middle of the model. Null takes it away.
+    /// </summary>
+    public void ShowLightArrow(Vector3? sun, Vector3 middle)
+    {
+        Invalidate();
+
+        if (lightArrow is not null)
+        {
+            root.Children.Remove(lightArrow);
+            lightArrow.Dispose();
+            lightArrow = null;
+        }
+
+        if (sun is not { } at) return;
+
+        var line = new LineBuilder();
+        line.AddLine(new SharpDX.Vector3(at.X, at.Y, at.Z), new SharpDX.Vector3(middle.X, middle.Y, middle.Z));
+
+        float size = MathF.Max(Vector3.Distance(at, middle) * 0.04f, 1f);
+        lightArrow = new GroupModel3D();
+        lightArrow.Children.Add(new LineGeometryModel3D
+        {
+            Geometry = line.ToLineGeometry3D(),
+            Color = Color.FromRgb(0xE0, 0x9A, 0x10),
+            Thickness = 2,
+            IsHitTestVisible = false
+        });
+        lightArrow.Children.Add(new MeshGeometryModel3D
+        {
+            Geometry = MeshConverter.ToGeometry(MeshTransform.Transformed(Primitives.Sphere(size, 16, 10), Matrix4x4.CreateTranslation(at))),
+            Material = new PhongMaterial
+            {
+                DiffuseColor = new SharpDX.Color4(0.96f, 0.72f, 0.13f, 1f),
+                AmbientColor = new SharpDX.Color4(0.96f, 0.72f, 0.13f, 1f),
+                EmissiveColor = new SharpDX.Color4(0.5f, 0.35f, 0.05f, 1f),
+                SpecularColor = new SharpDX.Color4(0, 0, 0, 1)
+            },
+            IsHitTestVisible = false
+        });
+        root.Children.Add(lightArrow);
+    }
+
     private MeshGeometryModel3D? handFace;
     private MeshGeometryModel3D? handCursor;
 
@@ -767,7 +813,7 @@ public sealed class SceneRenderer : IDisposable
     /// <summary>A dimmer, part-see-through version of the object's own colour.</summary>
     private static PhongMaterial MirrorMaterial(SceneObject o) => new()
     {
-        DiffuseColor = new SharpDX.Color4(o.ShownColour.X, o.ShownColour.Y, o.ShownColour.Z, 0.09f),
+        DiffuseColor = new SharpDX.Color4(o.ShownColour.X, o.ShownColour.Y, o.ShownColour.Z, 0.22f),
         SpecularColor = new SharpDX.Color4(0, 0, 0, 1),
         AmbientColor = new SharpDX.Color4(o.ShownColour.X * 0.3f, o.ShownColour.Y * 0.3f, o.ShownColour.Z * 0.3f, 1f)
     };
@@ -1374,6 +1420,29 @@ public sealed class SceneRenderer : IDisposable
     /// where the outline is edge-on to the camera. One too dense to have an outline has its colour
     /// deepened instead, which is all it has to be told by; a lift on top would only wash it out.
     /// </summary>
+    // How much of the ambient light a part takes, and how much it glints: set from the Light
+    // section of the Scene panel. Started as every version up to 4.7 had them.
+    private float ambientShare = 0.35f;
+    private float shine = 0.25f;
+
+    /// <summary>
+    /// How the parts take the light.
+    ///
+    /// The ambient is turned up here, on the parts, rather than on the ambient lamp: the lamp's
+    /// colour stops at white, and a part took only a third of it, so turning the lamp to full still
+    /// left a face turned from the key light grey. The share is not held to one - it is a factor in
+    /// the shader, not a colour anyone sees. The plate keeps its own, so it does not wash out.
+    /// </summary>
+    public void SetSurface(float ambient, float glint)
+    {
+        if (ambient == ambientShare && glint == shine) return;
+
+        ambientShare = ambient;
+        shine = glint;
+        foreach (var (o, visual) in visuals) ApplyLook(o, visual);
+        Invalidate();
+    }
+
     private PhongMaterial MaterialFor(SceneObject o)
     {
         bool deepened = o.IsSelected && o.Mesh.TriangleCount > OutlineTriangleLimit;
@@ -1396,9 +1465,9 @@ public sealed class SceneRenderer : IDisposable
         return new PhongMaterial
         {
             DiffuseColor = diffuse,
-            SpecularColor = new SharpDX.Color4(0.25f, 0.25f, 0.25f, 1f),
+            SpecularColor = new SharpDX.Color4(shine, shine, shine, 1f),
             SpecularShininess = 24f,
-            AmbientColor = new SharpDX.Color4(diffuse.Red * 0.35f, diffuse.Green * 0.35f, diffuse.Blue * 0.35f, 1f)
+            AmbientColor = new SharpDX.Color4(diffuse.Red * ambientShare, diffuse.Green * ambientShare, diffuse.Blue * ambientShare, 1f)
         };
     }
 

@@ -818,10 +818,10 @@
                                   IsChecked="{Binding ShowOverhangs, Mode=TwoWay}" MinWidth="76"
                                   AutomationProperties.Name="Overhangs"
                                   ToolTip="Mark faces steeper than the overhang angle - what the slicer will support. Faces flat on the plate are skipped. The angle and color are set in the side panel." />
-                    <ToggleButton Style="{StaticResource ToolToggle}" Content="Grid" Tag="{StaticResource IconGrid}"
+                    <ToggleButton Style="{StaticResource ToolToggle}" Content="Scene" Tag="{StaticResource IconGrid}"
                                   IsChecked="{Binding IsGridPanelOpen, Mode=TwoWay}"
-                                  AutomationProperties.Name="Grid"
-                                  ToolTip="The printable area, and how the axes and distances are drawn on the plate" />
+                                  AutomationProperties.Name="Scene"
+                                  ToolTip="The printable area, how the plate is drawn, and how the scene is lit" />
                     <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="6,0,0,0">
                         <TextBlock Text="Units" Style="{StaticResource FieldLabel}" Margin="8,0,6,0"
                                    ToolTip="The unit the boxes read in. Display only: models are stored and exported in millimeters, as every slicer expects." />
@@ -2354,6 +2354,94 @@
                         <CheckBox Content="Reflections" IsChecked="{Binding ShowReflections, Mode=TwoWay}" Margin="0,0,0,8"
                                   ToolTip="The plate reflects what stands on it, the way a glossy print bed does. Costs a render pass, so it is worth turning off on a slower machine." />
 
+                        <!-- Advanced only: the standard light is what Classic has always had. -->
+                        <StackPanel Visibility="{Binding IsAdvancedMode, Converter={StaticResource BoolToVisibility}}">
+                        <TextBlock Text="Light" FontWeight="SemiBold" Margin="0,4,0,6" />
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
+                            <!-- Editable for the name to save under; typing never picks a preset, or
+                                 typing the name of one to overwrite it would throw away the light
+                                 being saved. -->
+                            <ComboBox Width="132" IsEditable="True" IsTextSearchEnabled="False"
+                                      ItemsSource="{Binding LightPresets}" DisplayMemberPath="Name" TextSearch.TextPath="Name"
+                                      SelectedItem="{Binding SelectedLightPreset, Mode=TwoWay}"
+                                      Text="{Binding LightPresetName, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                      AutomationProperties.AutomationId="LightPreset"
+                                      ToolTip="Pick a preset to light the scene with it, or type a name and Save the light as it is now. Standard, Soft and Contrast are built in." />
+                            <Button Content="Save" Style="{StaticResource PanelButton}" Margin="4,0,0,0"
+                                    Command="{Binding SaveLightPresetCommand}" AutomationProperties.AutomationId="SaveLightPreset"
+                                    ToolTip="Keep the light as it is now under the name in the box - over your own preset of that name, if there is one" />
+                            <Button Content="Delete" Style="{StaticResource PanelButton}" Margin="4,0,0,0"
+                                    Command="{Binding DeleteLightPresetCommand}" AutomationProperties.AutomationId="DeleteLightPreset"
+                                    ToolTip="Forget your preset of the name in the box. The built-in ones stay." />
+                        </StackPanel>
+                        <Grid Margin="0,0,0,6">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="64" />
+                                <ColumnDefinition Width="140" />
+                                <ColumnDefinition Width="40" />
+                            </Grid.ColumnDefinitions>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                            </Grid.RowDefinitions>
+                            <Grid.Resources>
+                                <Style TargetType="Slider">
+                                    <Setter Property="Minimum" Value="0" />
+                                    <Setter Property="Maximum" Value="1" />
+                                    <Setter Property="SmallChange" Value="0.01" />
+                                    <Setter Property="LargeChange" Value="0.1" />
+                                    <Setter Property="VerticalAlignment" Value="Center" />
+                                    <Setter Property="Margin" Value="0,2" />
+                                </Style>
+                            </Grid.Resources>
+
+                            <TextBlock Grid.Row="0" Text="Ambient" Style="{StaticResource FieldLabel}"
+                                       ToolTip="The light that comes from everywhere: how much of its color a face turned from every lamp still shows" />
+                            <Slider Grid.Row="0" Grid.Column="1" Value="{Binding LightAmbient, Mode=TwoWay}" AutomationProperties.AutomationId="LightAmbient" />
+                            <TextBlock Grid.Row="0" Grid.Column="2" Text="{Binding LightAmbient, StringFormat={}{0:P0}}" Foreground="#FF5A5F66" VerticalAlignment="Center" Margin="6,0,0,0" />
+
+                            <TextBlock Grid.Row="1" Text="Key light" Style="{StaticResource FieldLabel}"
+                                       ToolTip="The lamp over your shoulder, which follows the view" />
+                            <Slider Grid.Row="1" Grid.Column="1" Value="{Binding LightKey, Mode=TwoWay}" AutomationProperties.AutomationId="LightKey" />
+                            <TextBlock Grid.Row="1" Grid.Column="2" Text="{Binding LightKey, StringFormat={}{0:P0}}" Foreground="#FF5A5F66" VerticalAlignment="Center" Margin="6,0,0,0" />
+
+                            <TextBlock Grid.Row="2" Text="Fill light" Style="{StaticResource FieldLabel}"
+                                       ToolTip="The faint lamp from below and behind, which keeps the undersides from going black" />
+                            <Slider Grid.Row="2" Grid.Column="1" Value="{Binding LightFill, Mode=TwoWay}" AutomationProperties.AutomationId="LightFill" />
+                            <TextBlock Grid.Row="2" Grid.Column="2" Text="{Binding LightFill, StringFormat={}{0:P0}}" Foreground="#FF5A5F66" VerticalAlignment="Center" Margin="6,0,0,0" />
+
+                            <TextBlock Grid.Row="3" Text="Shadows" Style="{StaticResource FieldLabel}"
+                                       ToolTip="How dark a shadow is. Shown only while Shadows is on." />
+                            <Slider Grid.Row="3" Grid.Column="1" Value="{Binding LightShadow, Mode=TwoWay}" AutomationProperties.AutomationId="LightShadow" />
+                            <TextBlock Grid.Row="3" Grid.Column="2" Text="{Binding LightShadow, StringFormat={}{0:P0}}" Foreground="#FF5A5F66" VerticalAlignment="Center" Margin="6,0,0,0" />
+
+                            <TextBlock Grid.Row="4" Text="Shine" Style="{StaticResource FieldLabel}"
+                                       ToolTip="How much a face glints where the key light catches it" />
+                            <Slider Grid.Row="4" Grid.Column="1" Value="{Binding LightShine, Mode=TwoWay}" AutomationProperties.AutomationId="LightShine" />
+                            <TextBlock Grid.Row="4" Grid.Column="2" Text="{Binding LightShine, StringFormat={}{0:P0}}" Foreground="#FF5A5F66" VerticalAlignment="Center" Margin="6,0,0,0" />
+                        </Grid>
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
+                            <view:LightDisc Turn="{Binding LightTurn}" HeightAngle="{Binding LightHeight}"
+                                            FollowsView="{Binding LightFollowsView}"
+                                            AutomationProperties.AutomationId="LightDisc" />
+                            <StackPanel Margin="10,0,0,0" VerticalAlignment="Center">
+                                <CheckBox Content="Follows the view" IsChecked="{Binding LightFollowsView, Mode=TwoWay}" Margin="0,0,0,6"
+                                          AutomationProperties.AutomationId="LightFollowsView"
+                                          ToolTip="On, the light stays over your shoulder as the view turns. Off, it stays put in the scene, so turning the view shows how it falls on the model." />
+                                <TextBlock Foreground="#FF5A5F66"><Run Text="Round " /><Run Text="{Binding LightTurn, Mode=OneWay, StringFormat={}{0:0}°}" /></TextBlock>
+                                <TextBlock Foreground="#FF5A5F66"><Run Text="Up " /><Run Text="{Binding LightHeight, Mode=OneWay, StringFormat={}{0:0}°}" /></TextBlock>
+                                <TextBlock Text="Alt + right-drag in the view swings it" TextWrapping="Wrap" Width="120"
+                                           Foreground="#FF8A9098" Margin="0,6,0,0" />
+                            </StackPanel>
+                        </StackPanel>
+                        <Button Content="Reset" Style="{StaticResource PanelButton}" HorizontalAlignment="Left" Margin="0,0,0,10"
+                                Command="{Binding ResetLightCommand}" AutomationProperties.AutomationId="ResetLight"
+                                ToolTip="Back to the Standard light" />
+                        </StackPanel>
+
                         <Button Content="Close" Style="{StaticResource PanelButton}" HorizontalAlignment="Left"
                                 Command="{Binding CloseGridPanelCommand}" />
                     </view:ColumnFlow>
@@ -2678,7 +2766,7 @@
                 <TextBlock Text="{Binding Notice}" TextWrapping="Wrap" Foreground="#FF5C3A00" />
             </Border>
             <hx:Viewport3DX x:Name="View"
-                            BackgroundColor="#FFD8DADD"
+                            BackgroundColor="#FFB8BCC2"
                             MSAA="Four"
                             FXAALevel="Low"
                             ShowCoordinateSystem="True"
@@ -2694,12 +2782,12 @@
                      The key is bright enough that a face turned square to it shows the colour it
                      was painted - with the ambient's third of a third, very nearly one. At 0.71 it
                      showed four fifths of it, and white painted grey. -->
-                <hx:AmbientLight3D Color="#FF7E8288" />
-                <hx:DirectionalLight3D x:Name="KeyLight" Direction="-0.5,-0.8,-1.0" Color="#FFC8C8C8" />
-                <hx:DirectionalLight3D x:Name="FillLight" Direction="0.55,0.35,0.75" Color="#FF62666C" />
+                <hx:AmbientLight3D Color="#FF4E5259" />
+                <hx:DirectionalLight3D x:Name="KeyLight" Direction="-0.5,-0.8,-1.0" Color="#FFE6E6E6" />
+                <hx:DirectionalLight3D x:Name="FillLight" Direction="0.55,0.35,0.75" Color="#FF4E5258" />
 
                 <!-- Only costs anything while IsShadowMappingEnabled is on - see ShowShadows. -->
-                <hx:ShadowMap3D Resolution="2048,2048" Intensity="0.72" Bias="0.003" />
+                <hx:ShadowMap3D x:Name="ShadowMap" Resolution="2048,2048" />
 
                 <hx:GroupModel3D x:Name="PlateGroup" />
                 <hx:GroupModel3D x:Name="ContentGroup" />

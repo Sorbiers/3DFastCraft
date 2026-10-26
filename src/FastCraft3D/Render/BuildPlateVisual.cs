@@ -70,7 +70,6 @@ public static class BuildPlateVisual
 
         yield return Tile(light, Color.FromRgb(0xF2, 0xF3, 0xF5));
         yield return Tile(dark, Color.FromRgb(0xDD, 0xDF, 0xE3));
-        foreach (var ring in Apron(halfX, halfY)) yield return ring;
         yield return Outline(halfX, halfY);
 
         if (look.Axes)
@@ -96,56 +95,6 @@ public static class BuildPlateVisual
     /// an opaque board simply hid it.
     /// </summary>
     private const float Solidity = 0.55f;
-
-    /// <summary>
-    /// A floor round the plate that fades into the background, rings fainter and fainter.
-    ///
-    /// The plate stopped at a hard edge against a flat backdrop, where 3D Builder's floor runs on
-    /// and dies away into haze - which is most of why its view looked calm and this one boxed in.
-    /// The toolkit has no fog, so the fading is done by hand: each ring its own model, since one
-    /// material takes one alpha.
-    /// </summary>
-    private static IEnumerable<MeshGeometryModel3D> Apron(float halfX, float halfY)
-    {
-        const int Rings = 10;
-        float reach = 0.8f * MathF.Max(halfX, halfY) * 2f, step = reach / Rings;
-
-        for (int k = 0; k < Rings; k++)
-        {
-            float inner = k * step, outer = (k + 1) * step;
-            var ring = new Mesh();
-            float ix = halfX + inner, iy = halfY + inner, ox = halfX + outer, oy = halfY + outer;
-
-            // Four strips, the two along X running the full width so the corners are covered.
-            Quad(-ox, iy, ox, oy);
-            Quad(-ox, -oy, ox, -iy);
-            Quad(-ox, -iy, -ix, iy);
-            Quad(ix, -iy, ox, iy);
-
-            var shade = Color.FromRgb(0xE6, 0xE8, 0xEB).ToColor4();
-            shade.Alpha = 0.5f * (1f - (k + 0.5f) / Rings);
-            yield return new MeshGeometryModel3D
-            {
-                Geometry = MeshConverter.ToGeometry(ring),
-                Material = new PhongMaterial
-                {
-                    DiffuseColor = shade,
-                    SpecularColor = new SharpDX.Color4(0, 0, 0, 1),
-                    AmbientColor = new SharpDX.Color4(0.55f, 0.55f, 0.58f, 1f)
-                },
-                IsTransparent = true,
-                DepthBias = 8,
-                CullMode = SharpDX.Direct3D11.CullMode.None,
-                IsHitTestVisible = false
-            };
-
-            void Quad(float x0, float y0, float x1, float y1)
-            {
-                ring.AddTriangle(new(x0, y0, 0), new(x1, y0, 0), new(x1, y1, 0));
-                ring.AddTriangle(new(x0, y0, 0), new(x1, y1, 0), new(x0, y1, 0));
-            }
-        }
-    }
 
     private static MeshGeometryModel3D Tile(Mesh mesh, Color colour)
     {

@@ -5646,12 +5646,14 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
         StickySelection = !settings.SingleSelection;
         sidePanelWidth = settings.SidePanelWidth;
         RestoreCustomButtons(settings.CustomButtons);
+        RestoreLightPresets(settings.LightPresets);
+        Light = settings.Light ?? LightSettings.Standard;
     }
 
     public RememberedSettings Remembered =>
         new(plateWidth, plateDepth, plateHeight, unit.Label, showAxes, showZAxis, showGridLabels, !showProperties,
             uiLevel == UiLevel.Classic, showShadows, showReflections, !stickySelection,
-            sidePanelWidth, customButtons.ToArray());
+            sidePanelWidth, customButtons.ToArray(), light, OwnLightPresets);
 
     private float sidePanelWidth;
 
