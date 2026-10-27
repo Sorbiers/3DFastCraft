@@ -155,6 +155,9 @@ public sealed partial class MainViewModel
 
         foreach (var o in objects)
         {
+            // Filtered out, it is not listed; an assembly is, from the first of its parts that is.
+            if (!Listed(o)) continue;
+
             if (o.Assembly is not { } a)
             {
                 wanted.Add(o);
@@ -166,10 +169,11 @@ public sealed partial class MainViewModel
             var members = objects.Where(m => m.Assembly == a).ToList();
             a.MemberCount = members.Count;
             wanted.Add(a);
-            if (a.IsExpanded) wanted.AddRange(members);
+            if (a.IsExpanded) wanted.AddRange(members.Where(Listed));
         }
 
         Raise(nameof(HasAssemblies));
+        if (IsListFiltered) Raise(nameof(ListFilterSummary));
         if (ListRows.SequenceEqual(wanted)) return;
 
         RowsRebuilding?.Invoke();

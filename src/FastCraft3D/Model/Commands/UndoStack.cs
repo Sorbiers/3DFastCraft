@@ -421,6 +421,36 @@ public sealed class FilamentCommand(
     }
 }
 
+/// <summary>Which plate prints a selection: one step for the lot, as <see cref="FilamentCommand"/> is.</summary>
+public sealed class PlateCommand(
+    string label,
+    IReadOnlyList<SceneObject> objects,
+    IReadOnlyList<int> before,
+    int after) : IUndoableCommand
+{
+    public string Label { get; } = label;
+
+    public void Apply(Scene scene)
+    {
+        foreach (var o in objects) o.Plate = after;
+    }
+
+    public void Revert(Scene scene)
+    {
+        for (int i = 0; i < objects.Count; i++)
+            objects[i].Plate = before[i];
+    }
+
+    /// <summary>Null when every object is already on that plate.</summary>
+    public static PlateCommand? CreateIfChanged(string label, IReadOnlyList<SceneObject> objects, int plate)
+    {
+        if (objects.Count == 0) return null;
+
+        var before = objects.Select(o => o.Plate).ToList();
+        return before.All(p => p == plate) ? null : new PlateCommand(label, objects, before, plate);
+    }
+}
+
 /// <summary>
 /// Painting a selection. Separate from <see cref="TransformCommand"/> because colour is not part
 /// of the transform, and because repainting the whole selection has to undo as one step rather

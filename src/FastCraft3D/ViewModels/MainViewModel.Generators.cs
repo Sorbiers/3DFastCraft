@@ -772,6 +772,7 @@ public sealed partial class MainViewModel
         o.Name = old.Name;
         o.Colour = old.Colour;
         o.Filament = old.Filament;
+        o.Plate = old.Plate;
         o.IsHidden = old.IsHidden;
         o.IsLocked = old.IsLocked;
         o.Rotation = old.Rotation;
@@ -854,6 +855,7 @@ public sealed partial class MainViewModel
                 {
                     unused.Remove(old);
                     o.Filament = old.Filament;
+                    o.Plate = old.Plate;
                     o.IsHidden = old.IsHidden;
                     o.IsLocked = old.IsLocked;
                 }
@@ -872,6 +874,7 @@ public sealed partial class MainViewModel
             {
                 unused.Remove(old);
                 o.Filament = old.Filament;
+                o.Plate = old.Plate;
                 o.IsHidden = old.IsHidden;
                 o.IsLocked = old.IsLocked;
                 o.Rotation = old.Rotation;

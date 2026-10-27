@@ -453,6 +453,7 @@ public static class SceneSerializer
         Scale = ToArray(o.Scale),
         Colour = ToArray(o.Colour),
         Filament = o.Filament > 1 ? o.Filament : null,
+        Plate = o.Plate > 1 ? o.Plate : null,
         Anchors = o.Anchors.Count > 0 ? o.Anchors.Select(ToDto).ToArray() : null,
         Pivot = o.PivotIsOwn ? true : null,
         Origin = o.Origin?.ToString(),
@@ -480,6 +481,7 @@ public static class SceneSerializer
             Scale = o.Scale is { Length: 3 } ? ToVector(o.Scale) : Vector3.One,
             Colour = o.Colour is { Length: 3 } ? ToVector(o.Colour) : new Vector3(0.3f, 0.55f, 0.85f),
             Filament = o.Filament ?? 1,
+            Plate = o.Plate ?? 1,
             Anchors = o.Anchors?.Select(FromDto).ToList() ?? [],
             PivotIsOwn = o.Pivot == true,
             Origin = origin,
@@ -606,6 +608,9 @@ public static class SceneSerializer
 
         /// <summary>Written only when it is not the first filament, so old files read as they did.</summary>
         public int? Filament { get; set; }
+
+        /// <summary>Written only when it is not the first plate, as the filament is.</summary>
+        public int? Plate { get; set; }
 
         /// <summary>What a tool marked on the part. Null for everything nothing was marked on.</summary>
         public AnchorDto[]? Anchors { get; set; }

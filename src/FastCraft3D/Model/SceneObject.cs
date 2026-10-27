@@ -28,6 +28,7 @@ public sealed class SceneObject : INotifyPropertyChanged
     private Recipe? recipe;
     private Mesh? recipeMesh;
     private int filament = 1;
+    private int plate = 1;
     private string name = "Object";
     private bool isSelected;
     private Bounds? worldBounds;
@@ -312,6 +313,19 @@ public sealed class SceneObject : INotifyPropertyChanged
 
     /// <summary>As many as the biggest multi-material units carry.</summary>
     public const int MostFilaments = 16;
+
+    /// <summary>
+    /// Which build plate prints this part, counted from one, for a model printed in more than one
+    /// go - the walls of a house on one plate, the roof on the next. Like the filament, a label the
+    /// project keeps and the object list can be narrowed to; one for everything until it is set.
+    /// </summary>
+    public int Plate
+    {
+        get => plate;
+        set => Set(ref plate, Math.Clamp(value, 1, MostPlates));
+    }
+
+    public const int MostPlates = 99;
 
     public Vector3 Position
     {
@@ -685,6 +699,7 @@ public sealed class SceneObject : INotifyPropertyChanged
         scale = scale,
         colour = colour,
         filament = filament,
+        plate = plate,
         anchors = [.. anchors],
         PivotIsOwn = PivotIsOwn,
         Recipe = Recipe

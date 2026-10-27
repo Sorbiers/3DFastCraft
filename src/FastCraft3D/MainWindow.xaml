@@ -957,8 +957,14 @@
                                 VerticalAlignment="Bottom" Click="OnObjectsMenu"
                                 AutomationProperties.Name="Objects menu" AutomationProperties.AutomationId="ObjectsMenu"
                                 ToolTip="Show, hide, lock or fold every object at once">
-                            <Path Data="M 0,1 L 13,1 M 0,5.5 L 13,5.5 M 0,10 L 13,10" Stroke="#FF44494F" StrokeThickness="1.4"
-                                  Fill="{x:Null}" Width="13" Height="11" SnapsToDevicePixels="True" />
+                            <Grid>
+                                <Path Data="M 0,1 L 13,1 M 0,5.5 L 13,5.5 M 0,10 L 13,10" Stroke="#FF44494F" StrokeThickness="1.4"
+                                      Fill="{x:Null}" Width="13" Height="11" SnapsToDevicePixels="True" />
+                                <!-- The list is filtered: said here as well as over the list, since the menu is where it is undone. -->
+                                <Ellipse Width="7" Height="7" Fill="#FF2F6FB6" Stroke="White" StrokeThickness="1"
+                                         HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,-4,-5,0"
+                                         Visibility="{Binding IsListFiltered, Converter={StaticResource BoolToVisibility}}" />
+                            </Grid>
                             <Button.ContextMenu>
                                 <ContextMenu>
                                     <ContextMenu.Resources>
@@ -970,6 +976,16 @@
                                             <Setter Property="Height" Value="11" />
                                         </Style>
                                     </ContextMenu.Resources>
+                                    <!-- Filled in as the menu opens, with the plates and filaments in use. -->
+                                    <MenuItem x:Name="PlateFilterMenu" Header="Filter by plate"
+                                              AutomationProperties.AutomationId="FilterByPlate" />
+                                    <MenuItem x:Name="FilamentFilterMenu" Header="Filter by filament"
+                                              AutomationProperties.AutomationId="FilterByFilament" />
+                                    <MenuItem Header="Show only the listed objects" Command="{Binding ShowOnlyListedCommand}"
+                                              ToolTip="Hide every object the filter leaves out of the list, and show the ones in it" />
+                                    <MenuItem Header="Clear the filter" Command="{Binding ClearListFilterCommand}"
+                                              AutomationProperties.AutomationId="ClearListFilterMenu" />
+                                    <Separator />
                                     <MenuItem Header="Show all" InputGestureText="Alt+H" Command="{Binding ShowAllCommand}"
                                               AutomationProperties.AutomationId="ObjectsShowAll">
                                         <MenuItem.Icon><Path Data="{StaticResource RowShown}" /></MenuItem.Icon>
@@ -1011,6 +1027,21 @@
                         </Button>
                         <TextBlock Text="Objects" Style="{StaticResource SectionHeader}" Margin="0" />
                     </DockPanel>
+
+                    <!-- Said while the list is narrowed, so a short list is never taken for the whole plate. -->
+                    <Border Background="#FFE8F0FA" BorderBrush="#FFBCD0EA" BorderThickness="1" CornerRadius="3"
+                            Padding="6,2" Margin="0,0,0,4"
+                            Visibility="{Binding IsListFiltered, Converter={StaticResource BoolToVisibility}}">
+                        <DockPanel>
+                            <Button DockPanel.Dock="Right" Content="Clear" Style="{StaticResource LinkButton}" Margin="8,0,0,0"
+                                    Command="{Binding ClearListFilterCommand}" AutomationProperties.AutomationId="ClearListFilter"
+                                    ToolTip="List every object again" />
+                            <Path DockPanel.Dock="Left" Data="M 0,0 L 10,0 L 6,5 L 6,9 L 4,10 L 4,5 Z" Fill="#FF2F6FB6"
+                                  Width="9" Height="9" Stretch="Uniform" Margin="0,0,6,0" VerticalAlignment="Center" />
+                            <TextBlock Text="{Binding ListFilterSummary}" Foreground="#FF2C4A6E" TextTrimming="CharacterEllipsis"
+                                       AutomationProperties.AutomationId="ListFilterSummary" />
+                        </DockPanel>
+                    </Border>
                 </StackPanel>
 
                 <!-- Selection is mirrored by SelectionListSync, not by an IsSelected binding:
@@ -2645,8 +2676,16 @@
                                                ToolTip="Which filament prints the selection on a multi-material printer (an AMS slot, an MMU tool). Saved with the project, a 3MF slicers read; STL and OBJ can't carry it." />
                                     <TextBox AutomationProperties.AutomationId="ObjectFilament" Width="48"
                                              Style="{StaticResource NumberBox}" Tag="number"
-                                             Text="{Binding ObjectFilament, UpdateSourceTrigger=LostFocus}" />
-                                    <TextBlock Text="of 16" Foreground="#FF9AA0A8" VerticalAlignment="Center" Margin="6,0,0,0" />
+                                             Text="{Binding ObjectFilament, UpdateSourceTrigger=LostFocus, TargetNullValue=''}" />
+                                    <TextBlock Text="{Binding FilamentHint}" Foreground="#FF9AA0A8" VerticalAlignment="Center" Margin="6,0,0,0" />
+                                </StackPanel>
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="Plate" Style="{StaticResource FieldLabel}" Width="62"
+                                               ToolTip="Which build plate prints the selection, for a model printed in more than one go. Saved with the project; the menu over the object list can show one plate at a time." />
+                                    <TextBox AutomationProperties.AutomationId="ObjectPlate" Width="48"
+                                             Style="{StaticResource NumberBox}" Tag="number"
+                                             Text="{Binding ObjectPlate, UpdateSourceTrigger=LostFocus, TargetNullValue=''}" />
+                                    <TextBlock Text="{Binding PlateHint}" Foreground="#FF9AA0A8" VerticalAlignment="Center" Margin="6,0,0,0" />
                                 </StackPanel>
 
                                 <!-- A part a generator made opens again in it, filled in as it

@@ -79,7 +79,7 @@ public sealed partial class MainViewModel
             }
             else
             {
-                var filled = new SceneObject(target.Name, result.Part) { Colour = target.Colour, Filament = target.Filament }.Centred();
+                var filled = new SceneObject(target.Name, result.Part) { Colour = target.Colour, Filament = target.Filament, Plate = target.Plate }.Centred();
                 double added = (result.Part.ComputeSignedVolume() - world.ComputeSignedVolume()) / 1000;
                 Undo.Execute(new ReplaceObjectsCommand("Fill up", [target], [filled]));
                 Status = $"Filled {target.Name} to {chosen.Level:0.##} mm - {added:0.#} cm³ added";

@@ -54,7 +54,8 @@ public partial class MainViewModel
                     Rotation = o.Rotation,
                     Scale = o.Scale,
                     Colour = o.Colour,
-                    Filament = o.Filament
+                    Filament = o.Filament,
+                    Plate = o.Plate
                 };
 
                 removed.Add(o);

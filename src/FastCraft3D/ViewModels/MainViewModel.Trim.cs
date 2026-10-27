@@ -44,7 +44,7 @@ public partial class MainViewModel
                     continue;
                 }
 
-                var made = new SceneObject(o.Name, mesh) { Colour = o.Colour, Filament = o.Filament }.Centred();
+                var made = new SceneObject(o.Name, mesh) { Colour = o.Colour, Filament = o.Filament, Plate = o.Plate }.Centred();
                 removed.Add(o);
                 added.Add(made);
                 successors.Add((o, made));

@@ -241,6 +241,7 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
         };
         Undo.Stepped += RecordStep;
         WireAssemblies();
+        WireListFilter();
         Scene.Objects.CollectionChanged += (_, _) => RefreshSelection();
         Scene.Objects.CollectionChanged += (_, _) => RaiseHiddenAndLocked();
 
@@ -3772,7 +3773,8 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
             var textured = new SceneObject(source.Name, joined)
             {
                 Colour = source.Colour,
-                Filament = source.Filament
+                Filament = source.Filament,
+                Plate = source.Plate
             }.Centred();
 
             string? walling = !isMasonryMode ? null : embossTexture.Kind switch
@@ -3843,13 +3845,15 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
         var body = new SceneObject(source.Name, parts.Body)
         {
             Colour = source.Colour,
-            Filament = source.Filament
+            Filament = source.Filament,
+            Plate = source.Plate
         }.Centred();
 
         var letters = new SceneObject(Scene.UniqueName($"{source.Name} text"), parts.Lettering)
         {
             Colour = Contrasting(source.Colour),
-            Filament = next
+            Filament = next,
+            Plate = source.Plate
         }.Centred();
 
         Undo.Execute(new ReplaceObjectsCommand(
@@ -5815,17 +5819,20 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
     /// <summary>
     /// Which filament prints the selection, for a printer that has more than one.
     ///
-    /// Reads the first selected object and writes to all of them, as the colour swatches do: the
-    /// point of it is to take the lettering, or the inlay, or half the parts of an assembly, and
-    /// put the lot on the second spool in one go.
+    /// Writes to every selected object, as the colour swatches do: the point of it is to take the
+    /// lettering, or the inlay, or half the parts of an assembly, and put the lot on the second
+    /// spool in one go. Empty when they are on different ones. It showed the first one's number,
+    /// and typing that same number over it was no change to the box, so nothing was written.
     /// </summary>
-    public int ObjectFilament
+    public int? ObjectFilament
     {
-        get => Scene.Selection.Count > 0 ? Scene.Selection[0].Filament : 1;
+        get => Shared(o => o.Filament);
         set
         {
+            if (value is not { } typed) return;
+
             var selection = Scene.Selection.ToList();
-            int wanted = Math.Clamp(value, 1, SceneObject.MostFilaments);
+            int wanted = Math.Clamp(typed, 1, SceneObject.MostFilaments);
 
             if (FilamentCommand.CreateIfChanged(
                     selection.Count == 1 ? "Filament" : $"Filament for {selection.Count} objects",
@@ -5834,11 +5841,61 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
                 Undo.Execute(command);
             }
 
-            Raise(nameof(ObjectFilament));
+            RaisePrintFields();
             Status = wanted == 1
                 ? "Prints in the first filament"
                 : $"Prints in filament {wanted}";
         }
+    }
+
+    /// <summary>Which build plate prints the selection: every selected object, and empty when they differ, as the filament.</summary>
+    public int? ObjectPlate
+    {
+        get => Shared(o => o.Plate);
+        set
+        {
+            if (value is not { } typed) return;
+
+            var selection = Scene.Selection.ToList();
+            int wanted = Math.Clamp(typed, 1, SceneObject.MostPlates);
+
+            if (PlateCommand.CreateIfChanged(
+                    selection.Count == 1 ? "Plate" : $"Plate for {selection.Count} objects",
+                    selection, wanted) is { } command)
+            {
+                Undo.Execute(command);
+            }
+
+            RaisePrintFields();
+            Status = selection.Count == 1 ? $"On plate {wanted}" : $"{selection.Count} objects on plate {wanted}";
+        }
+    }
+
+    public string FilamentHint => $"of {SceneObject.MostFilaments}" + ForSelection(ObjectFilament);
+
+    public string PlateHint => ForSelection(ObjectPlate).TrimStart(' ', '-');
+
+    /// <summary>Said beside the box when it is about more than one object, so it is plain that it writes to all of them.</summary>
+    private string ForSelection(int? shared) => Scene.Selection.Count < 2 ? ""
+        : shared is null ? " - they differ"
+        : $" - all {Scene.Selection.Count}";
+
+    /// <summary>What every selected object has, or null when they do not agree.</summary>
+    private int? Shared(Func<SceneObject, int> of)
+    {
+        var selection = Scene.Selection;
+        if (selection.Count == 0) return 1;
+
+        int first = of(selection[0]);
+        return selection.All(o => of(o) == first) ? first : null;
+    }
+
+    private void RaisePrintFields()
+    {
+        Raise(nameof(ObjectFilament));
+        Raise(nameof(ObjectPlate));
+        Raise(nameof(FilamentHint));
+        Raise(nameof(PlateHint));
     }
 
     /// <summary>Whether the pivot boxes are worth showing: only a pivot somebody chose.</summary>
@@ -8221,7 +8278,7 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
                 }
 
                 replaced.Add(t);
-                cutParts.Add(new SceneObject(t.Name, result) { Colour = t.Colour, Filament = t.Filament }.Centred());
+                cutParts.Add(new SceneObject(t.Name, result) { Colour = t.Colour, Filament = t.Filament, Plate = t.Plate }.Centred());
             }
 
             if (replaced.Count == 0)
@@ -9555,7 +9612,8 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
                 produced.Add(new SceneObject(selection[i].Name, webs[i].Mesh)
                 {
                     Colour = selection[i].Colour,
-                    Filament = selection[i].Filament
+                    Filament = selection[i].Filament,
+                    Plate = selection[i].Plate
                 }.Centred());
             }
 
@@ -11474,7 +11532,7 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
 
         SelectionChanged?.Invoke();
         Raise(nameof(HasAnySelection));
-        Raise(nameof(ObjectFilament));
+        RaisePrintFields();
         Raise(nameof(RealSize));
         Raise(nameof(HasOneSelected));
         Raise(nameof(HasManySelected));

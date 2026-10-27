@@ -126,7 +126,8 @@ public partial class MainViewModel
         var clone = new SceneObject($"{target.Name} surface", mesh)
         {
             Colour = target.Colour,
-            Filament = target.Filament
+            Filament = target.Filament,
+            Plate = target.Plate
         }.Centred();
 
         // Adding selects it, and the boxes are told: the clone is the thing to work on next -

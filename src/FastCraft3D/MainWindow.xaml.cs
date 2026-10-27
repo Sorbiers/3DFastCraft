@@ -2953,11 +2953,34 @@ public partial class MainWindow : Window
         if (sender is not Button { ContextMenu: { } menu } button) return;
 
         menu.DataContext = viewModel;
+        FillFilter(PlateFilterMenu, viewModel.ListPlate, viewModel.PlatesInUse, viewModel.FilterPlateCommand, "plates", "Plate");
+        FillFilter(FilamentFilterMenu, viewModel.ListFilament, viewModel.FilamentsInUse, viewModel.FilterFilamentCommand, "filaments", "Filament");
         menu.PlacementTarget = button;
         menu.Placement = System.Windows.Controls.Primitives.PlacementMode.Custom;
         menu.CustomPopupPlacementCallback = (popup, target, _) =>
             [new(new Point(target.Width - popup.Width, target.Height), System.Windows.Controls.Primitives.PopupPrimaryAxis.Horizontal)];
         menu.IsOpen = true;
+    }
+
+    /// <summary>One of the filter's submenus: every one, then each in use with how many objects it has, the one chosen ticked.</summary>
+    private static void FillFilter(MenuItem into, int? chosen, IReadOnlyList<(int Number, int Objects)> inUse,
+        System.Windows.Input.ICommand choose, string plural, string one)
+    {
+        into.IsChecked = chosen is not null;
+        into.Items.Clear();
+        into.Items.Add(new MenuItem { Header = $"All {plural}", IsChecked = chosen is null, Command = choose, CommandParameter = null });
+        into.Items.Add(new Separator());
+        foreach (var (number, objects) in inUse)
+        {
+            into.Items.Add(new MenuItem
+            {
+                Header = $"{one} {number}",
+                InputGestureText = objects == 1 ? "1 object" : $"{objects} objects",
+                IsChecked = chosen == number,
+                Command = choose,
+                CommandParameter = number
+            });
+        }
     }
 
     private void OnShowRecent(object sender, RoutedEventArgs e)
