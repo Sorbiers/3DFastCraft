@@ -78,7 +78,9 @@ Almost all of it is written by [Claude Code](https://claude.com/claude-code) fro
   the inside of a cup or a box, a recess, a sealed hollow; a pocket open to the side fills only up
   to its opening, and with *The plate is a floor* a tube or walls standing on the plate fill too.
   Solid, or as a part of its own that fits the inside exactly (a second filament, or a cavity's volume).
-- **Color and filament** - per object; 3MF carries both.
+- **Color, filament and plate** - per object, and typed once for the whole selection (the box is
+  empty while the selected parts differ). 3MF carries color and filament; the plate is the
+  project's own - **Export** can write a file for each.
 
 ### Align
 
@@ -113,6 +115,9 @@ Almost all of it is written by [Claude Code](https://claude.com/claude-code) fro
 - **Split** - with a plane you drag or type; keep either half or both.
 - **Mold** - a silicone mold that comes apart: split at the widest section, keyed, with pour
   hole and vents.
+- **Kit sprue** - small parts bound into a model kit's frame: laid out in rows inside a frame of
+  runners, each held by thin gates low at its foot, to snip off after printing. **Gates at the
+  corners** holds down the corners that lift first.
 - **Repair** - mend an open mesh.
 - **Rebuild** - **Keep the shape**: only the corners stay - points in the middle of flat faces
   and along straight edges go - and every flat face is filled again from its outline, so the web
@@ -123,7 +128,8 @@ Almost all of it is written by [Claude Code](https://claude.com/claude-code) fro
 - **Voronoi** - cut a part into a web of struts; watertight by construction.
 - **Extrude down** - a flat base under a scan, a relief or a tilted part.
 - **Split with connectors** - halves that go back together one way: pins, pegs or brick studs.
-- **Connect objects** - pins or pegs through the face two resting parts share.
+- **Connect objects** - pins or pegs through the face two resting parts share; **Manual placement**
+  draws that face and snaps each connector where it fits, up to 24.
 - **Hole** - plain, countersunk or counterbored, nut pocket, heat-set insert; one, a row or a bolt
   circle. With several parts selected it drills them all, lined up; *All the way through*
   goes through the whole stack.
@@ -158,7 +164,7 @@ Almost all of it is written by [Claude Code](https://claude.com/claude-code) fro
 ### File
 
 - **Start page** - comes up when the app starts with nothing to open: a new project, a file to
-  open, your **favorites** (the **Favorite** star on the File tab pins a project) and the last
+  open, your **pinned** projects (**Pin** on the File tab; each pulls out with its pin) and the last
   three others, each with its picture. **Recent** shows the pictures too, and ends with **Clear**.
 - **Project** - a summary of what the project holds, and **notes** kept in the project file.
 - **Printer profile** - printer profiles, one per printer and filament: nozzle, layer, and the fits the
@@ -169,8 +175,17 @@ Almost all of it is written by [Claude Code](https://claude.com/claude-code) fro
   project and its **versions** inside (**Ctrl+Alt+S** saves one, with a small picture of the plate;
   double-click a version to restore it); restore is an undo step. A `.3dfc` from before 4.3 is
   imported, without its versions.
+- **Project file** (`.3dfp`) - kept beside the `.3mf`, asked for at New or the first save: the
+  project, its versions and the view, where a slicer saving over the `.3mf` cannot reach them.
+  Opening a `.3mf` a slicer has saved over offers the project back. Explorer draws it as it draws
+  a 3MF.
+- **History** (Advanced) - every step, undo and redo kept in the `.3dfp` as you work: the plate
+  after any step, and a way back to it. With one object selected, only the steps that changed it,
+  and that object alone restored. Unsaved work is kept there too and offered back after a crash.
 - **Export** STL (binary or ASCII) or OBJ - everything or just the selection; reports
   triangles, volume and whether it is watertight before writing. For 3MF, save the project.
+  **One file per plate** writes each plate in use to a file of its own, in 3MF too - Bambu Studio
+  reads plates only from its own projects, so they reach it a file at a time.
 - **Blueprint** (Ctrl+P) - front, top, side and isometric views with dimensions and a title
   block; print, PDF or PNG, plus a parts list.
 - **Export session / Record** - every undo step as a file, or a screenshot after every action.
@@ -181,6 +196,9 @@ Almost all of it is written by [Claude Code](https://claude.com/claude-code) fro
   top reads), **Wireframe**, **X-ray** (X), **Outline**, **Overhangs** (faces that will need
   support), **Grid**. The window comes back where it was, maximised if it was. A selected part of more than 200,000 triangles has no outline - tracing it
   would cost more than it is worth - so its color deepens instead.
+- **Scene** - the grid, and in Advanced mode the **light**: presets, your own among them, a slider
+  for each lamp, and the key light placed on a sun disc or with **Alt**+right-drag, following the
+  view or staying put.
 - **Units** - mm, cm, m, in or ft; every box and tool panel reads in them. Models are always
   stored and exported in millimeters.
 - **Model scale** - set 1:87 and a second set of boxes reads real size beside the model's.
@@ -195,6 +213,14 @@ Almost all of it is written by [Claude Code](https://claude.com/claude-code) fro
   way only, the opposite face staying put. The resize strip reads mm or %; the box corners,
   dragged, resize in proportion. With several parts selected they move, turn and resize as one
   object; the **Each** button gives every part its own centre and axes instead.
+- **Right-click** an object, in the view or the list, for what is done to it most - duplicate,
+  rename, hide, lock, color, plate and filament, assembly, its own history, export. On the empty
+  plate: paste, select all, insert. A right-drag still pans.
+- **The objects list's menu** (top right) shows, hides and locks everything at once, folds every
+  assembly, and filters the list by plate or filament - a dot on the button and a strip over the
+  list say a filter is on, and what is added goes onto the plate it shows.
+- **Lock move** (side panel) - a part's body drags it only in Move mode, so a click to select
+  never shifts one.
 - **Stop on contact** (**C**) - a dragged part stops where its *shape* meets another, not its
   box. Parts that already overlap move freely.
 - **Number boxes** - every one, in every panel - take `+=5`, `-=5`, `*=1.5`, `/=2`; the wheel and
@@ -216,6 +242,7 @@ Almost all of it is written by [Claude Code](https://claude.com/claude-code) fro
 | `.stl` | Binary (default) or ASCII. One triangle soup - no separate parts. |
 | `.obj` | Named, separate objects, colors in a `.mtl` sidecar. |
 | `.3mf` | The project: parts, names, colors, units and filaments with a thumbnail, as any slicer reads them, and the editable project with its versions in `3DFastCraft/project.json`. Any 3MF imports. |
+| `.3dfp` | The project file beside the `.3mf`: project, versions, view and History. A 3MF package itself, so Explorer draws its picture. |
 | `.3dfc` | The project before 4.3. Import only: its parts come in as they were, its versions do not. |
 
 ## Requirements
@@ -278,6 +305,10 @@ reflection, and trimming breaks the app at runtime.
   about or on a barrel - refused, never left torn. **Raised instead of cut** avoids the boolean.
 - A face with a round hole cannot take a pattern; pattern before merging a boss onto it.
 - A set put down assembled is an assembly, not one solid - lay it out to print it.
+- Plates are the project's own: a 3MF carries none a slicer reads. **One file per plate** is the
+  way to a slicer's plates.
+- A kit sprue is an object of its own beside the parts: a slicer's *Arrange* would pull them apart.
+- History tells objects apart from 4.8 on; steps kept before it are not tied to one object.
 - A fine groove on a 3D texture means a fine mesh: a few hundred thousand triangles on a big
   wall, a minute or two to apply. A coarser pitch or groove is much quicker.
 - Undo keeps about a gigabyte of history; the oldest steps go beyond that, with an offer to
