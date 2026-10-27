@@ -13,7 +13,7 @@ namespace FastCraft3D.ViewModels;
 /// </summary>
 public sealed partial class MainViewModel
 {
-    private ICommand? assemble, reassemble, updateAssembly, ungroupAssembly;
+    private ICommand? assemble, reassemble, updateAssembly, ungroupAssembly, leaveAssembly;
     private ICommand? setAssemblyColour, pickAssemblyColour, foldAssembly, foldAll, hideAssembly, lockAssembly;
 
     /// <summary>
@@ -38,6 +38,9 @@ public sealed partial class MainViewModel
     public ICommand ReassembleCommand => reassemble ??= RelayCommand.Simple(Reassemble, () => SelectedAssembly is not null);
 
     public ICommand UpdateAssemblyCommand => updateAssembly ??= RelayCommand.Simple(UpdateAssembly, () => SelectedAssembly is not null);
+
+    /// <summary>The selected parts out of their assemblies, standing where they are. An assembly left with nothing is gone from the list.</summary>
+    public ICommand LeaveAssemblyCommand => leaveAssembly ??= RelayCommand.Simple(LeaveAssembly, () => Scene.Selection.Any(o => o.Assembly is not null));
 
     public ICommand UngroupAssemblyCommand => ungroupAssembly ??= RelayCommand.Simple(UngroupAssemblies, () => Scene.Assemblies.Any(a => a.IsSelected));
 
@@ -303,6 +306,17 @@ public sealed partial class MainViewModel
     /// Every assembly picked by its name taken apart, as one step - from the panel's button, and
     /// from Ungroup, which does this rather than split meshes while an assembly is picked.
     /// </summary>
+    private void LeaveAssembly()
+    {
+        var leaving = Scene.Selection.Where(o => o.Assembly is not null).ToList();
+        if (leaving.Count == 0) return;
+
+        Undo.Execute(new MembershipCommand("Leave assembly", leaving,
+            leaving.Select(Membership.Of).ToList(), leaving.Select(_ => Membership.None).ToList()));
+        RefreshSelection();
+        Status = leaving.Count == 1 ? $"{leaving[0].Name} is on its own again" : $"{leaving.Count} objects are on their own again";
+    }
+
     private void UngroupAssemblies()
     {
         var picked = Scene.Assemblies.Where(a => a.IsSelected).ToList();

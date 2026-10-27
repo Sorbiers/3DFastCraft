@@ -372,6 +372,7 @@ public partial class MainWindow : Window
         View.PreviewMouseLeftButtonUp += OnViewportLeftUp;
         View.PreviewMouseRightButtonDown += OnViewportRightDown;
         View.PreviewMouseRightButtonUp += OnViewportRightUp;
+        WireObjectMenus();
 
         // The last chance to save: this is the only path where unsaved work would vanish
         // without the user having asked for anything.
@@ -1846,6 +1847,13 @@ public partial class MainWindow : Window
             return;
         }
 
+        // Anywhere else a click, not a drag, is the menu: on an object, for the selection; on the plate, for the plate.
+        if (!viewModel.IsSketchMode && viewModel.NothingInHand && IsClick(e.GetPosition(View), rightPressScreen))
+        {
+            OpenViewMenu(e.GetPosition(View));
+            return;
+        }
+
         if (!viewModel.IsSketchMode || !viewModel.CurrentSketch.IsDrawing) return;
         if (!IsClick(e.GetPosition(View), rightPressScreen)) return;
 
@@ -2948,6 +2956,104 @@ public partial class MainWindow : Window
     /// with its right edges lined up: the list is at the right of the window, and a menu hanging
     /// off to the right of it runs over the edge.
     /// </summary>
+    /// <summary>
+    /// The list opens the object menu itself, on the row the right button has just selected - a
+    /// heading selects its assembly's parts. Nothing selected, as on the space below the rows, has
+    /// no menu.
+    /// </summary>
+    private void WireObjectMenus()
+    {
+        var menu = (ContextMenu)FindResource("ObjectMenu");
+        ObjectList.ContextMenu = menu;
+        ObjectList.ContextMenuOpening += (_, e) =>
+        {
+            if (viewModel.Scene.Selection.Count == 0) e.Handled = true;
+            else PrepareObjectMenu(menu);
+        };
+    }
+
+    /// <summary>
+    /// The view's menu, opened here rather than by WPF, which would open it after a right-drag too
+    /// and that is the camera's pan. A part clicked that is not selected is selected first, with
+    /// its assembly as a left click takes it, so the menu is plainly about what it was opened on.
+    /// </summary>
+    private void OpenViewMenu(Point at)
+    {
+        ContextMenu menu;
+        if (FirstHit(at, selectable: true) is { } hit && renderer?.Resolve(hit.ModelHit) is { } target)
+        {
+            if (!target.IsSelected)
+            {
+                viewModel.Scene.ClearSelection();
+                viewModel.Scene.SelectWithMates(target);
+                viewModel.RefreshSelection();
+            }
+
+            menu = (ContextMenu)FindResource("ObjectMenu");
+            PrepareObjectMenu(menu);
+        }
+        else
+        {
+            menu = (ContextMenu)FindResource("PlateMenu");
+            menu.DataContext = viewModel;
+        }
+
+        menu.PlacementTarget = View;
+        menu.Placement = PlacementMode.MousePoint;
+        menu.IsOpen = true;
+    }
+
+    private void PrepareObjectMenu(ContextMenu menu)
+    {
+        menu.DataContext = viewModel;
+        bool one = viewModel.Scene.Selection.Count == 1;
+
+        // Wired here, once for each menu made: a handler named in XAML on a resource made afresh
+        // for each owner is not one to rely on.
+        if (menu.Tag is null)
+        {
+            menu.Tag = true;
+            Tagged(menu, "Rename").Click += OnRenameFromMenu;
+        }
+
+        Tagged(menu, "Rename").IsEnabled = one;
+        Tagged(menu, "History").Visibility = one ? Visibility.Visible : Visibility.Collapsed;
+        FillAssign(Tagged(menu, "Plate"), viewModel.ObjectPlate, viewModel.PlatesInUse, SceneObject.MostPlates, viewModel.SetPlateCommand, "Plate");
+        FillAssign(Tagged(menu, "Filament"), viewModel.ObjectFilament, viewModel.FilamentsInUse, SceneObject.MostFilaments, viewModel.SetFilamentCommand, "Filament");
+    }
+
+    private static MenuItem Tagged(ContextMenu menu, string tag) => menu.Items.OfType<MenuItem>().First(m => Equals(m.Tag, tag));
+
+    /// <summary>A Plate or Filament submenu: each in use, the selection's own ticked, then the next one free.</summary>
+    private static void FillAssign(MenuItem into, int? current, IReadOnlyList<(int Number, int Objects)> inUse, int most,
+        System.Windows.Input.ICommand choose, string one)
+    {
+        into.Items.Clear();
+        var numbers = inUse.Select(u => u.Number).ToList();
+        int next = Math.Min(numbers.DefaultIfEmpty(1).Max() + 1, most);
+
+        foreach (int n in numbers.Append(next).Distinct().Order())
+        {
+            into.Items.Add(new MenuItem
+            {
+                Header = numbers.Contains(n) ? $"{one} {n}" : $"{one} {n} - new",
+                IsChecked = current == n,
+                Command = choose,
+                CommandParameter = n
+            });
+        }
+    }
+
+    /// <summary>To the name box in the properties panel, all of it selected to type over.</summary>
+    private void OnRenameFromMenu(object sender, RoutedEventArgs e) =>
+        // Once the menu has closed and handed focus back, or it takes it straight back again.
+        Dispatcher.BeginInvoke(DispatcherPriority.Background, () =>
+        {
+            ObjectNameBox.BringIntoView();
+            ObjectNameBox.Focus();
+            ObjectNameBox.SelectAll();
+        });
+
     private void OnObjectsMenu(object sender, RoutedEventArgs e)
     {
         if (sender is not Button { ContextMenu: { } menu } button) return;

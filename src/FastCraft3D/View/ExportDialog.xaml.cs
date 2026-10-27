@@ -17,7 +17,8 @@ public partial class ExportDialog : Window
     private readonly Scene scene;
     private bool loaded;
 
-    public ExportDialog(Scene scene)
+    /// <param name="selectedOnly">Start on the selection: Export selection asked for it.</param>
+    public ExportDialog(Scene scene, bool selectedOnly = false)
     {
         this.scene = scene;
         InitializeComponent();
@@ -28,6 +29,7 @@ public partial class ExportDialog : Window
         ScopeAll.Content = all == 1 ? "Everything on the plate - 1 object" : $"Everything on the plate - {all} objects";
         ScopeSelected.Content = selected == 1 ? "Selected only - 1 object" : $"Selected only - {selected} objects";
         ScopeSelected.IsEnabled = selected > 0;
+        if (selectedOnly && selected > 0) ScopeSelected.IsChecked = true;
 
         loaded = true;
         UpdateSummary();

@@ -385,7 +385,7 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
         CutCommand = RelayCommand.Simple(Cut, () => Scene.Selection.Count > 0);
         PasteCommand = RelayCommand.Simple(Paste, () => clipboard.Count > 0 || SharedClipboardHasObjects());
         ImportCommand = RelayCommand.Simple(Import);
-        ExportCommand = RelayCommand.Simple(Export, () => Scene.Objects.Count > 0);
+        ExportCommand = RelayCommand.Simple(() => Export(selected: false), () => Scene.Objects.Count > 0);
         ExportSessionCommand = AsyncRelayCommand.Simple(ExportSession, () => Undo.History.Count > 0);
         RecordCommand = RelayCommand.Simple(ToggleRecording);
         PrintDrawingCommand = RelayCommand.Simple(PrintDrawing, () => Scene.Objects.Count > 0);
@@ -11292,14 +11292,15 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
     /// <summary>The project's folder, or empty to let Windows pick the last one used.</summary>
     private string ProjectFolder() => Path.GetDirectoryName(projectPath) ?? "";
 
-    private void Export()
+    /// <param name="selected">Asked for from the selection, so the dialog starts on it.</param>
+    private void Export(bool selected)
     {
         if (Scene.Objects.Count == 0) return;
 
         // Scope is asked for rather than inferred. Exporting only what happened to be selected
         // is how half a model reaches a slicer without anyone noticing, so the whole plate is
         // the default and narrowing to the selection is a deliberate choice.
-        var options = new ExportDialog(Scene) { Owner = Application.Current?.MainWindow };
+        var options = new ExportDialog(Scene, selected) { Owner = Application.Current?.MainWindow };
         if (options.ShowDialog() != true || options.Result is not { } chosen) return;
 
         var subjects = ExportComposer.Subjects(Scene, chosen);

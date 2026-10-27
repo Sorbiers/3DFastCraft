@@ -10,6 +10,15 @@ namespace FastCraft3D.ViewModels;
 public partial class MainViewModel
 {
     private ICommand? hideAll, hideSelection, showOnlySelection, swapHidden, lockAll, lockSelection, swapLocked;
+    private ICommand? setPlate, setFilament, exportSelection;
+
+    /// <summary>The selection onto a plate by its number, for the right-click menu.</summary>
+    public ICommand SetPlateCommand => setPlate ??= new RelayCommand(p => { if (p is int n) ObjectPlate = n; }, _ => Scene.Selection.Count > 0);
+
+    public ICommand SetFilamentCommand => setFilament ??= new RelayCommand(p => { if (p is int n) ObjectFilament = n; }, _ => Scene.Selection.Count > 0);
+
+    /// <summary>Export with the selection already chosen: asked for from the selection, it is not a slip.</summary>
+    public ICommand ExportSelectionCommand => exportSelection ??= RelayCommand.Simple(() => Export(selected: true), () => Scene.Selection.Count > 0);
 
     public ICommand HideAllCommand => hideAll ??= RelayCommand.Simple(
         () => SetHidden(Scene.Objects.Where(o => !o.IsHidden).ToList(), true), () => Scene.Objects.Any(o => !o.IsHidden));

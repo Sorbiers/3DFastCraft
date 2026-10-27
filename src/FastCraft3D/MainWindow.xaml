@@ -398,6 +398,47 @@
                 </MultiTrigger>
             </Style.Triggers>
         </Style>
+        <!-- Right-click on an object, in the view or the list: what is done to the selection most,
+             not the ribbon again. A fresh one for each owner, since the list keeps its own. The
+             Plate and Filament lists are filled as it opens; the items with a tag are found by it. -->
+        <ContextMenu x:Key="ObjectMenu" x:Shared="False">
+            <MenuItem Header="Duplicate" InputGestureText="Ctrl+D" Command="{Binding DuplicateCommand}" />
+            <MenuItem Header="Delete" InputGestureText="Del" Command="{Binding DeleteCommand}" />
+            <MenuItem Header="Rename" Tag="Rename" />
+            <Separator />
+            <MenuItem Header="Hide" InputGestureText="H" Command="{Binding HideSelectionCommand}" />
+            <MenuItem Header="Show only this" Command="{Binding ShowOnlySelectionCommand}" />
+            <MenuItem Header="Lock" InputGestureText="L" Command="{Binding LockSelectionCommand}" />
+            <Separator />
+            <MenuItem Header="Color..." Command="{Binding PickColourCommand}" />
+            <MenuItem Header="Plate" Tag="Plate" />
+            <MenuItem Header="Filament" Tag="Filament" />
+            <Separator />
+            <MenuItem Header="Make assembly" Command="{Binding AssembleCommand}" />
+            <MenuItem Header="Leave assembly" Command="{Binding LeaveAssemblyCommand}" />
+            <Separator />
+            <MenuItem Header="Drop to plate" Command="{Binding AlignToPlateCommand}" />
+            <MenuItem Header="Repair" Command="{Binding RepairCommand}" />
+            <Separator />
+            <MenuItem Header="History of this object..." Tag="History" Command="{Binding SessionCommand}" />
+            <MenuItem Header="Export selection..." Command="{Binding ExportSelectionCommand}" />
+        </ContextMenu>
+
+        <!-- Right-click on the plate, away from every object. -->
+        <ContextMenu x:Key="PlateMenu">
+            <MenuItem Header="Paste" InputGestureText="Ctrl+V" Command="{Binding PasteCommand}" />
+            <MenuItem Header="Select all" InputGestureText="Ctrl+A" Command="{Binding SelectAllCommand}" />
+            <MenuItem Header="Show all" InputGestureText="Alt+H" Command="{Binding ShowAllCommand}" />
+            <Separator />
+            <MenuItem Header="Insert">
+                <MenuItem Header="Cube" Command="{Binding InsertCommand}" CommandParameter="Cube" />
+                <MenuItem Header="Cylinder" Command="{Binding InsertCommand}" CommandParameter="Cylinder" />
+                <MenuItem Header="Cone" Command="{Binding InsertCommand}" CommandParameter="Cone" />
+                <MenuItem Header="Sphere" Command="{Binding InsertCommand}" CommandParameter="Sphere" />
+                <MenuItem Header="Pyramid" Command="{Binding InsertCommand}" CommandParameter="Pyramid" />
+                <MenuItem Header="Wedge" Command="{Binding InsertCommand}" CommandParameter="Wedge" />
+            </MenuItem>
+        </ContextMenu>
     </Window.Resources>
 
     <!-- Keys are bound from View/Shortcuts, the same table F1 lists. -->
@@ -2638,7 +2679,7 @@
 
                         <StackPanel DataContext="{Binding Selected}" Style="{StaticResource OneObjectOnly}">
                             <TextBlock Text="Name" Style="{StaticResource SectionHeader}" />
-                            <TextBox AutomationProperties.AutomationId="ObjectName" Text="{Binding Name, UpdateSourceTrigger=LostFocus}" Padding="4,3" />
+                            <TextBox x:Name="ObjectNameBox" AutomationProperties.AutomationId="ObjectName" Text="{Binding Name, UpdateSourceTrigger=LostFocus}" Padding="4,3" />
                         </StackPanel>
 
                         <Expander Margin="0,10,0,0" IsExpanded="{Binding ShowProperties, Mode=TwoWay}"
