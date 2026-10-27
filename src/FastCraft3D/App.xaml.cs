@@ -31,6 +31,10 @@ public partial class App : Application
     {
         DispatcherUnhandledException += OnUnhandled;
         Opening = IncomingFiles.Wanted(e.Args);
+
+        // Off the UI thread: telling Explorer an association changed can take a moment.
+        Task.Run(ShellRegistration.RegisterProjectFile);
+
         base.OnStartup(e);
     }
 

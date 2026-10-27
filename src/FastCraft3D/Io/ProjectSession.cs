@@ -45,6 +45,9 @@ public sealed class ProjectSession
     private const string IndexPath = "3DFastCraft/session.json";
     private const string StepsFolder = "3DFastCraft/steps/";
     private const string MeshesFolder = "3DFastCraft/meshes/";
+
+    /// <summary>A mesh's part has an extension only so the package can give it a type - see <see cref="ProjectFile"/>.</summary>
+    internal const string MeshExtension = "bin";
     private const string LeftoverPath = "3DFastCraft/unsaved.json";
 
     private readonly List<Pending> pending = [];
@@ -117,8 +120,8 @@ public sealed class ProjectSession
                 if (ProjectFile.IdIn(read) != id) return false;
                 index = ReadIndex(read) ?? new IndexDto { Format = 1, Next = 1 };
                 foreach (var entry in read.Entries)
-                    if (entry.FullName.StartsWith(MeshesFolder, StringComparison.Ordinal))
-                        stored[entry.FullName[MeshesFolder.Length..]] = entry.Length;
+                    if (KeyOf(entry.FullName) is { } key)
+                        stored[key] = entry.Length;
                 hadLeftover = read.GetEntry(LeftoverPath) is not null;
             }
 
@@ -322,7 +325,7 @@ public sealed class ProjectSession
         if (stored.ContainsKey(key) || !meshes.TryGetValue(key, out var mesh)) return;
 
         byte[] data = Encode(mesh);
-        Put(zip, MeshesFolder + key, data);
+        Put(zip, MeshPath(key), data);
         stored[key] = data.Length;
     }
 
@@ -358,7 +361,7 @@ public sealed class ProjectSession
         {
             if (!read.TryGetValue(key, out var data))
             {
-                var stored = zip.GetEntry(MeshesFolder + key) ?? throw new InvalidDataException("A mesh this step uses is missing from the project file.");
+                var stored = zip.GetEntry(MeshPath(key)) ?? throw new InvalidDataException("A mesh this step uses is missing from the project file.");
                 read[key] = data = Bytes(stored);
             }
             return Decode(data);
@@ -390,6 +393,19 @@ public sealed class ProjectSession
     }
 
     private static string StepPath(int number) => $"{StepsFolder}{number:D6}.json";
+
+    private static string MeshPath(string key) => $"{MeshesFolder}{key}.{MeshExtension}";
+
+    /// <summary>The key of a mesh's part, or null for a part that is not one.</summary>
+    private static string? KeyOf(string name) =>
+        name.StartsWith(MeshesFolder, StringComparison.Ordinal) && name.EndsWith("." + MeshExtension, StringComparison.Ordinal)
+            ? name[MeshesFolder.Length..^(MeshExtension.Length + 1)]
+            : null;
+
+    /// <summary>Whether a part of a .3dfp is the session's.</summary>
+    internal static bool Holds(string name) =>
+        name == IndexPath || name == LeftoverPath
+        || name.StartsWith(StepsFolder, StringComparison.Ordinal) || name.StartsWith(MeshesFolder, StringComparison.Ordinal);
 
     /// <summary>
     /// Fastest, not the best: this is written on the UI thread while the user works, and a mesh is
@@ -447,7 +463,7 @@ public sealed class ProjectSession
 
         var uses = Uses(index);
         foreach (var entry in zip.Entries.ToList())
-            if (entry.FullName.StartsWith(MeshesFolder, StringComparison.Ordinal) && !uses.ContainsKey(entry.FullName[MeshesFolder.Length..]))
+            if (KeyOf(entry.FullName) is { } key && !uses.ContainsKey(key))
                 entry.Delete();
     }
 

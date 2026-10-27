@@ -240,17 +240,6 @@ public static class SceneSerializer
     /// <summary>The id of the .3dfp a project is kept with, or null for one kept without, or no project at all.</summary>
     public static string? ReadProjectFileId(string path) => ReadIfPresent(path)?.ProjectFile;
 
-    /// <summary>The project part of a 3MF exactly as written, for the .3dfp to keep a copy of.</summary>
-    public static byte[] ReadProjectPart(string path)
-    {
-        using var zip = ZipFile.OpenRead(path);
-        var part = zip.GetEntry(PartPath) ?? throw new InvalidDataException("This file holds no 3DFastCraft project.");
-        using var stream = part.Open();
-        using var copy = new MemoryStream();
-        stream.CopyTo(copy);
-        return copy.ToArray();
-    }
-
     /// <summary>The picture saved in a project, for the Recent list, or null for a file without one.</summary>
     public static byte[]? ReadThumbnail(string path) => ThreeMf.ReadThumbnail(path);
 

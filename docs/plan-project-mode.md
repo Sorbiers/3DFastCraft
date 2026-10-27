@@ -37,7 +37,10 @@ the `.3mf` as last saved, so a `.3mf` changed by another app can be told from on
 
 ### What the `.3dfp` holds
 
-A zip, like a 3MF:
+A 3MF package: every part of the `.3mf` as last saved - the model, its picture, the project part -
+with the content types made to cover the parts below, so Windows' own 3MF thumbnail and preview
+handler draws a `.3dfp` as it draws a `.3mf`. The app registers `.3dfp` for the user at each
+start (HKCU, only when something differs): opened by the app, with that handler for the picture.
 
 - `3DFastCraft/manifest.json` - format, id, the `.3mf`'s name, its fingerprint, when, by which version
 - `3DFastCraft/project.json` - the project part exactly as written into the `.3mf`, versions and all:
@@ -46,7 +49,7 @@ A zip, like a 3MF:
 - `3DFastCraft/session.json` - the index of the session: each step's number, label, time, object
   count and meshes; the work not yet saved and which run left it; the camera as last left
 - `3DFastCraft/steps/000001.json`... - the plate after each step, every object naming its mesh by key
-- `3DFastCraft/meshes/<key>` - each mesh once, keyed by a hash of its content
+- `3DFastCraft/meshes/<key>.bin` - each mesh once, keyed by a hash of its content
 - `3DFastCraft/unsaved.json` - the plate as it was when last written, while it had changes not saved
 
 The session is appended where it lies: .NET rewrites a zip opened for update only from its first
@@ -78,8 +81,8 @@ counts as changing it, so everything is read with the file opened for reading fi
   being gone, which is the case that loses work.
 - A `.3dfp` renamed beside its `.3mf` is found when opening, but saves write the one of the same
   name, and its session continues there.
-- Neither `.3mf` nor `.3dfp` is registered with Windows; a `.3dfp` opens from Open, a drop, or the
-  command line.
+- Only `.3dfp` is registered with Windows; the `.3mf` is left to whatever the user opens it with.
+  Where Windows' 3MF handler is missing, a `.3dfp` shows the app's icon instead of a picture.
 
 ## Full project mode (later)
 

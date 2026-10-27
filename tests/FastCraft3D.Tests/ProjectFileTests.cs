@@ -1,5 +1,6 @@
 using System.IO;
 using System.IO.Compression;
+using System.Xml.Linq;
 using FastCraft3D.Geometry;
 using FastCraft3D.Io;
 using FastCraft3D.Model;
@@ -116,6 +117,53 @@ public class ProjectFileTests : IDisposable
         Assert.Equal(["Wall", "Roof"], SceneSerializer.Load(model).Select(o => o.Name));
         Assert.Equal("with the roof", Assert.Single(SceneSerializer.ReadVersions(model)).Label);
         Assert.Equal("id3", SceneSerializer.ReadProjectFileId(model));
+    }
+
+    [Fact]
+    public void AProjectFileIsA3mfPackageWithEveryPartTyped()
+    {
+        string model = At("house.3mf");
+        var scene = SceneWith("Wall", "Roof");
+        SceneSerializer.Save(model, scene, projectFile: "id4");
+        string file = ProjectFile.Beside(model);
+        ProjectFile.Write(file, "id4", model, null, null);
+        var session = new ProjectSession();
+        session.Record(scene, "Add Roof");
+        session.Flush(file, "id4", scene, null);
+
+        // What Windows' 3MF handler draws Explorer's picture from.
+        Assert.Equal(2, ThreeMf.Read(file).Count);
+        Assert.NotNull(ThreeMf.ReadThumbnail(file));
+
+        using var zip = ZipFile.OpenRead(file);
+        XDocument types;
+        using (var stream = zip.GetEntry("[Content_Types].xml")!.Open()) types = XDocument.Load(stream);
+        var typed = types.Root!.Elements().Where(e => e.Name.LocalName == "Default")
+            .Select(e => (string)e.Attribute("Extension")!).ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var entry in zip.Entries.Where(e => e.FullName != "[Content_Types].xml"))
+            Assert.Contains(Path.GetExtension(entry.FullName).TrimStart('.'), typed);
+    }
+
+    [Fact]
+    public void WhatALaterSaveNoLongerHasGoesFromTheProjectFileAndTheSessionStays()
+    {
+        string model = At("house.3mf");
+        var scene = SceneWith("Wall");
+        SceneSerializer.Save(model, scene, projectFile: "id5");
+        string file = ProjectFile.Beside(model);
+        ProjectFile.Write(file, "id5", model, null, null);
+        var session = new ProjectSession();
+        session.Record(scene, "Add Wall");
+        session.Flush(file, "id5", null, null);
+
+        // An empty plate has no picture.
+        SceneSerializer.Save(model, new Scene(), projectFile: "id5");
+        ProjectFile.Write(file, "id5", model, null, null);
+
+        Assert.Null(ThreeMf.ReadThumbnail(file));
+        Assert.Empty(SceneSerializer.Load(file));
+        Assert.Equal("Add Wall", Assert.Single(ProjectSession.ReadSteps(file)).Label);
     }
 
     [Fact]

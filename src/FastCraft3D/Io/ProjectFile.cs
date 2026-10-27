@@ -2,6 +2,7 @@ using System.IO;
 using System.IO.Compression;
 using System.Security.Cryptography;
 using System.Text.Json;
+using System.Xml.Linq;
 
 namespace FastCraft3D.Io;
 
@@ -21,11 +22,13 @@ public sealed record ProjectFileInfo(string Id, string ModelName, string Fingerp
 /// project this app keeps inside it is gone - every editable object, every kept version. Nothing
 /// put into the .3mf can stop that, so a copy of the project goes into a file no slicer opens. It
 /// is never the only copy: the .3mf stays whole on its own, and this one can be deleted and made
-/// again. It is where what only this app needs, and a slicer has no use for, will go - the view
-/// now, the session as it goes later.
+/// again. It is where what only this app needs, and a slicer has no use for, goes - the view, and
+/// the session as it goes (see <see cref="ProjectSession"/>).
 ///
-/// A zip, as a 3MF is, with the project part at the same path as in the .3mf, so the project
-/// reads out of either the same way.
+/// It is the .3mf as last saved, every part of it, with this app's own parts added - so it is a 3MF
+/// package itself. The project part is at the same path, so the project reads out of either the
+/// same way; and Windows' own 3MF thumbnail and preview handler draws a .3dfp as it does a .3mf,
+/// which spares the app a shell extension of its own (see <see cref="ShellRegistration"/>).
 /// </summary>
 public static class ProjectFile
 {
@@ -33,6 +36,7 @@ public static class ProjectFile
 
     private const string ManifestPath = "3DFastCraft/manifest.json";
     private const string ViewPath = "3DFastCraft/view.json";
+    private const string ContentTypesPath = "[Content_Types].xml";
     private const int CurrentFormat = 1;
 
     public static string NewId() => Guid.NewGuid().ToString("N");
@@ -41,13 +45,16 @@ public static class ProjectFile
     public static string Beside(string modelPath) => Path.ChangeExtension(modelPath, Extension);
 
     /// <summary>
-    /// Writes the project file for a .3mf just saved: its project part, the view, and the
-    /// fingerprint of the .3mf as it now is. To a temporary file first and then over the old one,
-    /// so a save cut short never leaves half a file where the last good one was.
+    /// Writes the project file for a .3mf just saved: the .3mf's parts, the view, and the
+    /// fingerprint of the .3mf as it now is. A new one goes to a temporary file first and then over
+    /// any old one, so a save cut short never leaves half a file where the last good one was.
     /// </summary>
     public static void Write(string path, string id, string modelPath, ViewState? view, string? app)
     {
-        byte[] part = SceneSerializer.ReadProjectPart(modelPath);
+        var package = PackageOf(modelPath);
+        if (!package.Any(p => p.Name == SceneSerializer.PartPath))
+            throw new InvalidDataException("This file holds no 3DFastCraft project.");
+
         byte[] manifest = JsonSerializer.SerializeToUtf8Bytes(new ManifestDto
         {
             Format = CurrentFormat,
@@ -59,14 +66,20 @@ public static class ProjectFile
         });
 
         // This project's own file holds its session too, which can run to many megabytes: the
-        // three parts that change are replaced where it lies rather than the lot copied to a new
-        // file at every save. That gives up the temporary file for those three, but all three are
-        // in the .3mf just written, and the .3dfp can be made again from it.
+        // parts that change are replaced where it lies rather than the lot copied to a new file at
+        // every save. That gives up the temporary file for those parts, but they are all in the
+        // .3mf just written, and the .3dfp can be made again from it.
         if (File.Exists(path) && ReadInfo(path)?.Id == id)
         {
             using var zip = ZipFile.Open(path, ZipArchiveMode.Update);
+
+            // What the last .3mf had and this one has not: the picture of a plate since emptied.
+            var fresh = package.Select(p => p.Name).ToHashSet();
+            foreach (var entry in zip.Entries.ToList())
+                if (!IsOwn(entry.FullName) && !fresh.Contains(entry.FullName)) entry.Delete();
+
+            foreach (var (name, data) in package) Replace(zip, name, data);
             Replace(zip, ManifestPath, manifest);
-            Replace(zip, SceneSerializer.PartPath, part);
             if (view is not null) Replace(zip, ViewPath, JsonSerializer.SerializeToUtf8Bytes(view));
             return;
         }
@@ -75,12 +88,51 @@ public static class ProjectFile
         using (var file = File.Create(temporary))
         using (var zip = new ZipArchive(file, ZipArchiveMode.Create))
         {
+            foreach (var (name, data) in package) Entry(zip, name, data);
             Entry(zip, ManifestPath, manifest);
-            Entry(zip, SceneSerializer.PartPath, part);
             if (view is not null) Entry(zip, ViewPath, JsonSerializer.SerializeToUtf8Bytes(view));
         }
 
         File.Move(temporary, path, overwrite: true);
+    }
+
+    /// <summary>The parts only a .3dfp has: its own, and the session's. Everything else came from the .3mf.</summary>
+    private static bool IsOwn(string name) => name == ManifestPath || name == ViewPath || ProjectSession.Holds(name);
+
+    /// <summary>
+    /// Every part of the .3mf, with its content types made to cover what only a .3dfp holds - the
+    /// session's JSON and meshes. A package with a part of no declared type is refused whole by a
+    /// strict reader, and Windows' thumbnail handler is one.
+    /// </summary>
+    private static List<(string Name, byte[] Data)> PackageOf(string modelPath)
+    {
+        using var zip = ZipFile.OpenRead(modelPath);
+        var parts = new List<(string Name, byte[] Data)>();
+        foreach (var entry in zip.Entries)
+        {
+            using var stream = entry.Open();
+            using var copy = new MemoryStream();
+            stream.CopyTo(copy);
+            parts.Add((entry.FullName, entry.FullName == ContentTypesPath ? WithOwnTypes(copy.ToArray()) : copy.ToArray()));
+        }
+        return parts;
+    }
+
+    private static byte[] WithOwnTypes(byte[] xml)
+    {
+        var document = XDocument.Load(new MemoryStream(xml));
+        var root = document.Root ?? throw new InvalidDataException("The .3mf's content types are empty.");
+        XNamespace types = root.Name.Namespace;
+
+        foreach (var (extension, type) in new[] { ("json", "application/json"), (ProjectSession.MeshExtension, "application/octet-stream") })
+        {
+            if (!root.Elements(types + "Default").Any(d => string.Equals((string?)d.Attribute("Extension"), extension, StringComparison.OrdinalIgnoreCase)))
+                root.Add(new XElement(types + "Default", new XAttribute("Extension", extension), new XAttribute("ContentType", type)));
+        }
+
+        using var output = new MemoryStream();
+        document.Save(output);
+        return output.ToArray();
     }
 
     private static void Replace(ZipArchive zip, string name, byte[] data)
@@ -89,9 +141,10 @@ public static class ProjectFile
         Entry(zip, name, data);
     }
 
+    /// <summary>Fastest, as the session is: the model is copied in at every save, and it can be large.</summary>
     private static void Entry(ZipArchive zip, string name, byte[] data)
     {
-        using var stream = zip.CreateEntry(name, CompressionLevel.Optimal).Open();
+        using var stream = zip.CreateEntry(name, CompressionLevel.Fastest).Open();
         stream.Write(data);
     }
 
