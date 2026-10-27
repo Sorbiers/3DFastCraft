@@ -128,7 +128,7 @@ public partial class MainViewModel
         string? file = SessionFile();
         if (file is null || !File.Exists(file))
         {
-            Status = "The session is kept in the project file - save the project to start it";
+            Status = "The history is kept in the project file - save the project to start it";
             return;
         }
 

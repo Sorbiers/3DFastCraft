@@ -526,12 +526,9 @@
                     <Button Style="{StaticResource ToolButton}" Content="Smooth" Tag="{StaticResource IconSmooth}"
                             Command="{Binding SmoothCommand}"
                             ToolTip="Round the facets off, with the result shown as you set it" />
-                    <Button Style="{StaticResource ToolButton}" Content="Grow" Tag="{StaticResource IconGrow}"
-                            Command="{Binding GrowCommand}" AutomationProperties.AutomationId="GrowFaces"
-                            ToolTip="Move every face out by the same amount, along the axes you pick - walls thicker, gaps narrower. Not a scale." />
-                    <Button Style="{StaticResource ToolButton}" Content="Shrink" Tag="{StaticResource IconShrink}"
-                            Command="{Binding ShrinkCommand}" AutomationProperties.AutomationId="ShrinkFaces"
-                            ToolTip="Move every face in by the same amount, along the axes you pick - walls thinner, gaps wider. Leave Z out to keep the height." />
+                    <Button Style="{StaticResource ToolButton}" Content="Grow / Shrink" Tag="{StaticResource IconGrowShrink}"
+                            Command="{Binding GrowShrinkCommand}" MinWidth="84" AutomationProperties.AutomationId="GrowShrink"
+                            ToolTip="Move every face out or in by the same amount, along the axes you pick - walls thicker or thinner, gaps narrower or wider. Not a scale. Leave Z out to keep the height." />
                     <Button Style="{StaticResource ToolButton}" Content="Trim" Tag="{StaticResource IconTrim}"
                             Command="{Binding TrimCommand}" AutomationProperties.AutomationId="TrimEdges"
                             ToolTip="Cut a part back round its outer edge by a distance, along the axes you pick, leaving everything inside the edge as it is" />
@@ -765,8 +762,8 @@
                     <Button Style="{StaticResource ToolButton}" Content="Versions" Tag="{StaticResource IconVersions}"
                             Command="{Binding VersionsCommand}" MinWidth="82"
                             ToolTip="List the versions kept in this file, and restore one. Needs the project saved to a file first." />
-                    <Button Style="{StaticResource ToolButton}" Content="Session" Tag="{StaticResource IconSession}"
-                            Command="{Binding SessionCommand}" MinWidth="70" AutomationProperties.AutomationId="Session"
+                    <Button Style="{StaticResource ToolButton}" Content="History" Tag="{StaticResource IconSession}"
+                            Command="{Binding SessionCommand}" MinWidth="70" AutomationProperties.AutomationId="History"
                             Visibility="{Binding IsAdvancedMode, Converter={StaticResource BoolToVisibility}}"
                             ToolTip="Every step taken in this project, kept in its project file (.3dfp) as you work. Look back at one, or go back to it. Needs a project file - see Project." />
                     <Button Style="{StaticResource ToolButton}" Content="Project" Tag="{StaticResource IconProject}"

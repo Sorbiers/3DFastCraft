@@ -8,9 +8,9 @@ public partial class GrowShrinkDialog : ToolPanel
 {
     /// <summary>Remembered for the session: the next part usually wants the same.</summary>
     private static float distance = 0.2f;
-    private static bool alongX = true, alongY = true, alongZ = true;
+    private static bool alongX = true, alongY = true, alongZ = true, shrinking;
 
-    public GrowShrinkDialog(bool grow, int objects)
+    public GrowShrinkDialog(int objects)
     {
         InitializeComponent();
 
@@ -19,7 +19,7 @@ public partial class GrowShrinkDialog : ToolPanel
         AlongX.IsChecked = alongX;
         AlongY.IsChecked = alongY;
         AlongZ.IsChecked = alongZ;
-        (grow ? GrowChoice : ShrinkChoice).IsChecked = true;
+        (shrinking ? ShrinkChoice : GrowChoice).IsChecked = true;
     }
 
     /// <summary>How far, out above zero and in below, and along which axes; null when cancelled.</summary>
@@ -51,6 +51,7 @@ public partial class GrowShrinkDialog : ToolPanel
 
         distance = by;
         (alongX, alongY, alongZ) = (x, y, z);
+        shrinking = ShrinkChoice.IsChecked == true;
 
         Result = (ShrinkChoice.IsChecked == true ? -by : by, x, y, z);
         DialogResult = true;

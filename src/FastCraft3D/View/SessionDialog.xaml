@@ -1,7 +1,7 @@
 <Window x:Class="FastCraft3D.View.SessionDialog"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="Session" Height="560" Width="760" MinWidth="560" MinHeight="380"
+        Title="History" Height="560" Width="760" MinWidth="560" MinHeight="380"
         WindowStartupLocation="CenterOwner" ShowInTaskbar="False"
         Background="#FFF7F7F8">
 

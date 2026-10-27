@@ -13,17 +13,17 @@ namespace FastCraft3D.ViewModels;
 /// </summary>
 public partial class MainViewModel
 {
-    private ICommand? grow, shrink;
+    private ICommand? growShrink;
 
-    public ICommand GrowCommand => grow ??= Track(RelayCommand.Simple(() => GrowOrShrink(true), () => Scene.Selection.Any(o => !o.IsLocked)));
-    public ICommand ShrinkCommand => shrink ??= Track(RelayCommand.Simple(() => GrowOrShrink(false), () => Scene.Selection.Any(o => !o.IsLocked)));
+    /// <summary>One button: the panel was the same for both, with Grow and Shrink to choose in it.</summary>
+    public ICommand GrowShrinkCommand => growShrink ??= Track(RelayCommand.Simple(GrowOrShrink, () => Scene.Selection.Any(o => !o.IsLocked)));
 
-    private void GrowOrShrink(bool growing)
+    private void GrowOrShrink()
     {
         var targets = Scene.Selection.Where(o => !o.IsLocked).ToList();
         if (targets.Count == 0) return;
 
-        var dialog = new GrowShrinkDialog(growing, targets.Count);
+        var dialog = new GrowShrinkDialog(targets.Count);
         if (dialog.ShowDialog() != true || dialog.Result is not { } choice) return;
 
         string label = choice.Distance > 0 ? "Grow" : "Shrink";
