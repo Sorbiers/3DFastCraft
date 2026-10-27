@@ -694,6 +694,9 @@
                     <Button Style="{StaticResource ToolButton}" Content="Voronoi" Visibility="{Binding IsAdvancedMode, Converter={StaticResource BoolToVisibility}}" Tag="{StaticResource IconVoronoi}"
                             Command="{Binding VoronoiCommand}" MinWidth="82"
                             ToolTip="Beta. Cut the selection into a web of Voronoi struts - an openwork lamp or vase, or a lightweight core. Built on a voxel grid, so it is watertight; detail finer than a voxel is lost." />
+                    <Button Style="{StaticResource ToolButton}" Content="Kit sprue" Tag="{StaticResource IconKitSprue}"
+                            Command="{Binding KitSprueCommand}" MinWidth="76" AutomationProperties.AutomationId="KitSprue"
+                            ToolTip="Bind the selection, or everything, into a model kit's sprue: laid out in rows inside a frame of runners, each part held by thin gates to snip off after printing. For small parts." />
                     <Separator Margin="8,0" />
                     <Button Style="{StaticResource ToolButton}" Content="Emboss" Tag="{StaticResource IconText}"
                             Command="{Binding BeginEmbossCommand}" MinWidth="78"
