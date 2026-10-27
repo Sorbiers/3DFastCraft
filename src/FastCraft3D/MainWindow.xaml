@@ -951,33 +951,64 @@
                         </WrapPanel>
                     </view:GroupWrap>
                     <DockPanel Margin="0,6,0,4">
-                        <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Bottom">
-                            <Button Content="Show all" Style="{StaticResource LinkButton}" Margin="0,0,10,0"
-                                    Command="{Binding ShowAllCommand}"
-                                    Visibility="{Binding AnyHidden, Converter={StaticResource BoolToVisibility}}"
-                                    ToolTip="Show every hidden object again (Alt+H)" />
-                            <Button Content="Unlock all" Style="{StaticResource LinkButton}"
-                                    Command="{Binding UnlockAllCommand}"
-                                    Visibility="{Binding AnyLocked, Converter={StaticResource BoolToVisibility}}"
-                                    ToolTip="Unlock every locked object (Alt+L)" />
+                        <!-- Everything at once - shown, hidden, locked, folded - behind one button: the eye
+                             and the lock on a row do one object, and H and L the selection. -->
+                        <Button DockPanel.Dock="Right" Style="{StaticResource RowIconButton}" Width="24" Height="20"
+                                VerticalAlignment="Bottom" Click="OnObjectsMenu"
+                                AutomationProperties.Name="Objects menu" AutomationProperties.AutomationId="ObjectsMenu"
+                                ToolTip="Show, hide, lock or fold every object at once">
+                            <Path Data="M 0,1 L 13,1 M 0,5.5 L 13,5.5 M 0,10 L 13,10" Stroke="#FF44494F" StrokeThickness="1.4"
+                                  Fill="{x:Null}" Width="13" Height="11" SnapsToDevicePixels="True" />
+                            <Button.ContextMenu>
+                                <ContextMenu>
+                                    <ContextMenu.Resources>
+                                        <Style TargetType="Path">
+                                            <Setter Property="Stroke" Value="#FF33383F" />
+                                            <Setter Property="StrokeThickness" Value="1.3" />
+                                            <Setter Property="Stretch" Value="Uniform" />
+                                            <Setter Property="Width" Value="13" />
+                                            <Setter Property="Height" Value="11" />
+                                        </Style>
+                                    </ContextMenu.Resources>
+                                    <MenuItem Header="Show all" InputGestureText="Alt+H" Command="{Binding ShowAllCommand}"
+                                              AutomationProperties.AutomationId="ObjectsShowAll">
+                                        <MenuItem.Icon><Path Data="{StaticResource RowShown}" /></MenuItem.Icon>
+                                    </MenuItem>
+                                    <MenuItem Header="Hide all" Command="{Binding HideAllCommand}"
+                                              AutomationProperties.AutomationId="ObjectsHideAll">
+                                        <MenuItem.Icon><Path Data="{StaticResource RowHidden}" /></MenuItem.Icon>
+                                    </MenuItem>
+                                    <MenuItem Header="Hide the selection" InputGestureText="H" Command="{Binding HideSelectionCommand}" />
+                                    <MenuItem Header="Show only the selection" Command="{Binding ShowOnlySelectionCommand}"
+                                              ToolTip="Hide everything that is not selected" />
+                                    <MenuItem Header="Swap shown and hidden" Command="{Binding SwapHiddenCommand}"
+                                              ToolTip="Hide what is shown, and show what is hidden" />
+                                    <Separator />
+                                    <MenuItem Header="Lock all" Command="{Binding LockAllCommand}"
+                                              AutomationProperties.AutomationId="ObjectsLockAll">
+                                        <MenuItem.Icon><Path Data="{StaticResource RowLocked}" Width="11" /></MenuItem.Icon>
+                                    </MenuItem>
+                                    <MenuItem Header="Unlock all" InputGestureText="Alt+L" Command="{Binding UnlockAllCommand}"
+                                              AutomationProperties.AutomationId="ObjectsUnlockAll">
+                                        <MenuItem.Icon><Path Data="{StaticResource RowUnlocked}" Width="11" /></MenuItem.Icon>
+                                    </MenuItem>
+                                    <MenuItem Header="Lock the selection" InputGestureText="L" Command="{Binding LockSelectionCommand}" />
+                                    <MenuItem Header="Swap locked and unlocked" Command="{Binding SwapLockedCommand}"
+                                              ToolTip="Lock what is unlocked, and unlock what is locked" />
 
-                            <!-- Every assembly opened or folded at once, while there are any. -->
-                            <StackPanel Orientation="Horizontal" Margin="8,0,0,0"
-                                        Visibility="{Binding HasAssemblies, Converter={StaticResource BoolToVisibility}}">
-                                <Button Style="{StaticResource RowIconButton}" Command="{Binding FoldAllAssembliesCommand}"
-                                        CommandParameter="Open" AutomationProperties.Name="Open all assemblies"
-                                        ToolTip="Show the parts of every assembly">
-                                    <Path Data="M 0,0 L 4,4 L 8,0 M 0,5 L 4,9 L 8,5" Stroke="#FF44494F" StrokeThickness="1.3"
-                                          Fill="{x:Null}" Width="9" Height="10" Stretch="Uniform" />
-                                </Button>
-                                <Button Style="{StaticResource RowIconButton}" Command="{Binding FoldAllAssembliesCommand}"
-                                        CommandParameter="Close" AutomationProperties.Name="Fold all assemblies"
-                                        ToolTip="Fold every assembly up to its name">
-                                    <Path Data="M 0,0 L 4,4 L 0,8 M 5,0 L 9,4 L 5,8" Stroke="#FF44494F" StrokeThickness="1.3"
-                                          Fill="{x:Null}" Width="10" Height="9" Stretch="Uniform" />
-                                </Button>
-                            </StackPanel>
-                        </StackPanel>
+                                    <!-- Only while there are assemblies to fold. -->
+                                    <Separator Visibility="{Binding HasAssemblies, Converter={StaticResource BoolToVisibility}}" />
+                                    <MenuItem Header="Expand all assemblies" Command="{Binding FoldAllAssembliesCommand}" CommandParameter="Open"
+                                              Visibility="{Binding HasAssemblies, Converter={StaticResource BoolToVisibility}}">
+                                        <MenuItem.Icon><Path Data="M 0,0 L 4,4 L 8,0 M 0,5 L 4,9 L 8,5" Width="9" Height="10" /></MenuItem.Icon>
+                                    </MenuItem>
+                                    <MenuItem Header="Collapse all assemblies" Command="{Binding FoldAllAssembliesCommand}" CommandParameter="Close"
+                                              Visibility="{Binding HasAssemblies, Converter={StaticResource BoolToVisibility}}">
+                                        <MenuItem.Icon><Path Data="M 0,0 L 4,4 L 0,8 M 5,0 L 9,4 L 5,8" Width="10" Height="9" /></MenuItem.Icon>
+                                    </MenuItem>
+                                </ContextMenu>
+                            </Button.ContextMenu>
+                        </Button>
                         <TextBlock Text="Objects" Style="{StaticResource SectionHeader}" Margin="0" />
                     </DockPanel>
                 </StackPanel>

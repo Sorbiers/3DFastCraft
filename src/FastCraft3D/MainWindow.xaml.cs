@@ -2943,6 +2943,23 @@ public partial class MainWindow : Window
     /// Drops the recent-files menu under its button. A context menu is used rather than a popup
     /// so the list styles and behaves like every other menu in Windows.
     /// </summary>
+    /// <summary>
+    /// The menu over the object list, on a left click as a menu button should. Under the button
+    /// with its right edges lined up: the list is at the right of the window, and a menu hanging
+    /// off to the right of it runs over the edge.
+    /// </summary>
+    private void OnObjectsMenu(object sender, RoutedEventArgs e)
+    {
+        if (sender is not Button { ContextMenu: { } menu } button) return;
+
+        menu.DataContext = viewModel;
+        menu.PlacementTarget = button;
+        menu.Placement = System.Windows.Controls.Primitives.PlacementMode.Custom;
+        menu.CustomPopupPlacementCallback = (popup, target, _) =>
+            [new(new Point(target.Width - popup.Width, target.Height), System.Windows.Controls.Primitives.PopupPrimaryAxis.Horizontal)];
+        menu.IsOpen = true;
+    }
+
     private void OnShowRecent(object sender, RoutedEventArgs e)
     {
         if (sender is not Button button || button.ContextMenu is not { } menu) return;
