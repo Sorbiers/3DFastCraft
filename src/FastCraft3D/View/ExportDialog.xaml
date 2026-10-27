@@ -21,6 +21,9 @@
         <TextBlock Text="What to export" Style="{StaticResource GroupHeader}" Margin="0,0,0,6" />
         <RadioButton x:Name="ScopeAll" GroupName="Scope" IsChecked="True" Checked="OnOptionChanged" />
         <RadioButton x:Name="ScopeSelected" GroupName="Scope" Checked="OnOptionChanged" />
+        <CheckBox x:Name="ByPlate" Margin="2,8,2,2" Foreground="#FF33383F"
+                  ToolTip="A file for each plate in use, named with its number - for a slicer such as Bambu Studio, which takes plates one file at a time"
+                  Checked="OnByPlateChanged" Unchecked="OnByPlateChanged" />
 
         <TextBlock Text="Format" Style="{StaticResource GroupHeader}" />
         <RadioButton x:Name="FormatBinary" GroupName="Format" IsChecked="True"
@@ -29,8 +32,10 @@
                      Content="ASCII STL - readable text, roughly five times larger" Checked="OnOptionChanged" />
         <RadioButton x:Name="FormatObj" GroupName="Format"
                      Content="Wavefront OBJ - keeps objects named and separate" Checked="OnOptionChanged" />
+        <RadioButton x:Name="Format3mf" GroupName="Format" IsEnabled="False"
+                     Content="3MF - keeps parts, names, colors and filaments" Checked="OnOptionChanged" />
         <TextBlock TextWrapping="Wrap" Margin="2,6,2,0" Foreground="#FF7A8088"
-                   Text="For a 3MF, save the project: it is one, and any slicer opens it with its parts, names, colors and filaments." />
+                   Text="3MF is here for one file per plate. For everything in one 3MF, save the project: it is one, and any slicer opens it with its parts, names, colors and filaments." />
 
         <CheckBox x:Name="DropToPlate" Margin="2,16,2,2" Foreground="#FF33383F"
                   Content="Drop to the build plate"

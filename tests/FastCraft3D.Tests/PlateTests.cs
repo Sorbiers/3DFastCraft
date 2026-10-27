@@ -127,6 +127,24 @@ public class PlateTests : IDisposable
     }
 
     [Fact]
+    public void ExportingByPlateWritesAFileForEachPlateNamedFromTheOneChosen()
+    {
+        var parts = new[] { Part("Wall"), Part("Roof", plate: 3), Part("Door") };
+
+        var files = ExportComposer.ByPlate(parts, Path.Combine(folder, "house.3mf"));
+
+        Assert.Equal([1, 3], files.Select(f => f.Plate));
+        Assert.Equal(["house - plate 1.3mf", "house - plate 3.3mf"], files.Select(f => Path.GetFileName(f.Path)));
+        Assert.Equal(["Wall", "Door"], files[0].Objects.Select(o => o.Name));
+
+        // Choosing one of them again names them the same.
+        Assert.Equal(files.Select(f => f.Path), ExportComposer.ByPlate(parts, files[1].Path).Select(f => f.Path));
+
+        ThreeMf.Write(files[1].Path, ExportComposer.ComposeForObj(files[1].Objects));
+        Assert.Equal("Roof", Assert.Single(ThreeMf.Read(files[1].Path)).Name);
+    }
+
+    [Fact]
     public void WhatIsAddedWhileTheListShowsAPlateGoesOntoThatPlate()
     {
         WithModel(model =>

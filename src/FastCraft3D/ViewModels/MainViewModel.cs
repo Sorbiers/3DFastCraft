@@ -11311,7 +11311,12 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
             DefaultExt = chosen.Extension,
             FileName = SuggestedName() + chosen.Extension,
             InitialDirectory = ProjectFolder(),
-            Title = chosen.SelectedOnly
+            // The plates' files are named from this one and it is not itself written, so whether
+            // it is there already says nothing; the plates' own are asked about once chosen.
+            OverwritePrompt = !chosen.ByPlate,
+            Title = chosen.ByPlate
+                ? "Export a file per plate - each is named from this one, with its plate"
+                : chosen.SelectedOnly
                 ? $"Export {subjects.Count} selected object(s)"
                 : $"Export all {subjects.Count} object(s)"
         };
@@ -11319,22 +11324,68 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
 
         try
         {
-            if (chosen.IsObj)
+            if (chosen.ByPlate)
             {
-                ObjWriter.Write(dialog.FileName, ExportComposer.ComposeForObj(subjects, chosen.DropToPlate));
-                Status = $"Exported {subjects.Count} object(s) to {Path.GetFileName(dialog.FileName)}";
+                ExportByPlate(dialog.FileName, subjects, chosen);
+            }
+            else if (WriteExport(dialog.FileName, subjects, chosen) is { } merged)
+            {
+                Status = $"Exported {merged.TriangleCount:N0} triangles to {Path.GetFileName(dialog.FileName)}";
+                WarnIfNotPrintable(merged);
             }
             else
             {
-                var merged = ExportComposer.MergeForStl(subjects, chosen.DropToPlate);
-                StlWriter.Write(dialog.FileName, merged, binary: chosen.Format == ExportFormat.BinaryStl);
-                Status = $"Exported {merged.TriangleCount:N0} triangles to {Path.GetFileName(dialog.FileName)}";
-                WarnIfNotPrintable(merged);
+                Status = $"Exported {subjects.Count} object(s) to {Path.GetFileName(dialog.FileName)}";
             }
         }
         catch (Exception ex)
         {
             Prompt.Show(ex.Message, "Could not export", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+    }
+
+    /// <summary>
+    /// A file per plate, for a slicer that keeps plates but takes them only from its own
+    /// projects: Bambu Studio reads any other 3MF as geometry for its first plate, so each plate
+    /// has to reach it as a file of its own.
+    /// </summary>
+    private void ExportByPlate(string chosen, List<SceneObject> subjects, ExportOptions options)
+    {
+        var files = ExportComposer.ByPlate(subjects, chosen);
+
+        var there = files.Where(f => File.Exists(f.Path)).Select(f => Path.GetFileName(f.Path)).ToList();
+        if (there.Count > 0 && Prompt.Show(
+                there.Count == 1
+                    ? $"{there[0]} is already there. Replace it?"
+                    : $"{there.Count} of the files are already there:\n\n{string.Join("\n", there)}\n\nReplace them?",
+                "Export by plate", MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes)
+        {
+            return;
+        }
+
+        foreach (var (_, path, objects) in files)
+            WriteExport(path, objects, options);
+
+        Status = $"Exported {files.Count} plates, {Path.GetFileName(files[0].Path)} to {Path.GetFileName(files[^1].Path)}";
+    }
+
+    /// <summary>One file in the chosen format; for STL, the mesh written, so it can be judged.</summary>
+    private static Mesh? WriteExport(string path, IReadOnlyList<SceneObject> objects, ExportOptions options)
+    {
+        switch (options.Format)
+        {
+            case ExportFormat.ThreeMf:
+                ThreeMf.Write(path, ExportComposer.ComposeForObj(objects, options.DropToPlate));
+                return null;
+
+            case ExportFormat.Obj:
+                ObjWriter.Write(path, ExportComposer.ComposeForObj(objects, options.DropToPlate));
+                return null;
+
+            default:
+                var merged = ExportComposer.MergeForStl(objects, options.DropToPlate);
+                StlWriter.Write(path, merged, binary: options.Format == ExportFormat.BinaryStl);
+                return merged;
         }
     }
 

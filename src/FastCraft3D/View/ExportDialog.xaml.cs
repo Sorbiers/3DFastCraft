@@ -37,15 +37,33 @@ public partial class ExportDialog : Window
     public ExportOptions? Result { get; private set; }
 
     private ExportOptions CurrentOptions() => new(
-        FormatObj.IsChecked == true ? ExportFormat.Obj
+        Format3mf.IsChecked == true ? ExportFormat.ThreeMf
+            : FormatObj.IsChecked == true ? ExportFormat.Obj
             : FormatAscii.IsChecked == true ? ExportFormat.AsciiStl
             : ExportFormat.BinaryStl,
         SelectedOnly: ScopeSelected.IsChecked == true,
-        DropToPlate: DropToPlate.IsChecked == true);
+        DropToPlate: DropToPlate.IsChecked == true,
+        ByPlate: ByPlate.IsChecked == true);
 
     private void OnOptionChanged(object sender, RoutedEventArgs e)
     {
         if (!loaded) return;
+        UpdateSummary();
+    }
+
+    /// <summary>
+    /// 3MF only with a file per plate, and chosen with it: it is the one that keeps the parts and
+    /// their filaments, which is what a slicer taking the plates one at a time wants.
+    /// </summary>
+    private void OnByPlateChanged(object sender, RoutedEventArgs e)
+    {
+        if (!loaded) return;
+
+        bool byPlate = ByPlate.IsChecked == true;
+        Format3mf.IsEnabled = byPlate;
+        if (byPlate) Format3mf.IsChecked = true;
+        else if (Format3mf.IsChecked == true) FormatBinary.IsChecked = true;
+
         UpdateSummary();
     }
 
@@ -57,6 +75,15 @@ public partial class ExportDialog : Window
     {
         var options = CurrentOptions();
         var subjects = ExportComposer.Subjects(scene, options);
+
+        var plates = subjects.Select(o => o.Plate).Distinct().Order().ToList();
+        ByPlate.IsEnabled = plates.Count > 1;
+        ByPlate.Content = plates.Count > 1 ? $"One file per plate - {plates.Count} plates" : "One file per plate - it is all on one plate";
+        if (options.ByPlate && plates.Count < 2)
+        {
+            ByPlate.IsChecked = false; // which comes back here with the options as they now are
+            return;
+        }
 
         if (subjects.Count == 0)
         {
@@ -79,6 +106,8 @@ public partial class ExportDialog : Window
         SummaryText.Text =
             $"{parts}, {healths.Sum(h => h.Health.TriangleCount):N0} triangles, {healths.Sum(h => h.Health.VolumeCm3):0.##} cm3\n" +
             $"Bounding size {bounds}";
+        if (options.ByPlate)
+            SummaryText.Text += $"\nA file for each of plates {string.Join(", ", plates.SkipLast(1))} and {plates[^1]}";
 
         WarningText.Visibility = broken.Count == 0 ? Visibility.Collapsed : Visibility.Visible;
         WarningText.Text = broken.Count switch

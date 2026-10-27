@@ -1,4 +1,6 @@
+using System.IO;
 using System.Numerics;
+using System.Text.RegularExpressions;
 using FastCraft3D.Geometry;
 using FastCraft3D.Model;
 
@@ -20,6 +22,21 @@ public static class ExportComposer
         var selection = scene.Selection;
         // Asking for the selection when there is none would silently export an empty file.
         return selection.Count > 0 ? selection.ToList() : scene.Shown.ToList();
+    }
+
+    /// <summary>
+    /// A file for each plate in use, named from the one chosen: "house.3mf" gives "house - plate 1.3mf"
+    /// and on. Choosing one of those again names them the same, not "house - plate 1 - plate 1".
+    /// </summary>
+    public static List<(int Plate, string Path, List<SceneObject> Objects)> ByPlate(IEnumerable<SceneObject> objects, string chosen)
+    {
+        string folder = Path.GetDirectoryName(chosen) ?? "";
+        string stem = Regex.Replace(Path.GetFileNameWithoutExtension(chosen), @"\s*-\s*plate \d+$", "", RegexOptions.IgnoreCase);
+        string extension = Path.GetExtension(chosen);
+
+        return objects.GroupBy(o => o.Plate).OrderBy(g => g.Key)
+            .Select(g => (g.Key, Path.Combine(folder, $"{stem} - plate {g.Key}{extension}"), g.ToList()))
+            .ToList();
     }
 
     /// <summary>
