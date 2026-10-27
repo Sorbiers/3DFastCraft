@@ -135,10 +135,44 @@ public partial class MainViewModel
         // Written first, so the list ends with the step just taken.
         KeepRecovery(now: true);
 
-        var dialog = new SessionDialog(file, Path.GetFileName(projectPath!)) { Owner = Application.Current?.MainWindow };
-        if (dialog.ShowDialog() != true || dialog.GoBackTo is not { } number) return;
+        // One object selected: its own history is offered, and shown first.
+        (Guid Id, string Name)? subject = Scene.Selection is [var one] ? (one.Id, one.Name) : null;
 
-        Run(IsBig(file), "Going back...", () => GoBackToStep(file, number));
+        var dialog = new SessionDialog(file, Path.GetFileName(projectPath!), subject) { Owner = Application.Current?.MainWindow };
+        if (dialog.ShowDialog() != true) return;
+
+        if (dialog.RestoreFrom is { } from && subject is { } s)
+            RestoreObject(file, from, s.Id, s.Name);
+        else if (dialog.GoBackTo is { } number)
+            Run(IsBig(file), "Going back...", () => GoBackToStep(file, number));
+    }
+
+    /// <summary>
+    /// One object as it was after a step, in place of what it is now, or back on the plate if it
+    /// has gone since; nothing else changes. Through undo, as going back is.
+    /// </summary>
+    private void RestoreObject(string file, int number, Guid id, string name)
+    {
+        try
+        {
+            if (ProjectSession.LoadObject(file, number, id) is not { } restored)
+            {
+                Status = $"{name} was not on the plate after step {number}";
+                return;
+            }
+
+            if (Scene.Objects.FirstOrDefault(o => o.Id == id) is { } now)
+                Undo.Execute(new ReplaceObjectsCommand($"Restore {name} from step {number}", [now], [restored], [(now, restored)]));
+            else
+                Undo.Execute(Added($"Bring back {name} from step {number}", [restored]));
+
+            RefreshSelection();
+            Status = $"{restored.Name} is back as it was after step {number} - Ctrl+Z to undo";
+        }
+        catch (Exception ex)
+        {
+            Prompt.Show(ex.Message, "Could not restore the object", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
     }
 
     private void GoBackToStep(string file, int number)

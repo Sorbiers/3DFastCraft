@@ -34,6 +34,13 @@ public sealed class SceneObject : INotifyPropertyChanged
     private Bounds? worldBounds;
     private MeshHealth? health;
 
+    /// <summary>
+    /// Who this part is, through every change made to it: what its own history is found by in the
+    /// steps a project keeps. A part a tool makes in place of it takes it on (see
+    /// ReplaceObjectsCommand); a copy is a part of its own and has its own. Kept with the project.
+    /// </summary>
+    public Guid Id { get; set; } = Guid.NewGuid();
+
     public SceneObject(string name, Mesh mesh)
     {
         this.name = name;

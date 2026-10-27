@@ -13,6 +13,19 @@ public sealed class Scene
 
     public ObservableCollection<SceneObject> Objects { get; } = new();
 
+    public Scene()
+    {
+        // An object's history is found by its id, so no two on the plate share one - the same
+        // project's parts brought in twice would. The one arriving takes a new id. Undo puts back
+        // the very object that left, never on the plate twice, so it keeps its own.
+        Objects.CollectionChanged += (_, e) =>
+        {
+            if (e.NewItems is null) return;
+            foreach (SceneObject o in e.NewItems)
+                if (Objects.Any(other => other != o && other.Id == o.Id)) o.Id = Guid.NewGuid();
+        };
+    }
+
     /// <summary>
     /// Raised when parts join or leave an assembly. Adding and removing objects is already
     /// announced by <see cref="Objects"/>; this is for the changes that leave the list as it was.

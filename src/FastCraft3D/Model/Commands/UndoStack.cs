@@ -264,8 +264,13 @@ public sealed class ReplaceObjectsCommand(
 
         removedIndices.AddRange(located.Select(r => r.Index));
 
-        // Before they join the plate, so the list is built with them already in place.
-        if (carryAssemblies) AssemblyTools.Carry(removed, added, successors);
+        // Before they join the plate, so the list is built with them already in place. A plate
+        // brought back whole from a file - not carried - has its own assemblies and its own ids.
+        if (carryAssemblies)
+        {
+            PassIdentity(removed, added, successors);
+            AssemblyTools.Carry(removed, added, successors);
+        }
 
         scene.ClearSelection();
         foreach (var o in added)
@@ -273,6 +278,25 @@ public sealed class ReplaceObjectsCommand(
             scene.Objects.Add(o);
             o.IsSelected = true;
         }
+    }
+
+    /// <summary>
+    /// A part made in place of one other is that part, changed, and takes its id, so its history
+    /// runs on through the change: the pairs given, or else a made part with the name of exactly
+    /// one consumed part, as assemblies are carried. A part with two successors - a split's
+    /// halves - passes it to neither, since no two on the plate share one.
+    /// </summary>
+    private static void PassIdentity(IReadOnlyList<SceneObject> removed, IReadOnlyList<SceneObject> added,
+        IReadOnlyList<(SceneObject From, SceneObject To)>? successors)
+    {
+        var kept = new HashSet<SceneObject>(removed);
+        IEnumerable<(SceneObject From, SceneObject To)> pairs = successors ?? added
+            .Select(o => (Named: removed.Where(r => r.Name == o.Name).Take(2).ToList(), To: o))
+            .Where(p => p.Named.Count == 1)
+            .Select(p => (p.Named[0], p.To));
+
+        foreach (var group in pairs.Where(p => !kept.Contains(p.To)).GroupBy(p => p.From))
+            if (group.Count() == 1) group.Single().To.Id = group.Key.Id;
     }
 
     public void Revert(Scene scene)

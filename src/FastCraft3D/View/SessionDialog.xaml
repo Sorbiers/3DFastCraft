@@ -17,7 +17,12 @@
             <ColumnDefinition Width="Auto" />
         </Grid.ColumnDefinitions>
 
-        <TextBlock x:Name="HeaderText" Grid.ColumnSpan="2" TextWrapping="Wrap" Foreground="#FF33383F" Margin="0,0,0,10" />
+        <StackPanel Grid.ColumnSpan="2" Margin="0,0,0,10">
+            <TextBlock x:Name="HeaderText" TextWrapping="Wrap" Foreground="#FF33383F" />
+            <CheckBox x:Name="OnlyObject" Margin="0,8,0,0" Visibility="Collapsed" Click="OnScopeClicked"
+                      AutomationProperties.AutomationId="HistoryOnlyObject"
+                      ToolTip="The steps that changed the selected object, and a way to bring back just that object as it was" />
+        </StackPanel>
 
         <ListBox x:Name="StepList" Grid.Row="1" SelectionChanged="OnSelectionChanged"
                  MouseDoubleClick="OnListDoubleClick" AutomationProperties.AutomationId="SessionSteps">
@@ -42,8 +47,7 @@
             </Grid>
         </Border>
 
-        <TextBlock Grid.Row="2" Grid.ColumnSpan="2" TextWrapping="Wrap" Margin="0,10,0,0" Foreground="#FF767C85"
-                   Text="Going back replaces what is on the plate. It is a normal undo step, so Ctrl+Z brings the current model back." />
+        <TextBlock x:Name="FooterText" Grid.Row="2" Grid.ColumnSpan="2" TextWrapping="Wrap" Margin="0,10,0,0" Foreground="#FF767C85" />
 
         <StackPanel Grid.Row="3" Grid.ColumnSpan="2" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,14,0,0">
             <Button x:Name="ForgetButton" Content="Forget older steps" Click="OnForget"

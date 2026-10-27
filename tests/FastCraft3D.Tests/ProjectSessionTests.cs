@@ -4,6 +4,7 @@ using System.Numerics;
 using FastCraft3D.Geometry;
 using FastCraft3D.Io;
 using FastCraft3D.Model;
+using FastCraft3D.Model.Commands;
 using Xunit;
 
 namespace FastCraft3D.Tests;
@@ -61,6 +62,65 @@ public class ProjectSessionTests : IDisposable
         Assert.Equal(new Vector3(5, 0, 0), Assert.Single(afterMove).Position);
         Assert.Equal(scene.Objects[0].Mesh.TriangleCount, afterMove[0].Mesh.TriangleCount);
         Assert.Equal(["Wall", "Roof"], ProjectSession.LoadStep(file, 3).Select(o => o.Name));
+    }
+
+    [Fact]
+    public void AnObjectsOwnHistoryListsOnlyTheStepsThatChangedItAndBringsBackOneVersion()
+    {
+        var scene = new Scene();
+        string file = SavedProject(scene);
+        var session = new ProjectSession();
+
+        var wall = new SceneObject("Wall", Primitives.Box(20, 2, 10));
+        scene.Objects.Add(wall);
+        session.Record(scene, "Add Wall");
+        scene.Objects.Add(new SceneObject("Roof", Primitives.Box(20, 20, 2)));
+        session.Record(scene, "Add Roof");
+        wall.Position = new Vector3(5, 0, 0);
+        session.Record(scene, "Move");
+        wall.Mesh = Primitives.Box(30, 2, 10);
+        session.Record(scene, "Grow");
+        scene.Objects.Remove(wall);
+        session.Record(scene, "Delete");
+        session.Flush(file, "id1", null, null);
+
+        var steps = ProjectSession.ReadObjectSteps(file, wall.Id);
+        Assert.Equal(["Add Wall", "Move", "Grow", "Delete"], steps.Select(s => s.Label));
+        Assert.Equal("Place changed", steps[1].Change);
+        Assert.Equal("Shape changed", steps[2].Change);
+        Assert.False(steps[3].Present);
+
+        var back = ProjectSession.LoadObject(file, 3, wall.Id)!;
+        Assert.Equal(wall.Id, back.Id);
+        Assert.Equal(new Vector3(5, 0, 0), back.Position);
+        Assert.Equal(20, back.Mesh.ComputeBounds().Size.X, 3);
+        Assert.Null(ProjectSession.LoadObject(file, 5, wall.Id));
+    }
+
+    [Fact]
+    public void APartRemadeInPlaceKeepsItsIdButACopyASplitHalfOrASecondArrivalDoNot()
+    {
+        var scene = new Scene();
+        var wall = new SceneObject("Wall", Primitives.Box(20, 2, 10));
+        scene.Objects.Add(wall);
+
+        var grown = new SceneObject("Wall", Primitives.Box(22, 4, 12));
+        new ReplaceObjectsCommand("Grow", [wall], [grown]).Apply(scene);
+        Assert.Equal(wall.Id, grown.Id);
+
+        var halves = new[] { new SceneObject("Wall 1", Primitives.Box(11, 4, 12)), new SceneObject("Wall 2", Primitives.Box(11, 4, 12)) };
+        new ReplaceObjectsCommand("Split", [grown], halves, [(grown, halves[0]), (grown, halves[1])]).Apply(scene);
+        Assert.DoesNotContain(halves, h => h.Id == wall.Id);
+
+        Assert.NotEqual(halves[0].Id, halves[0].Clone().Id);
+
+        var twin = new SceneObject("Twin", Primitives.Box(1, 1, 1)) { Id = halves[0].Id };
+        scene.Objects.Add(twin);
+        Assert.NotEqual(halves[0].Id, twin.Id);
+
+        string path = At("ids.3mf");
+        SceneSerializer.Save(path, scene);
+        Assert.Equal(scene.Objects.Select(o => o.Id), SceneSerializer.Load(path).Select(o => o.Id));
     }
 
     [Fact]

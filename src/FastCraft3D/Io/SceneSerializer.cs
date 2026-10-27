@@ -224,6 +224,24 @@ public static class SceneSerializer
         return Objects(dto.Objects, dto.Assemblies, meshes);
     }
 
+    /// <summary>One object in a step, without its mesh, to tell one version of it from the next; null when it is not there.</summary>
+    internal static ObjectState? ReadStepState(Stream json, Guid id) => Find(json, id) is { } o
+        ? new ObjectState(o.Name ?? "Object", o.Mesh,
+            [.. o.Position ?? [], .. o.Rotation ?? [], .. o.Scale ?? []],
+            o.Colour ?? [], o.Filament ?? 1, o.Plate ?? 1, o.Hidden == true)
+        : null;
+
+    /// <summary>One object as a step kept it, mesh and all, without the rest of the plate; null when it is not there.</summary>
+    internal static SceneObject? ReadStepObject(Stream json, Guid id, Func<string, Mesh> meshes) =>
+        Find(json, id) is { } o ? FromDto(o, meshes) : null;
+
+    private static ObjectDto? Find(Stream json, Guid id)
+    {
+        var dto = JsonSerializer.Deserialize<SceneDto>(json, Options);
+        string key = id.ToString("N");
+        return dto?.Objects?.FirstOrDefault(o => o.Id == key);
+    }
+
     /// <summary>Settings given are written; none given leaves what the file already held.</summary>
     private static void Keep(SceneDto dto, ProjectSettings? settings)
     {
@@ -447,6 +465,7 @@ public static class SceneSerializer
 
     private static ObjectDto ToDto(SceneObject o, Func<Mesh, string>? meshKey = null) => new()
     {
+        Id = o.Id.ToString("N"),
         Name = o.Name,
         Position = ToArray(o.Position),
         Rotation = ToArray(o.Rotation),
@@ -476,6 +495,7 @@ public static class SceneSerializer
 
         return new SceneObject(o.Name ?? "Object", mesh)
         {
+            Id = Guid.TryParse(o.Id, out var id) ? id : Guid.NewGuid(),
             Position = ToVector(o.Position),
             Rotation = ToVector(o.Rotation),
             Scale = o.Scale is { Length: 3 } ? ToVector(o.Scale) : Vector3.One,
@@ -600,6 +620,9 @@ public static class SceneSerializer
 
     private sealed class ObjectDto
     {
+        /// <summary>The object's id, as 32 hex digits. A file written before it gets new ones.</summary>
+        public string? Id { get; set; }
+
         public string? Name { get; set; }
         public float[]? Position { get; set; }
         public float[]? Rotation { get; set; }
@@ -701,3 +724,7 @@ public static class SceneSerializer
         Enum.TryParse<BoreShape>(a.Shape, out var shape) ? shape : BoreShape.Round,
         a.Flat);
 }
+
+/// <summary>One object in one step as far as telling its versions apart needs: everything but the mesh, which its key stands for.</summary>
+/// <param name="Place">Position, turn and scale, one after another.</param>
+internal sealed record ObjectState(string Name, string? Mesh, float[] Place, float[] Colour, int Filament, int Plate, bool Hidden);

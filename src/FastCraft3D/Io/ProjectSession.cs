@@ -13,6 +13,10 @@ namespace FastCraft3D.Io;
 /// <summary>One step of the session kept in a .3dfp: what it was, when, and how many objects were on the plate after it.</summary>
 public sealed record SessionStep(int Number, string Label, DateTime Utc, int Objects);
 
+/// <summary>A step that changed one object: what the step was, and what it did to the object.</summary>
+/// <param name="Present">Whether the object is on the plate after it - not after the step that took it off.</param>
+public sealed record ObjectStep(int Number, string Label, DateTime Utc, string Change, bool Present);
+
 /// <summary>Work a run left in a .3dfp unsaved: when, how much, and which run, to tell a crash from a copy still open.</summary>
 public sealed record SessionLeftover(DateTime Utc, int Objects, int ProcessId, long StartedUtcTicks);
 
@@ -226,6 +230,84 @@ public sealed class ProjectSession
     {
         using var zip = ZipFile.OpenRead(path);
         return Load(zip, StepPath(number), out _);
+    }
+
+    /// <summary>
+    /// The steps that changed one object, oldest first: where it first is, each step that changed
+    /// it, where it left the plate and came back. Each step is read without its meshes - the key a
+    /// step names its mesh by says whether the shape changed. None for a file without a session.
+    /// </summary>
+    public static List<ObjectStep> ReadObjectSteps(string path, Guid id)
+    {
+        var found = new List<ObjectStep>();
+        try
+        {
+            using var zip = ZipFile.OpenRead(path);
+            var steps = ReadIndex(zip)?.Steps ?? [];
+            ObjectState? before = null;
+            bool seen = false;
+
+            foreach (var step in steps)
+            {
+                if (zip.GetEntry(StepPath(step.N)) is not { } part) continue;
+
+                ObjectState? now;
+                using (var stream = part.Open()) now = SceneSerializer.ReadStepState(stream, id);
+
+                string? change = (before, now) switch
+                {
+                    (null, null) => null,
+                    (null, _) => seen ? "Back on the plate" : step == steps[0] ? "As first kept" : "Added",
+                    (_, null) => "Taken off the plate",
+                    ({ } earlier, { } later) => Change(earlier, later)
+                };
+
+                if (change is not null) found.Add(new ObjectStep(step.N, step.Label ?? "Step", step.Utc, change, now is not null));
+                seen |= now is not null;
+                before = now;
+            }
+        }
+        catch
+        {
+            // A file that cannot be read has no history to show.
+        }
+
+        return found;
+    }
+
+    /// <summary>What a step did to an object, said in a few words; null when it did nothing to it.</summary>
+    private static string? Change(ObjectState before, ObjectState now)
+    {
+        var what = new List<string>();
+        if (before.Mesh != now.Mesh) what.Add("shape");
+        if (!before.Place.SequenceEqual(now.Place)) what.Add("place");
+        if (!before.Colour.SequenceEqual(now.Colour)) what.Add("color");
+        if (before.Filament != now.Filament) what.Add("filament");
+        if (before.Plate != now.Plate) what.Add("plate");
+        if (before.Name != now.Name) what.Add("name");
+
+        string said = what.Count switch
+        {
+            0 => "",
+            1 => what[0] + " changed",
+            _ => string.Join(", ", what.SkipLast(1)) + " and " + what[^1] + " changed"
+        };
+
+        if (before.Hidden != now.Hidden) said += (said.Length > 0 ? ", " : "") + (now.Hidden ? "hidden" : "shown");
+        return said.Length == 0 ? null : char.ToUpperInvariant(said[0]) + said[1..];
+    }
+
+    /// <summary>One object as it was after a step, or null when it was not on the plate then.</summary>
+    public static SceneObject? LoadObject(string path, int number, Guid id)
+    {
+        using var zip = ZipFile.OpenRead(path);
+        var part = zip.GetEntry(StepPath(number)) ?? throw new InvalidDataException("That step is no longer in the project file.");
+
+        Mesh Fetch(string key) => Decode(Bytes(zip.GetEntry(MeshPath(key))
+            ?? throw new InvalidDataException("A mesh this step uses is missing from the project file.")));
+
+        using var stream = part.Open();
+        return SceneSerializer.ReadStepObject(stream, id, Fetch);
     }
 
     /// <summary>Unsaved work left in a .3dfp, or null for none.</summary>
