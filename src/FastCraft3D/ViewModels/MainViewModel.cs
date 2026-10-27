@@ -239,6 +239,7 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
             Raise(nameof(UndoLabel));
             IsDirty = true;
         };
+        Undo.Stepped += RecordStep;
         WireAssemblies();
         Scene.Objects.CollectionChanged += (_, _) => RefreshSelection();
         Scene.Objects.CollectionChanged += (_, _) => RaiseHiddenAndLocked();
@@ -1589,6 +1590,7 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
     private void ForgetRecovery()
     {
         Recovery.Clear();
+        session.ForgetLeftover();
         keptChanges = changes;
         sinceKept.Restart();
     }
@@ -1607,7 +1609,7 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
     /// </summary>
     public void KeepRecovery(bool now = false)
     {
-        if (changes == keptChanges) return;
+        if (changes == keptChanges && !session.HasPending) return;
 
         if (!now)
         {
@@ -1618,7 +1620,8 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
 
         long started = Stopwatch.GetTimestamp();
 
-        Recovery.Keep(Scene, projectPath, ViewSettings);
+        // A project with a .3dfp keeps its work there, beside its session; anything else here.
+        if (!KeepInProjectFile() && changes != keptChanges) Recovery.Keep(Scene, projectPath, ViewSettings);
 
         keepTook = Stopwatch.GetElapsedTime(started).TotalMilliseconds;
         keptChanges = changes;
@@ -1633,7 +1636,12 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
     {
         try
         {
-            var loaded = SceneSerializer.Load(point.ScenePath, out var settings);
+            LeaveSession();
+
+            ProjectSettings? settings;
+            var loaded = point.ProjectFile is { } file
+                ? ProjectSession.LoadLeftover(file, out settings)
+                : SceneSerializer.Load(point.ScenePath, out settings);
             if (settings is { } kept) ApplySettings(kept);
 
             Scene.Objects.Clear();
@@ -1643,9 +1651,11 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
             projectPath = point.ProjectPath;
             openedFrom = null;
             projectFileId = point.ProjectPath is { } original ? SceneSerializer.ReadProjectFileId(original) : null;
+            if (projectFileId is null && point.ProjectFile is { } kept3dfp) projectFileId = ProjectFile.ReadInfo(kept3dfp)?.Id;
             keepProjectFile = projectFileId is not null ? true : null;
             RefreshSelection();
             ZoomExtentsRequested?.Invoke();
+            if (point.ProjectFile is { } viewFrom && ProjectFile.ReadView(viewFrom) is { } view) ProjectViewRestoreRequested?.Invoke(view);
 
             // Still not written anywhere the user asked for, which is the whole point of it.
             IsDirty = true;
@@ -10732,6 +10742,7 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
     {
         if (!ConfirmDiscardChanges()) return;
 
+        LeaveSession();
         Scene.Objects.Clear();
         Undo.Clear();
         projectPath = null;
@@ -10772,6 +10783,8 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
     {
         try
         {
+            LeaveSession();
+
             if (Path.GetExtension(path).Equals(ProjectFile.Extension, StringComparison.OrdinalIgnoreCase))
             {
                 OpenProjectFile(path);
@@ -10857,6 +10870,12 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
         }
 
         string path = target;
+
+        // Saved under a new name, it is a new project with a .3dfp of its own: what the old one's
+        // session holds goes into the old one first.
+        if (projectPath is not null && !string.Equals(Path.GetFullPath(path), Path.GetFullPath(projectPath), StringComparison.OrdinalIgnoreCase))
+            LeaveSession();
+
         string? projectFile = ProjectFileIdForSave(path);
         Run(!onTheSpot && SaveIsSlow(), "Saving...", () => WriteProject(path, projectFile));
     }
@@ -10954,7 +10973,12 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
         if (projectPath is null) return;
 
         var dialog = new VersionsDialog(projectPath) { Owner = Application.Current?.MainWindow };
-        if (dialog.ShowDialog() != true || dialog.RestoreIndex is not { } index) return;
+        bool restoring = dialog.ShowDialog() == true;
+
+        // The .3dfp keeps a copy of the versions, so one forgotten goes from there too.
+        if (dialog.Forgot) UpdateProjectFile(projectPath);
+
+        if (!restoring || dialog.RestoreIndex is not { } index) return;
 
         string path = projectPath;
         Run(IsBig(path), "Restoring...", () => RestoreVersion(path, index));
@@ -11286,6 +11310,7 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
         if (IsBusy) return;
         var token = StartWork("Exporting session");
         int digits = (steps.Count + 1).ToString().Length;
+        sessionPaused = true;
 
         try
         {
@@ -11313,6 +11338,7 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
         }
         finally
         {
+            sessionPaused = false;
             EndWork();
             RefreshSelection();
         }

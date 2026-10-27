@@ -174,21 +174,54 @@ public static class SceneSerializer
     public static List<SceneObject> Load(string path, out ProjectSettings? settings)
     {
         var dto = Read(path);
-
-        // A file from before the printable area had a depth and a height kept one square bed size.
-        float? width = dto.PlateWidth ?? dto.PlateSize;
-        float? depth = dto.PlateDepth ?? dto.PlateSize;
-        settings = width is { } w && depth is { } d && dto.Unit is { } unit && dto.ModelScale is { } scale
-            ? new ProjectSettings(w, d, dto.PlateHeight ?? Scene.PrintHeight, unit, scale, dto.Notes)
-            : null;
+        settings = Settings(dto);
         return Objects(dto.Objects, dto.Assemblies);
     }
 
+    private static ProjectSettings? Settings(SceneDto dto)
+    {
+        // A file from before the printable area had a depth and a height kept one square bed size.
+        float? width = dto.PlateWidth ?? dto.PlateSize;
+        float? depth = dto.PlateDepth ?? dto.PlateSize;
+        return width is { } w && depth is { } d && dto.Unit is { } unit && dto.ModelScale is { } scale
+            ? new ProjectSettings(w, d, dto.PlateHeight ?? Scene.PrintHeight, unit, scale, dto.Notes)
+            : null;
+    }
+
     /// <summary>The objects back, each in the assembly it names.</summary>
-    private static List<SceneObject> Objects(List<ObjectDto>? objects, List<AssemblyDto>? assemblies)
+    private static List<SceneObject> Objects(List<ObjectDto>? objects, List<AssemblyDto>? assemblies, Func<string, Mesh>? meshes = null)
     {
         var made = assemblies?.Select(FromDto).ToList() ?? [];
-        return objects?.Select(o => FromDto(o, made)).ToList() ?? [];
+        return objects?.Select(o => FromDto(o, made, meshes)).ToList() ?? [];
+    }
+
+    /// <summary>
+    /// The scene as one step of a session: all of it but the meshes, which are named by
+    /// <paramref name="key"/> and kept once each beside the steps - see <see cref="ProjectSession"/>.
+    /// A move then costs the few hundred bytes of the numbers that changed rather than another
+    /// copy of the model.
+    /// </summary>
+    internal static byte[] WriteStep(Scene scene, ProjectSettings? settings, Func<Mesh, string> key)
+    {
+        var assemblies = scene.Assemblies;
+        var dto = new SceneDto
+        {
+            Version = CurrentVersion,
+            Objects = scene.Objects.Select(o => ToDto(o, assemblies, key)).ToList(),
+            Assemblies = assemblies.Count > 0 ? assemblies.Select(ToDto).ToList() : null
+        };
+        Keep(dto, settings);
+        return JsonSerializer.SerializeToUtf8Bytes(dto, Options);
+    }
+
+    /// <summary>A step written by <see cref="WriteStep"/> back as objects, its meshes fetched by key.</summary>
+    internal static List<SceneObject> ReadStep(Stream json, Func<string, Mesh> meshes, out ProjectSettings? settings)
+    {
+        var dto = JsonSerializer.Deserialize<SceneDto>(json, Options) ?? throw new InvalidDataException("The step is empty.");
+        if (dto.Version > CurrentVersion)
+            throw new InvalidDataException("This step was kept by a newer version of 3DFastCraft.");
+        settings = Settings(dto);
+        return Objects(dto.Objects, dto.Assemblies, meshes);
     }
 
     /// <summary>Settings given are written; none given leaves what the file already held.</summary>
@@ -378,9 +411,9 @@ public static class SceneSerializer
         part.Write(project);
     }
 
-    private static ObjectDto ToDto(SceneObject o, IReadOnlyList<Assembly>? assemblies)
+    private static ObjectDto ToDto(SceneObject o, IReadOnlyList<Assembly>? assemblies, Func<Mesh, string>? meshKey = null)
     {
-        var dto = ToDto(o);
+        var dto = ToDto(o, meshKey);
         int index = o.Assembly is { } a && assemblies is not null ? IndexOf(assemblies, a) : -1;
         if (index < 0) return dto;
 
@@ -410,9 +443,9 @@ public static class SceneSerializer
         IsExpanded = a.Collapsed != true
     };
 
-    private static SceneObject FromDto(ObjectDto o, IReadOnlyList<Assembly> assemblies)
+    private static SceneObject FromDto(ObjectDto o, IReadOnlyList<Assembly> assemblies, Func<string, Mesh>? meshes = null)
     {
-        var made = FromDto(o);
+        var made = FromDto(o, meshes);
         if (o.Assembly is { } index && index >= 0 && index < assemblies.Count)
         {
             made.Assembly = assemblies[index];
@@ -423,7 +456,7 @@ public static class SceneSerializer
         return made;
     }
 
-    private static ObjectDto ToDto(SceneObject o) => new()
+    private static ObjectDto ToDto(SceneObject o, Func<Mesh, string>? meshKey = null) => new()
     {
         Name = o.Name,
         Position = ToArray(o.Position),
@@ -441,13 +474,14 @@ public static class SceneSerializer
         Recipe = o.Recipe is { } r
             ? new RecipeDto { Generator = r.Generator, Version = r.Version, Settings = r.Settings, Role = r.Role, Set = r.Set, Origin = ToArray(r.Origin) }
             : null,
-        Vertices = Flatten(o.Mesh.Positions),
-        Triangles = o.Mesh.Indices.ToArray()
+        Mesh = meshKey?.Invoke(o.Mesh),
+        Vertices = meshKey is null ? Flatten(o.Mesh.Positions) : null,
+        Triangles = meshKey is null ? o.Mesh.Indices.ToArray() : null
     };
 
-    private static SceneObject FromDto(ObjectDto o)
+    private static SceneObject FromDto(ObjectDto o, Func<string, Mesh>? meshes = null)
     {
-        var mesh = new Mesh(Unflatten(o.Vertices), o.Triangles ?? []);
+        var mesh = o.Mesh is { } key && meshes is not null ? meshes(key) : new Mesh(Unflatten(o.Vertices), o.Triangles ?? []);
         PrimitiveKind? origin = Enum.TryParse<PrimitiveKind>(o.Origin, out var kind) ? kind : null;
 
         return new SceneObject(o.Name ?? "Object", mesh)
@@ -613,6 +647,9 @@ public static class SceneSerializer
         public float[]? Home { get; set; }
 
         public float[]? HomeRotation { get; set; }
+
+        /// <summary>In a session step, the key of the mesh kept beside it, in place of the two below.</summary>
+        public string? Mesh { get; set; }
 
         public float[]? Vertices { get; set; }
         public int[]? Triangles { get; set; }

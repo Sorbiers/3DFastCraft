@@ -26,6 +26,8 @@
     <StreamGeometry x:Key="IconOpen">M3,7 L10,7 L12,9 L21,9 L21,19 L3,19 Z</StreamGeometry>
     <StreamGeometry x:Key="IconSave">M4,4 L17,4 L20,7 L20,20 L4,20 Z M8,4 L8,10 L16,10 L16,4 M7,14 L17,14 M7,17 L17,17</StreamGeometry>
     <StreamGeometry x:Key="IconSaveAs">M4,4 L15,4 L18,7 L18,14 M4,4 L4,20 L13,20 M7,4 L7,10 L14,10 L14,4 M17,17 L23,17 M20,14 L20,20</StreamGeometry>
+    <!-- A timeline - two steps and the plate now - with the way back above it. -->
+    <StreamGeometry x:Key="IconSession">M3,16 L15.5,16 M5,13.5 L5,18.5 M10,13.5 L10,18.5 M18,13.5 A2.5,2.5 0 1 1 17.9,13.5 Z M7,8 L16,8 M10,5.5 L7,8 L10,10.5</StreamGeometry>
     <StreamGeometry x:Key="IconVersions">M4,6 L14,6 M4,10 L14,10 M4,14 L10,14 M17,11 A5,5 0 1 1 16.9,11 Z M17,13 L17,16 L19,17</StreamGeometry>
 
     <!-- Boolean operations, drawn as two overlapping circles -->

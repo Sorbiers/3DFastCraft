@@ -25,6 +25,9 @@ public partial class VersionsDialog : Window
     /// <summary>The version the user chose to restore, or null.</summary>
     public int? RestoreIndex { get; private set; }
 
+    /// <summary>Whether a version was forgotten - the file has changed, whatever else was chosen.</summary>
+    public bool Forgot { get; private set; }
+
     private void Refresh()
     {
         var versions = SceneSerializer.ReadVersions(projectPath);
@@ -125,6 +128,7 @@ public partial class VersionsDialog : Window
         if (answer != MessageBoxResult.OK) return;
 
         SceneSerializer.DeleteVersion(projectPath, index);
+        Forgot = true;
         Refresh();
     }
 }

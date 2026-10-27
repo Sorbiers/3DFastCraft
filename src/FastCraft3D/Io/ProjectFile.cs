@@ -48,7 +48,7 @@ public static class ProjectFile
     public static void Write(string path, string id, string modelPath, ViewState? view, string? app)
     {
         byte[] part = SceneSerializer.ReadProjectPart(modelPath);
-        var manifest = new ManifestDto
+        byte[] manifest = JsonSerializer.SerializeToUtf8Bytes(new ManifestDto
         {
             Format = CurrentFormat,
             Id = id,
@@ -56,18 +56,37 @@ public static class ProjectFile
             Fingerprint = Fingerprint(modelPath),
             SavedUtc = DateTime.UtcNow,
             App = app
-        };
+        });
+
+        // This project's own file holds its session too, which can run to many megabytes: the
+        // three parts that change are replaced where it lies rather than the lot copied to a new
+        // file at every save. That gives up the temporary file for those three, but all three are
+        // in the .3mf just written, and the .3dfp can be made again from it.
+        if (File.Exists(path) && ReadInfo(path)?.Id == id)
+        {
+            using var zip = ZipFile.Open(path, ZipArchiveMode.Update);
+            Replace(zip, ManifestPath, manifest);
+            Replace(zip, SceneSerializer.PartPath, part);
+            if (view is not null) Replace(zip, ViewPath, JsonSerializer.SerializeToUtf8Bytes(view));
+            return;
+        }
 
         string temporary = path + ".tmp";
         using (var file = File.Create(temporary))
         using (var zip = new ZipArchive(file, ZipArchiveMode.Create))
         {
-            Entry(zip, ManifestPath, JsonSerializer.SerializeToUtf8Bytes(manifest));
+            Entry(zip, ManifestPath, manifest);
             Entry(zip, SceneSerializer.PartPath, part);
             if (view is not null) Entry(zip, ViewPath, JsonSerializer.SerializeToUtf8Bytes(view));
         }
 
         File.Move(temporary, path, overwrite: true);
+    }
+
+    private static void Replace(ZipArchive zip, string name, byte[] data)
+    {
+        zip.GetEntry(name)?.Delete();
+        Entry(zip, name, data);
     }
 
     private static void Entry(ZipArchive zip, string name, byte[] data)
@@ -91,11 +110,20 @@ public static class ProjectFile
         }
     }
 
-    /// <summary>The view kept with a project, or null.</summary>
+    /// <summary>The view kept with a project, or null: as the session last left it, else as last saved.</summary>
     public static ViewState? ReadView(string path)
     {
-        try { return Read<ViewState>(path, ViewPath); }
+        try { return ProjectSession.ReadView(path) ?? Read<ViewState>(path, ViewPath); }
         catch { return null; }
+    }
+
+    /// <summary>The id in a project file already open, or null for one that is not one.</summary>
+    internal static string? IdIn(ZipArchive zip)
+    {
+        if (zip.GetEntry(ManifestPath) is not { } entry) return null;
+        using var stream = entry.Open();
+        var manifest = JsonSerializer.Deserialize<ManifestDto>(stream);
+        return manifest is { Format: <= CurrentFormat } ? manifest.Id : null;
     }
 
     private static T? Read<T>(string path, string entry)

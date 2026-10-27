@@ -43,6 +43,15 @@ public partial class MainViewModel
         }
     }
 
+    /// <summary>
+    /// The start page closed without opening anything: a new project, unless one is under way
+    /// already - the page is also opened from the File tab over a project being worked on.
+    /// </summary>
+    public void NewProjectFromStartPage()
+    {
+        if (projectPath is null && keepProjectFile is null && Scene.Objects.Count == 0) BeginNewProject();
+    }
+
     /// <summary>A project started from nothing: whether it keeps a .3dfp, asked now unless the answer was remembered.</summary>
     public void BeginNewProject()
     {
@@ -66,6 +75,7 @@ public partial class MainViewModel
 
         keepProjectFile = keep;
         if (keep) projectFileId ??= ProjectFile.NewId();
+        else session.Drop();
         IsDirty = true;
 
         string name = projectPath is null ? "the project" : Path.GetFileName(projectPath);
@@ -85,7 +95,11 @@ public partial class MainViewModel
     private string? ProjectFileIdForSave(string target)
     {
         keepProjectFile ??= projectFileDefault ?? AskProjectFile();
-        if (keepProjectFile != true) return null;
+        if (keepProjectFile != true)
+        {
+            session.Drop();
+            return null;
+        }
 
         bool newName = projectPath is null
                        || !string.Equals(Path.GetFullPath(target), Path.GetFullPath(projectPath), StringComparison.OrdinalIgnoreCase);
@@ -100,7 +114,12 @@ public partial class MainViewModel
 
         try
         {
-            ProjectFile.Write(ProjectFile.Beside(modelPath), projectFileId, modelPath, CaptureView?.Invoke(), Version);
+            string file = ProjectFile.Beside(modelPath);
+            var view = CameraNow();
+            ProjectFile.Write(file, projectFileId, modelPath, view, Version);
+
+            // The steps held since the last write, and nothing left unsaved: it has just been saved.
+            session.Flush(file, projectFileId, null, null, view);
         }
         catch (Exception ex)
         {
@@ -128,7 +147,11 @@ public partial class MainViewModel
                 $"{name} is kept with a project file, {Path.GetFileName(ProjectFile.Beside(modelPath))}, and it is not beside it.\n\n"
                 + "Make it again now? It holds a copy of the project and the view, and nothing that is not also in the .3mf.",
                 "Project file missing", MessageBoxButton.YesNo, MessageBoxImage.Question);
-            if (make == MessageBoxResult.Yes) UpdateProjectFile(modelPath);
+            if (make == MessageBoxResult.Yes)
+            {
+                UpdateProjectFile(modelPath);
+                RecordOpened("Opened");
+            }
             else keepProjectFile = false;
             return false;
         }
@@ -146,13 +169,17 @@ public partial class MainViewModel
             WriteProject(modelPath, info.Id);
         }
 
+        bool restored = false;
         if (found is not null && ProjectFile.ReadView(found) is { } view)
         {
             ProjectViewRestoreRequested?.Invoke(view);
-            return true;
+            restored = true;
         }
 
-        return false;
+        if (found is not null && keepProjectFile == true)
+            RecordOpened(OfferLeftover(found, modelPath) ? "Opened with the unsaved changes" : "Opened");
+
+        return restored;
     }
 
     /// <summary>
@@ -221,6 +248,7 @@ public partial class MainViewModel
         RefreshSelection();
         ZoomExtentsRequested?.Invoke();
         if (ProjectFile.ReadView(path) is { } view) ProjectViewRestoreRequested?.Invoke(view);
+        RecordOpened($"Brought back from {Path.GetFileName(path)}");
         Status = $"The project is back from {Path.GetFileName(path)} - save to write it into {Path.GetFileName(modelPath)}";
     }
 }

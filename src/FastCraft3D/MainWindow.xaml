@@ -762,6 +762,10 @@
                     <Button Style="{StaticResource ToolButton}" Content="Versions" Tag="{StaticResource IconVersions}"
                             Command="{Binding VersionsCommand}" MinWidth="82"
                             ToolTip="List the versions kept in this file, and restore one. Needs the project saved to a file first." />
+                    <Button Style="{StaticResource ToolButton}" Content="Session" Tag="{StaticResource IconSession}"
+                            Command="{Binding SessionCommand}" MinWidth="70" AutomationProperties.AutomationId="Session"
+                            Visibility="{Binding IsAdvancedMode, Converter={StaticResource BoolToVisibility}}"
+                            ToolTip="Every step taken in this project, kept in its project file (.3dfp) as you work. Look back at one, or go back to it. Needs a project file - see Project." />
                     <Button Style="{StaticResource ToolButton}" Content="Project" Tag="{StaticResource IconProject}"
                             Command="{Binding ProjectCommand}" MinWidth="70" AutomationProperties.AutomationId="Project"
                             ToolTip="Notes kept in this project, and a summary of what is in it" />

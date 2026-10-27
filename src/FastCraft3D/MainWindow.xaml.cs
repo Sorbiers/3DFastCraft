@@ -399,7 +399,11 @@ public partial class MainWindow : Window
             // The close was confirmed, so whatever is unsaved was meant to go. What is left in
             // the recovery folder after this is the work of a run that never got here.
             recoveryClock.Stop();
-            if (!App.Crashed) Recovery.Clear();
+            if (!App.Crashed)
+            {
+                Recovery.Clear();
+                viewModel.LeaveSession();
+            }
 
             CompositionTarget.Rendering -= OnFrame;
             Microsoft.Win32.SystemEvents.SessionSwitch -= OnSessionSwitch;
@@ -455,7 +459,7 @@ public partial class MainWindow : Window
 
         if (page.Project is { } path) viewModel.OpenRecentCommand.Execute(path);
         else if (page.OpenAFile) viewModel.OpenCommand.Execute(null);
-        else viewModel.BeginNewProject();
+        else viewModel.NewProjectFromStartPage();
     }
 
     private void OnShowStartPage(object sender, RoutedEventArgs e) => ShowStartPage();

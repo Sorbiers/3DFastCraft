@@ -9,7 +9,8 @@ namespace FastCraft3D.Io;
 /// <param name="ProjectPath">The file it was being edited as, or null for a scene never saved.</param>
 /// <param name="SavedUtc">When the copy was written.</param>
 /// <param name="Objects">How many objects it holds, so the offer can say what is on the table.</param>
-public readonly record struct RecoveryPoint(string ScenePath, string? ProjectPath, DateTime SavedUtc, int Objects);
+/// <param name="ProjectFile">The .3dfp the work was kept in instead, for a project that keeps one; the scene path is then nothing.</param>
+public readonly record struct RecoveryPoint(string ScenePath, string? ProjectPath, DateTime SavedUtc, int Objects, string? ProjectFile = null);
 
 /// <summary>
 /// The copy of the scene kept for a run that never gets to close.
@@ -24,6 +25,10 @@ public readonly record struct RecoveryPoint(string ScenePath, string? ProjectPat
 /// and when it started. Two copies of the app open at once must not offer each other's live work
 /// back, and Windows gives process ids out again, so the start time has to agree as well before
 /// a file is taken as being in use.
+///
+/// A project that keeps a .3dfp has its work kept there instead, with its session (see
+/// <see cref="ProjectSession"/>), and only a note is left here pointing at it - so a start after a
+/// crash still offers it back without being told which project to look in.
 ///
 /// Nothing here is allowed to interrupt the work: every path swallows its own failures. A
 /// read-only profile, a roaming folder that is not there, an antivirus holding the file open -
@@ -47,6 +52,9 @@ public static class Recovery
         public int Objects { get; set; }
         public int ProcessId { get; set; }
         public long StartedUtcTicks { get; set; }
+
+        /// <summary>The .3dfp the scene is kept in, when it is not kept here.</summary>
+        public string? ProjectFile { get; set; }
     }
 
     /// <summary>
@@ -78,6 +86,45 @@ public static class Recovery
         {
         }
     }
+
+    /// <summary>
+    /// This run's work is kept in a project's .3dfp: only a note pointing at it is written, and any
+    /// copy of the scene kept here before - while the project had no .3dfp yet - goes.
+    /// </summary>
+    public static void KeepIn(string projectFile, string? projectPath, int objects, string? folder = null)
+    {
+        try
+        {
+            string where = folder ?? DefaultFolder();
+            Directory.CreateDirectory(where);
+
+            using var me = Process.GetCurrentProcess();
+
+            try { File.Delete(ScenePath(where, me.Id)); } catch { }
+            File.WriteAllText(NotePath(where, me.Id), JsonSerializer.Serialize(new Note
+            {
+                Project = projectPath,
+                SavedUtc = DateTime.UtcNow,
+                Objects = objects,
+                ProcessId = me.Id,
+                StartedUtcTicks = Started(me),
+                ProjectFile = projectFile
+            }));
+        }
+        catch
+        {
+        }
+    }
+
+    /// <summary>Which run this is, as a note writes it down: the process id and when it started.</summary>
+    public static (int ProcessId, long StartedUtcTicks) ThisRun()
+    {
+        using var me = Process.GetCurrentProcess();
+        return (me.Id, Started(me));
+    }
+
+    /// <summary>Whether the run that wrote a note is still going - its work is then live, not left over.</summary>
+    public static bool IsRunning(int processId, long startedUtcTicks) => StillRunning(processId, startedUtcTicks);
 
     /// <summary>Takes this run's copy away - there is nothing left to recover.</summary>
     public static void Clear(string? folder = null)
@@ -119,7 +166,14 @@ public static class Recovery
                 string scene = Path.ChangeExtension(note, SceneSerializer.LegacyExtension);
                 var kept = Read(note);
 
-                if (kept is null || !File.Exists(scene) || DateTime.UtcNow - kept.SavedUtc > KeepFor)
+                // Kept in a .3dfp: there only while the .3dfp still holds this run's work. Recovered
+                // or turned down from inside the project since, it is gone, or another run's.
+                bool there = kept?.ProjectFile is { } file
+                    ? File.Exists(file) && ProjectSession.ReadLeftover(file) is { } left
+                      && left.ProcessId == kept.ProcessId && left.StartedUtcTicks == kept.StartedUtcTicks
+                    : File.Exists(scene);
+
+                if (kept is null || !there || DateTime.UtcNow - kept.SavedUtc > KeepFor)
                 {
                     Forget(scene, note);
                     continue;
@@ -128,7 +182,7 @@ public static class Recovery
                 // Another copy of the app has this open right now: it is live work, not a leftover.
                 if (alive(kept.ProcessId, kept.StartedUtcTicks)) continue;
 
-                found.Add(new RecoveryPoint(scene, kept.Project, kept.SavedUtc, kept.Objects));
+                found.Add(new RecoveryPoint(scene, kept.Project, kept.SavedUtc, kept.Objects, kept.ProjectFile));
             }
         }
         catch
@@ -139,9 +193,12 @@ public static class Recovery
         return found;
     }
 
-    /// <summary>Throws one away, recovered or refused.</summary>
-    public static void Discard(RecoveryPoint point) =>
+    /// <summary>Throws one away, recovered or refused. Kept in a .3dfp, only the unsaved work comes out of it - never the file.</summary>
+    public static void Discard(RecoveryPoint point)
+    {
+        if (point.ProjectFile is { } file) ProjectSession.ClearLeftover(file);
         Forget(point.ScenePath, Path.ChangeExtension(point.ScenePath, ".json"));
+    }
 
     private static Note? Read(string path)
     {

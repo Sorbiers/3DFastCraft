@@ -72,6 +72,12 @@ public sealed class UndoStack
     /// <summary>Raised just after a new step is applied and pushed, with the step itself.</summary>
     public event Action<IUndoableCommand>? Executed;
 
+    /// <summary>
+    /// Raised after anything that moves the plate along the history - a new step, an undo, a redo -
+    /// with what to call it. The session kept in a project's .3dfp takes the plate down at each.
+    /// </summary>
+    public event Action<string>? Stepped;
+
     public bool CanUndo => done.Count > 0;
     public bool CanRedo => undone.Count > 0;
     public string? NextUndoLabel => done.Count > 0 ? done[^1].Label : null;
@@ -108,6 +114,7 @@ public sealed class UndoStack
         Fit();
         Changed?.Invoke();
         Executed?.Invoke(command);
+        Stepped?.Invoke(command.Label);
     }
 
     public void Undo()
@@ -120,6 +127,7 @@ public sealed class UndoStack
         command.Revert(scene);
         undone.Push(command);
         Changed?.Invoke();
+        Stepped?.Invoke("Undo " + command.Label);
     }
 
     public void Redo()
@@ -130,6 +138,7 @@ public sealed class UndoStack
         command.Apply(scene);
         done.Add(command);
         Changed?.Invoke();
+        Stepped?.Invoke("Redo " + command.Label);
     }
 
     public void Clear()
