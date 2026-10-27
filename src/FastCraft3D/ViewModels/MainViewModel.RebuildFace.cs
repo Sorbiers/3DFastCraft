@@ -132,7 +132,7 @@ public partial class MainViewModel
 
         // Adding selects it, and the boxes are told: the clone is the thing to work on next -
         // to move, to resize, to subtract.
-        Undo.Execute(new AddObjectsCommand("Clone surface", [clone]));
+        Undo.Execute(Added("Clone surface", [clone]));
         RefreshSelection();
         Status = $"Cloned the face as {clone.Name}, {unit.From(cloneThickness):0.##} {unit.Label} thick - it is selected";
     }

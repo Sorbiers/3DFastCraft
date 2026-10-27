@@ -350,7 +350,7 @@ public sealed partial class MainViewModel
             foreach (var o in parts) Membership.AtHome(assembly, o).ApplyTo(o);
         }
 
-        Undo.Execute(new AddObjectsCommand($"Insert {generator.Title.ToLowerInvariant()}", parts));
+        Undo.Execute(Added($"Insert {generator.Title.ToLowerInvariant()}", parts));
         if (assembly is not null) Scene.SelectAssembly(assembly);
         RefreshSelection();
         Status = assembly is not null ? $"Inserted {assembly.Name}: {parts.Count} parts in an assembly - click its name in the list to select them all"

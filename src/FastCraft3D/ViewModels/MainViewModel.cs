@@ -7266,7 +7266,7 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
         // Primitives are centred on their own origin, so lift by half the height to sit on the plate.
         o.Position = new Vector3(0, 0, mesh.ComputeBounds().Size.Z / 2f);
 
-        Undo.Execute(new AddObjectsCommand($"Insert {kind}", [o]));
+        Undo.Execute(Added($"Insert {kind}", [o]));
         RefreshSelection();
         Status = $"Inserted {kind}";
         // Deliberately no reframing here: a primitive always lands at the origin, already in
@@ -7302,7 +7302,7 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
 
         if (copies.Count == 0) return;
 
-        Undo.Execute(new AddObjectsCommand(offset ? "Duplicate" : "Duplicate in place", copies));
+        Undo.Execute(Added(offset ? "Duplicate" : "Duplicate in place", copies));
         RefreshSelection();
         Status = offset ? "Duplicated" : "Duplicated in place";
     }
@@ -7332,7 +7332,7 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
             var placed = RepeatArray.MakeGrid(selection, grid, Namer());
             if (placed.Count == 0) return;
 
-            Undo.Execute(new AddObjectsCommand("Repeat in a grid", placed));
+            Undo.Execute(Added("Repeat in a grid", placed));
             RefreshSelection();
             Status = $"Repeated in a {grid.Columns} x {grid.Rows}{(grid.Layers > 1 ? $" x {grid.Layers}" : "")} grid - {placed.Count} new object(s)";
             return;
@@ -7343,7 +7343,7 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
         var copies = RepeatArray.Make(selection, settings, Namer());
         if (copies.Count == 0) return;
 
-        Undo.Execute(new AddObjectsCommand("Repeat", copies));
+        Undo.Execute(Added("Repeat", copies));
         RefreshSelection();
         Status = $"Repeated - {copies.Count} new object(s)";
     }
@@ -7416,7 +7416,7 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
             }.Centred()).ToList();
 
             AssembleNew($"{source.Name} mold", made);
-            Undo.Execute(new AddObjectsCommand("Mold", made));
+            Undo.Execute(Added("Mold", made));
             RefreshSelection();
 
             Status = result.Summary;
@@ -7464,7 +7464,7 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
         if (before.Where((state, i) => !state.Equals(made.Seats[i])).Any())
             steps.Add(new TransformCommand("Repeat", selection, before, made.Seats));
 
-        steps.Add(new AddObjectsCommand("Repeat", made.Copies));
+        steps.Add(Added("Repeat", made.Copies));
 
         Undo.Execute(steps.Count == 1 ? steps[0] : new CompoundCommand("Repeat round a circle", steps));
         RefreshSelection();
@@ -7614,7 +7614,7 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
             var o = new SceneObject(Scene.UniqueName(dialog.PictureName), built) { Colour = colour }.Centred();
             o.Position = o.Position with { Z = o.Position.Z - o.WorldBounds.Min.Z };
 
-            Undo.Execute(new AddObjectsCommand($"Insert {dialog.PictureName}", [o]));
+            Undo.Execute(Added($"Insert {dialog.PictureName}", [o]));
             RefreshSelection();
 
             var grid = Lithophane.Grid(picture.Width, picture.Height, options);
@@ -7693,7 +7693,7 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
             Position = new Vector3(0, 0, built.ComputeBounds().Size.Z / 2f)
         };
 
-        Undo.Execute(new AddObjectsCommand($"Insert custom {shape.Kind}", [o]));
+        Undo.Execute(Added($"Insert custom {shape.Kind}", [o]));
         RefreshSelection();
         Status = $"Inserted a custom {shape.Kind.ToString().ToLowerInvariant()} - {built.TriangleCount:N0} triangles";
     }
@@ -8064,7 +8064,7 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
         sketchLeavesForSolid = true;
         IsSketchMode = false;
         sketchLeavesForSolid = false;
-        Undo.Execute(new AddObjectsCommand(said, [o]));
+        Undo.Execute(Added(said, [o]));
         RefreshSelection();
         LookFromTopRequested?.Invoke(false);
         Status = $"{said} - the sketch is kept, for another go";
@@ -8238,7 +8238,7 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
             where.ApplyTo(cutter);
             cutter.Centred();
 
-            Undo.Execute(new AddObjectsCommand("Insert hole cutter", [cutter]));
+            Undo.Execute(Added("Insert hole cutter", [cutter]));
             RefreshSelection();
             Status = $"Added the cutter for {what} - select the part, then the cutter, and Subtract";
             return;
@@ -8447,7 +8447,7 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
         var o = new SceneObject(Scene.UniqueName(TextObject.NameFor(chosen)), built) { Colour = colour }.Centred();
         o.Position = o.Position with { Z = o.Position.Z - o.WorldBounds.Min.Z };
 
-        Undo.Execute(new AddObjectsCommand("Insert text", [o]));
+        Undo.Execute(Added("Insert text", [o]));
         RefreshSelection();
         Status = $"Inserted {o.Name} - {built.TriangleCount:N0} triangles";
     }
@@ -9093,7 +9093,7 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
             return copy;
         }).ToList();
 
-        Undo.Execute(new AddObjectsCommand("Paste", pasted));
+        Undo.Execute(Added("Paste", pasted));
         RefreshSelection();
 
         // Said plainly, because what has just landed is invisible when it has landed on top of
@@ -11153,7 +11153,7 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
 
             string what = imported.Count == 1 ? "object" : "objects";
 
-            Undo.Execute(new AddObjectsCommand("Import", imported));
+            Undo.Execute(Added("Import", imported));
             RefreshSelection();
             ZoomExtentsRequested?.Invoke();
 

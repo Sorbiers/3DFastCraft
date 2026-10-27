@@ -74,7 +74,7 @@ public sealed partial class MainViewModel
             if (result.Fill is { } fill)
             {
                 var o = new SceneObject(Scene.UniqueName($"{target.Name} fill"), fill) { Colour = NextAutomaticColour() }.Centred();
-                Undo.Execute(new AddObjectsCommand("Fill up", [o]));
+                Undo.Execute(Added("Fill up", [o]));
                 Status = $"Filled {target.Name} to {chosen.Level:0.##} mm as a part of its own - {fill.ComputeSignedVolume() / 1000:0.#} cm³";
             }
             else

@@ -125,4 +125,29 @@ public class PlateTests : IDisposable
             Assert.False(model.IsListFiltered);
         });
     }
+
+    [Fact]
+    public void WhatIsAddedWhileTheListShowsAPlateGoesOntoThatPlate()
+    {
+        WithModel(model =>
+        {
+            model.Scene.Objects.Add(Part("Wall", plate: 1));
+            model.Scene.Objects.Add(Part("Roof", plate: 2));
+
+            model.FilterPlateCommand.Execute(2);
+            model.InsertCommand.Execute(PrimitiveKind.Cube);
+
+            var box = model.Scene.Objects[^1];
+            Assert.Equal(2, box.Plate);
+            Assert.Contains(box, model.ListRows.Cast<SceneObject>());
+
+            model.Undo.Undo();
+            model.Undo.Redo();
+            Assert.Equal(2, box.Plate);
+
+            model.FilterPlateCommand.Execute(null);
+            model.InsertCommand.Execute(PrimitiveKind.Cube);
+            Assert.Equal(1, model.Scene.Objects[^1].Plate);
+        });
+    }
 }

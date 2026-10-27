@@ -1,6 +1,7 @@
 using System.Collections.Specialized;
 using System.Windows.Input;
 using FastCraft3D.Model;
+using FastCraft3D.Model.Commands;
 
 namespace FastCraft3D.ViewModels;
 
@@ -10,7 +11,7 @@ namespace FastCraft3D.ViewModels;
 /// Only the list: the view still shows everything, and "Show only the listed objects" hides the
 /// rest for a look at one plate on its own. Not kept with the project - a filter left on is the
 /// kind of thing that makes a list look as if parts have gone - and a new or opened project
-/// starts without one.
+/// starts without one. While it shows one plate, what is added goes onto that plate.
 /// </summary>
 public partial class MainViewModel
 {
@@ -56,6 +57,21 @@ public partial class MainViewModel
     public ICommand ClearListFilterCommand => clearListFilter ??= RelayCommand.Simple(ClearListFilter, () => IsListFiltered);
 
     public ICommand ShowOnlyListedCommand => showOnlyListed ??= RelayCommand.Simple(ShowOnlyListed, () => IsListFiltered);
+
+    /// <summary>
+    /// Adding objects, onto the plate the list shows if it shows one. They went to the first plate
+    /// and so were missing from the list they were added to. Set before the step, so undo and redo
+    /// carry it; a part made in place of another keeps that one's plate and does not come here.
+    /// </summary>
+    private AddObjectsCommand Added(string label, IReadOnlyList<SceneObject> objects)
+    {
+        if (listPlate is { } plate)
+        {
+            foreach (var o in objects) o.Plate = plate;
+        }
+
+        return new AddObjectsCommand(label, objects);
+    }
 
     private bool Listed(SceneObject o) =>
         (listPlate is not { } plate || o.Plate == plate) && (listFilament is not { } filament || o.Filament == filament);
