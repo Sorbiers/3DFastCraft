@@ -190,7 +190,6 @@ public sealed class GeneratorView : UserControl
             {
                 failed = (settings, error);
                 shown = null;
-                this.preview(null, null);
                 Describe();
             };
         }
@@ -890,17 +889,21 @@ public sealed class GeneratorView : UserControl
         {
             failed = (current, ex);
             shown = null;
-            preview(null, null);
             Describe();
         }
     }
 
+    /// <summary>
+    /// A build back. One that was refused, or failed, leaves the last good preview on the plate,
+    /// as a number typed out of range does: taken away, the rest of the scene the preview stands
+    /// in front of came back in its place, and it looked as if the tool had been cancelled.
+    /// </summary>
     private void Present(object settings, Generated made)
     {
         if (stopped) return;
 
         shown = (settings, made);
-        preview(settings, made.IsRefused ? null : made);
+        if (!made.IsRefused) preview(settings, made);
         Describe();
     }
 

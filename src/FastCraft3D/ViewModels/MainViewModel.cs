@@ -8426,7 +8426,12 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
         {
             if (shown is not null) Scene.Objects.Remove(shown);
             shown = null;
-            if (mesh is null) return;
+            if (mesh is null)
+            {
+                // Only the lettering was being drawn: with it gone, everything else comes back.
+                PreviewOnly = null;
+                return;
+            }
 
             shown = new SceneObject("Text", mesh) { Colour = colour }.Centred();
             shown.Position = shown.Position with { Z = shown.Position.Z - shown.WorldBounds.Min.Z };

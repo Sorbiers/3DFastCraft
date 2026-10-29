@@ -107,9 +107,9 @@ public partial class TextDialog : ToolPanel
 
         var mesh = TextObject.Build(options);
 
+        // Nothing to show leaves the last lettering on the plate, as the other panels do.
         if (mesh.TriangleCount == 0)
         {
-            preview(null);
             SummaryText.Text = string.IsNullOrWhiteSpace(options.Text)
                 ? "Type the lettering."
                 : "This font has none of these letters.";

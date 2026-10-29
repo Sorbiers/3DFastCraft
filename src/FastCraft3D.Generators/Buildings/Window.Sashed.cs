@@ -161,13 +161,25 @@ public sealed partial class Window
         var parts = new List<GeneratedPart> { new("Window frame", Shapes.Union(bars), Role: "frame") };
         var notes = new List<string>();
 
-        if (s.Glass)
+        if (s.Glass && sheet)
         {
-            var lights = sashes.SelectMany(k => Lights(s, k)).Select(Glazing.Rect).ToList();
             var whole = Glazing.Rect((-w, s.Sill ? 0.01f + Glazing.Hair : 0f, w, s.Height));
-
-            parts.Add(Glazing.Panes(sheet ? [whole] : lights, s.GlassThickness));
+            parts.Add(Glazing.Panes([whole], s.GlassThickness));
             notes.AddRange(Glazing.Notes(s.GlassThickness, printer, s.Flat));
+        }
+        else if (s.Glass)
+        {
+            // Each sash glazed to its own level: the glass as far under every sash's face as under
+            // the one furthest back, so the one in front has its glass in front too. All of it at
+            // one thickness, the sash in front looked glazed from behind the other.
+            float lowest = sashes.Min(k => k.Level);
+            var lights = sashes.SelectMany(k => Lights(s, k).Select(l => (Glazing.Rect(l), s.GlassThickness + k.Level - lowest))).ToList();
+            float thickest = lights.Max(l => l.Item2);
+
+            parts.Add(Glazing.Panes(lights));
+            notes.AddRange(Glazing.Notes(s.GlassThickness, printer, s.Flat, thickest));
+            if (thickest > s.GlassThickness + 1e-3f)
+                notes.Add($"The glass in the sash in front is {thickest - s.GlassThickness:0.##} mm thicker, so it sits as far behind that sash's face as the other's.");
         }
 
         parts.AddRange(Surround(s, notes));

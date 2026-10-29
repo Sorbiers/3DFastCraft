@@ -73,13 +73,13 @@ public class GeneratorViewTests
     });
 
     [Fact]
-    public void SettingsThatCannotBeMadeSayWhyAndTakeThePreviewAway() => RunSta(() =>
+    public void SettingsThatCannotBeMadeSayWhyAndLeaveTheLastPreviewOnThePlate() => RunSta(() =>
     {
         var (view, previews) = Open();
 
         Find<TextBox>(view, "box.open.Wall").Text = "20";
 
-        Assert.Null(previews[^1]);
+        Assert.NotNull(Assert.Single(previews));
         Assert.False(view.CanInsert);
         Assert.Contains("leave no room inside", view.SummaryText);
         Assert.True(view.ShowsProblem, "the reason is said in red");

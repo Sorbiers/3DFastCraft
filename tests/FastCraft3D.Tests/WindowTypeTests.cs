@@ -226,6 +226,26 @@ public class WindowTypeTests
     }
 
     [Fact]
+    public void EachSashIsGlazedToItsOwnLevelTheGlassAsFarUnderItsFaceAsInTheOther()
+    {
+        foreach (var type in new[] { WindowType.Sliding, WindowType.SingleHung })
+        {
+            var s = Of(type, w => w with { Depth = 3, SetBack = 0.4f, Step = 0.4f, GlassThickness = 1.2f });
+            var glass = Made(s).Parts.Single(p => p.Role == "glass").Mesh;
+            var panes = MeshComponents.Split(glass).Select(p => p.ComputeBounds()).ToList();
+
+            foreach (var sash in Window.Sashes(s))
+            foreach (var light in Window.Lights(s, sash))
+            {
+                float mx = (light.X0 + light.X1) / 2f, my = (light.Y0 + light.Y1) / 2f;
+                var pane = panes.Single(b => b.Min.X < mx && mx < b.Max.X && b.Min.Y < my && my < b.Max.Y);
+                Assert.Equal(0f, pane.Min.Z, 3);
+                Assert.Equal(sash.Level - (s.Depth - s.SetBack - s.Step - s.GlassThickness), pane.Max.Z, 3);
+            }
+        }
+    }
+
+    [Fact]
     public void TheMuntinsDivideEverySashIntoTheLightsAskedFor()
     {
         var s = Of(WindowType.SingleHung, w => w with { LightsAcross = 3, LightsUp = 2 });

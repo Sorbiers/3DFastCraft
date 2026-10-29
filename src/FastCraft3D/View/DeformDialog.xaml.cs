@@ -37,6 +37,9 @@ public partial class DeformDialog : ToolPanel
     private bool updating;
     private bool usable = true;
 
+    // Whether the plate shows a change rather than the shape as it was.
+    private bool changing;
+
     /// <param name="worlds">The objects in plate coordinates, as they are before the change.</param>
     /// <param name="preview">Shows changed meshes in plate coordinates, or puts the originals back when given null.</param>
     public DeformDialog(DeformSpec spec, string subject, IReadOnlyList<Mesh> worlds,
@@ -113,15 +116,25 @@ public partial class DeformDialog : ToolPanel
         ProblemText.Visibility = problem is null ? Visibility.Collapsed : Visibility.Visible;
         AcceptButton.IsEnabled = usable;
 
-        if (!usable || Math.Abs(value - spec.Identity) < 1e-3)
+        // A value it cannot take leaves the last one that worked on the plate. Put back as it was,
+        // the shape looked as if the tool had been cancelled.
+        if (!usable)
+        {
+            SummaryText.Text = changing ? "Shown at the last value that worked." : "The shape is shown as it is.";
+            return;
+        }
+
+        if (Math.Abs(value - spec.Identity) < 1e-3)
         {
             preview(null);
-            SummaryText.Text = usable ? "Nothing to change at this value." : "The shape is shown as it is.";
+            changing = false;
+            SummaryText.Text = "Nothing to change at this value.";
             return;
         }
 
         var changed = worlds.Select(w => spec.Deform(w, value, axis)).ToList();
         preview(changed);
+        changing = true;
 
         int before = worlds.Sum(w => w.TriangleCount);
         int after = changed.Sum(m => m.TriangleCount);

@@ -74,7 +74,10 @@ public partial class FillDialog : ToolPanel
         analysis = null;
         AcceptButton.IsEnabled = false;
         SummaryText.Text = "Working out where it would hold liquid...";
-        preview(null);
+
+        // The last fill stays on the plate until the new one is worked out, and so does it when
+        // there is none: taken away, the rest of the plate came back in its place, and the panel
+        // looked cancelled.
 
         try
         {
@@ -102,13 +105,12 @@ public partial class FillDialog : ToolPanel
                 ? "Nothing here would hold liquid: every space inside it opens to the side."
                 : "Nothing here would hold liquid: every space inside it opens to the side or underneath. Standing on the plate, try The plate is a floor.";
             AcceptButton.IsEnabled = false;
-            preview(null);
             return;
         }
 
         double cm3 = a.VolumeMm3(Level) / 1000.0;
         var body = a.Body(Level);
-        preview(body);
+        if (body is not null) preview(body);
 
         AcceptButton.IsEnabled = body is not null;
         SummaryText.Text = body is null

@@ -19,7 +19,11 @@ internal static class Glazing
     /// as they are.
     /// </summary>
     public static GeneratedPart Panes(IEnumerable<List<Vector2>> openings, float thickness) =>
-        new("Glass", Mesh.Combine(openings.Select(o => Shapes.Prism(DrawnIn(o), 0, thickness))), Role: "glass")
+        Panes(openings.Select(o => (o, thickness)));
+
+    /// <summary>The panes as one part, each as thick as it is given: sashes at different levels glazed each to its own.</summary>
+    public static GeneratedPart Panes(IEnumerable<(List<Vector2> Opening, float Thickness)> panes) =>
+        new("Glass", Mesh.Combine(panes.Select(p => Shapes.Prism(DrawnIn(p.Opening), 0, p.Thickness))), Role: "glass")
         {
             Filament = Filament,
             Colour = Colour
@@ -76,9 +80,10 @@ internal static class Glazing
     public static Generated Assembled(List<GeneratedPart> parts, List<string> notes) => new(parts, notes) { LaidOut = false };
 
     /// <param name="flat">Printed lying down, so the glass is the bottom layers.</param>
-    public static List<string> Notes(float thickness, Printer printer, bool flat = false)
+    /// <param name="thickest">The thickest pane, where they are not all <paramref name="thickness"/>: the clear layers go up to it.</param>
+    public static List<string> Notes(float thickness, Printer printer, bool flat = false, float? thickest = null)
     {
-        int layers = Math.Max(1, (int)MathF.Round(thickness / printer.Layer));
+        int layers = Math.Max(1, (int)MathF.Round((thickest ?? thickness) / printer.Layer));
         var notes = new List<string>
         {
             flat
