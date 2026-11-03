@@ -735,6 +735,9 @@
                     <Button Style="{StaticResource ToolButton}" Content="Kit sprue" Tag="{StaticResource IconKitSprue}"
                             Command="{Binding KitSprueCommand}" MinWidth="76" AutomationProperties.AutomationId="KitSprue"
                             ToolTip="Bind the selection, or everything, into a model kit's sprue: laid out in rows inside a frame of runners, each part held by thin gates to snip off after printing. For small parts." />
+                    <Button Style="{StaticResource ToolButton}" Content="Corner tabs" Tag="{StaticResource IconCornerTabs}"
+                            Command="{Binding CornerTabsCommand}" MinWidth="82" AutomationProperties.AutomationId="CornerTabs"
+                            ToolTip="Hold down the corners that lift: tabs on the sharp corners of the selection, where they stand, each held by a thin gate at the foot to snip off after printing - out to a frame round the part, or to pads of their own. Click a corner in the view to add or take off its tabs." />
                     <Separator Margin="8,0" />
                     <Button Style="{StaticResource ToolButton}" Content="Emboss" Tag="{StaticResource IconText}"
                             Command="{Binding BeginEmbossCommand}" MinWidth="78"

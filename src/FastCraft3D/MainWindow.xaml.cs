@@ -2022,6 +2022,18 @@ public partial class MainWindow : Window
 
     private void OnViewportLeftUp(object sender, MouseButtonEventArgs e)
     {
+        // A panel that takes a click in the view - a corner for Corner tabs - reads it on release,
+        // so a drag still turns the view. On a part, the point on it; off one, the point on the plate.
+        if (viewModel.HasOpenPanel && viewModel.PanelClick is { } panelClick)
+        {
+            var released = e.GetPosition(View);
+            if (!IsClick(released, pressScreen)) return;
+
+            if (FirstHit(released) is { } hit) panelClick(ToVector3(hit.PointHit));
+            else if (TryIntersectPlane(released, 0f, out var onPlate)) panelClick(onPlate);
+            return;
+        }
+
         if (viewModel.IsConnectMode && viewModel.ConnectorsByHand)
         {
             if (IsClick(e.GetPosition(View), pressScreen) && SightLine(e.GetPosition(View)) is { } sight)
