@@ -60,4 +60,6 @@ git checkout -q $branch
 
 Step "GitHub release"
 gh release create "v$Version" build\3DFastCraft.exe --title "3DFastCraft $Version" --notes-file $Notes; Check "gh release"
-gh release view "v$Version" --json assets --jq '.assets[] | "\(.name) \(.size)"'
+# Read as JSON here rather than through --jq: Windows PowerShell drops the double quotes inside an
+# argument to a native program, so the filter reached gh in two pieces and it refused it.
+(gh release view "v$Version" --json assets | ConvertFrom-Json).assets | ForEach-Object { "$($_.name) $($_.size)" }
