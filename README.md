@@ -118,6 +118,10 @@ Almost all of it is written by [Claude Code](https://claude.com/claude-code) fro
 - **Kit sprue** - small parts bound into a model kit's frame: laid out in rows inside a frame of
   runners, each held by thin gates low at its foot, to snip off after printing. **Gates at the
   corners** holds down the corners that lift first.
+- **Corner tabs** - the corners of a part that lift held down where it stands: tabs on its sharp
+  corners, at any angle, each held by a thin gate low at its foot to snip off after printing - two
+  off the sides of a corner or one out of its point, run out to a frame round the part or ended in
+  pads. Corners are found, or picked by clicking them in the view.
 - **Repair** - mend an open mesh.
 - **Rebuild** - **Keep the shape**: only the corners stay - points in the middle of flat faces
   and along straight edges go - and every flat face is filled again from its outline, so the web
@@ -307,7 +311,10 @@ reflection, and trimming breaks the app at runtime.
 - A set put down assembled is an assembly, not one solid - lay it out to print it.
 - Plates are the project's own: a 3MF carries none a slicer reads. **One file per plate** is the
   way to a slicer's plates.
-- A kit sprue is an object of its own beside the parts: a slicer's *Arrange* would pull them apart.
+- A kit sprue, and corner tabs, are an object of their own beside the parts: a slicer's *Arrange*
+  would pull them apart.
+- Corner tabs are read from the first layer: a tab that would run into the part itself is left
+  off, and a corner gentler than 20 degrees cannot be picked.
 - History tells objects apart from 4.8 on; steps kept before it are not tied to one object.
 - A fine groove on a 3D texture means a fine mesh: a few hundred thousand triangles on a big
   wall, a minute or two to apply. A coarser pitch or groove is much quicker.
