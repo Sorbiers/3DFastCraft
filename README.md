@@ -63,7 +63,8 @@ Almost all of it is written by [Claude Code](https://claude.com/claude-code) fro
 ### Edit
 
 - **Undo, copy, paste** - paste lands where the copy came from, also between two app windows.
-- **Duplicate** - beside, or in place.
+- **Duplicate** - beside, or in place. A whole assembly copied or duplicated comes out as an
+  assembly of its own, set aside as one block; a part taken alone comes out loose.
 - **Set pivot** - turn and measure about a point you click (a shaft hole, a hinge line). Resizing
   grows a part away from its pivot, so the arrow on a face that lies on the pivot is left out
   (**One way only** keeps every arrow).
@@ -79,8 +80,9 @@ Almost all of it is written by [Claude Code](https://claude.com/claude-code) fro
   to its opening, and with *The plate is a floor* a tube or walls standing on the plate fill too.
   Solid, or as a part of its own that fits the inside exactly (a second filament, or a cavity's volume).
 - **Color, filament and plate** - per object, and typed once for the whole selection (the box is
-  empty while the selected parts differ). 3MF carries color and filament; the plate is the
-  project's own - **Export** can write a file for each.
+  empty while the selected parts differ); a picked assembly's plate takes its hidden and locked
+  parts along. 3MF carries color and filament; the plate is the project's own - **Export** can
+  write a file for each.
 
 ### Align
 
@@ -212,11 +214,14 @@ Almost all of it is written by [Claude Code](https://claude.com/claude-code) fro
 - **Selection** - *Sticky* (default, as 3D Builder): a click toggles one object. Off: Explorer
   rules - Ctrl+click adds, Shift+click takes a range, clicking empty space clears. A click on a
   part of an assembly picks the whole assembly; **Alt**+click picks the one part. The objects
-  list can be dragged taller by its bottom edge, and scrolls to a part as it is added.
+  list can be dragged taller by its bottom edge, and scrolls to a part as it is added or picked
+  in the view.
 - **Handles** - **M** move, **R** rotate, **S** resize; **Snap** to 1 or 5 mm. **O** resizes one
   way only, the opposite face staying put. The resize strip reads mm or %; the box corners,
   dragged, resize in proportion. With several parts selected they move, turn and resize as one
-  object; the **Each** button gives every part its own centre and axes instead.
+  object; the **Each** button gives every part its own centre and axes instead. Leaving **R**
+  works the turn into the part's shape where it stands, so its angles read 0 again; a generated
+  part keeps its angles, so its settings can still be edited.
 - **Right-click** an object, in the view or the list, for what is done to it most - duplicate,
   rename, hide, lock, color, plate and filament, assembly, its own history, export. On the empty
   plate: paste, select all, insert. A right-drag still pans.
