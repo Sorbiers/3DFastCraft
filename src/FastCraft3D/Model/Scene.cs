@@ -126,9 +126,10 @@ public sealed class Scene
     }
 
     /// <summary>An assembly name nothing else on the plate has.</summary>
-    public string UniqueAssemblyName(string baseName)
+    public string UniqueAssemblyName(string baseName, IEnumerable<string>? alsoTaken = null)
     {
         var taken = new HashSet<string>(Assemblies.Select(a => a.Name), StringComparer.OrdinalIgnoreCase);
+        if (alsoTaken is not null) taken.UnionWith(alsoTaken);
         if (!taken.Contains(baseName)) return baseName;
 
         for (int i = 2; ; i++)

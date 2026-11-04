@@ -27,6 +27,7 @@ public sealed class SelectionListSync : IDisposable
     private readonly Scene scene;
     private bool syncing;
     private int holding;
+    private object? shownPick;
 
     public SelectionListSync(ListBox list, Scene scene)
     {
@@ -73,6 +74,37 @@ public sealed class SelectionListSync : IDisposable
         {
             syncing = false;
         }
+
+        ScrollToPick();
+    }
+
+    /// <summary>
+    /// One part, or one assembly, picked in the view is scrolled to in the list, where it may be
+    /// far out of sight. Only when the pick changes: this runs after every change to the model,
+    /// and moving the part about must not keep pulling the list back to it.
+    /// </summary>
+    private void ScrollToPick()
+    {
+        var target = Pick();
+        if (ReferenceEquals(target, shownPick)) return;
+
+        shownPick = target;
+        if (target is not null) list.ScrollIntoView(target);
+    }
+
+    /// <summary>The row standing for the selection: its one part, or its one assembly's heading. Null for none or several.</summary>
+    private object? Pick()
+    {
+        var picked = scene.Selection;
+        if (picked.Count == 0) return null;
+
+        object? row = picked[0].Assembly is { IsSelected: true } a && picked.All(o => o.Assembly == a) ? a
+            : picked.Count == 1 ? picked[0]
+            : null;
+
+        // A part of a folded assembly has no row of its own; its heading stands for it.
+        if (row is SceneObject { Assembly: { } home } && !list.Items.Contains(row)) row = home;
+        return row is not null && list.Items.Contains(row) ? row : null;
     }
 
     private static bool Chosen(object item) => item switch
@@ -113,6 +145,9 @@ public sealed class SelectionListSync : IDisposable
         {
             syncing = false;
         }
+
+        // Picked in the list, so already in sight; noted, so picking it again in the view is no change.
+        shownPick = Pick();
 
         // The rows now say something the scene does not: a heading picked, whose parts' rows
         // need lighting up; a part let go of, whose heading has to go dark; a hidden or locked

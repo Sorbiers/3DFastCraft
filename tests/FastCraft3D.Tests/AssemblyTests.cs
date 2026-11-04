@@ -284,13 +284,153 @@ public class AssemblyTests : IDisposable
     }
 
     [Fact]
-    public void ACopyIsAPartOfItsOwn()
+    public void ACloneIsAPartOfItsOwnAndPartsCarryTheirAssemblyThroughTheClipboard()
     {
-        var (_, _, _, a, _) = Assembled();
+        var (_, _, assembly, a, b) = Assembled();
+        b.Position += new Vector3(5, 0, 0);
 
         Assert.Null(a.Clone().Assembly);
-        Assert.Null(Assert.Single(SceneSerializer.FromBytes(SceneSerializer.ToBytes([a]))).Assembly);
+
+        var back = SceneSerializer.FromBytes(SceneSerializer.ToBytes([a, b]));
+        Assert.Equal(2, back.Count);
+        Assert.NotNull(back[0].Assembly);
+        Assert.Same(back[0].Assembly, back[1].Assembly);
+        Assert.Equal(assembly.Name, back[0].Assembly!.Name);
+        Assert.Equal(b.HomePosition, back[1].HomePosition);
     }
+
+    [Fact]
+    public void APartCopiedAlonePastesLooseAndAWholeAssemblyPastesAsANewOneEachTime() => RunSta(() =>
+    {
+        var model = new MainViewModel();
+        var a = Part("A", new Vector3(0, 0, 15));
+        var b = Part("B", new Vector3(40, 0, 15));
+        model.Scene.Objects.Add(a);
+        model.Scene.Objects.Add(b);
+        a.IsSelected = b.IsSelected = true;
+        model.RefreshSelection();
+        model.AssembleCommand.Execute(null);
+        var assembly = a.Assembly!;
+        b.Position += new Vector3(0, 10, 0);
+
+        model.Scene.ClearSelection();
+        a.IsSelected = true;
+        model.RefreshSelection();
+        model.CopyCommand.Execute(null);
+        model.PasteCommand.Execute(null);
+        Assert.Null(Assert.Single(model.Scene.Selection).Assembly);
+
+        model.Scene.ClearSelection();
+        model.Scene.SelectAssembly(assembly);
+        model.RefreshSelection();
+        model.CopyCommand.Execute(null);
+        model.PasteCommand.Execute(null);
+        model.PasteCommand.Execute(null);
+
+        var pasted = model.Scene.Assemblies.Where(x => x != assembly).ToList();
+        Assert.Equal(2, pasted.Count);
+        Assert.NotEqual(pasted[0].Name, pasted[1].Name);
+        Assert.Same(pasted[1], model.SelectedAssembly);
+        foreach (var copy in pasted)
+        {
+            var parts = model.Scene.MembersOf(copy);
+            Assert.Equal(2, parts.Count);
+            Assert.Equal(b.HomePosition, parts.Single(p => p.Position == b.Position).HomePosition);
+        }
+
+        Assert.Equal(2, model.Scene.MembersOf(assembly).Count);
+    });
+
+    [Fact]
+    public void ADuplicatedAssemblyIsANewOneSetAsideWholeWithItsHomesAndAPartDuplicatedAloneIsLoose() => RunSta(() =>
+    {
+        var model = new MainViewModel();
+        var a = Part("A", new Vector3(0, 0, 15));
+        var b = Part("B", new Vector3(40, 0, 15));
+        model.Scene.Objects.Add(a);
+        model.Scene.Objects.Add(b);
+        a.IsSelected = b.IsSelected = true;
+        model.RefreshSelection();
+        model.AssembleCommand.Execute(null);
+        var assembly = a.Assembly!;
+        b.Position += new Vector3(0, 10, 0);
+
+        model.Scene.ClearSelection();
+        model.Scene.SelectAssembly(assembly);
+        model.RefreshSelection();
+        model.DuplicateCommand.Execute(null);
+
+        var copy = Assert.Single(model.Scene.Assemblies, x => x != assembly);
+        Assert.Same(copy, model.SelectedAssembly);
+        var parts = model.Scene.MembersOf(copy);
+        Assert.Equal(2, parts.Count);
+        var shift = parts[0].Position - a.Position;
+        Assert.True(shift.X > 0);
+        Assert.Equal(b.Position + shift, parts[1].Position);
+        Assert.Equal(b.HomePosition + shift, parts[1].HomePosition);
+
+        model.Scene.ClearSelection();
+        a.IsSelected = true;
+        model.RefreshSelection();
+        model.DuplicateCommand.Execute("InPlace");
+        Assert.Null(Assert.Single(model.Scene.Selection).Assembly);
+        Assert.Equal(2, model.Scene.MembersOf(assembly).Count);
+    });
+
+    [Fact]
+    public void APlateGivenToAPickedAssemblyTakesItsHiddenPartsAlong() => RunSta(() =>
+    {
+        var model = new MainViewModel();
+        var a = Part("A", new Vector3(0, 0, 15));
+        var b = Part("B", new Vector3(40, 0, 15));
+        var loose = Part("Loose", new Vector3(0, 80, 15));
+        model.Scene.Objects.Add(a);
+        model.Scene.Objects.Add(b);
+        model.Scene.Objects.Add(loose);
+        a.IsSelected = b.IsSelected = true;
+        model.RefreshSelection();
+        model.AssembleCommand.Execute(null);
+
+        b.IsHidden = true;
+        model.Scene.ClearSelection();
+        model.Scene.SelectAssembly(a.Assembly!);
+        model.RefreshSelection();
+        Assert.True(model.HasPickedAssemblies);
+
+        model.ObjectPlate = 2;
+
+        Assert.Equal((2, 2, 1), (a.Plate, b.Plate, loose.Plate));
+    });
+
+    [Fact]
+    public void LeavingRotateAlignsWhatWasTurnedWhereItStandsAndKeepsItsPlateAndTheSelection() => RunSta(() =>
+    {
+        var model = new MainViewModel();
+        var turned = Part("Turned", new Vector3(0, 0, 15));
+        var already = Part("Already", new Vector3(60, 0, 15), new Vector3(0, 0, 30));
+        turned.Plate = 2;
+        model.Scene.Objects.Add(turned);
+        model.Scene.Objects.Add(already);
+
+        model.GizmoMode = FastCraft3D.Render.GizmoMode.Rotate;
+        turned.Rotation = new Vector3(0, 0, 45);
+        var corners = turned.ToWorldMesh().ComputeBounds();
+        already.IsSelected = true;
+        model.RefreshSelection();
+        model.GizmoMode = FastCraft3D.Render.GizmoMode.Move;
+
+        var aligned = model.Scene.Objects.Single(o => o.Name == "Turned");
+        Assert.NotSame(turned, aligned);
+        Assert.Equal(Vector3.Zero, aligned.Rotation);
+        Assert.Equal(2, aligned.Plate);
+        var now = aligned.ToWorldMesh().ComputeBounds();
+        Assert.InRange(Vector3.Distance(corners.Min, now.Min) + Vector3.Distance(corners.Max, now.Max), 0f, 1e-3f);
+
+        // Turned before Rotate was picked, and not since: left as it was, and still the one picked.
+        Assert.Same(already, model.Scene.Objects.Single(o => o.Name == "Already"));
+        Assert.Equal(new Vector3(0, 0, 30), already.Rotation);
+        Assert.Same(already, Assert.Single(model.Scene.Selection));
+    });
 
     // --- Picked as one ---------------------------------------------------------------------
 

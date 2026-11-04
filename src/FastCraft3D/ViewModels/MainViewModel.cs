@@ -863,28 +863,82 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
         var selection = Scene.Selection.ToList();
         if (selection.Count == 0) return;
 
-        var aligned = new List<SceneObject>(selection.Count);
-
-        foreach (var o in selection)
-        {
-            var baked = MeshTransform.Transformed(
-                o.Mesh, Matrix4x4.CreateScale(o.Scale) * MeshTransform.Rotation(o.Rotation));
-
-            aligned.Add(new SceneObject(o.Name, baked)
-            {
-                Colour = o.Colour,
-                Position = o.Position,
-                // Not pristine: the turn is in the mesh now, and rounding would rebuild it upright.
-                Origin = o.Origin
-            });
-        }
-
-        Undo.Execute(new ReplaceObjectsCommand("Align to axes", selection, aligned));
+        Undo.Execute(new ReplaceObjectsCommand("Align to axes", selection, selection.Select(Squared).ToList()));
         RefreshSelection();
 
         Status = selection.Count == 1
             ? $"{selection[0].Name} aligned with the world axes"
             : $"{selection.Count} objects aligned with the world axes";
+    }
+
+    /// <summary>
+    /// The part with its turn and size worked into the mesh, standing where it stood. Its plate
+    /// and filament go with it: made with neither, a part on the second plate went to the first
+    /// and was gone from the plate being looked at, as though aligning had deleted it.
+    /// </summary>
+    private static SceneObject Squared(SceneObject o)
+    {
+        var turn = Matrix4x4.CreateScale(o.Scale) * MeshTransform.Rotation(o.Rotation);
+        return new SceneObject(o.Name, MeshTransform.Transformed(o.Mesh, turn))
+        {
+            Colour = o.Colour,
+            Filament = o.Filament,
+            Plate = o.Plate,
+            Position = o.Position,
+            // Not pristine: the turn is in the mesh now, and rounding would rebuild it upright.
+            Origin = o.Origin,
+            Anchors = o.Anchors.Select(a => a.Through(turn)).ToList(),
+            PivotIsOwn = o.PivotIsOwn
+        };
+    }
+
+    /// <summary>
+    /// How every part was turned when Rotate was picked, so that leaving it can tell which were
+    /// turned meanwhile. Null while a tool's preview holds the handles, when it is the preview
+    /// being turned.
+    /// </summary>
+    private Dictionary<SceneObject, Vector3>? turnsOnEntering;
+
+    /// <summary>
+    /// On leaving Rotate, the parts turned while it was on are aligned with the world axes, as the
+    /// button beside the angles does, so the resize arrows and the box stand square with the
+    /// plate again and the angles read 0. What it says, or null when nothing was turned.
+    ///
+    /// A part a generator made keeps its angles: with the turn worked into its mesh it could no
+    /// longer be made again from its settings, which make it upright. The selection is left as it
+    /// was - a part turned and then let go of is aligned without being picked again.
+    /// </summary>
+    private string? SquareTurned()
+    {
+        var before = turnsOnEntering;
+        turnsOnEntering = null;
+        if (before is null || panelHandles || HasOpenPanel || IsBusy) return null;
+
+        var turned = Scene.Objects.Where(o =>
+            before.TryGetValue(o, out var was) && o.Rotation != was && o.Rotation != Vector3.Zero && !o.IsLocked).ToList();
+        var generated = turned.Count(o => o.Recipe is not null);
+        turned.RemoveAll(o => o.Recipe is not null);
+
+        string? kept = generated == 0 ? null
+            : generated == 1 ? "a generated part keeps its angles, so its settings can still be edited"
+            : $"{generated} generated parts keep their angles, so their settings can still be edited";
+        if (turned.Count == 0) return kept;
+
+        var picked = Scene.Selection.ToHashSet();
+        var headings = Scene.Assemblies.Where(a => a.IsSelected).ToList();
+        var squared = turned.Select(Squared).ToList();
+        Undo.Execute(new ReplaceObjectsCommand("Align to axes", turned, squared));
+
+        for (int i = 0; i < turned.Count; i++)
+            if (picked.Remove(turned[i])) picked.Add(squared[i]);
+        foreach (var o in Scene.Objects) o.IsSelected = picked.Contains(o);
+        foreach (var a in headings) a.IsSelected = Scene.IsWhollySelected(a);
+        RefreshSelection();
+
+        string said = turned.Count == 1
+            ? $"{turned[0].Name} aligned with the world axes, its turn kept in its shape"
+            : $"{turned.Count} objects aligned with the world axes, their turns kept in their shapes";
+        return kept is null ? said : $"{said}; {kept}";
     }
 
     /// <summary>Whether anything selected is turned. Nothing to align if none of it is.</summary>
@@ -1817,6 +1871,7 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
             // A held preview scales only when its sizes are settings - a Library part; refusing it
             // for every held preview left the Scale button on the bar for one and doing nothing.
             if (gizmoMode == value || (value == GizmoMode.Scale && panelHandles && !heldResizable)) return;
+            bool leavingRotate = gizmoMode == GizmoMode.Rotate;
             gizmoMode = value;
             Raise(nameof(GizmoMode));
             Raise(nameof(IsMoveMode));
@@ -1828,6 +1883,11 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
                 GizmoMode.Rotate => "Rotate: drag a ring to turn around that axis",
                 _ => "Resize: drag an arrow to change that dimension"
             };
+
+            if (value == GizmoMode.Rotate)
+                turnsOnEntering = panelHandles ? null : Scene.Objects.ToDictionary(o => o, o => o.Rotation);
+            else if (leavingRotate && SquareTurned() is { } squared)
+                Status = squared;
         }
     }
 
@@ -5856,7 +5916,8 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
         {
             if (value is not { } typed) return;
 
-            var selection = Scene.Selection.ToList();
+            var picked = Scene.Assemblies.Where(a => a.IsSelected).ToList();
+            var selection = OnPlateTogether(picked);
             int wanted = Math.Clamp(typed, 1, SceneObject.MostPlates);
 
             if (PlateCommand.CreateIfChanged(
@@ -5867,9 +5928,23 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
             }
 
             RaisePrintFields();
-            Status = selection.Count == 1 ? $"On plate {wanted}" : $"{selection.Count} objects on plate {wanted}";
+            Status = picked.Count == 1 && selection.All(o => o.Assembly == picked[0]) ? $"{picked[0].Name} on plate {wanted}"
+                : picked.Count > 1 && selection.All(o => o.Assembly is { IsSelected: true }) ? $"{picked.Count} assemblies on plate {wanted}"
+                : selection.Count == 1 ? $"On plate {wanted}"
+                : $"{selection.Count} objects on plate {wanted}";
         }
     }
+
+    /// <summary>
+    /// The selection, and every part of an assembly picked by its name with it - a hidden or locked
+    /// part too, which a pick passes over. An assembly is printed on one plate, and one of its parts
+    /// left behind on the old plate for being hidden just then would be missing from the print.
+    /// </summary>
+    private List<SceneObject> OnPlateTogether(IReadOnlyList<Assembly> picked) =>
+        Scene.Selection.Union(picked.SelectMany(Scene.MembersOf)).ToList();
+
+    /// <summary>Whether an assembly is picked by its name, which puts a Plate box at the top of the panel.</summary>
+    public bool HasPickedAssemblies => Scene.Assemblies.Any(a => a.IsSelected);
 
     public string FilamentHint => $"of {SceneObject.MostFilaments}" + ForSelection(ObjectFilament);
 
@@ -5896,6 +5971,7 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
         Raise(nameof(ObjectPlate));
         Raise(nameof(FilamentHint));
         Raise(nameof(PlateHint));
+        Raise(nameof(HasPickedAssemblies));
     }
 
     /// <summary>Whether the pivot boxes are worth showing: only a pivot somebody chose.</summary>
@@ -7291,20 +7367,62 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
     /// </summary>
     private void Duplicate(bool offset)
     {
+        var selection = Scene.Selection;
+        if (selection.Count == 0) return;
+
+        // An assembly picked whole is set aside as one block, by its own width: stepped part by
+        // part, each by its own width, it came out pulled apart.
+        var blocks = selection.Select(o => o.Assembly).OfType<Assembly>().Distinct()
+            .Where(Scene.IsWhollySelected)
+            .ToDictionary(a => a, a => offset ? Beside(selection.Where(o => o.Assembly == a)) : Vector3.Zero);
+
         var name = Namer();
-        var copies = Scene.Selection.Select(o =>
+        var made = new Dictionary<Assembly, Assembly>();
+        var copies = selection.Select(o =>
         {
             var copy = o.Clone();
             copy.Name = name(o.Name);
-            if (offset) copy.Position += new Vector3(o.WorldBounds.Size.X + 5f, 0, 0);
+            if (o.Assembly is { } assembly && blocks.TryGetValue(assembly, out var shift))
+            {
+                copy.Assembly = TwinOf(assembly, made);
+                copy.Position += shift;
+                copy.HomePosition = o.HomePosition + shift;
+                copy.HomeRotation = o.HomeRotation;
+            }
+            else if (offset)
+            {
+                copy.Position += Beside([o]);
+            }
+
             return copy;
         }).ToList();
 
-        if (copies.Count == 0) return;
-
         Undo.Execute(Added(offset ? "Duplicate" : "Duplicate in place", copies));
+
+        // After the add, as for Paste: a heading picked while the parts were still arriving was let go.
+        foreach (var assembly in made.Values) assembly.IsSelected = true;
         RefreshSelection();
-        Status = offset ? "Duplicated" : "Duplicated in place";
+
+        string what = made.Count == 1 && copies.All(o => o.Assembly is not null) ? $" {made.Values.First().Name}" : "";
+        Status = offset ? $"Duplicated{what}" : $"Duplicated{what} in place";
+    }
+
+    /// <summary>How far a copy is set aside so that it clears what it was copied from.</summary>
+    private static Vector3 Beside(IEnumerable<SceneObject> parts) =>
+        new(parts.Aggregate(Bounds.Empty, (b, o) => b.Union(o.WorldBounds)).Size.X + 5f, 0, 0);
+
+    /// <summary>
+    /// The new assembly that copies of <paramref name="original"/>'s parts join: one per original
+    /// in each Paste or Duplicate, named apart from the plate and from the others made with it.
+    /// </summary>
+    private Assembly TwinOf(Assembly original, Dictionary<Assembly, Assembly> made)
+    {
+        if (!made.TryGetValue(original, out var twin))
+            made[original] = twin = new Assembly(Scene.UniqueAssemblyName(original.Name, made.Values.Select(a => a.Name)))
+            {
+                Colour = original.Colour
+            };
+        return twin;
     }
 
     /// <summary>
@@ -9050,10 +9168,35 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
         if (selection.Count == 0) return;
 
         clipboard.Clear();
-        foreach (var o in selection) clipboard.Add(o.Clone());
+        clipboard.AddRange(Clipped(selection));
         ShareClipboard();
 
         Status = selection.Count == 1 ? "Copied 1 object" : $"Copied {selection.Count} objects";
+    }
+
+    /// <summary>
+    /// The selection cloned for the clipboard. A part copied with the whole of its assembly takes
+    /// a stand-in for the assembly along, and its home, so the paste is an assembly of its own; a
+    /// part copied without the rest of it comes out loose, as before. The stand-in is never on the
+    /// plate - the paste makes a fresh one each time, or pasting twice would make one assembly of both.
+    /// </summary>
+    private List<SceneObject> Clipped(IReadOnlyList<SceneObject> selection)
+    {
+        var standIns = new Dictionary<Assembly, Assembly>();
+        return selection.Select(o =>
+        {
+            var copy = o.Clone();
+            if (o.Assembly is { } assembly && Scene.IsWhollySelected(assembly))
+            {
+                if (!standIns.TryGetValue(assembly, out var standIn))
+                    standIns[assembly] = standIn = new Assembly(assembly.Name) { Colour = assembly.Colour };
+                copy.Assembly = standIn;
+                copy.HomePosition = o.HomePosition;
+                copy.HomeRotation = o.HomeRotation;
+            }
+
+            return copy;
+        }).ToList();
     }
 
     /// <summary>Copies the selection and takes it away, as one step that Ctrl+Z puts back.</summary>
@@ -9063,7 +9206,7 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
         if (selection.Count == 0) return;
 
         clipboard.Clear();
-        foreach (var o in selection) clipboard.Add(o.Clone());
+        clipboard.AddRange(Clipped(selection));
         ShareClipboard();
 
         int taken = selection.Count;
@@ -9091,21 +9234,37 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
         if (clipboard.Count == 0) return;
 
         var name = Namer();
+        var made = new Dictionary<Assembly, Assembly>();
         var pasted = clipboard.Select(source =>
         {
             var copy = source.Clone();
             copy.Name = name(source.Name);
+
+            // Joined before it is on the plate, so the list is built with the heading in place.
+            if (source.Assembly is { } held)
+            {
+                copy.Assembly = TwinOf(held, made);
+                copy.HomePosition = source.HomePosition;
+                copy.HomeRotation = source.HomeRotation;
+            }
+
             return copy;
         }).ToList();
 
         Undo.Execute(Added("Paste", pasted));
+
+        // Picked by its heading, as an assembly clicked in the view is. Not before: the parts
+        // join the plate one at a time, and the first one in alone let go of a heading set early.
+        foreach (var assembly in made.Values) assembly.IsSelected = true;
         RefreshSelection();
 
         // Said plainly, because what has just landed is invisible when it has landed on top of
         // what it was copied from - and it is the paste that is selected, so a drag moves it.
-        Status = pasted.Count == 1
-            ? "Pasted 1 object where it came from"
-            : $"Pasted {pasted.Count} objects where they came from";
+        Status = made.Count == 1 && pasted.All(o => o.Assembly is not null)
+            ? $"Pasted {made.Values.First().Name} where it came from"
+            : pasted.Count == 1
+                ? "Pasted 1 object where it came from"
+                : $"Pasted {pasted.Count} objects where they came from";
     }
 
     // --- The clipboard shared with other windows of the app ---------------------------

@@ -298,8 +298,16 @@ public static class SceneSerializer
     /// </summary>
     public static byte[] ToBytes(IEnumerable<SceneObject> objects)
     {
-        // Without their assemblies: a pasted part is a part of its own, as a duplicate is.
-        var dto = new SceneDto { Version = CurrentVersion, Objects = objects.Select(o => ToDto(o, null)).ToList() };
+        // With the assemblies they carry - a copy of a whole assembly pastes as one. A part copied
+        // without the rest of its assembly carries none.
+        var parts = objects.ToList();
+        var assemblies = parts.Select(o => o.Assembly).OfType<Assembly>().Distinct().ToList();
+        var dto = new SceneDto
+        {
+            Version = CurrentVersion,
+            Objects = parts.Select(o => ToDto(o, assemblies)).ToList(),
+            Assemblies = assemblies.Count > 0 ? assemblies.Select(ToDto).ToList() : null
+        };
         using var memory = new MemoryStream();
         using (var gzip = new GZipStream(memory, CompressionLevel.Fastest, leaveOpen: true))
             JsonSerializer.Serialize(gzip, dto, Options);
@@ -314,7 +322,7 @@ public static class SceneSerializer
                   ?? throw new InvalidDataException("There is nothing readable on the clipboard.");
         if (dto.Version > CurrentVersion)
             throw new InvalidDataException("These were copied from a newer version of 3DFastCraft.");
-        return Objects(dto.Objects, null);
+        return Objects(dto.Objects, dto.Assemblies);
     }
 
     // --- Plumbing ---------------------------------------------------------------------

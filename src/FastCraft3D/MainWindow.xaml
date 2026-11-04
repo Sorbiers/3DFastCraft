@@ -2680,6 +2680,19 @@
                             </WrapPanel>
                         </StackPanel>
 
+                        <!-- One assembly or several picked: the plate, here at the top as well as
+                             under Properties, which may be folded away. An assembly goes onto a
+                             plate whole, hidden and locked parts with it. -->
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,8"
+                                    Visibility="{Binding HasPickedAssemblies, Converter={StaticResource BoolToVisibility}}">
+                            <TextBlock Text="Plate" Style="{StaticResource FieldLabel}" Width="62"
+                                       ToolTip="Which build plate prints the selected assemblies - every part of them, hidden and locked ones too" />
+                            <TextBox AutomationProperties.AutomationId="AssemblyPlate" Width="48"
+                                     Style="{StaticResource NumberBox}" Tag="number"
+                                     Text="{Binding ObjectPlate, UpdateSourceTrigger=LostFocus, TargetNullValue=''}" />
+                            <TextBlock Text="{Binding PlateHint}" Foreground="#FF9AA0A8" VerticalAlignment="Center" Margin="6,0,0,0" />
+                        </StackPanel>
+
                         <StackPanel DataContext="{Binding Selected}" Style="{StaticResource OneObjectOnly}">
                             <TextBlock Text="Name" Style="{StaticResource SectionHeader}" />
                             <TextBox x:Name="ObjectNameBox" AutomationProperties.AutomationId="ObjectName" Text="{Binding Name, UpdateSourceTrigger=LostFocus}" Padding="4,3" />
